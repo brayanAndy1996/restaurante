@@ -1,0 +1,98 @@
+
+
+1. FLUJO DEL CLIENTE Y OPERACIÓN 
+
+1. LLEGADA Y RECEPCIÓN ( Mozo)
+   - Saludo al cliente y consulta sobre cantidad de personas o reserva.
+   - En el módulo de Salón de (APLICATIVO) , el usuario ubica el mapa visual de mesas.
+   - Apertura de mesa: Se selecciona la mesa asignada (ej. Mesa 12), se ingresa 
+     el número de comensales y el nombre del mozo responsable.
+   - La mesa cambia visualmente de estado en (APLICATIVO) (de Libre [Verde] a 
+     Ocupada [Rojo]).
+
+2. TOMA DE COMANDA Y REGISTRO EN (APLICATIVO)  
+   - El mozo toma la orden en la mesa (vía comandero móvil/tablet o terminal fijo).
+   - Búsqueda en (APLICATIVO)  por familias de productos y cantidad que tiene cada producto 
+     (Entradas, Bebidas, Fondos,Postres, Licores).
+   - Inclusión de Modificadores/Observaciones en el sistema:
+     * Términos de carne (Bien cocido, 3/4, Medio).
+     * Modificaciones ("Sin sal", "Salsa aparte", "Sin cebolla").
+     * Tiempos de servicio ("Servir con la entrada", "Para llevar").
+
+3. TRANSMISIÓN AUTOMÁTICA Y RUTEADA DE IMPRESIÓN
+   - Al dar clic en "Enviar" o "Comandar" en (APLICATIVO) , el sistema rutea el pedido:
+     * Ticket a Impresora de BARRA (Bebidas, tragos, cafés).
+     * Ticket a Impresora de COCINA / KDS (Entradas, platos de fondo).
+     * Ticket a Impresora de PARRILLA / FRÍOS (Si el restaurante maneja subestaciones).
+
+4. SERVICIO Y CONTROL DE MESA
+   - Salen las bebidas y entradas según orden de llegada en comanda de (APLICATIVO) .
+   - Adiciones: Si el cliente pide algo más, el mozo abre nuevamente la Mesa 12 en
+     (APLICATIVO)  y añade los ítems extra. El sistema genera un ticket de adición.
+
+5. SOLICITUD DE CUENTA Y PRE-CUENTA
+   - El cliente pide la cuenta.
+   - El mozo o cajero selecciona la mesa en (APLICATIVO)  y presiona "Pre-Cuenta".
+   - Se imprime la comanda detallada para verificación del cliente.
+   - El estado de la mesa en (APLICATIVO)  cambia a "En Pre-cuenta" (Color Amarillo).
+
+6. COBRO Y CIERRE DE MESA (Caja)
+   - El cliente entrega el medio de pago (Efectivo, Tarjeta Crédito/Débito, Yape/Plin).
+   - En el Módulo de Caja de (APLICATIVO) :
+     * Se liquida la mesa indicando el tipo de comprobante (Boleta o Factura Electrónica).
+     * Si es Factura, se ingresa el RUC del cliente ((APLICATIVO)  autocompleta/valida datos).
+     * Se registra el medio de pago y el monto cobrado (calculando cambio/vuelto si es efectivo).
+     * Se emite el comprobante fiscal conectado a SUNAT.
+   - Al finalizar la transacción, la mesa pasa a estado Libre en (APLICATIVO) .
+
+
+2. CIRCUITO Y TIPOS DE ÓRDENES EN (APLICATIVO) 
+
+• Tipos de Operaciones de Mesa en el Sistema:
+  - Apertura de Mesa: Inicio de atención.
+  - Comanda de Adición: Suma de productos a una cuenta activa.
+  - Cambio / Mover de Mesa: Transferencia completa de la comanda de una mesa a otra en el mapa visual.
+  - Unir / Juntar Mesas: Agrupación de dos o más mesas en un solo grupo de consumo.
+  - División de Cuenta: Separa ítems específicos o divide el total en partes iguales para cobros individuales.
+  - Anulación de Ítem / Descuentos: Requiere clave de supervisor o administrador en (APLICATIVO)  
+
+3. ROLES Y FRECUENCIAS POR SECTORES
+
+A. SECTOR SALÓN Y MOZOS
+   - Frecuencia: Continua.
+   - Uso de (APLICATIVO) : Apertura, comandeo, consulta de estados de mesa, emisión de pre-cuentas.
+
+B. SECTOR BARRA
+   - Frecuencia: Alta (Tiempo real).
+   - Uso de (APLICATIVO) : Recepción de comanda en impresora de barra, despacho e informe de quiebre de stock de licores/insumos.
+
+C. SECTOR COCINA
+   - Frecuencia: Constante.
+   - Uso de (APLICATIVO) : Impresión de comanda térmica en pase/cocina o pantalla KDS. Permite cantar platos y coordinar tiempos 1 y 2.
+
+D. SECTOR CAJA Y ADMINISTRACIÓN
+   - Frecuencia: Inicio de turno, cobros continuos y cierre de turno.
+   - Funciones en (APLICATIVO) :
+     * Apertura de Caja (Fondo inicial/Caja chica).
+     * Emisión de Boletas, Facturas y Notas de Crédito.
+     * Reporte de Arqueo de Caja (X de Caja) durante el turno.
+     * Cierre de Caja (Z de Caja) al finalizar el día: Cuadre de efectivo, vouchers y billeteras digitales.
+     * Exportación de ventas a contabilidad e inventario (Kardex / Insumos).
+
+
+4. RUTINAS DIARIAS DE APERTURA Y CIERRE 
+
+• APERTURA:
+  1. Encendido del Servidor Principal de (APLICATIVO)  y terminales/comanderos.
+  2. Verificación de impresoras térmicas (papel suficiente en cocina, barra y caja).
+  3. Ingreso de usuario en (APLICATIVO)  y ejecución de "Apertura de Caja" con el monto inicial.
+  4. Revisión de cartas y desactivación en el sistema de productos no disponibles (86 / Fuera de stock).
+
+• CIERRE:
+  1. Verificación en el Mapa de Mesas de (APLICATIVO)   que no existan mesas abiertas ni cuentas pendientes.
+  2. Generación del reporte de Arqueo de Caja y conteo físico de dinero vs. sistema.
+  3. Ejecución del Cierre de Caja (Cierre Z) en (APLICATIVO)  
+  4. Envío automático de resumen de ventas diaria y reporte SUNAT.
+
+
+

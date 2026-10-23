@@ -1,0 +1,10 @@
+* text=auto
+*.ts text eol=lf
+*.tsx text eol=lf
+*.json text eol=lf
+*.md text eol=lf
+*.mjs text eol=lf
+*.css text eol=lf
+*.md whitespace=-blank-at-eol
+restaurante.txt whitespace=-blank-at-eol,-blank-at-eof
+/docs/contexto/** -text whitespace=-blank-at-eol

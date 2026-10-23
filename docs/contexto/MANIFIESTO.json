@@ -1,0 +1,231 @@
+{
+  "schemaVersion": 1,
+  "generated": true,
+  "source": "Raiz del espacio proyectos; fuentes globales y documentacion individual de referencia",
+  "sourceRevision": "sha256:42eb398f35a5134ff647c28dc8a7a5d4017d1b7641ce41e0fba663d58194c596",
+  "instructions": "No editar este snapshot. Actualizar fuentes y ejecutar herramientas/Sincronizar-Contexto.ps1 desde el espacio de documentacion.",
+  "referenceProjects": [
+    "academia_natacion",
+    "core",
+    "empresa_software",
+    "restaurante"
+  ],
+  "sources": [
+    {
+      "path": "academia_natacion/docs/01-acuerdos-entregas.md",
+      "sha256": "58df8ff12e4a58918f22794e9ebde5cbd861a0a380323ea769e8f402cad8cef8"
+    },
+    {
+      "path": "academia_natacion/docs/02-operacion-sincronizacion.md",
+      "sha256": "93cc6f4da85fa73efee2977d1d217c3a62e9387c3134452c4e80443bbf82d49f"
+    },
+    {
+      "path": "academia_natacion/docs/03-documentacion-funcional.md",
+      "sha256": "0f71ce54c505e17f403e5e5b0469208cecfc77e0c1707c6965cff17a49f8872f"
+    },
+    {
+      "path": "academia_natacion/docs/04-metodo-desarrollo.md",
+      "sha256": "1748ace5d8a4b5bca2927351641fb862ab80d5535185bf0f63631352901a15c8"
+    },
+    {
+      "path": "academia_natacion/docs/05-contratos-base.md",
+      "sha256": "3e1441f93984302b41604e3f62aeb40863eb9d065eaf37f4d69d9aa904a43c30"
+    },
+    {
+      "path": "academia_natacion/docs/06-verificacion-base.md",
+      "sha256": "de5d4257df4e4b49ee7b6ea9c182f38bb202ab2ccdc5da10a7d4114ab825198a"
+    },
+    {
+      "path": "academia_natacion/docs/07-acceso-dispositivo.md",
+      "sha256": "f6f2519ba31175879a0f21484cbe96198d1f5286b661750389f37591bdb08c9b"
+    },
+    {
+      "path": "academia_natacion/docs/08-verificacion-acceso.md",
+      "sha256": "bbfd23482fad8de27a34d99cce870ac407c40c259acb5f1f0c5a8f7060f17c06"
+    },
+    {
+      "path": "academia_natacion/docs/09-operacion-online.md",
+      "sha256": "2da62b02245495d0d53d13a99f60011701c0453f5081a5beb74941abc7ebbc54"
+    },
+    {
+      "path": "academia_natacion/docs/10-offline-conciliacion.md",
+      "sha256": "eda1901b47bada18192886b545840f4e2b3c81fac992212c2b421ec7ad28f16c"
+    },
+    {
+      "path": "academia_natacion/docs/11-guia-local-web-android.md",
+      "sha256": "82efd3902a2a4754f3cf5c8cb5710e716e8b979bc9a593beee03371d72059a49"
+    },
+    {
+      "path": "academia_natacion/docs/decisiones/001-stack.md",
+      "sha256": "a279b82e64ece1fd4480507d419f157c1b871226e2c2cfe830b87e372693ca29"
+    },
+    {
+      "path": "academia_natacion/docs/specs/001-base-ejecutable.md",
+      "sha256": "0207e030279f9d898bb8858c9e1cdb02776fc733965e317e0f16e5c9154d4e3e"
+    },
+    {
+      "path": "academia_natacion/docs/specs/002-acceso-dispositivo.md",
+      "sha256": "1b203ffee3de4926a85352dc9abd4718916974a03c0f492b25c3831e4dd2de3f"
+    },
+    {
+      "path": "academia_natacion/docs/specs/003-catalogo-alumnos-inscripciones.md",
+      "sha256": "aecd37eb2ecf7d09a41ce3adcb84a882e799eeafce8ad637b848553dd2963c5e"
+    },
+    {
+      "path": "academia_natacion/docs/specs/004-cajas-cobros-asistencia-portal.md",
+      "sha256": "a0eafd8877daf0a388548b9504f13baae1f98860d5e01133d7b12995b5fba851"
+    },
+    {
+      "path": "academia_natacion/docs/specs/005-archivos-offline-respaldo.md",
+      "sha256": "6da80e35702151d7a690328070d03b8b78f58fd924ee8751924a23265bac2901"
+    },
+    {
+      "path": "academia_natacion/README.md",
+      "sha256": "997416e96b0e9f5a113481aa7d3922fdab57ea777f8943496806817d9d42dad5"
+    },
+    {
+      "path": "ARQUITECTURA_COMPARTIDA.md",
+      "sha256": "ecb9838f0fd2488315f2bf482d623e992c87f201dc216798eb267ba6bc0c6862"
+    },
+    {
+      "path": "CONTEXTO_GENERAL.md",
+      "sha256": "376653688dc11a171af0f1a478fe2fb5fcfd03456d51d18836a4e773dcf59463"
+    },
+    {
+      "path": "core/docs/01-alcance-modulos.md",
+      "sha256": "48fd8fb0d9a2e34af574b1abab9fdae6d8bbd77d16dca8e9f6022e4248c554b7"
+    },
+    {
+      "path": "core/docs/02-arquitectura.md",
+      "sha256": "0defb24bd75d286958a171336fe29def90c63b2a9ca8fcb1ff5642a019ff6193"
+    },
+    {
+      "path": "core/docs/03-contratos-integracion.md",
+      "sha256": "1dd666dfa5a9215af6a9ec904881e0b7bbe0c6e65359cdaf165b7818c109cc92"
+    },
+    {
+      "path": "core/docs/04-persistencia-versiones.md",
+      "sha256": "93b875f3b269e4af5194d7908beb6e6842e5fb0f54e2c233249bf0ed3eaa44a3"
+    },
+    {
+      "path": "core/docs/05-verificacion-datos.md",
+      "sha256": "e8fe8e3e6b616f30e8966403811a465500cee85e93ddab5104a14c7721f91e74"
+    },
+    {
+      "path": "core/docs/06-ruta-desarrollo.md",
+      "sha256": "4720f7972fba4702cae69b7b7d23c266ee25a013cd4a79ec3c9c845bdf04e92e"
+    },
+    {
+      "path": "core/docs/specs/README.md",
+      "sha256": "9cbd0e3e26249c3a044787b7a4e38f79a450c8ed69fba37b3f968391589b5a74"
+    },
+    {
+      "path": "core/README.md",
+      "sha256": "4c44b0592f693e186ca46303707680a32ae661554117f18f58806e924d9affb0"
+    },
+    {
+      "path": "DATOS_PRUEBA.md",
+      "sha256": "4b765a0cef3cd83709da573aefcb91d295bdb253413fcad463c0e2d263c5246b"
+    },
+    {
+      "path": "DOMINIOS.md",
+      "sha256": "de9cc1dbbff8aa563165011fe60b087ed88af31beaf997401a8fea23b8451e8c"
+    },
+    {
+      "path": "empresa_software/docs/01-negocio.md",
+      "sha256": "f0e29ff8d0ea4eb3612e5f09271ebdfd987496c718f32e467b5b3b11f3bfe4be"
+    },
+    {
+      "path": "empresa_software/docs/02-arquitectura.md",
+      "sha256": "c1e1e30942ae6cb788dbc6dbc8b8cf7b4f7899876dc42e1c08eb51e9c51c467a"
+    },
+    {
+      "path": "empresa_software/docs/03-nucleo.md",
+      "sha256": "e6e19d09daffb7f15ba8036834487bb94043cb284bb7ba108b07c145da7533bb"
+    },
+    {
+      "path": "empresa_software/docs/04-facturacion-sunat.md",
+      "sha256": "7b8aff3d68170f149f2196a0dba09753bd4544ab9c61beaa2707f7dd76e8d91e"
+    },
+    {
+      "path": "empresa_software/docs/05-panel-administrador.md",
+      "sha256": "3283f7a7e065496146ef48e6b7c23768f11ab8963f7af6bd915aa02600092ec1"
+    },
+    {
+      "path": "empresa_software/docs/06-metodologia.md",
+      "sha256": "21829bf9d74800fd5375b3d79c28390ccaccef1b790175445f1fc2dcba2a44c0"
+    },
+    {
+      "path": "empresa_software/docs/07-contrato-frontend.md",
+      "sha256": "be4d6ac257f332085664e1b27d129fe4a9c3e6bbc0606fab4d243e2f80c8d1fc"
+    },
+    {
+      "path": "empresa_software/docs/08-acceso-operacion.md",
+      "sha256": "42206f8d684db500729f6483d3e9e9a80fe63715ed9c2e4a34a6045257f19129"
+    },
+    {
+      "path": "empresa_software/docs/arquitectura.md",
+      "sha256": "234ac75e3d26c759747e42983601fbd86fb5969436c3ca63f799f70f7a9908aa"
+    },
+    {
+      "path": "empresa_software/docs/decisiones/001-stack.md",
+      "sha256": "a6e3c52fd0169700fa0089b361003e273843d892bb5d971ec6bb9d939085a7ac"
+    },
+    {
+      "path": "empresa_software/docs/specs/001-base-ejecutable.md",
+      "sha256": "76f4accf3f0f29e4d2949f2683a12ed0456a881aff724fdf67a0df99b8042061"
+    },
+    {
+      "path": "empresa_software/docs/specs/002-acceso-nativo.md",
+      "sha256": "aaa07ca61461727d81a502f66b233739aeb1d8b21668ce64b546c9e66a487567"
+    },
+    {
+      "path": "empresa_software/README.md",
+      "sha256": "b36233b123e059eed136ad6c2456e488814ddf24099e87c019a5079b64f303c6"
+    },
+    {
+      "path": "HARDWARE.md",
+      "sha256": "e50377c283f9160b0e9dfe457c12d1a1e290699f7f8e9afcec6f8e6c221b936b"
+    },
+    {
+      "path": "METODOLOGIA.md",
+      "sha256": "22a58015b39e5f03080f0b2a294c725c48b89dab33fa9c4135816f8363c489f1"
+    },
+    {
+      "path": "README.md",
+      "sha256": "e8ddbc083435abf00f06b78b0ef57570f299c78da90b170a61ae563ba424b9e6"
+    },
+    {
+      "path": "restaurante/CHANGELOG.md",
+      "sha256": "f879a16ce524b686666435b695e840ccfb1fa5796092de824f71d1ca64a2a442"
+    },
+    {
+      "path": "restaurante/docs/alcance.md",
+      "sha256": "e3cb2305420f72714a8d0024f8e63162489bd357bf8021ab868390700c0a471a"
+    },
+    {
+      "path": "restaurante/docs/decisiones/001-stack.md",
+      "sha256": "6a1ed01b7e860d640f259e2a81fc1fbb6181966920995d83695ffe565aa75e4b"
+    },
+    {
+      "path": "restaurante/docs/decisiones/002-continuidad.md",
+      "sha256": "fc4480feb2fca566a4ba42bf409dedda84b5a8a42b3e0112ac272c886f0c6321"
+    },
+    {
+      "path": "restaurante/docs/specs/001-base-tecnica.md",
+      "sha256": "331690ce2304d61baf91d4a71589070ce0f4934ddbf6cf20521548dd691a7c9a"
+    },
+    {
+      "path": "restaurante/docs/specs/002-acceso-multitenant.md",
+      "sha256": "9f681b19e30b869a52903dd8c7c02fd982f3fee5354957d59725c973fef76c42"
+    },
+    {
+      "path": "restaurante/README.md",
+      "sha256": "bec0d86b647f0cfd4940b60ea6d1d2065d3e1ad0747461b61552c60f211c7a3c"
+    },
+    {
+      "path": "STACK.md",
+      "sha256": "d855343df21f0f3a9ada9bf53b7177bf6210143a08283e42b496b73a6011574c"
+    }
+  ]
+}

@@ -1,0 +1,33 @@
+{
+  "name": "restaurante",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "npm run build:frontend && tsx watch src/start.ts",
+    "build:frontend": "next build",
+    "build:server": "tsc -p tsconfig.server.json",
+    "build": "npm run build:frontend && npm run build:server",
+    "start": "node dist/server/src/start.js",
+    "typecheck": "tsc --noEmit && tsc -p tsconfig.server.json --noEmit && tsc -p tsconfig.test.json",
+    "lint": "eslint .",
+    "test": "tsx --test tests/server.test.ts",
+    "smoke": "tsx --test tests/smoke.test.ts",
+    "check": "npm run typecheck && npm run lint && npm run build && npm test && npm run smoke"
+  },
+  "dependencies": {
+    "next": "16.4.2",
+    "react": "19.3.1",
+    "react-dom": "19.3.1"
+  },
+  "devDependencies": {
+    "@eslint/js": "10.0.1",
+    "@types/node": "24.1.0",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "eslint": "10.10.0",
+    "tsx": "4.23.15",
+    "typescript": "6.0.3",
+    "typescript-eslint": "8.69.0"
+  }
+}
