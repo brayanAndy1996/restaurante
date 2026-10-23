@@ -1,9 +1,17 @@
 import { createHash, randomBytes } from "node:crypto";
-export const PERMISSIONS = [
+export const ADMIN_PERMISSIONS = [
   "usuarios.gestionar",
   "roles.gestionar",
   "locales.asignar",
   "auditoria.consultar",
+] as const;
+export const PERMISSIONS = [
+  ...ADMIN_PERMISSIONS,
+  "carta.consultar",
+  "carta.gestionar",
+  "stock.ajustar",
+  "salon.gestionar",
+  "mesas.operar",
 ] as const;
 export class AuthError extends Error {
   constructor(

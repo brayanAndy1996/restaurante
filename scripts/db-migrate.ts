@@ -64,6 +64,32 @@ export async function migrate(url: string, environment?: "demo" | "test") {
           [],
           t,
         );
+      const [op] = await db.query(
+        "SELECT value FROM restaurant.metadata WHERE key='patch004'",
+        [],
+        t,
+      );
+      if (!op) {
+        const { fingerprint } = await import("./seed-demo.js");
+        const [snapshot] = await db.query(
+          "SELECT value FROM restaurant.metadata WHERE key='demo_fingerprint'",
+          [],
+          t,
+        );
+        if (snapshot && snapshot.value !== (await fingerprint(db, t)))
+          throw new Error("Demo modified; migration refused");
+        await db.exec(
+          await readFile(resolve("migrations/004-carta-salon.sql"), "utf8"),
+          [],
+          t,
+        );
+        if (snapshot)
+          await db.exec(
+            "UPDATE restaurant.metadata SET value=$1 WHERE key='demo_fingerprint'",
+            [await fingerprint(db, t)],
+            t,
+          );
+      }
     });
   } finally {
     await db.close();
@@ -79,7 +105,7 @@ if (process.argv[1]?.replaceAll("\\", "/").endsWith("/db-migrate.ts")) {
       : undefined;
   migrate(url, environment)
     .then(() =>
-      console.log("Migración002+003 completada; sin cuentas automáticas."),
+      console.log("Migración002+003+004 completada; sin cuentas automáticas."),
     )
     .catch(() => {
       console.error(

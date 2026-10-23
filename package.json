@@ -1,6 +1,6 @@
 {
   "name": "restaurante",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
   "type": "module",
   "scripts": {
@@ -14,13 +14,16 @@
     "test": "tsx --test tests/server.test.ts tests/auth-policy.test.ts tests/auth-http.test.ts",
     "test:db": "node --env-file-if-exists=.env.test --import tsx --test tests/db-auth.integration.test.ts",
     "test:adversarial": "node --env-file-if-exists=.env.test --import tsx --test tests/adversarial-access.test.ts",
-    "check:all": "npm run check && npm run test:db && npm run test:adversarial",
+    "test:operations": "node --env-file-if-exists=.env.test --import tsx --test tests/operations.integration.test.ts",
+    "test:operations:adversarial": "node --env-file-if-exists=.env.test --import tsx --test tests/operations-adversarial.test.ts",
+    "check:all": "npm run check && npm run test:db && npm run test:adversarial && npm run test:operations && npm run test:operations:adversarial && npm run test:operations:upgrade",
     "smoke": "tsx --test tests/smoke.test.ts",
     "db:local": "pwsh -NoProfile -File scripts/local-postgres.ps1 -Action prepare",
     "db:migrate": "node --env-file-if-exists=.env.admin --import tsx scripts/db-migrate.ts",
     "db:seed:demo": "node --env-file-if-exists=.env.admin --import tsx scripts/seed-demo.ts",
     "tenant:bootstrap": "node --env-file-if-exists=.env.admin --import tsx scripts/bootstrap-tenant.ts",
-    "check": "npm run typecheck && npm run lint && npm run build && npm test && npm run smoke"
+    "check": "npm run typecheck && npm run lint && npm run build && npm test && npm run smoke",
+    "test:operations:upgrade": "node --env-file-if-exists=.env.test --import tsx --test tests/operations-upgrade.integration.test.ts"
   },
   "dependencies": {
     "argon2": "0.45.1",

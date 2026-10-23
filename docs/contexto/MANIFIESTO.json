@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "generated": true,
   "source": "Raiz del espacio proyectos; fuentes globales y documentacion individual de referencia",
-  "sourceRevision": "sha256:6d988f827a43b3e46a03e3d0cfc216b1d814124d4e4fede9dda8cdc72b9e64cf",
+  "sourceRevision": "sha256:0feda8ea0af263c40ad7d32dc5a24253cef3223bb965f46c26f5624d91066b83",
   "instructions": "No editar este snapshot. Actualizar fuentes y ejecutar herramientas/Sincronizar-Contexto.ps1 desde el espacio de documentacion.",
   "referenceProjects": [
     "academia_natacion",
@@ -89,7 +89,7 @@
     },
     {
       "path": "CONTEXTO_GENERAL.md",
-      "sha256": "b646ecad7c98df4c0e3bcdbc772c8f7da85a73b16e49424d7d915009f3053bca"
+      "sha256": "54446855f63d555b15eb121f39bc93bd0a8b310ec4c86d62539e1f17155e9059"
     },
     {
       "path": "core/docs/01-alcance-modulos.md",
@@ -193,15 +193,15 @@
     },
     {
       "path": "README.md",
-      "sha256": "ac8fcc57230a4806d1e3c79ae9ea24456610b799cf8600909a370652c3178f39"
+      "sha256": "25586e89d0b4d6b870e7f78ab77d8b5c596512693a0b0ebeee5b3683bb16684f"
     },
     {
       "path": "restaurante/CHANGELOG.md",
-      "sha256": "c11f4d76ef1f82425a2d35a13d22e02ee084932af5e341b99bfc977138f5efd9"
+      "sha256": "3fd988c66de6e62fb84fefd3022268d8a7a992a0b1dcbbf0b2b3c20bf9845bff"
     },
     {
       "path": "restaurante/docs/alcance.md",
-      "sha256": "e3cb2305420f72714a8d0024f8e63162489bd357bf8021ab868390700c0a471a"
+      "sha256": "5a54de27c3ba434c654b5e71f474f63ff5a75eb642b8e7484b542b854898dff1"
     },
     {
       "path": "restaurante/docs/decisiones/001-stack.md",
@@ -224,8 +224,12 @@
       "sha256": "2bc70e5da64ea49a409768d59c29a8b3306b80bde6a4b855aa39ef2b9c342e2a"
     },
     {
+      "path": "restaurante/docs/specs/003-carta-salon.md",
+      "sha256": "8163c02212b597f29c3f84e5d70348b149291a3875d8044ecaaf26c08eccd25b"
+    },
+    {
       "path": "restaurante/README.md",
-      "sha256": "ab13f788ff6c2d10bddddb403a973cfb813c490c9b9fd2192b6e780f13f48cf2"
+      "sha256": "2d007d423dfae4e1040b1ccc695b11f650ddfbd34b422c23462f6b0474f2ae33"
     },
     {
       "path": "STACK.md",

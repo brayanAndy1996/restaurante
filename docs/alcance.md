@@ -1,6 +1,6 @@
 # Alcance de restaurante
 
-Actualizado: 2026-10-22. Producto independiente, desarrollado desde cero en su [repositorio propio](https://github.com/brayanAndy1996/restaurante). Prioridad: backend y arquitectura con frontend funcional mínimo. Las reglas comunes se consultan en [el contexto](contexto/CONTEXTO_GENERAL.md), [metodología](contexto/METODOLOGIA.md) y [arquitectura](contexto/ARQUITECTURA_COMPARTIDA.md); no se comparte implementación ni se utiliza CORE.
+Actualizado: 2026-10-23. Producto independiente, desarrollado desde cero en su [repositorio propio](https://github.com/brayanAndy1996/restaurante). Prioridad: backend y arquitectura con frontend funcional mínimo. Las reglas comunes se consultan en [el contexto](contexto/CONTEXTO_GENERAL.md), [metodología](contexto/METODOLOGIA.md) y [arquitectura](contexto/ARQUITECTURA_COMPARTIDA.md); no se comparte implementación ni se utiliza CORE.
 
 ## Acuerdos particulares
 
@@ -13,15 +13,15 @@ Actualizado: 2026-10-22. Producto independiente, desarrollado desde cero en su [
 - Primera versión comercial sin facturación electrónica, consultas RUC/SUNAT ni notas de crédito fiscales. Los tickets/precuentas son documentos internos; nunca se presentan como comprobantes fiscales. La referencia original `restaurante.txt` es un insumo y se interpreta con estas exclusiones acordadas.
 - Moneda PEN, importes con dos decimales, precios con IGV incluido y fecha de negocio `America/Lima`. Cálculos, redondeos y distribución de cuentas se especifican antes de cobrar.
 
-Este producto adelanta nube y contingencia por decisión particular del usuario; las referencias globales a nube pospuesta no aplazan este alcance. La nube objetivo no implica que exista hoy un despliegue ni soporte multitenant implementado.
+Este producto adelanta nube y contingencia por decisión particular del usuario; las referencias globales a nube pospuesta no aplazan este alcance. La nube objetivo no implica que exista un despliegue público. El aislamiento multitenant sí está implementado y verificado en PostgreSQL de desarrollo.
 
 ## Mapa de módulos propios y entregas
 
 | Entrega progresiva | Recorrido y dependencias |
 |---|---|
 | 001: base técnica | API de diagnóstico y página real, configuración y checks; sin BD/acceso comercial. [Spec ejecutable](specs/001-base-tecnica.md). |
-| Acceso y ámbitos | Usuarios, credenciales, sesiones, roles/permisos, tenants/locales y auditoría; persistencia/migraciones y demo opcional segura. Base para cualquier operación sensible. |
-| Carta y salón | Familias/productos, cantidades y disponibilidad, sectores/mesas, apertura con comensales/mozo y estados; concurrencia dentro del mismo local. |
+| 002: acceso y ámbitos (terminada) | Usuarios, credenciales, sesiones, roles/permisos, tenants/locales y auditoría; persistencia/migraciones y demo opcional segura. Base para cualquier operación sensible. |
+| 003: carta y salón (terminada) | Familias/productos, cantidades y disponibilidad, sectores/mesas, apertura con comensales/mozo y estados; concurrencia dentro del mismo local. |
 | Comandas y producción | Órdenes, observaciones/modificadores y tiempos de servicio, adiciones, ruteo por estación, impresoras de red y KDS, confirmaciones y reintentos visibles. |
 | Servicio y cuentas | Precuenta, mover mesas, unir mesas/cuentas, división por ítems o partes iguales; anulaciones y descuentos autorizados y auditados. |
 | Caja | Apertura/fondo, cobros parciales y múltiples medios (efectivo, tarjeta, Yape/Plin como registro), vuelto, cierre de cuenta/mesa, arqueo y cierre de turno, reportes/exportación. Sin procesar pagos externos hasta una integración especificada. |
@@ -39,4 +39,4 @@ El stock debe definir reservas, descuento/devolución al anular, concurrencia y 
 
 ## Estado de la entrega
 
-Se autoriza comenzar por la base 001; las funciones del mapa son alcance progresivo pendiente. No hay evidencia todavía de persistencia, continuidad, impresión, KDS o operación comercial comprobadas. Los comandos reales y resultados se mantienen en README y en cada spec; el hardware publicado sigue provisional hasta probar el producto empaquetado.
+v0.3.0 incluye base técnica, acceso multitenant PostgreSQL y carta/salón por local, verificados con integración real y revisión adversarial. Las atenciones solo se abren y cancelan vacías; las cantidades se ajustan manualmente con auditoría, sin consumo automático. Ver [spec 002](specs/002-acceso-multitenant.md) y [spec 003](specs/003-carta-salon.md). Comandas, cobros, continuidad, impresión y KDS siguen pendientes; no hay operación comercial ni despliegue público. Los comandos reales y resultados se mantienen en README y en cada spec; el hardware publicado sigue provisional hasta probar el producto empaquetado.

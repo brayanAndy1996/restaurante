@@ -168,7 +168,7 @@ test("PostgreSQL real: restricted roles, isolation, lifecycle and durable invari
           auth.context(ia, tr),
         );
         assert.equal(context.tenant.id, a.tenantId);
-        assert.ok(context.permissions.length === 4);
+        assert.deepEqual(context.permissions, [...PERMISSIONS].sort());
         await expectCode(
           () => route(ia, "PATCH", `/api/users/${b.userId}`, { active: false }),
           "NOT_FOUND",

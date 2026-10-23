@@ -1,9 +1,11 @@
+import { operationsRoute } from "./operations.js";
 import { Sequelize, QueryTypes, type Transaction } from "sequelize";
 import { createHmac, randomUUID, timingSafeEqual } from "node:crypto";
 import * as argon2 from "argon2";
 import {
   AuthError,
   PERMISSIONS,
+  ADMIN_PERMISSIONS,
   fields,
   hashToken,
   ids,
@@ -100,6 +102,13 @@ export class Database {
       transaction,
     );
     if (patch?.value !== "logout-idempotent")
+      throw new Error("Migration required");
+    const [operations] = await this.query(
+      "SELECT value FROM restaurant.metadata WHERE key='patch004'",
+      [],
+      transaction,
+    );
+    if (operations?.value !== "catalog-and-tables")
       throw new Error("Migration required");
   }
   close() {
@@ -314,8 +323,8 @@ export class AuthService {
   }
   async ensureAdmin(t: Transaction) {
     const [row] = await this.db.query(
-      "SELECT count(*)::int count FROM (SELECT u.id FROM restaurant.users u JOIN restaurant.user_roles ur ON ur.user_id=u.id AND ur.tenant_id=u.tenant_id JOIN restaurant.role_permissions rp ON rp.role_id=ur.role_id AND rp.tenant_id=ur.tenant_id WHERE u.active GROUP BY u.id HAVING count(DISTINCT rp.permission)=4) admins",
-      [],
+      "SELECT count(*)::int count FROM (SELECT u.id FROM restaurant.users u JOIN restaurant.user_roles ur ON ur.user_id=u.id AND ur.tenant_id=u.tenant_id JOIN restaurant.role_permissions rp ON rp.role_id=ur.role_id AND rp.tenant_id=ur.tenant_id WHERE u.active GROUP BY u.id HAVING count(DISTINCT rp.permission) FILTER (WHERE rp.permission=ANY($1::text[]))=4) admins",
+      [[...ADMIN_PERMISSIONS]],
       t,
     );
     if (Number(row?.count) < 1) throw new AuthError("LAST_ADMIN", 409);
@@ -399,6 +408,8 @@ export class AuthService {
     t: Transaction,
     url: URL,
   ): Promise<object> {
+    if (path.startsWith("/api/operations/"))
+      return operationsRoute(this, method, path, body, i, t);
     if (method === "GET" && path === "/api/context") return this.context(i, t);
     if (method === "GET" && path === "/api/permissions")
       return { items: PERMISSIONS };

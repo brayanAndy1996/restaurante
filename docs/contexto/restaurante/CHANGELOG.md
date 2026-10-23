@@ -1,5 +1,13 @@
 # Cambios
 
+## 0.3.0 — 2026-10-23
+
+- Carta por local: familias, productos, precios enteros en céntimos PEN, disponibilidad efectiva y ajustes de cantidades con versión, motivo y auditoría.
+- Salón: sectores, mesas, mozos habilitados, apertura idempotente y cancelación de atenciones vacías. Protección frente a doble ocupación y cambios durante la atención.
+- Migración 004 con RLS, relaciones compuestas y actualización selectiva de permisos; bootstrap y demo reproducible actualizados.
+- Interfaz mínima conectada con selección explícita de local. Sin comandas, consumo automático, cobros, impresión ni offline todavía.
+- Integración y adversariales en PostgreSQL real, incluido upgrade desde 002 en una BD temporal independiente.
+
 ## 0.2.0 — 2026-10-22
 
 - Acceso por empresa, sesiones y contraseñas Argon2id; protección CSRF y límite durable de login.

@@ -39,6 +39,7 @@ export async function handleAuth(
   const path = url.pathname;
   if (!(
     path.startsWith("/api/auth/") ||
+    path.startsWith("/api/operations/") ||
     [
       "/api/context",
       "/api/users",
