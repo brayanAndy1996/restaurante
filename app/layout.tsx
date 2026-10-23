@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Restaurante | Diagnóstico técnico",
-  description: "Diagnóstico local del servicio Restaurante.",
+  title: "Restaurante | Acceso",
+  description: "Acceso y administración de usuarios, roles y auditoría del restaurante.",
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {

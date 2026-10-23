@@ -1,0 +1,50 @@
+CREATE SCHEMA IF NOT EXISTS restaurant;
+REVOKE ALL ON SCHEMA restaurant FROM PUBLIC;
+CREATE TABLE restaurant.metadata (key text PRIMARY KEY, value text NOT NULL);
+INSERT INTO restaurant.metadata VALUES ('version','002'),('environment','normal');
+CREATE TABLE restaurant.tenants(id uuid PRIMARY KEY, code text NOT NULL UNIQUE, name text NOT NULL, active boolean NOT NULL DEFAULT true, UNIQUE(id,code));
+CREATE TABLE restaurant.sites(id uuid PRIMARY KEY,tenant_id uuid NOT NULL REFERENCES restaurant.tenants(id),code text NOT NULL,name text NOT NULL,active boolean NOT NULL DEFAULT true,UNIQUE(tenant_id,id),UNIQUE(tenant_id,code));
+CREATE TABLE restaurant.users(id uuid PRIMARY KEY,tenant_id uuid NOT NULL REFERENCES restaurant.tenants(id),username text NOT NULL,password_hash text NOT NULL,active boolean NOT NULL DEFAULT true,UNIQUE(tenant_id,id),UNIQUE(tenant_id,username));
+CREATE TABLE restaurant.roles(id uuid PRIMARY KEY,tenant_id uuid NOT NULL REFERENCES restaurant.tenants(id),name text NOT NULL,UNIQUE(tenant_id,id),UNIQUE(tenant_id,name));
+CREATE TABLE restaurant.role_permissions(tenant_id uuid NOT NULL,role_id uuid NOT NULL,permission text NOT NULL CHECK(permission IN ('usuarios.gestionar','roles.gestionar','locales.asignar','auditoria.consultar')),PRIMARY KEY(tenant_id,role_id,permission),FOREIGN KEY(tenant_id,role_id) REFERENCES restaurant.roles(tenant_id,id));
+CREATE TABLE restaurant.user_roles(tenant_id uuid NOT NULL,user_id uuid NOT NULL,role_id uuid NOT NULL,PRIMARY KEY(tenant_id,user_id,role_id),FOREIGN KEY(tenant_id,user_id) REFERENCES restaurant.users(tenant_id,id),FOREIGN KEY(tenant_id,role_id) REFERENCES restaurant.roles(tenant_id,id));
+CREATE TABLE restaurant.user_sites(tenant_id uuid NOT NULL,user_id uuid NOT NULL,site_id uuid NOT NULL,PRIMARY KEY(tenant_id,user_id,site_id),FOREIGN KEY(tenant_id,user_id) REFERENCES restaurant.users(tenant_id,id),FOREIGN KEY(tenant_id,site_id) REFERENCES restaurant.sites(tenant_id,id));
+CREATE TABLE restaurant.sessions(id uuid PRIMARY KEY,tenant_id uuid NOT NULL,user_id uuid NOT NULL,token_hash text NOT NULL UNIQUE,csrf_token text NOT NULL,created_at timestamptz NOT NULL DEFAULT now(),last_seen timestamptz NOT NULL DEFAULT now(),expires_at timestamptz NOT NULL DEFAULT now()+interval '12 hours',revoked boolean NOT NULL DEFAULT false,FOREIGN KEY(tenant_id,user_id) REFERENCES restaurant.users(tenant_id,id));
+CREATE TABLE restaurant.audit_events(id uuid PRIMARY KEY,tenant_id uuid NOT NULL REFERENCES restaurant.tenants(id),actor_id uuid,action text NOT NULL,entity_id uuid,outcome text NOT NULL,created_at timestamptz NOT NULL DEFAULT now(),FOREIGN KEY(tenant_id,actor_id) REFERENCES restaurant.users(tenant_id,id));
+CREATE TABLE restaurant.auth_limits(key text PRIMARY KEY,attempts int NOT NULL,expires_at timestamptz NOT NULL);
+CREATE TABLE restaurant.auth_events(id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,identity_key text NOT NULL,outcome text NOT NULL,created_at timestamptz NOT NULL DEFAULT now());
+DO $migration$ DECLARE tab text; BEGIN
+FOREACH tab IN ARRAY ARRAY['tenants','sites','users','roles','role_permissions','user_roles','user_sites','sessions','audit_events'] LOOP
+EXECUTE format('ALTER TABLE restaurant.%I ENABLE ROW LEVEL SECURITY',tab);
+EXECUTE format('ALTER TABLE restaurant.%I FORCE ROW LEVEL SECURITY',tab);
+EXECUTE format('CREATE POLICY tenant_scope ON restaurant.%I USING (%s = nullif(current_setting(''restaurant.tenant_id'',true),'''')::uuid) WITH CHECK (%s = nullif(current_setting(''restaurant.tenant_id'',true),'''')::uuid)',tab,CASE WHEN tab='tenants' THEN 'id' ELSE 'tenant_id' END,CASE WHEN tab='tenants' THEN 'id' ELSE 'tenant_id' END);
+END LOOP; END $migration$;
+CREATE POLICY auth_lookup ON restaurant.tenants TO restaurante_auth_lookup USING(true);
+CREATE POLICY auth_lookup ON restaurant.users TO restaurante_auth_lookup USING(true);
+CREATE POLICY auth_lookup ON restaurant.sessions TO restaurante_auth_lookup USING(true);
+GRANT USAGE ON SCHEMA restaurant TO restaurante_auth_lookup;
+GRANT SELECT ON restaurant.tenants,restaurant.users,restaurant.sessions TO restaurante_auth_lookup;
+GRANT SELECT,INSERT,UPDATE ON restaurant.auth_limits TO restaurante_auth_lookup;
+GRANT INSERT ON restaurant.auth_events TO restaurante_auth_lookup;
+GRANT USAGE ON SEQUENCE restaurant.auth_events_id_seq TO restaurante_auth_lookup;
+CREATE FUNCTION restaurant.login_identity(tenant_code text, login_name text) RETURNS TABLE(tenant_id uuid,user_id uuid,password_hash text) LANGUAGE sql SECURITY DEFINER SET search_path=pg_catalog,restaurant AS $migration$ SELECT t.id,u.id,u.password_hash FROM restaurant.tenants t JOIN restaurant.users u ON u.tenant_id=t.id WHERE t.code=tenant_code AND u.username=login_name AND t.active AND u.active $migration$;
+CREATE FUNCTION restaurant.session_identity(token text) RETURNS TABLE(tenant_id uuid,user_id uuid,session_id uuid,csrf_token text) LANGUAGE sql SECURITY DEFINER SET search_path=pg_catalog,restaurant AS $migration$ SELECT s.tenant_id,s.user_id,s.id,s.csrf_token FROM restaurant.sessions s JOIN restaurant.users u ON u.tenant_id=s.tenant_id AND u.id=s.user_id JOIN restaurant.tenants t ON t.id=s.tenant_id WHERE s.token_hash=token AND NOT s.revoked AND s.expires_at>now() AND s.last_seen>now()-interval '30 minutes' AND u.active AND t.active $migration$;
+CREATE FUNCTION restaurant.rate_attempt(bucket text, maximum int, increment boolean) RETURNS boolean LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog,restaurant AS $migration$ DECLARE n int; BEGIN
+INSERT INTO restaurant.auth_limits(key,attempts,expires_at) VALUES(bucket,CASE WHEN increment THEN 1 ELSE 0 END,now()+interval '15 minutes') ON CONFLICT(key) DO UPDATE SET attempts=CASE WHEN restaurant.auth_limits.expires_at<=now() THEN CASE WHEN increment THEN 1 ELSE 0 END ELSE restaurant.auth_limits.attempts+CASE WHEN increment THEN 1 ELSE 0 END END,expires_at=CASE WHEN restaurant.auth_limits.expires_at<=now() THEN now()+interval '15 minutes' ELSE restaurant.auth_limits.expires_at END RETURNING attempts INTO n; RETURN n<=maximum; END $migration$;
+CREATE FUNCTION restaurant.record_auth(identity_key text,result text) RETURNS void LANGUAGE sql SECURITY DEFINER SET search_path=pg_catalog,restaurant AS $migration$ INSERT INTO restaurant.auth_events(identity_key,outcome) VALUES(identity_key,result) $migration$;
+GRANT CREATE ON SCHEMA restaurant TO restaurante_auth_lookup;
+CREATE FUNCTION restaurant.rate_success(bucket text) RETURNS void LANGUAGE sql SECURITY DEFINER SET search_path=pg_catalog,restaurant AS $migration$ UPDATE restaurant.auth_limits SET attempts=greatest(attempts-1,0) WHERE key=bucket $migration$;
+ALTER FUNCTION restaurant.rate_success(text) OWNER TO restaurante_auth_lookup;
+ALTER FUNCTION restaurant.login_identity(text,text) OWNER TO restaurante_auth_lookup;
+ALTER FUNCTION restaurant.session_identity(text) OWNER TO restaurante_auth_lookup;
+ALTER FUNCTION restaurant.rate_attempt(text,int,boolean) OWNER TO restaurante_auth_lookup;
+ALTER FUNCTION restaurant.record_auth(text,text) OWNER TO restaurante_auth_lookup;
+REVOKE ALL ON ALL FUNCTIONS IN SCHEMA restaurant FROM PUBLIC;
+GRANT USAGE ON SCHEMA restaurant TO restaurante_runtime;
+GRANT SELECT ON restaurant.metadata TO restaurante_runtime;
+GRANT SELECT,INSERT,UPDATE ON restaurant.tenants,restaurant.sites,restaurant.users,restaurant.roles,restaurant.sessions TO restaurante_runtime;
+GRANT SELECT,INSERT,DELETE ON restaurant.role_permissions,restaurant.user_roles,restaurant.user_sites TO restaurante_runtime;
+GRANT SELECT,INSERT ON restaurant.audit_events TO restaurante_runtime;
+GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA restaurant TO restaurante_runtime;
+
+REVOKE CREATE ON SCHEMA restaurant FROM restaurante_auth_lookup;

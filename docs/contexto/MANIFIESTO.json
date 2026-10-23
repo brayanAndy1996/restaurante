@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "generated": true,
   "source": "Raiz del espacio proyectos; fuentes globales y documentacion individual de referencia",
-  "sourceRevision": "sha256:42eb398f35a5134ff647c28dc8a7a5d4017d1b7641ce41e0fba663d58194c596",
+  "sourceRevision": "sha256:6d988f827a43b3e46a03e3d0cfc216b1d814124d4e4fede9dda8cdc72b9e64cf",
   "instructions": "No editar este snapshot. Actualizar fuentes y ejecutar herramientas/Sincronizar-Contexto.ps1 desde el espacio de documentacion.",
   "referenceProjects": [
     "academia_natacion",
@@ -89,7 +89,7 @@
     },
     {
       "path": "CONTEXTO_GENERAL.md",
-      "sha256": "376653688dc11a171af0f1a478fe2fb5fcfd03456d51d18836a4e773dcf59463"
+      "sha256": "b646ecad7c98df4c0e3bcdbc772c8f7da85a73b16e49424d7d915009f3053bca"
     },
     {
       "path": "core/docs/01-alcance-modulos.md",
@@ -193,11 +193,11 @@
     },
     {
       "path": "README.md",
-      "sha256": "e8ddbc083435abf00f06b78b0ef57570f299c78da90b170a61ae563ba424b9e6"
+      "sha256": "ac8fcc57230a4806d1e3c79ae9ea24456610b799cf8600909a370652c3178f39"
     },
     {
       "path": "restaurante/CHANGELOG.md",
-      "sha256": "f879a16ce524b686666435b695e840ccfb1fa5796092de824f71d1ca64a2a442"
+      "sha256": "c11f4d76ef1f82425a2d35a13d22e02ee084932af5e341b99bfc977138f5efd9"
     },
     {
       "path": "restaurante/docs/alcance.md",
@@ -205,11 +205,15 @@
     },
     {
       "path": "restaurante/docs/decisiones/001-stack.md",
-      "sha256": "6a1ed01b7e860d640f259e2a81fc1fbb6181966920995d83695ffe565aa75e4b"
+      "sha256": "7fea395e1c0d7ed2351260749469f075675e38f337fa24dedec17fea5d68c772"
     },
     {
       "path": "restaurante/docs/decisiones/002-continuidad.md",
       "sha256": "fc4480feb2fca566a4ba42bf409dedda84b5a8a42b3e0112ac272c886f0c6321"
+    },
+    {
+      "path": "restaurante/docs/decisiones/003-persistencia-acceso.md",
+      "sha256": "44c03abd028cc5f5b06cc584d14013458060b413fd174642c287f965a411a0a7"
     },
     {
       "path": "restaurante/docs/specs/001-base-tecnica.md",
@@ -217,11 +221,11 @@
     },
     {
       "path": "restaurante/docs/specs/002-acceso-multitenant.md",
-      "sha256": "9f681b19e30b869a52903dd8c7c02fd982f3fee5354957d59725c973fef76c42"
+      "sha256": "2bc70e5da64ea49a409768d59c29a8b3306b80bde6a4b855aa39ef2b9c342e2a"
     },
     {
       "path": "restaurante/README.md",
-      "sha256": "bec0d86b647f0cfd4940b60ea6d1d2065d3e1ad0747461b61552c60f211c7a3c"
+      "sha256": "ab13f788ff6c2d10bddddb403a973cfb813c490c9b9fd2192b6e780f13f48cf2"
     },
     {
       "path": "STACK.md",

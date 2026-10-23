@@ -1,5 +1,13 @@
 # Cambios
 
+## 0.2.0 — 2026-10-22
+
+- Acceso por empresa, sesiones y contraseñas Argon2id; protección CSRF y límite durable de login.
+- PostgreSQL con RLS, relaciones compuestas, runtime restringido y credencial de migración separada. Migraciones 002 y 003, bootstrap explícito con clave oculta y demo opcional reproducible de dos empresas.
+- Usuarios, roles/permisos, pertenencias a locales y auditoría; protección del último administrador y de escalaciones mediante roles existentes.
+- UI mínima integrada para acceso/administración. Modo local mantiene diagnóstico; sin identidad offline ni ventas.
+- Verificación: check completo, 11 pruebas HTTP/políticas, 1 smoke, 12 escenarios de integración PostgreSQL y 11 adversariales independientes; QA de login/contextos/permisos y CLI real. Corregidos logout repetido, CSRF multibyte, carrera del límite de intentos, asignación de roles superiores y validación de UUID malformados.
+
 ## 0.1.0 — 2026-10-22
 
 Primera base técnica local de desarrollo, sin release comercial ni despliegue nube.

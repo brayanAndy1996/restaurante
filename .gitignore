@@ -15,3 +15,4 @@ data/
 *.db
 playwright-report/
 test-results/
+.local/

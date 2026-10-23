@@ -2,7 +2,7 @@ import eslint from "@eslint/js";
 import tseslint from "typescript-eslint";
 
 export default tseslint.config(
-  { ignores: [".next/**", "out/**", "dist/**", "node_modules/**"] },
+  { ignores: [".next/**", "out/**", "dist/**", "node_modules/**", ".local/**"] },
   eslint.configs.recommended,
   ...tseslint.configs.recommended,
   {

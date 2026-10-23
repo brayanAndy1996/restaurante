@@ -29,3 +29,7 @@ No duplicar reglas por motor ni acoplar dominio a HTTP/Electron. La replicación
 Consultadas el 2026-10-22: [Next instalación](https://nextjs.org/docs/app/getting-started/installation), [exportación estática](https://nextjs.org/docs/app/guides/static-exports), [Sequelize versiones](https://sequelize.org/releases/), [Sequelize v6](https://sequelize.org/docs/v6/), [Electron releases](https://releases.electronjs.org/). npm confirma engines de Next `>=20.9.0`; versiones exactas seleccionadas se guardan en lockfile. El entorno disponible supera ese mínimo; esto no certifica el instalador Windows.
 
 Prueba acotada de esta entrega: typecheck, tests API, build export estático, servir artefacto por Node y revisar UI. La spec registrará evidencia ejecutada. Versiones de Electron, drivers definitivos, TLS LAN, rendimiento/concurrencia, matriz Android/iOS y firma/instalación se cierran antes de sus implementaciones/piloto.
+
+## Actualización v0.2.0
+
+Persistencia de acceso implementada y verificada con Sequelize 6.37.8, pg 8.23.1 y PostgreSQL 17.5 dedicado de desarrollo. Argon2 0.45.1 nativo probado. Versiones, aislamiento, mitigación UUID transitiva y límites se registran en [ADR 003](003-persistencia-acceso.md); evidencia en [spec 002](../specs/002-acceso-multitenant.md). Electron, SQLite y despliegue productivo siguen pendientes.

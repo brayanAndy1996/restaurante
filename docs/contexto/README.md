@@ -19,7 +19,7 @@ Punto de entrada de la documentación. Actualizado: 2026-10-22. La base técnica
 | [academia_natacion](academia_natacion/README.md) | Gestión de academia: web, Android y nube con operación offline | Operación online v0.3.0; offline comercial/respaldo/hardware pendientes |
 | [core](core/README.md) | Archivo histórico de una propuesta descartada | Cancelado el 2026-10-20; no desarrollar ni consumir |
 | [empresa_software](empresa_software/README.md) | Panel interno: empresas, catálogo, contratos, cobros e instalaciones/licencias | Base técnica y acceso nativo v0.2.0 verificados; módulos comerciales pendientes |
-| [restaurante](restaurante/README.md) | Operación multitenant de salón, comandas y caja; nube con continuidad local | Base técnica v0.1.0 verificada; acceso y operación comercial pendientes |
+| [restaurante](restaurante/README.md) | Operación multitenant de salón, comandas y caja; nube con continuidad local | Acceso multitenant v0.2.0 verificado; operación comercial y continuidad pendientes |
 
 Natación tiene documentación, acceso/permisos y autorización Android v0.2.0, además de diagnóstico API/web/Android en su [repositorio oficial](https://github.com/brayanAndy1996/piscina); los módulos operativos siguen pendientes. Pollería permanece como proyecto futuro.
 

@@ -28,6 +28,8 @@ Acuerdos del 2026-10-21: [natación](academia_natacion/README.md) tendrá web Ne
 
 Excepción propia de [restaurante](restaurante/README.md), acordada el 2026-10-22: producto multitenant con nube habitual y servidor local para continuidad sin internet; primera instalación con un local, mozos en celulares/tablets e impresoras de red. La primera versión comercial excluye facturación electrónica; inventario de disponibilidad/cantidades. KDS también en alcance. Caída simultánea de internet y servidor local fuera de continuidad garantizada. Arquitectura, límites y entregas se definen en la documentación del producto; las reglas siguientes de nube futura no aplazan este alcance. Desarrollo iniciado, sin operación comercial ni sincronización implementadas todavía.
 
+Restaurante usa el [repositorio restaurante](https://github.com/brayanAndy1996/restaurante). Acceso multitenant v0.2.0 implementado y verificado con PostgreSQL real, roles/permisos, sesiones y auditoría propios; la evidencia y los límites están en su [spec 002](restaurante/docs/specs/002-acceso-multitenant.md). Opera únicamente como entorno de desarrollo local: no hay despliegue nube, ventas ni continuidad implementados.
+
 - TypeScript y **Electron** para las aplicaciones de escritorio.
 - SQLite local y Sequelize como ORM. PostgreSQL está previsto para la futura nube.
 - Stack preferido para todos los proyectos: **Next.js (frontend), Node.js (backend), Sequelize y PostgreSQL (BD servidor)**, con TypeScript. Electron y SQLite siguen siendo las decisiones locales actuales. Antes de implementar cada software, revisar adecuación/compatibilidad y registrar decisión por proyecto según [STACK.md](STACK.md); no asumir que la preferencia es la mejor opción para cualquier requisito.
