@@ -18,25 +18,34 @@ import {
 } from './errores';
 
 /**
- * Sentencia que fija la empresa de la transacción. Este es el único archivo de la API autorizado a
- * escribir el parámetro (regla de ESLint, criterio 37), y el texto no se puede importar fuera de
- * `src/nucleo/` (criterio 22c). La guarda de consultas (`base-de-datos/guarda-api.ts`) reconoce este
- * texto exacto, pero solo autoriza la transacción si `ejecutar` la registró antes como pendiente.
- * El tercer argumento `true` hace que el valor muera con la transacción.
+ * Nombre de la función de la base que fija la empresa de la transacción (criterio 22e). La guarda de
+ * consultas lo lee de aquí para rechazar toda otra mención, porque el lint prohíbe escribir el texto
+ * fuera de este archivo y de las migraciones.
  */
-export const SQL_FIJAR_CONTEXTO = "SELECT set_config('app.empresa_id', $1, true)";
+export const NOMBRE_FUNCION_FIJAR_CONTEXTO = 'fijar_contexto_empresa';
 
 /**
- * Contexto de empresa de la operación en curso: `AsyncLocalStorage` + parámetro de transacción
- * `app.empresa_id` en PostgreSQL. Sin contexto, ninguna consulta de la API llega a la base.
+ * Sentencia que fija la empresa de la transacción. Este es el único archivo de la API autorizado a
+ * escribir `fijar_contexto_empresa` y el parámetro `app.empresa_id` (regla de ESLint, criterios 37 y
+ * 22e), y el texto no se puede importar fuera de `src/nucleo/` (criterio 22c). La guarda de consultas
+ * (`base-de-datos/guarda-api.ts`) reconoce este texto exacto, pero solo autoriza la transacción si
+ * `ejecutar` la registró antes como pendiente. La base (no la guarda) garantiza que la empresa se
+ * fija una sola vez por transacción: una segunda llamada falla con `42501` (criterio 22e).
+ */
+export const SQL_FIJAR_CONTEXTO = `SELECT ${NOMBRE_FUNCION_FIJAR_CONTEXTO}($1)`;
+
+/**
+ * Contexto de empresa de la operación en curso: `AsyncLocalStorage` + la fila de la sesión en
+ * `contexto.sesion_empresa` (la fija `fijar_contexto_empresa`, una sola vez por transacción). Sin
+ * contexto, ninguna consulta de la API llega a la base.
  */
 @Injectable()
 export class ContextoEmpresa {
   constructor(@Inject(CONEXION_API) private readonly conexion: Sequelize) {}
 
   /**
-   * Valida el UUID, abre una transacción en la conexión de la API, fija `app.empresa_id` como
-   * primera sentencia y corre `fn` con el contexto activo. Confirma si `fn` termina bien y revierte
+   * Valida el UUID, abre una transacción en la conexión de la API, fija la empresa con
+   * `fijar_contexto_empresa` como primera sentencia y corre `fn` con el contexto activo. Confirma si `fn` termina bien y revierte
    * si lanza; `fn` no puede controlar la transacción por SQL (la guarda de la API lo rechaza, criterio
    * 22b) ni autorizar otra transacción de la API (criterio 22c). Misma empresa dentro de un contexto
    * activo: reutiliza la transacción; otra empresa: `ContextoEmpresaConflictoError`. Dentro de una

@@ -15,8 +15,15 @@ export interface OpcionesPrepararBd {
   baseDeDatos?: string;
   /** Borra la base si existe (para las pruebas). Nunca se usa con la base de desarrollo. */
   recrear?: boolean;
+  /** De dónde se leen `NODE_ENV`, `DB_PASSWORD_*` y `DB_PROTECCION_CATALOGO`; por defecto `process.env`. */
   env?: NodeJS.ProcessEnv;
   registrar?: (mensaje: string) => void;
+  /**
+   * Recibe el aviso de las protecciones del catálogo omitidas (criterio 38e): solo se llama si el
+   * administrador no puede aplicarlas y `DB_PROTECCION_CATALOGO=omitir`. Por defecto, la salida de
+   * error (`console.warn`).
+   */
+  avisar?: (mensaje: string) => void;
 }
 
 /** Funciones de `pg_catalog` que devuelven el texto de las consultas en curso de otras sesiones. */
@@ -384,34 +391,205 @@ async function protegerEjecucionDeSql(adminUrl: string, baseDeDatos: string): Pr
   }
 }
 
+/** Valor único válido de `DB_PROTECCION_CATALOGO` (criterio 38e). */
+const OMITIR_PROTECCION = 'omitir';
+
+/**
+ * Lee `DB_PROTECCION_CATALOGO` antes de tocar nada: sin definir o vacía es "no omitir"; `omitir` pide
+ * omitir las protecciones del catálogo si el administrador no puede aplicarlas; cualquier otro valor
+ * (`omitirr`, `OMITIR`…) es un error, haya o no superusuario.
+ */
+function leerProteccionCatalogo(env: NodeJS.ProcessEnv): { omitir: boolean } {
+  const valor = env.DB_PROTECCION_CATALOGO;
+  if (valor === undefined || valor === '') return { omitir: false };
+  if (valor === OMITIR_PROTECCION) return { omitir: true };
+  throw new Error(
+    `DB_PROTECCION_CATALOGO tiene un valor no válido (${JSON.stringify(valor)}): el único valor ` +
+      `válido es ${OMITIR_PROTECCION} (en minúsculas) y, para aplicar las protecciones del catálogo, ` +
+      'la variable se deja sin definir (criterio 38e).',
+  );
+}
+
+/** Funciones de `pg_catalog` cuyas protecciones aplica `db:preparar` (para leer sus dueños). */
+const NOMBRES_DE_FUNCIONES_PROTEGIDAS = [
+  ...FUNCIONES_DE_ACTIVIDAD,
+  ...FUNCIONES_DE_SENAL,
+  ...FUNCIONES_QUE_EJECUTAN_SQL,
+  'loread',
+  'lowrite',
+];
+/** Relaciones de `pg_catalog` cuyas protecciones aplica `db:preparar` (para leer sus dueños). */
+const RELACIONES_PROTEGIDAS = [
+  'pg_catalog.pg_stat_activity',
+  'pg_catalog.pg_largeobject',
+  'pg_catalog.pg_largeobject_metadata',
+  'pg_catalog.pg_settings',
+];
+
+/**
+ * Criterio 38e (a): ¿puede el usuario de `DATABASE_ADMIN_URL` aplicar las protecciones del catálogo
+ * (38b, 38c, 38d y la capa de base de 22d)? Puede si es superusuario o si tiene los privilegios del
+ * dueño de los objetos de `pg_catalog` afectados (el dueño se lee del catálogo, no se supone; en la
+ * práctica es el superusuario de arranque del clúster). Los roles y el dueño de arranque son del
+ * clúster, así que basta mirarlo desde la base de conexión. No modifica nada.
+ */
+async function puedeProtegerElCatalogo(admin: Client): Promise<boolean> {
+  const { rows } = await admin.query<{ puede: boolean }>(
+    `SELECT (SELECT rolsuper FROM pg_roles WHERE rolname = current_user)
+            OR COALESCE(bool_and(pg_has_role(current_user, d.dueno, 'USAGE')), false) AS puede
+       FROM (SELECT p.proowner AS dueno
+               FROM pg_proc p
+               JOIN pg_namespace n ON n.oid = p.pronamespace
+              WHERE n.nspname = 'pg_catalog'
+                AND (p.proname = ANY ($1::text[])
+                     OR p.proname LIKE 'lo\\_%'
+                     OR p.proname LIKE 'pg\\_stat\\_get\\_backend\\_%')
+             UNION
+             SELECT c.relowner
+               FROM pg_class c
+              WHERE c.oid = ANY ($2::regclass[])) d`,
+    [NOMBRES_DE_FUNCIONES_PROTEGIDAS, RELACIONES_PROTEGIDAS],
+  );
+  return rows[0]?.puede === true;
+}
+
+const CRITERIOS_DEL_CATALOGO =
+  'texto de consultas ajenas (criterio 38b), cancelar, terminar o enumerar sesiones ajenas ' +
+  '(criterio 38c), objetos grandes (criterio 38d) y la capa de base de SQL armado como texto y ' +
+  'UPDATE sobre pg_settings (criterio 22d)';
+
+function mensajeSinPermisosSobreElCatalogo(usuario: string): string {
+  return (
+    `El usuario de DATABASE_ADMIN_URL (${usuario}) no es superusuario ni tiene los privilegios del ` +
+    'dueño de los objetos de pg_catalog, así que no puede aplicar las protecciones del catálogo: ' +
+    `${CRITERIOS_DEL_CATALOGO}. No se creó ni se modificó ningún rol ni base de datos. ` +
+    'Si PostgreSQL es administrado y no da superusuario (producción), define ' +
+    'DB_PROTECCION_CATALOGO=omitir: db:preparar prepara los roles, la base y sus privilegios sin esas ' +
+    'protecciones y escribe un aviso; entonces quedan solo en la guarda de la API y en la de ' +
+    'plataforma, que rechazan sus nombres, y el aislamiento entre empresas (RLS y criterio 22e) no ' +
+    'depende de ellas (criterio 38e). Si no, usa un administrador superusuario.'
+  );
+}
+
+function avisoDeProteccionesOmitidas(baseDeDatos: string): string {
+  return (
+    `AVISO: DB_PROTECCION_CATALOGO=omitir y el administrador no es superusuario: en la base ` +
+    `${baseDeDatos} NO se aplicaron las protecciones del catálogo de PostgreSQL:\n` +
+    '  - texto de consultas ajenas: pg_stat_activity y afines (criterio 38b)\n' +
+    '  - cancelar, terminar o enumerar sesiones ajenas: pg_cancel_backend, pg_terminate_backend y ' +
+    'pg_stat_get_backend_* (criterio 38c)\n' +
+    '  - objetos grandes: lo_*, loread, lowrite, pg_largeobject y pg_largeobject_metadata (criterio 38d)\n' +
+    '  - SQL armado como texto y UPDATE sobre pg_settings, capa de base: ts_rewrite, ts_stat, ' +
+    'query_to_xml*, cursor_to_xml* (criterio 22d)\n' +
+    'Esas protecciones quedan solo en la guarda de la API y en la de plataforma, que rechazan sus ' +
+    'nombres (criterio 38e). El aislamiento entre empresas (RLS y criterio 22e) no depende de ellas. ' +
+    'No instales en esa base extensiones como pg_stat_statements, dblink o postgres_fdw, ni des a ' +
+    'los roles de la aplicación pg_monitor, pg_read_all_stats ni pg_signal_backend.'
+  );
+}
+
+/** Clave del bloqueo asesor que serializa las preparaciones (evita "tuple concurrently updated"). */
+const BLOQUEO_PREPARAR = "hashtext('restaurante:preparar-bd')";
+
+/** Atributos que `ALTER ROLE` rechaza nombrar a un administrador que no es superusuario (PostgreSQL 16). */
+const ATRIBUTOS_RESERVADOS_A_SUPERUSUARIO = [
+  ['rolsuper', 'SUPERUSER'],
+  ['rolbypassrls', 'BYPASSRLS'],
+  ['rolreplication', 'REPLICATION'],
+] as const;
+
 /**
  * Prepara el clúster de forma idempotente: roles sin privilegios especiales (con contraseña),
  * la base con dueño `restaurante_migrador` y los permisos de conexión de la base. Es la única
  * fuente de verdad de los roles: la usan db:preparar, el entorno local, la nube, CI y las pruebas.
  * Los privilegios sobre el esquema y las tablas los fija la primera migración. Además quita a los dos
- * roles de la aplicación el acceso al texto de las consultas de otras sesiones (criterio 38b) y la posibilidad de cancelar, terminar o enumerar sesiones ajenas (criterio 38c), el uso de objetos grandes (criterio 38d) y la ejecución de SQL armado como texto y el `UPDATE` sobre `pg_settings` (criterio 22d), lo que
- * exige que el usuario de `DATABASE_ADMIN_URL` sea superusuario.
+ * roles de la aplicación el acceso al texto de las consultas de otras sesiones (criterio 38b) y la
+ * posibilidad de cancelar, terminar o enumerar sesiones ajenas (criterio 38c), el uso de objetos
+ * grandes (criterio 38d) y la ejecución de SQL armado como texto y el `UPDATE` sobre `pg_settings`
+ * (criterio 22d), lo que exige que el usuario de `DATABASE_ADMIN_URL` sea superusuario.
+ *
+ * Modo sin superusuario (criterio 38e, PostgreSQL administrado): antes de crear o modificar nada se
+ * valida `DB_PROTECCION_CATALOGO` y se comprueba si el administrador puede aplicar esas protecciones.
+ * Si no puede y la variable no es `omitir`, falla sin tocar nada; con `omitir` aplica todo lo demás,
+ * omite las protecciones del catálogo y avisa (`avisar`, por defecto la salida de error). Con
+ * superusuario las aplica siempre. Un bloqueo asesor serializa las preparaciones simultáneas.
  */
 export async function prepararBaseDeDatos(opciones: OpcionesPrepararBd = {}): Promise<void> {
   const env = opciones.env ?? process.env;
   const registrar = opciones.registrar ?? (() => undefined);
+  const avisar = opciones.avisar ?? ((mensaje: string) => console.warn(mensaje));
   const adminUrl = opciones.adminUrl ?? exigirUrlAdmin(env);
   const baseDeDatos = validarNombreDeBase(opciones.baseDeDatos ?? BASE_DE_DATOS_POR_DEFECTO);
   const contrasenas = contrasenasDeRoles(env);
+  const { omitir } = leerProteccionCatalogo(env);
 
   const admin = new Client({ connectionString: urlAdminParaBase(adminUrl, 'postgres') });
   admin.on('error', () => undefined);
   await admin.connect();
+  let aplicarProtecciones: boolean;
   try {
+    // Dos preparaciones a la vez sobre el mismo clúster (por ejemplo varios archivos de pruebas)
+    // chocan con "tuple concurrently updated" al modificar los mismos roles y objetos: se serializan.
+    await admin.query(`SELECT pg_advisory_lock(${BLOQUEO_PREPARAR})`);
+
+    // 0. Antes de tocar nada: ¿puede el administrador aplicar las protecciones del catálogo?
+    const { rows: yo } = await admin.query<{ usuario: string; esSuperusuario: boolean }>(
+      `SELECT current_user::text AS usuario, rolsuper AS "esSuperusuario"
+         FROM pg_roles WHERE rolname = current_user`,
+    );
+    const usuario = yo[0]?.usuario ?? 'desconocido';
+    const esSuperusuario = yo[0]?.esSuperusuario === true;
+    aplicarProtecciones = await puedeProtegerElCatalogo(admin);
+    if (!aplicarProtecciones && !omitir) {
+      throw new Error(mensajeSinPermisosSobreElCatalogo(usuario));
+    }
+    if (aplicarProtecciones && omitir) {
+      registrar(
+        'DB_PROTECCION_CATALOGO=omitir se ignora: el administrador puede aplicar las protecciones',
+      );
+    }
+
     // 1. Roles (CREATE o ALTER: deja siempre los mismos atributos y la contraseña vigente).
     for (const [clave, nombre] of Object.entries(ROLES) as [keyof typeof ROLES, string][]) {
       const existe = await admin.query('SELECT 1 FROM pg_roles WHERE rolname = $1', [nombre]);
+      // PostgreSQL 16: un administrador que no es superusuario no puede nombrar SUPERUSER, BYPASSRLS
+      // ni REPLICATION en ALTER ROLE ni siquiera para negarlos (CREATE ROLE sí lo admite). Se omiten
+      // en ese caso y se comprueba abajo que el rol no los tiene.
+      const reservados = existe.rowCount && !esSuperusuario ? '' : 'NOSUPERUSER NOBYPASSRLS ';
+      const replicacion = existe.rowCount && !esSuperusuario ? '' : ' NOREPLICATION';
       const atributos =
-        'LOGIN NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE NOINHERIT NOREPLICATION ' +
+        `LOGIN ${reservados}NOCREATEDB NOCREATEROLE NOINHERIT${replicacion} ` +
         `PASSWORD ${admin.escapeLiteral(contrasenas[clave])}`;
-      await admin.query(
-        `${existe.rowCount ? 'ALTER' : 'CREATE'} ROLE ${admin.escapeIdentifier(nombre)} ${atributos}`,
-      );
+      try {
+        await admin.query(
+          `${existe.rowCount ? 'ALTER' : 'CREATE'} ROLE ${admin.escapeIdentifier(nombre)} ${atributos}`,
+        );
+      } catch (error) {
+        if (existe.rowCount && !esSuperusuario) {
+          const motivo = error instanceof Error ? error.message : String(error);
+          throw new Error(
+            `No se pudo modificar el rol ${nombre} con ${usuario} (${motivo}). Un administrador que no ` +
+              `es superusuario necesita CREATEROLE y ADMIN OPTION sobre ${nombre}; los tiene si ` +
+              'creó el rol.',
+          );
+        }
+        throw error;
+      }
+      if (existe.rowCount && !esSuperusuario) {
+        const { rows } = await admin.query<Record<string, boolean>>(
+          'SELECT rolsuper, rolbypassrls, rolreplication FROM pg_roles WHERE rolname = $1',
+          [nombre],
+        );
+        for (const [columna, atributo] of ATRIBUTOS_RESERVADOS_A_SUPERUSUARIO) {
+          if (rows[0]?.[columna]) {
+            throw new Error(
+              `El rol ${nombre} tiene el atributo ${atributo} y ${usuario}, que no es superusuario, no ` +
+                'puede quitárselo: hay que quitarlo con un superusuario (los roles de la aplicación ' +
+                'no deben tenerlo, criterio 7).',
+            );
+          }
+        }
+      }
       registrar(`rol ${nombre}: ${existe.rowCount ? 'actualizado' : 'creado'}`);
     }
     await admin.query(
@@ -419,10 +597,7 @@ export async function prepararBaseDeDatos(opciones: OpcionesPrepararBd = {}): Pr
     );
 
     // Un administrador que no es superusuario necesita ser miembro del rol dueño para crear la base.
-    const { rows } = await admin.query<{ rolsuper: boolean }>(
-      'SELECT rolsuper FROM pg_roles WHERE rolname = current_user',
-    );
-    if (!rows[0]?.rolsuper) {
+    if (!esSuperusuario) {
       await admin.query(`GRANT ${admin.escapeIdentifier(ROLES.migrador)} TO CURRENT_USER`);
     }
 
@@ -450,31 +625,37 @@ export async function prepararBaseDeDatos(opciones: OpcionesPrepararBd = {}): Pr
     await admin.query(
       `GRANT CONNECT ON DATABASE ${base} TO ${admin.escapeIdentifier(ROLES.api)}, ${admin.escapeIdentifier(ROLES.plataforma)}`,
     );
+
+    if (aplicarProtecciones) {
+      // 4. Texto de consultas ajenas: se aplica conectado a la base de destino (criterio 38b).
+      await protegerCatalogoDeActividad(adminUrl, baseDeDatos);
+      registrar(
+        `base ${baseDeDatos}: texto de consultas ajenas oculto a ${ROLES.api} y ${ROLES.plataforma}`,
+      );
+
+      // 5. Señales y enumeración de sesiones ajenas, también en la base de destino (criterio 38c).
+      await protegerSenalesDeSesiones(adminUrl, baseDeDatos);
+      registrar(
+        `base ${baseDeDatos}: ${ROLES.api} y ${ROLES.plataforma} no pueden cancelar, terminar ni enumerar sesiones ajenas`,
+      );
+
+      // 6. Objetos grandes, también en la base de destino (criterio 38d).
+      await protegerObjetosGrandes(adminUrl, baseDeDatos);
+      registrar(
+        `base ${baseDeDatos}: ${ROLES.api} y ${ROLES.plataforma} no pueden usar objetos grandes (large objects)`,
+      );
+
+      // 7. Funciones que ejecutan SQL desde texto y UPDATE sobre pg_settings (criterio 22d).
+      await protegerEjecucionDeSql(adminUrl, baseDeDatos);
+      registrar(
+        `base ${baseDeDatos}: ${ROLES.api} y ${ROLES.plataforma} no pueden ejecutar SQL armado como texto ni actualizar pg_settings`,
+      );
+    } else {
+      // Sin superusuario y con DB_PROTECCION_CATALOGO=omitir (criterio 38e).
+      avisar(avisoDeProteccionesOmitidas(baseDeDatos));
+    }
   } finally {
+    await admin.query(`SELECT pg_advisory_unlock(${BLOQUEO_PREPARAR})`).catch(() => undefined);
     await admin.end();
   }
-
-  // 4. Texto de consultas ajenas: se aplica conectado a la base de destino (criterio 38b).
-  await protegerCatalogoDeActividad(adminUrl, baseDeDatos);
-  registrar(
-    `base ${baseDeDatos}: texto de consultas ajenas oculto a ${ROLES.api} y ${ROLES.plataforma}`,
-  );
-
-  // 5. Señales y enumeración de sesiones ajenas, también en la base de destino (criterio 38c).
-  await protegerSenalesDeSesiones(adminUrl, baseDeDatos);
-  registrar(
-    `base ${baseDeDatos}: ${ROLES.api} y ${ROLES.plataforma} no pueden cancelar, terminar ni enumerar sesiones ajenas`,
-  );
-
-  // 6. Objetos grandes, también en la base de destino (criterio 38d).
-  await protegerObjetosGrandes(adminUrl, baseDeDatos);
-  registrar(
-    `base ${baseDeDatos}: ${ROLES.api} y ${ROLES.plataforma} no pueden usar objetos grandes (large objects)`,
-  );
-
-  // 7. Funciones que ejecutan SQL desde texto y UPDATE sobre pg_settings (criterio 22d).
-  await protegerEjecucionDeSql(adminUrl, baseDeDatos);
-  registrar(
-    `base ${baseDeDatos}: ${ROLES.api} y ${ROLES.plataforma} no pueden ejecutar SQL armado como texto ni actualizar pg_settings`,
-  );
 }

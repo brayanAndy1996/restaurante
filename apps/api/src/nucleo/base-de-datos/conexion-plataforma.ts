@@ -23,9 +23,10 @@ import {
   textoDeConsulta,
 } from './consultas-sin-empresa';
 import type { OpcionesSinEmpresa } from './consultas-sin-empresa';
-import { contieneControlDeTransaccion } from './control-transaccion';
+import { contieneControlDeTransaccion, mencionaContextoDeEmpresa } from './control-transaccion';
 import { crearSequelize } from './crear-sequelize';
 import { ConsultaProhibidaError } from './errores';
+import { SQLSTATE } from './errores-pg';
 import { estadoActual } from './estado-operacion';
 import type { OpcionesConsultaInterna, TransaccionInterna } from './transaccion-interna';
 
@@ -46,6 +47,11 @@ const SQL_SOLO_LECTURA = 'SET TRANSACTION READ ONLY';
 const PROHIBIDO_CERRAR =
   'Una operación de plataforma no puede confirmar, revertir ni reabrir su transacción, ni cambiar ' +
   'la sesión: lo hace OperacionPlataforma (COMMIT, ROLLBACK, END, ABORT, SAVEPOINT, RELEASE, BEGIN, SET…)';
+
+const PROHIBIDO_NOMBRE =
+  'Una operación de plataforma no puede nombrar funciones ni objetos que cambien el contexto o la ' +
+  'sesión, ejecuten SQL armado como texto o muestren sesiones, consultas u objetos grandes ajenos ' +
+  '(set_config, pg_settings, ts_rewrite, *_to_xml*, pg_stat_activity, pg_cancel_backend, lo_*…)';
 
 /** Pool pequeño: las operaciones de plataforma son raras y manuales. */
 const POOL_PLATAFORMA = 2;
@@ -159,6 +165,13 @@ export class ConexionPlataforma {
       ) {
         throw new OperacionPlataformaAusenteError();
       }
+      // Criterio 38e: la misma lista de nombres que la guarda de la API (set_config, pg_settings,
+      // ts_*, *_to_xml*, app.empresa_id, fijar_contexto_empresa sin excepción, pg_stat_activity,
+      // señales, objetos grandes…) y el rechazo de `U&"…"`. Aquí no hay lista blanca de sentencias,
+      // pero `DO`, `PREPARE` y `SET` (las vías para ejecutar SQL dinámico sin nombrarlo) ya se
+      // rechazaron arriba. Es un `ConsultaProhibidaError`, no un error de la base.
+      if (mencionaContextoDeEmpresa(texto))
+        throw new ConsultaProhibidaError(PROHIBIDO_NOMBRE, SQLSTATE.PERMISO_DENEGADO);
       return this.cola.ejecutar(transaccion, () => consultar(sql, opts));
     };
     sequelize.query = guardada as unknown as typeof sequelize.query;

@@ -65,6 +65,14 @@ describe('criterio 37b · selectores adicionales', () => {
     expect((await mensajes('modulos/plataforma/x.tsx', codigo)).length).toBeGreaterThan(0);
   });
 
+  it('el nombre de la función que fija el contexto sigue la misma regla (criterio 22e)', async () => {
+    const codigo = `export const sql = 'SELECT fijar_contexto_empresa($1)';\n`;
+    expect(await mensajes('nucleo/contexto-empresa/contexto-empresa.ts', codigo)).toEqual([]);
+    expect(await mensajes('migraciones/x.mts', codigo)).toEqual([]);
+    expect((await mensajes('modulos/plataforma/x.tsx', codigo)).length).toBeGreaterThan(0);
+    expect((await mensajes('nucleo/base-de-datos/x.ts', codigo)).length).toBeGreaterThan(0);
+  });
+
   it.each(['ts', 'tsx', 'mts', 'cts'])(
     'ESLint analiza archivos .%s de src (no «File ignored»)',
     async (ext) => {

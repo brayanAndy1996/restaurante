@@ -11,6 +11,7 @@
  * `UPDATE …; COMMIT` en un mismo texto sí. Si el texto tiene un literal o comentario sin cerrar, se
  * rechaza (no se puede saber dónde termina).
  */
+import { NOMBRE_FUNCION_FIJAR_CONTEXTO } from '../contexto-empresa/contexto-empresa';
 
 const PALABRAS_DE_CONTROL = new Set([
   'COMMIT',
@@ -213,25 +214,77 @@ export function contieneControlDeTransaccion(texto: string): boolean {
 }
 
 /**
- * Funciones y objetos con los que una consulta podría cambiar el contexto de empresa o ejecutar SQL
- * armado como texto: `set_config`, `pg_settings` (un `UPDATE` equivale a `set_config`), `query_to_xml*`
- * y `cursor_to_xml*` (ejecutan la consulta que reciben como texto), `ts_stat` y `ts_rewrite` (ídem;
- * capa extra, porque la barrera es la lista blanca y el permiso de la base), y el propio
- * nombre del parámetro (`app.empresa_id`) fuera de un literal.
+ * Nombres completos que la guarda rechaza fuera de literales y comentarios (criterios 22b, 22d, 22e y
+ * 38e), sin distinguir mayúsculas y con o sin esquema (`pg_catalog.lo_get`) o entre comillas dobles.
+ * Se rechaza si el carácter anterior y el siguiente no son de identificador, así que `reset_config` o
+ * `pg_stat_activity_x` son otros identificadores y pasan.
+ *
+ * - Cambiar el contexto o ejecutar SQL armado como texto: `set_config`, `pg_settings` (un `UPDATE`
+ *   equivale a `set_config`), `ts_rewrite`, `ts_stat` y la fijación del contexto
+ *   (`fijar_contexto_empresa`, salvo la fijación propia de `ContextoEmpresa`, que la guarda reconoce
+ *   por su origen antes de llegar aquí).
+ * - Texto de consultas y sesiones ajenas (38b y 38c): `pg_stat_activity`, `pg_stat_get_activity`,
+ *   `pg_cancel_backend`, `pg_terminate_backend` y `pg_signal_backend`.
+ * - Objetos grandes (38d): `pg_largeobject`, `pg_largeobject_metadata`, `loread` y `lowrite`.
+ *
+ * Donde no hay superusuario (producción, criterio 38e) las revocaciones de `pg_catalog` no existen y
+ * esta lista, aplicada en la guarda de la API y en la de plataforma, es la barrera de esos objetos.
+ */
+export const NOMBRES_PROHIBIDOS: readonly string[] = [
+  'set_config',
+  'pg_settings',
+  'ts_rewrite',
+  'ts_stat',
+  NOMBRE_FUNCION_FIJAR_CONTEXTO,
+  'pg_stat_activity',
+  'pg_stat_get_activity',
+  'pg_cancel_backend',
+  'pg_terminate_backend',
+  'pg_signal_backend',
+  'pg_largeobject',
+  'pg_largeobject_metadata',
+  'loread',
+  'lowrite',
+];
+
+/**
+ * Prefijos prohibidos: se rechaza todo identificador que empiece así (cualquier continuación cuenta);
+ * solo se mira el carácter anterior. Son las familias de funciones de `pg_catalog` de las que no se
+ * quiere ni una firma: `pg_stat_get_backend_*` (enumeran sesiones), `lo_*` (objetos grandes), y las
+ * funciones `*_to_xml*` que ejecutan SQL recibido como texto (`query_to_xml`, `cursor_to_xml`) o leen
+ * una relación nombrada dentro de un literal (`table_to_xml`, `schema_to_xml`, `database_to_xml`, con
+ * sus variantes `*schema` y `*_and_xmlschema`). Convención: ninguna tabla, columna ni alias de la
+ * aplicación empieza con `lo_`.
+ */
+export const PREFIJOS_PROHIBIDOS: readonly string[] = [
+  'pg_stat_get_backend_',
+  'lo_',
+  'query_to_xml',
+  'cursor_to_xml',
+  'table_to_xml',
+  'schema_to_xml',
+  'database_to_xml',
+];
+
+const NO_IDENTIFICADOR_ANTES = '(?<![A-Za-z0-9_\\u0080-\\uffff$])';
+const NO_IDENTIFICADOR_DESPUES = '(?![A-Za-z0-9_\\u0080-\\uffff$])';
+
+/**
+ * Mención de un nombre o prefijo prohibido, o del propio nombre del parámetro (`app.empresa_id`, con
+ * espacios alrededor del punto, que PostgreSQL admite), en el texto ya limpio.
  */
 const MENCION_DE_CONTEXTO = new RegExp(
-  // Sin un carácter de identificador delante (`reset_config` no es `set_config`) y, en las funciones
-  // con nombre completo, sin uno detrás; `query_to_xml*` y `cursor_to_xml*` admiten sufijo.
-  '(?<![A-Za-z0-9_\\u0080-\\uffff$])(?:' +
-    '(?:set_config|pg_settings|ts_stat|ts_rewrite)(?![A-Za-z0-9_\\u0080-\\uffff$])|' +
-    'query_to_xml|cursor_to_xml|app\\s*\\.\\s*empresa_id)',
+  `${NO_IDENTIFICADOR_ANTES}(?:` +
+    `(?:${NOMBRES_PROHIBIDOS.join('|')})${NO_IDENTIFICADOR_DESPUES}|` +
+    `${PREFIJOS_PROHIBIDOS.join('|')}|` +
+    'app\\s*\\.\\s*empresa_id)',
   'i',
 );
 
 /**
- * `true` si el texto, sin literales ni comentarios, nombra una función o un objeto con el que se
- * cambiaría el contexto de empresa o la sesión (ver `MENCION_DE_CONTEXTO`), o si no se puede analizar
- * con certeza. Un valor que contiene `set_config` (por ejemplo `'x; set y'` o un nombre de sucursal)
+ * `true` si el texto, sin literales ni comentarios, nombra una función o un objeto de la lista de
+ * `NOMBRES_PROHIBIDOS` y `PREFIJOS_PROHIBIDOS` (o el parámetro `app.empresa_id`), si tiene un
+ * identificador con escapes Unicode (`U&"…"`) o si no se puede analizar con certeza. Un valor que contiene `set_config` (por ejemplo `'x; set y'` o un nombre de sucursal)
  * no cuenta: se decide sobre el texto limpio (criterio 22b).
  */
 export function mencionaContextoDeEmpresa(texto: string): boolean {

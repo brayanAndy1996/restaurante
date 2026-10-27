@@ -135,4 +135,17 @@ describe('CODIGOS_ERROR', () => {
   it('incluye CUERPO_DEMASIADO_GRANDE', () => {
     expect(CODIGOS_ERROR).toContain('CUERPO_DEMASIADO_GRANDE');
   });
+
+  it('incluye los códigos de los errores 4xx genéricos (criterio 40d)', () => {
+    for (const codigo of [
+      'NO_AUTENTICADO',
+      'PROHIBIDO',
+      'METODO_NO_PERMITIDO',
+      'TIPO_NO_SOPORTADO',
+      'DEMASIADAS_PETICIONES',
+      'PETICION_INVALIDA',
+    ]) {
+      expect(CODIGOS_ERROR).toContain(codigo);
+    }
+  });
 });

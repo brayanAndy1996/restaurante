@@ -6,7 +6,8 @@
 //    `require(...)`, `import x = require(...)`, el `import('…')` de tipos y los reexportes
 //    (`export … from`). Un `import()` o `require()` con un argumento que no es un texto fijo también
 //    falla, porque no se puede saber qué carga.
-// 2. El texto del parámetro de contexto de empresa solo lo escribe el servicio de contexto
+// 2. El texto del parámetro de contexto de empresa (`app.empresa_id`) y el de la función que lo fija
+//    (`fijar_contexto_empresa`, criterio 22e) solo los escribe el servicio de contexto
 //    (`src/nucleo/contexto-empresa/contexto-empresa.ts`), también si se arma por concatenación de
 //    literales o con una plantilla de literales (criterio 22c: el parser de `herramientas/` calcula
 //    esos textos antes de aplicar la regla).
@@ -15,7 +16,7 @@
 //    dentro de `src/nucleo/` (criterio 22c), con las mismas formas de importación de la regla 1.
 //
 // Todas aplican a todo archivo `.ts`, `.tsx`, `.mts` y `.cts` de `src/`. Las migraciones quedan fuera
-// de la regla 2 porque su SQL tiene que nombrar el parámetro (lo lee `empresa_actual()`); las pruebas
+// de la regla 2 porque su SQL tiene que nombrar el parámetro y la función; las pruebas
 // y los scripts quedan fuera de todas porque no son código de la API.
 const base = require('@restaurante/config/eslint');
 const parserTextosCalculados = require('./herramientas/parser-textos-calculados');
@@ -47,7 +48,7 @@ const MENSAJE_DINAMICO =
   'texto fijo: no se puede comprobar que no cargue la conexión de plataforma.';
 const MENSAJE_PARAMETRO =
   'Solo ContextoEmpresa (src/nucleo/contexto-empresa/contexto-empresa.ts) puede escribir el ' +
-  'parámetro de contexto de empresa. Usa ContextoEmpresa.ejecutar.';
+  'parámetro de contexto de empresa ni la función que lo fija. Usa ContextoEmpresa.ejecutar.';
 
 /** Formas de cargar un módulo concreto que `no-restricted-imports` no ve. */
 function selectoresDeRuta(ruta, message) {
@@ -100,10 +101,20 @@ const SELECTORES_SQL_CONTEXTO = [
   ...selectoresDeRuta(RUTA_AUTORIZACION, MENSAJE_AUTORIZACION),
 ];
 
-/** El texto del parámetro de contexto, entre comillas o en una plantilla (ya calculado por el parser). */
+/**
+ * El texto del parámetro de contexto (`app.empresa_id`) y el de la función que lo fija
+ * (`fijar_contexto_empresa`, criterio 22e), entre comillas o en una plantilla (ya calculado por el
+ * parser). Sin distinguir mayúsculas.
+ */
 const SELECTORES_PARAMETRO = [
-  { selector: 'Literal[value=/app\\.empresa_id/i]', message: MENSAJE_PARAMETRO },
-  { selector: 'TemplateElement[value.raw=/app\\.empresa_id/i]', message: MENSAJE_PARAMETRO },
+  {
+    selector: 'Literal[value=/app\\.empresa_id|fijar_contexto_empresa/i]',
+    message: MENSAJE_PARAMETRO,
+  },
+  {
+    selector: 'TemplateElement[value.raw=/app\\.empresa_id|fijar_contexto_empresa/i]',
+    message: MENSAJE_PARAMETRO,
+  },
 ];
 
 const PATRON_CONEXION = {
@@ -169,7 +180,7 @@ module.exports = [
     },
   },
   {
-    // Las migraciones sí nombran el parámetro (su SQL lo necesita).
+    // Las migraciones sí nombran el parámetro y la función (su SQL lo necesita).
     files: [MIGRACIONES],
     rules: {
       'no-restricted-syntax': ['error', ...SELECTORES_CONEXION, ...SELECTORES_SQL_CONTEXTO],

@@ -3,6 +3,8 @@ import {
   contieneControlDeTransaccion,
   contieneSentenciaNoPermitida,
   mencionaContextoDeEmpresa,
+  NOMBRES_PROHIBIDOS,
+  PREFIJOS_PROHIBIDOS,
 } from '../src/nucleo/base-de-datos/control-transaccion';
 
 // Analizador de sentencias de las guardas (criterios 22b, 22d y 32b), comparado con el escáner léxico
@@ -169,6 +171,66 @@ describe('mención de contexto con límites de identificador', () => {
     'SELECT 1 -- pg_settings\n',
   ])('deja pasar %s', (sql) => {
     expect(mencionaContextoDeEmpresa(sql)).toBe(false);
+  });
+});
+
+describe('lista de nombres y prefijos del criterio 38e', () => {
+  it.each([
+    'SELECT fijar_contexto_empresa($1)',
+    'SELECT public.fijar_contexto_empresa($1)',
+    'SELECT "fijar_contexto_empresa"($1)',
+    'SELECT FIJAR_CONTEXTO_EMPRESA($1)',
+    'SELECT query FROM pg_stat_activity',
+    'SELECT * FROM pg_catalog.pg_stat_get_activity(NULL)',
+    'SELECT pg_cancel_backend(1)',
+    'SELECT "pg_catalog"."pg_terminate_backend"(1)',
+    'SELECT 1 AS pg_signal_backend',
+    'SELECT 1 FROM pg_largeobject',
+    'SELECT oid FROM pg_largeobject_metadata',
+    'SELECT loread(0, 1)',
+    'SELECT lowrite(0, 1)',
+    'SELECT pg_stat_get_backend_idset()',
+    'SELECT pg_stat_get_backend_x',
+    'SELECT lo_get(1)',
+    'SELECT lo_from_bytea(0, 1)',
+    'SELECT 1 AS lo_x',
+    "SELECT table_to_xml('t', true, false, '')",
+    "SELECT schema_to_xml_and_xmlschema('s', true, false, '')",
+    "SELECT database_to_xmlschema(true, false, '')",
+    'SELECT U&"\\006Co_get"(1)',
+  ])('rechaza %s', (sql) => {
+    expect(mencionaContextoDeEmpresa(sql)).toBe(true);
+  });
+
+  it.each([
+    'SELECT 1 AS my_lo_get',
+    'SELECT 1 AS colo_r',
+    'SELECT 1 AS xlo_get',
+    'SELECT 1 AS pg_stat_activity_x',
+    'SELECT 1 AS loreadx',
+    'SELECT 1 AS lowritex',
+    'SELECT 1 AS mi_pg_largeobject',
+    'SELECT 1 AS mi_pg_largeobject_metadata',
+    'SELECT 1 AS fijar_contexto_empresa2',
+    'SELECT 1 AS mi_fijar_contexto_empresa',
+    'SELECT 1 AS xpg_stat_get_backend_pid',
+    "UPDATE sucursal SET direccion = 'lo_get pg_stat_activity fijar_contexto_empresa' WHERE id = 1",
+    'SELECT 1 /* lo_get */ -- pg_largeobject\n',
+    "SELECT $$lo_get$$, E'pg_cancel_backend'",
+  ])('deja pasar %s', (sql) => {
+    expect(mencionaContextoDeEmpresa(sql)).toBe(false);
+  });
+
+  it('exporta la lista como dato, con nombres y prefijos en minúsculas', () => {
+    expect(NOMBRES_PROHIBIDOS).toEqual(
+      expect.arrayContaining(['set_config', 'pg_stat_activity', 'loread', 'lowrite']),
+    );
+    expect(PREFIJOS_PROHIBIDOS).toEqual(
+      expect.arrayContaining(['lo_', 'pg_stat_get_backend_', 'table_to_xml']),
+    );
+    for (const nombre of [...NOMBRES_PROHIBIDOS, ...PREFIJOS_PROHIBIDOS]) {
+      expect(nombre).toBe(nombre.toLowerCase());
+    }
   });
 });
 

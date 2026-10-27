@@ -190,8 +190,27 @@ describe('el contexto no se puede cambiar con SQL dentro de la transacción', ()
   it('fijar el contexto otra vez en la misma transacción lanza un conflicto', async () => {
     await contexto.ejecutar(A.id, async () => {
       await expect(
-        sequelize.query("SELECT set_config('app.empresa_id', $1, true)", { bind: [randomUUID()] }),
+        sequelize.query('SELECT fijar_contexto_empresa($1)', { bind: [randomUUID()] }),
       ).rejects.toBeInstanceOf(ContextoEmpresaConflictoError);
+    });
+  });
+
+  it('fijar el contexto con otro texto (esquema, comillas, sin parámetro) se rechaza antes de la base', async () => {
+    await contexto.ejecutar(A.id, async () => {
+      for (const sql of [
+        'SELECT public.fijar_contexto_empresa($1)',
+        'SELECT "fijar_contexto_empresa"($1)',
+        "SELECT fijar_contexto_empresa('00000000-0000-0000-0000-000000000000')",
+      ]) {
+        await expect(sequelize.query(sql, { bind: [randomUUID()] })).rejects.toBeInstanceOf(
+          ConsultaProhibidaError,
+        );
+      }
+      // La transacción sigue sana: el rechazo fue de la guarda y la base no vio nada.
+      const filas = await sequelize.query('SELECT count(*) AS n FROM sucursal', {
+        type: QueryTypes.SELECT,
+      });
+      expect(filas).toHaveLength(1);
     });
   });
 });
