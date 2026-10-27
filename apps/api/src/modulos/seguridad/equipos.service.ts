@@ -124,7 +124,7 @@ export class EquiposService {
            LEFT JOIN bloqueo_intentos b
              ON b.empresa_id = er.empresa_id AND b.ambito = 'PIN_EQUIPO_RECORDADO' AND b.objetivo_id = er.id
           WHERE er.equipo_id = $1 AND er.revocado_en IS NULL AND u.activo
-          ORDER BY er.ultimo_uso_en DESC, er.recordado_en DESC, er.id`,
+          ORDER BY er.ultimo_uso_en DESC, er.recordado_en DESC, er.orden DESC`,
         { bind: [equipo.id], type: QueryTypes.SELECT },
       );
       return {
@@ -285,7 +285,7 @@ export class EquiposService {
     const activos = await this.conexion.query<{ id: string; usuario_id: string }>(
       `SELECT id, usuario_id FROM equipo_recordado
         WHERE equipo_id = $1 AND revocado_en IS NULL
-        ORDER BY ultimo_uso_en, recordado_en, id`,
+        ORDER BY ultimo_uso_en, recordado_en, orden`,
       { bind: [equipoId], type: QueryTypes.SELECT },
     );
     const propio = activos.find((a) => a.usuario_id === usuarioId);

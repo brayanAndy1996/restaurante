@@ -47,6 +47,9 @@ CREATE TABLE equipo_recordado (
   usuario_id uuid NOT NULL,
   recordado_en timestamptz NOT NULL,
   ultimo_uso_en timestamptz NOT NULL,
+  -- Orden de alta, para desempatar con certeza cuando dos filas comparten instante (el reloj de la API
+  -- puede repetirse): la recordada primero es la de menor orden.
+  orden bigint GENERATED ALWAYS AS IDENTITY,
   -- Última sucursal que la persona eligió en este equipo (criterio 33).
   ultima_sucursal_id uuid,
   revocado_en timestamptz,
