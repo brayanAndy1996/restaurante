@@ -1,14 +1,15 @@
 // pnpm db:migrar     -> aplica las migraciones pendientes
 // pnpm db:revertir   -> revierte la última migración aplicada
-// Usa DATABASE_MIGRADOR_URL; si falta, la deriva de DATABASE_ADMIN_URL (rol migrador, base `restaurante`).
+// Usa DATABASE_MIGRADOR_URL; si falta, la deriva de DATABASE_ADMIN_URL (rol migrador y la base de
+// DATABASE_URL, o `restaurante` si no está definida).
 import { cargarEnvDeLaRaiz } from '../src/config/cargar-env';
 import { migrarArriba, revertirUltima } from './lib/migraciones';
-import { BASE_DE_DATOS_POR_DEFECTO, exigirUrlAdmin, urlParaRol } from './lib/roles';
+import { baseDeDatosDelEntorno, exigirUrlAdmin, urlParaRol } from './lib/roles';
 
 function urlMigrador(): string {
   return (
     process.env.DATABASE_MIGRADOR_URL ??
-    urlParaRol(exigirUrlAdmin(), 'migrador', BASE_DE_DATOS_POR_DEFECTO)
+    urlParaRol(exigirUrlAdmin(), 'migrador', baseDeDatosDelEntorno())
   );
 }
 

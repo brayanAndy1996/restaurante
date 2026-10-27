@@ -32,7 +32,7 @@ Todos los archivos llevan al inicio `// spec: 001-base-multitenancy (pruebas pro
 ## Fase C · Implementación (backend)
 
 - [ ] T10 · backend · Migración `202610270001-plataforma-base.ts` y función auxiliar `sqlTablaDeEmpresa`: `empresa_actual()`, las cuatro tablas (con `sucursal.hora_corte` `DEFAULT '05:00'`), RLS forzada, políticas, privilegios, llaves compuestas y triggers de la auditoría. (criterios 7, 8, 9, 11 a 16, 16b, 17, 19, 20, 21, 35b, 36, 38)
-- [ ] T11 · backend · `nucleo/base-de-datos`: instancias de Sequelize de la API y de plataforma, `definirModelos`, adaptador CLS sobre `AsyncLocalStorage`, hooks `beforeQuery` en ambas instancias, verificación de roles al arrancar y mapeo de errores de PostgreSQL. (criterios 10, 22, 28)
+- [ ] T11 · backend · `nucleo/base-de-datos`: instancias de Sequelize de la API y de plataforma, `definirModelos`, la guarda que envuelve `sequelize.query` en ambas instancias (en la de la API apoyada en `AsyncLocalStorage`, con el analizador de sentencias de `control-transaccion.ts`), verificación de roles al arrancar y mapeo de errores de PostgreSQL. (criterios 10, 22, 28)
 - [ ] T12 · backend · `nucleo/contexto-empresa`: `ContextoEmpresa`, interceptor global, resolutores nulo y por cabecera elegidos por configuración, y `@SinEmpresa()`. (criterios 22 a 31)
 - [ ] T13 · backend · `GET /health` con tiempo límite y sin detalles del error, más su prueba de integración (no protegida). (criterios 5, 6)
 - [ ] T14 · backend · `OperacionPlataforma` y `PlataformaEmpresasService` (`registrarEmpresa`, `agregarEmisor`, `agregarSucursal`, `listarEmpresas`), con hora de corte `05:00` por defecto y sin crear suscripción. (criterios 28, 32 a 35, 35b)

@@ -70,7 +70,7 @@ export DATABASE_PLATAFORMA_URL=postgres://restaurante_plataforma:plataforma_loca
 export EMPRESA_POR_HEADER=habilitado   # opcional: resolutor por cabecera x-empresa-id (solo desarrollo y pruebas)
 pnpm install --frozen-lockfile
 pnpm db:preparar   # roles restaurante_migrador / _api / _plataforma, la base `restaurante` y las protecciones del catálogo (idempotente)
-pnpm db:migrar     # aplica las migraciones pendientes (idempotente); sin DATABASE_MIGRADOR_URL la deriva del admin
+pnpm db:migrar     # aplica las migraciones pendientes (idempotente); sin DATABASE_MIGRADOR_URL la deriva del admin y de la base de DATABASE_URL
 pnpm db:semilla    # compila los paquetes compartidos y crea dos empresas de demostración, actor `semilla` (idempotente)
 pnpm dev           # API en http://localhost:3000
 curl http://localhost:3000/health
@@ -81,7 +81,15 @@ la raíz) y cambiar el puerto `5433` por el de tu PostgreSQL. `pnpm db:semilla` 
 los paquetes compartidos (`pnpm build:compartidos`); `pnpm dev` también los compila antes de arrancar.
 Si no defines `DATABASE_URL` ni `DATABASE_PLATAFORMA_URL`, `db:semilla` las deriva de
 `DATABASE_ADMIN_URL`; la API (`pnpm dev`) sí las necesita en el entorno o en `.env`. `pnpm db:revertir`
-deshace la última migración. En producción se corre el mismo `db:preparar` con el usuario administrador
+deshace la última migración.
+
+`db:preparar` acepta el nombre de la base como argumento (`pnpm db:preparar mi_base`); sin argumento usa
+la base de `DATABASE_URL` si está definida (y `restaurante` si no). `db:migrar` y `db:revertir` usan
+`DATABASE_MIGRADOR_URL` tal cual; sin ella derivan la URL del administrador con el rol migrador y esa
+misma base (la de `DATABASE_URL`, o `restaurante`). Así, con `DATABASE_URL` apuntando a otra base, los
+tres comandos trabajan sobre ella. El nombre de base solo admite minúsculas, dígitos y guion bajo.
+
+En producción se corre el mismo `db:preparar` con el usuario administrador
 del proveedor de PostgreSQL, `NODE_ENV=production` y las tres `DB_PASSWORD_*` definidas.
 
 ## Comandos
@@ -107,23 +115,27 @@ pnpm test
 pnpm --filter @restaurante/api exec vitest run test/aislamiento/rls-sql.spec.ts   # un archivo
 ```
 
+Con la vía Docker (`pnpm local:preparar`, PostgreSQL en el puerto 5433) el administrador es
+`DATABASE_ADMIN_URL=postgres://postgres:postgres@localhost:5433/postgres`, el mismo valor que trae
+`.env.example`; el puerto 5432 del ejemplo de arriba es el de un PostgreSQL instalado aparte.
+
 Cada ejecución recrea la base `restaurante_test` y le aplica las migraciones (no toca `restaurante`).
 Las pruebas protegidas de aislamiento viven en `apps/api/test/aislamiento/`; los detalles de las
 utilidades están en `apps/api/test/README.md`. Las pruebas de `packages/*` no usan base de datos.
 
 ## Variables de entorno
 
-| Variable                                                            | Uso                                                                                                           |
-| ------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
-| `DATABASE_URL`                                                      | Conexión de la API (`restaurante_api`)                                                                        |
-| `DATABASE_PLATAFORMA_URL`                                           | Conexión de plataforma (`restaurante_plataforma`)                                                             |
-| `DATABASE_MIGRADOR_URL`                                             | Migraciones (`restaurante_migrador`); si falta se deriva del admin                                            |
-| `DATABASE_ADMIN_URL`                                                | Solo `db:preparar` y las pruebas: administrador de PostgreSQL                                                 |
-| `DB_PASSWORD_MIGRADOR`, `DB_PASSWORD_API`, `DB_PASSWORD_PLATAFORMA` | Contraseñas que `db:preparar` asigna a los roles; obligatorias salvo con `NODE_ENV` `development` o `test`    |
-| `DB_POOL_MAX`                                                       | Tamaño del pool de la API (por defecto 10)                                                                    |
-| `EMPRESA_POR_HEADER`                                                | `habilitado` activa el resolutor por cabecera `x-empresa-id`; la API se niega a arrancar con él en producción |
-| `NODE_ENV`                                                          | Obligatoria, sin valor por defecto: `development`, `test` o `production`                                      |
-| `PORT`                                                              | Puerto de la API (por defecto 3000)                                                                           |
+| Variable                                                            | Uso                                                                                                            |
+| ------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| `DATABASE_URL`                                                      | Conexión de la API (`restaurante_api`); su base es también la que usan por defecto `db:preparar` y `db:migrar` |
+| `DATABASE_PLATAFORMA_URL`                                           | Conexión de plataforma (`restaurante_plataforma`)                                                              |
+| `DATABASE_MIGRADOR_URL`                                             | Migraciones (`restaurante_migrador`); si falta se deriva del admin                                             |
+| `DATABASE_ADMIN_URL`                                                | Solo `db:preparar` y las pruebas: administrador de PostgreSQL                                                  |
+| `DB_PASSWORD_MIGRADOR`, `DB_PASSWORD_API`, `DB_PASSWORD_PLATAFORMA` | Contraseñas que `db:preparar` asigna a los roles; obligatorias salvo con `NODE_ENV` `development` o `test`     |
+| `DB_POOL_MAX`                                                       | Tamaño del pool de la API (por defecto 10)                                                                     |
+| `EMPRESA_POR_HEADER`                                                | `habilitado` activa el resolutor por cabecera `x-empresa-id`; la API se niega a arrancar con él en producción  |
+| `NODE_ENV`                                                          | Obligatoria, sin valor por defecto: `development`, `test` o `production`                                       |
+| `PORT`                                                              | Puerto de la API (por defecto 3000)                                                                            |
 
 ## Aislamiento entre empresas: reglas para quien programa
 

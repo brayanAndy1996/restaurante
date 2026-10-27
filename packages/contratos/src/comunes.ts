@@ -17,9 +17,10 @@ export const sinNul = (texto: string): boolean => !texto.includes(NUL);
 /**
  * Sustituto UTF-16 alto sin un bajo detrás, o bajo sin un alto delante. Un par válido (por ejemplo un
  * emoji) no coincide. Se usa una expresión regular y no `String.prototype.isWellFormed` para que el
- * mismo código valga en navegadores antiguos (la PWA usa este paquete).
+ * mismo código valga en navegadores antiguos (la PWA usa este paquete); tampoco usa lookbehind, que
+ * Safari no admite antes de la 16.4.
  */
-const SUSTITUTO_SUELTO = /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/;
+const SUSTITUTO_SUELTO = /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?:^|[^\uD800-\uDBFF])[\uDC00-\uDFFF]/;
 
 /**
  * Refinamiento común de los textos: sin sustitutos UTF-16 sueltos (criterio 40c). Un sustituto suelto

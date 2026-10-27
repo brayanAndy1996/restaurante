@@ -1,11 +1,12 @@
-// pnpm db:preparar [baseDeDatos]  (por defecto: restaurante). Idempotente.
+// pnpm db:preparar [baseDeDatos]  (por defecto: la de DATABASE_URL o, si no está definida, restaurante).
+// Idempotente.
 import { cargarEnvDeLaRaiz } from '../src/config/cargar-env';
 import { prepararBaseDeDatos } from './lib/preparar-bd';
-import { BASE_DE_DATOS_POR_DEFECTO } from './lib/roles';
+import { baseDeDatosDelEntorno } from './lib/roles';
 
 async function main() {
   cargarEnvDeLaRaiz();
-  const baseDeDatos = process.argv[2] ?? BASE_DE_DATOS_POR_DEFECTO;
+  const baseDeDatos = process.argv[2] ?? baseDeDatosDelEntorno();
   await prepararBaseDeDatos({ baseDeDatos, registrar: (mensaje) => console.log(mensaje) });
   console.log('Preparación de la base de datos terminada.');
 }

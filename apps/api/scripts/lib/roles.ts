@@ -54,6 +54,22 @@ export function contrasenasDeRoles(
   };
 }
 
+/**
+ * Base de datos a la que apuntan los scripts cuando no se les da una: la de `DATABASE_URL` si está
+ * definida (y tiene nombre de base) o, si no, `restaurante`.
+ */
+export function baseDeDatosDelEntorno(env: NodeJS.ProcessEnv = process.env): string {
+  const url = env.DATABASE_URL;
+  if (!url) return BASE_DE_DATOS_POR_DEFECTO;
+  let nombre: string;
+  try {
+    nombre = decodeURIComponent(new URL(url).pathname.replace(/^\//, ''));
+  } catch {
+    throw new Error('DATABASE_URL no es una URL válida');
+  }
+  return nombre === '' ? BASE_DE_DATOS_POR_DEFECTO : validarNombreDeBase(nombre);
+}
+
 export function validarNombreDeBase(nombre: string): string {
   if (!/^[a-z][a-z0-9_]*$/.test(nombre)) {
     throw new Error(

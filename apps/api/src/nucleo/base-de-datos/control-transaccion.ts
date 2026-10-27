@@ -28,29 +28,68 @@ const PALABRAS_DE_CONTROL = new Set([
   'DO',
 ]);
 
+/** Carácter que puede formar parte de un identificador de PostgreSQL (`ident_cont` y `$`). */
 const CARACTER_DE_IDENTIFICADOR = /[A-Za-z0-9_\u0080-￿$]/;
 
+/** Delimitador de dólar-comillas (`dolqdelim`): la etiqueta no empieza con dígito ni contiene `$`. */
+const DELIMITADOR_DOLAR = /\$(?:[A-Za-z_\u0080-￿][A-Za-z0-9_\u0080-￿]*)?\$/y;
+
+/** Resultado de `analizar`: el texto sin literales ni comentarios, y esa misma versión con nombres. */
+interface Analisis {
+  /** Comentarios, cadenas, identificadores entre comillas y cadenas `$$` reemplazados por un espacio. */
+  limpio: string;
+  /**
+   * Igual que `limpio`, pero el contenido de un identificador entre comillas (`"set_config"`) se deja
+   * en el texto, porque nombra un objeto y no es un valor: así no sirve para esconder una función.
+   * `null` si hay un identificador con escapes Unicode (`U&"…"`), que no se puede leer sin
+   * interpretarlo.
+   */
+  conNombres: string | null;
+}
+
 /**
- * Reemplaza comentarios y literales por un espacio. `null` si alguno queda sin cerrar. Con
- * `conservarIdentificadores`, el contenido de un identificador entre comillas (`"set_config"`) se
- * deja en el texto, porque nombra un objeto y no es un valor: así no sirve para esconder una función.
- * Un identificador con escapes Unicode (`U&"…"`) no se puede leer sin interpretarlo y se rechaza.
+ * Examina el texto igual que el escáner léxico de PostgreSQL 16 (`scan.l`) y devuelve `null` si algún
+ * comentario o literal queda sin cerrar o si algo se leería distinto según un ajuste de la sesión.
+ * Cualquier diferencia con PostgreSQL deja que la guarda vea algo distinto de lo que se ejecuta, así que
+ * ante la duda se rechaza. Reglas que se siguen:
+ *
+ * - Un comentario `--` termina en `\n` **o** `\r` (`newline [\n\r]`). los de bloque se anidan, y `**` seguido
+ *   de `/` también cierra. Ambos pueden empezar en medio de una secuencia de operadores (`+--x`).
+ * - Cadenas `'…'`: `''` es una comilla. Solo `E'…'`/`e'…'` (la `E` no puede ser el final de otro
+ *   identificador: `typeE'…'` no lleva escapes) interpreta `\` (`\\`, `\'`, …). `U&'…'`, `N'…'`, `B'…'` y
+ *   `X'…'` se leen como una cadena normal; el `UESCAPE` de `U&'…'` se aplica después de leer y no cambia
+ *   dónde termina el literal. `'a'` + salto de línea + `'b'` son dos literales para esta guarda
+ *   (PostgreSQL los une): no cambia nada porque ambos se reemplazan por un espacio.
+ * - SUPUESTO: `standard_conforming_strings = on` (el valor por defecto; la guarda impide cambiarlo con
+ *   `SET`). Con `off`, `'\'` seguiría abierta. Para no depender de ello, una cadena que no es `E` y
+ *   tiene `\` justo antes de una comilla (`'\'`, `'\''`) se rechaza: es el único caso en que ambos modos
+ *   la leen distinto.
+ * - Identificadores `"…"`: `""` es una comilla. Un `U&"…"` hace que `conNombres` sea `null`.
+ * - Dólar-comillas `$etiqueta$…$etiqueta$`: la etiqueta no empieza con dígito (`$1` es un parámetro) y
+ *   el `$` de apertura no sigue a un carácter de identificador (`a$$b$$` es un identificador). Se cierra
+ *   con la primera aparición de la misma etiqueta: en PostgreSQL toda `$` empieza una lectura nueva,
+ *   así que buscarla como subcadena es equivalente.
+ * - El carácter anterior se mira en el texto ya limpio, no en el original: tras `$a$…$a$E'…'` o
+ *   tras un comentario de bloque la `E` empieza una cadena nueva.
  */
-function quitarLiteralesYComentarios(
-  texto: string,
-  conservarIdentificadores = false,
-): string | null {
-  let salida = '';
+function analizarSinCache(texto: string): Analisis | null {
+  let limpio = '';
+  let conNombres: string | null = '';
+  const emitir = (plano: string, conNombre: string = plano): void => {
+    limpio += plano;
+    if (conNombres !== null) conNombres += conNombre;
+  };
   let i = 0;
   const n = texto.length;
   while (i < n) {
     const c = texto[i]!;
     const siguiente = texto[i + 1];
     if (c === '-' && siguiente === '-') {
-      const fin = texto.indexOf('\n', i);
-      if (fin === -1) return `${salida} `;
-      salida += ' ';
-      i = fin + 1;
+      // Termina en `\n` o `\r`; ese carácter queda en el texto y se emite como el espacio que es.
+      let fin = i + 2;
+      while (fin < n && texto[fin] !== '\n' && texto[fin] !== '\r') fin += 1;
+      emitir(' ');
+      i = fin;
     } else if (c === '/' && siguiente === '*') {
       let nivel = 1;
       i += 2;
@@ -66,20 +105,24 @@ function quitarLiteralesYComentarios(
         }
       }
       if (nivel > 0) return null;
-      salida += ' ';
+      emitir(' ');
     } else if (c === "'") {
-      // Cadena con escapes de barra si va precedida por E/e que no es parte de otro identificador.
-      const previo = texto[i - 1];
-      const antes = texto[i - 2];
+      const previo = limpio[limpio.length - 1];
+      const antes = limpio[limpio.length - 2];
       const conEscapes =
         (previo === 'E' || previo === 'e') &&
         !(antes !== undefined && CARACTER_DE_IDENTIFICADOR.test(antes));
       let j = i + 1;
       let cerrada = false;
       while (j < n) {
-        if (conEscapes && texto[j] === '\\') {
-          j += 2;
-        } else if (texto[j] === "'") {
+        const actual = texto[j];
+        if (actual === '\\') {
+          // Un par de barras se lee igual con y sin standard_conforming_strings; una barra sola antes
+          // de una comilla, no.
+          if (conEscapes || texto[j + 1] === '\\') j += 2;
+          else if (texto[j + 1] === "'") return null;
+          else j += 1;
+        } else if (actual === "'") {
           if (texto[j + 1] === "'") j += 2;
           else {
             cerrada = true;
@@ -90,7 +133,7 @@ function quitarLiteralesYComentarios(
         }
       }
       if (!cerrada) return null;
-      salida += ' ';
+      emitir(' ');
       i = j + 1;
     } else if (c === '"') {
       let j = i + 1;
@@ -107,33 +150,49 @@ function quitarLiteralesYComentarios(
         }
       }
       if (!cerrado) return null;
-      if (conservarIdentificadores) {
-        if (/U&$/i.test(texto.slice(Math.max(0, i - 2), i))) return null;
-        salida += ` ${texto.slice(i + 1, j)} `;
+      if (/U&$/i.test(texto.slice(Math.max(0, i - 2), i))) {
+        conNombres = null;
+        limpio += ' ';
       } else {
-        salida += ' ';
+        emitir(' ', ` ${texto.slice(i + 1, j)} `);
       }
       i = j + 1;
     } else if (c === '$') {
-      const previo = texto[i - 1];
+      const previo = limpio[limpio.length - 1];
       const dentroDeIdentificador = previo !== undefined && CARACTER_DE_IDENTIFICADOR.test(previo);
-      const etiqueta = /^\$([A-Za-z_\u0080-￿][A-Za-z0-9_\u0080-￿]*)?\$/.exec(texto.slice(i));
-      if (!dentroDeIdentificador && etiqueta) {
+      DELIMITADOR_DOLAR.lastIndex = i;
+      const etiqueta = dentroDeIdentificador ? null : DELIMITADOR_DOLAR.exec(texto);
+      if (etiqueta) {
         const marca = etiqueta[0];
         const fin = texto.indexOf(marca, i + marca.length);
         if (fin === -1) return null;
-        salida += ' ';
+        emitir(' ');
         i = fin + marca.length;
       } else {
-        salida += c;
+        emitir(c);
         i += 1;
       }
     } else {
-      salida += c;
+      emitir(c);
       i += 1;
     }
   }
-  return salida;
+  return { limpio, conNombres };
+}
+
+let ultimoTexto: string | undefined;
+let ultimoAnalisis: Analisis | null = null;
+
+/**
+ * Como `analizarSinCache`, pero recuerda el último texto: la guarda de la API hace tres comprobaciones
+ * seguidas sobre la misma consulta y así se examina una sola vez (la función es síncrona).
+ */
+function analizar(texto: string): Analisis | null {
+  if (texto !== ultimoTexto) {
+    ultimoAnalisis = analizarSinCache(texto);
+    ultimoTexto = texto;
+  }
+  return ultimoAnalisis;
 }
 
 /**
@@ -141,10 +200,12 @@ function quitarLiteralesYComentarios(
  * analizar con certeza.
  */
 export function contieneControlDeTransaccion(texto: string): boolean {
-  const limpio = quitarLiteralesYComentarios(texto);
-  if (limpio === null) return true;
-  for (const sentencia of limpio.split(';')) {
-    // Los paréntesis y espacios iniciales no cambian la sentencia que viene después.
+  const analisis = analizar(texto);
+  if (analisis === null) return true;
+  for (const sentencia of analisis.limpio.split(';')) {
+    // Los paréntesis y espacios iniciales no cambian la sentencia que viene después. `\s` incluye todo
+    // lo que PostgreSQL toma por espacio (`[ \t\n\r\f\v]`) y algo más (por ejemplo U+00A0): leer de más es
+    // rechazar de más.
     const palabra = /^[\s(]*([A-Za-z]+)/.exec(sentencia)?.[1];
     if (palabra !== undefined && PALABRAS_DE_CONTROL.has(palabra.toUpperCase())) return true;
   }
@@ -158,8 +219,14 @@ export function contieneControlDeTransaccion(texto: string): boolean {
  * capa extra, porque la barrera es la lista blanca y el permiso de la base), y el propio
  * nombre del parámetro (`app.empresa_id`) fuera de un literal.
  */
-const MENCION_DE_CONTEXTO =
-  /set_config|pg_settings|query_to_xml|cursor_to_xml|ts_stat\b|ts_rewrite\b|app\s*\.\s*empresa_id/i;
+const MENCION_DE_CONTEXTO = new RegExp(
+  // Sin un carácter de identificador delante (`reset_config` no es `set_config`) y, en las funciones
+  // con nombre completo, sin uno detrás; `query_to_xml*` y `cursor_to_xml*` admiten sufijo.
+  '(?<![A-Za-z0-9_\\u0080-\\uffff$])(?:' +
+    '(?:set_config|pg_settings|ts_stat|ts_rewrite)(?![A-Za-z0-9_\\u0080-\\uffff$])|' +
+    'query_to_xml|cursor_to_xml|app\\s*\\.\\s*empresa_id)',
+  'i',
+);
 
 /**
  * `true` si el texto, sin literales ni comentarios, nombra una función o un objeto con el que se
@@ -168,8 +235,12 @@ const MENCION_DE_CONTEXTO =
  * no cuenta: se decide sobre el texto limpio (criterio 22b).
  */
 export function mencionaContextoDeEmpresa(texto: string): boolean {
-  const limpio = quitarLiteralesYComentarios(texto, true);
-  return limpio === null || MENCION_DE_CONTEXTO.test(limpio);
+  const analisis = analizar(texto);
+  return (
+    analisis === null ||
+    analisis.conNombres === null ||
+    MENCION_DE_CONTEXTO.test(analisis.conNombres)
+  );
 }
 
 /**
@@ -196,10 +267,10 @@ const PALABRAS_PERMITIDAS = new Set([
  * Las sentencias vacías (un `;` final) se ignoran. Un texto sin ninguna sentencia se rechaza.
  */
 export function contieneSentenciaNoPermitida(texto: string): boolean {
-  const limpio = quitarLiteralesYComentarios(texto);
-  if (limpio === null) return true;
+  const analisis = analizar(texto);
+  if (analisis === null) return true;
   let hubo = false;
-  for (const sentencia of limpio.split(';')) {
+  for (const sentencia of analisis.limpio.split(';')) {
     if (sentencia.trim() === '') continue;
     hubo = true;
     const palabra = /^[\s(]*([A-Za-z]+)(?![A-Za-z0-9_$\u0080-\uffff])/.exec(sentencia)?.[1];
