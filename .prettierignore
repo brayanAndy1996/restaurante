@@ -8,3 +8,5 @@ pnpm-lock.yaml
 .impeccable
 specs
 CLAUDE.md
+# Prototipo: index.html se genera con `node prototipo/armar.mjs` a partir de prototipo.html
+prototipo/index.html
