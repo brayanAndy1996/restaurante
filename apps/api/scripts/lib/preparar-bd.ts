@@ -295,12 +295,101 @@ async function protegerObjetosGrandes(adminUrl: string, baseDeDatos: string): Pr
   }
 }
 
+/** Funciones de `pg_catalog` que ejecutan como SQL un texto (o un cursor) que reciben. */
+const FUNCIONES_QUE_EJECUTAN_SQL = [
+  'ts_rewrite',
+  'ts_stat',
+  'query_to_xml',
+  'query_to_xmlschema',
+  'query_to_xml_and_xmlschema',
+  'cursor_to_xml',
+  'cursor_to_xmlschema',
+];
+/** Un catálogo de PostgreSQL 16 trae unas 9 firmas de estas funciones; menos es una lectura rota. */
+const MINIMO_FIRMAS_QUE_EJECUTAN_SQL = 7;
+
+/**
+ * Criterio 22d: dentro de una transacción de `restaurante_api` con el contexto de la empresa A, las
+ * funciones que ejecutan SQL recibido como texto (`ts_rewrite`, todas sus firmas, `ts_stat`,
+ * `query_to_xml`, `query_to_xmlschema`, `query_to_xml_and_xmlschema`) o por nombre de cursor
+ * (`cursor_to_xml`, `cursor_to_xmlschema`) pueden llamar `set_config('app.empresa_id', <B>, true)` sin
+ * que la guarda de la API lo vea, y la vista `pg_settings` es actualizable (un `UPDATE` equivale a
+ * `set_config`). Se quita el `EXECUTE` de todas las firmas (descubiertas en `pg_proc`, no una lista
+ * fija) a PUBLIC y a los dos roles (incluidas las dos de `ts_rewrite`), y el `UPDATE` sobre
+ * `pg_settings`. No se toca `set_config` (lo usa `ContextoEmpresa`),
+ * `current_setting` ni el `SELECT` sobre `pg_settings`. Al ser objetos de `pg_catalog` existen por base
+ * de datos: hay que aplicarlo conectado a la base de destino. Es repetible y termina comprobando, rol
+ * por rol, que quedó aplicado. Falla con un mensaje claro si el administrador no puede aplicarlo.
+ */
+async function protegerEjecucionDeSql(adminUrl: string, baseDeDatos: string): Promise<void> {
+  const cliente = new Client({ connectionString: urlAdminParaBase(adminUrl, baseDeDatos) });
+  cliente.on('error', () => undefined);
+  await cliente.connect();
+  const roles = [ROLES.api, ROLES.plataforma];
+  const listaRoles = roles.map((rol) => cliente.escapeIdentifier(rol)).join(', ');
+  try {
+    const { rows: funciones } = await cliente.query<{ firma: string }>(
+      `SELECT p.oid::regprocedure::text AS firma
+         FROM pg_proc p
+         JOIN pg_namespace n ON n.oid = p.pronamespace
+        WHERE n.nspname = 'pg_catalog'
+          AND p.proname = ANY ($1::text[])
+        ORDER BY 1`,
+      [FUNCIONES_QUE_EJECUTAN_SQL],
+    );
+    for (const nombre of FUNCIONES_QUE_EJECUTAN_SQL) {
+      if (!funciones.some((f) => f.firma.startsWith(`${nombre}(`))) {
+        throw new Error(`no se encontró la función ${nombre} de pg_catalog`);
+      }
+    }
+    if (funciones.length < MINIMO_FIRMAS_QUE_EJECUTAN_SQL) {
+      throw new Error(`solo se encontraron ${funciones.length} firmas en pg_catalog`);
+    }
+    const sentencias = funciones.map(
+      ({ firma }) => `REVOKE ALL ON FUNCTION ${firma} FROM PUBLIC, ${listaRoles}`,
+    );
+    sentencias.push(`REVOKE UPDATE ON pg_catalog.pg_settings FROM PUBLIC, ${listaRoles}`);
+    for (const sentencia of sentencias) await cliente.query(sentencia);
+
+    // Verificación: un administrador sin permisos sobre pg_catalog no recibe error, solo avisos.
+    const pendientes: string[] = [];
+    for (const rol of roles) {
+      for (const { firma } of funciones) {
+        const { rows } = await cliente.query(
+          'SELECT has_function_privilege($1, $2::regprocedure, $3) AS permitido',
+          [rol, firma, 'EXECUTE'],
+        );
+        if (rows[0]?.permitido) pendientes.push(`${rol} puede ejecutar ${firma}`);
+      }
+      const { rows } = await cliente.query('SELECT has_table_privilege($1, $2, $3) AS permitido', [
+        rol,
+        'pg_catalog.pg_settings',
+        'UPDATE',
+      ]);
+      if (rows[0]?.permitido) pendientes.push(`${rol} puede actualizar pg_settings`);
+    }
+    if (pendientes.length > 0) throw new Error(pendientes.join('; '));
+  } catch (error) {
+    const motivo = error instanceof Error ? error.message : String(error);
+    throw new Error(
+      `No se pudo impedir que ${ROLES.api} y ${ROLES.plataforma} ejecuten SQL armado como texto ni ` +
+        `actualicen pg_settings en la base ${baseDeDatos} (${motivo}). El usuario de ` +
+        'DATABASE_ADMIN_URL debe ser superusuario (o dueño de los objetos de pg_catalog) para quitar ' +
+        'permisos sobre ts_rewrite, ts_stat, query_to_xml, query_to_xmlschema, ' +
+        'query_to_xml_and_xmlschema, cursor_to_xml, cursor_to_xmlschema y sobre UPDATE en pg_settings ' +
+        '(criterio 22d). La base queda sin esta protección.',
+    );
+  } finally {
+    await cliente.end();
+  }
+}
+
 /**
  * Prepara el clúster de forma idempotente: roles sin privilegios especiales (con contraseña),
  * la base con dueño `restaurante_migrador` y los permisos de conexión de la base. Es la única
  * fuente de verdad de los roles: la usan db:preparar, el entorno local, la nube, CI y las pruebas.
  * Los privilegios sobre el esquema y las tablas los fija la primera migración. Además quita a los dos
- * roles de la aplicación el acceso al texto de las consultas de otras sesiones (criterio 38b) y la posibilidad de cancelar, terminar o enumerar sesiones ajenas (criterio 38c), y el uso de objetos grandes (criterio 38d), lo que
+ * roles de la aplicación el acceso al texto de las consultas de otras sesiones (criterio 38b) y la posibilidad de cancelar, terminar o enumerar sesiones ajenas (criterio 38c), el uso de objetos grandes (criterio 38d) y la ejecución de SQL armado como texto y el `UPDATE` sobre `pg_settings` (criterio 22d), lo que
  * exige que el usuario de `DATABASE_ADMIN_URL` sea superusuario.
  */
 export async function prepararBaseDeDatos(opciones: OpcionesPrepararBd = {}): Promise<void> {
@@ -381,5 +470,11 @@ export async function prepararBaseDeDatos(opciones: OpcionesPrepararBd = {}): Pr
   await protegerObjetosGrandes(adminUrl, baseDeDatos);
   registrar(
     `base ${baseDeDatos}: ${ROLES.api} y ${ROLES.plataforma} no pueden usar objetos grandes (large objects)`,
+  );
+
+  // 7. Funciones que ejecutan SQL desde texto y UPDATE sobre pg_settings (criterio 22d).
+  await protegerEjecucionDeSql(adminUrl, baseDeDatos);
+  registrar(
+    `base ${baseDeDatos}: ${ROLES.api} y ${ROLES.plataforma} no pueden ejecutar SQL armado como texto ni actualizar pg_settings`,
   );
 }

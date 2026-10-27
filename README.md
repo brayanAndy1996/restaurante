@@ -42,7 +42,12 @@ rol para todas las empresas) y no tiene RLS:
   (`pg_stat_get_backend_*`) y ser miembro de `pg_signal_backend` (criterio 38c);
 - los objetos grandes: todas las funciones `lo_*`, `loread` y `lowrite` de `pg_catalog` (todas sus
   firmas, descubiertas en `pg_proc`) y `SELECT` sobre `pg_largeobject` y `pg_largeobject_metadata`
-  (criterio 38d).
+  (criterio 38d);
+- las funciones que ejecutan SQL recibido como texto o por nombre de cursor (todas las firmas de
+  `ts_rewrite`, `ts_stat`, `query_to_xml`, `query_to_xmlschema`,
+  `query_to_xml_and_xmlschema`, `cursor_to_xml` y `cursor_to_xmlschema`, descubiertas en `pg_proc`) y
+  el `UPDATE` sobre `pg_settings`, que permitirían cambiar `app.empresa_id` a mitad de transacción
+  (criterio 22d). `restaurante_api` conserva `set_config`.
 
 Si el administrador no puede aplicarlo **falla con un mensaje que lo dice** en vez de dejar la base sin
 esa protección. En PostgreSQL gestionado sin superusuario, pide al proveedor que quite esos permisos de
@@ -144,7 +149,11 @@ Una empresa nunca ve datos de otra. La garantía la da PostgreSQL (RLS) y la ref
   `ejecutar` cuando no hay contexto vigente queda autorizada: otra transacción de la API abierta desde
   `fn` (`sequelize.transaction()`), aunque fije una empresa a mano, lanza error en cada consulta
   (criterio 22c). El texto SQL que fija la empresa (`SQL_FIJAR_CONTEXTO`) y el registro de transacciones
-  por autorizar no se pueden usar fuera de `apps/api/src/nucleo/` (regla de ESLint).
+  por autorizar no se pueden usar fuera de `apps/api/src/nucleo/` (regla de ESLint). Además, dentro
+  del contexto solo pasan sentencias cuya primera palabra (en cada sentencia de un texto con varias,
+  tras quitar comentarios) es `SELECT`, `INSERT`, `UPDATE`, `DELETE`, `WITH`, `VALUES` o `TABLE`: `LISTEN`,
+  `COPY`, `DECLARE`, `EXPLAIN`, `SHOW`, `CREATE`… lanzan `ConsultaProhibidaError` antes de la base
+  (lista blanca, criterio 22d; no depende de nombres de funciones).
 - **Después de `ejecutar` no queda contexto.** Un efecto secundario lanzado desde `fn` (imprimir, PSE,
   avisos en tiempo real) corre después de confirmar y hereda el almacén asíncrono de la petición, pero
   ya sin contexto: `empresaActual()` y los servicios de empresa lanzan `ContextoEmpresaAusenteError`.

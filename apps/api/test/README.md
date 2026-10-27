@@ -142,7 +142,10 @@ listarEmpresas(): Promise<{ id: string; nombre: string }[]>
   de `packages/config` y agrega las dos reglas del criterio 37 (y 37b), que se aplican a
   `src/**/*.{ts,tsx,mts,cts}` y detectan también `import()`, `require`, `import x = require()` y los
   reexportes (las migraciones quedan fuera de la segunda porque su SQL nombra el parámetro; las pruebas y los
-  scripts no son código de la API).
+  scripts no son código de la API). El parser `apps/api/herramientas/parser-textos-calculados.js`
+  pliega antes de las reglas las concatenaciones con `+`, las plantillas, `.concat()` sobre literales
+  y `.join()` sobre arreglos de literales, así que `'app.'.concat('empresa_id')` y
+  `['app', 'empresa_id'].join('.')` también fallan (criterio 37c).
 
 ## Crear las empresas A y B en las pruebas
 
@@ -197,6 +200,14 @@ consultas (modelos, `queryInterface`, consultas crudas y las sentencias de trans
   comentarios, así que `'COMMIT'` como valor funciona). Solo el `COMMIT`/`ROLLBACK` propio de
   `ejecutar` pasa (`cierre-propio.ts`). Efecto: `sequelize.transaction({ transaction })` anidado
   (usa `SAVEPOINT`) no está permitido dentro de un contexto.
+- Lista blanca (criterio 22d): dentro del contexto, la primera palabra de cada sentencia (sin
+  comentarios, aceptando paréntesis de apertura) debe ser `SELECT`, `INSERT`, `UPDATE`, `DELETE`,
+  `WITH`, `VALUES` o `TABLE`; todo lo demás (`LISTEN`, `COPY`, `DECLARE`, `EXPLAIN`, `SHOW`, `CREATE`…)
+  lanza `ConsultaProhibidaError` antes de la base (`contieneSentenciaNoPermitida`, en
+  `control-transaccion.ts`). Las sentencias internas (abrir y cerrar la transacción de Sequelize y
+  la fijación de `ContextoEmpresa`) pasan por su origen. También se rechazan `ts_rewrite`, `ts_stat`,
+  `query_to_xml*` y `cursor_to_xml*` fuera de literales; la barrera de fondo es el `REVOKE` de
+  `db:preparar` (`preparar-bd.ts`, `protegerEjecucionDeSql`).
 
 ### La excepción `sinEmpresa: 'salud' | 'verificacion-roles'`
 

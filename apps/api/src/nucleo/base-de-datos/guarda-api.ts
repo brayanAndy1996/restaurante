@@ -13,7 +13,11 @@ import {
 } from './consultas-sin-empresa';
 import { estaCerrandoPropio } from './cierre-propio';
 import { consumirPendienteDeAutorizar } from './autorizacion-transaccion';
-import { contieneControlDeTransaccion, mencionaContextoDeEmpresa } from './control-transaccion';
+import {
+  contieneControlDeTransaccion,
+  contieneSentenciaNoPermitida,
+  mencionaContextoDeEmpresa,
+} from './control-transaccion';
 import { ColaPorTransaccion } from './cola-por-transaccion';
 import { ConsultaProhibidaError } from './errores';
 import type { OpcionesConsultaInterna, TransaccionInterna } from './transaccion-interna';
@@ -23,6 +27,10 @@ const PROHIBIDO_CONTROLAR =
   'Dentro de ContextoEmpresa.ejecutar no se puede confirmar, revertir ni subdividir la transacción ' +
   '(COMMIT, ROLLBACK, END, ABORT, SAVEPOINT, RELEASE, BEGIN, START TRANSACTION, PREPARE…): ' +
   'lo hace ejecutar al terminar fn';
+
+const PROHIBIDO_SENTENCIA =
+  'Dentro de ContextoEmpresa.ejecutar solo se admiten sentencias que empiecen por SELECT, INSERT, ' +
+  'UPDATE, DELETE, WITH, VALUES o TABLE';
 
 /**
  * Instala la guarda de la API en `sequelize.query`, por donde pasan todas las consultas de la
@@ -48,6 +56,10 @@ const PROHIBIDO_CONTROLAR =
  * 5. En una transacción autorizada también se rechazan `set_config`, `SET`/`RESET`/`DISCARD`/`DO` y
  *    los demás medios de cambiar el contexto o la sesión. La decisión se toma sobre el texto sin
  *    literales ni comentarios (el mismo analizador), así que un valor como `'x; set y'` pasa.
+ * 6. Lista blanca (criterio 22d): dentro de una transacción autorizada, la primera palabra de cada
+ *    sentencia debe ser `SELECT`, `INSERT`, `UPDATE`, `DELETE`, `WITH`, `VALUES` o `TABLE`; todo lo
+ *    demás (`LISTEN`, `COPY`, `DECLARE`, `EXPLAIN`…) se rechaza antes de pedir la conexión. No depende
+ *    de nombres de funciones: es la capa que no se puede esquivar con una función nueva.
  *
  * Esto sustituye al CLS de Sequelize (`useCLS` es global para toda la clase `Sequelize` y mezclaría
  * la API con la plataforma): la transacción de la petición se toma del `AsyncLocalStorage` aquí,
@@ -111,6 +123,11 @@ export function instalarGuardaApi(sequelize: Sequelize): void {
     if (texto === undefined || mencionaContextoDeEmpresa(texto)) throw new ConsultaProhibidaError();
     // Incluye `SET`/`RESET`/`DISCARD`/`DO` como sentencia, además del control de transacción.
     if (contieneControlDeTransaccion(texto)) throw new ConsultaProhibidaError(PROHIBIDO_CONTROLAR);
+    // Lista blanca (22d): solo SELECT, INSERT, UPDATE, DELETE, WITH, VALUES y TABLE. Las sentencias
+    // internas (abrir y cerrar la transacción, fijar el contexto) ya salieron más arriba por su origen.
+    if (contieneSentenciaNoPermitida(texto)) {
+      throw new ConsultaProhibidaError(PROHIBIDO_SENTENCIA);
+    }
     return cola.ejecutar(transaccion, () => consultar(sql, opts));
   }
 

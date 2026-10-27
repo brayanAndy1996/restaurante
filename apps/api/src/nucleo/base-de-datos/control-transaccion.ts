@@ -154,11 +154,12 @@ export function contieneControlDeTransaccion(texto: string): boolean {
 /**
  * Funciones y objetos con los que una consulta podría cambiar el contexto de empresa o ejecutar SQL
  * armado como texto: `set_config`, `pg_settings` (un `UPDATE` equivale a `set_config`), `query_to_xml*`
- * y `cursor_to_xml*` (ejecutan la consulta que reciben como texto) y `ts_stat` (ídem), y el propio
+ * y `cursor_to_xml*` (ejecutan la consulta que reciben como texto), `ts_stat` y `ts_rewrite` (ídem;
+ * capa extra, porque la barrera es la lista blanca y el permiso de la base), y el propio
  * nombre del parámetro (`app.empresa_id`) fuera de un literal.
  */
 const MENCION_DE_CONTEXTO =
-  /set_config|pg_settings|query_to_xml|cursor_to_xml|ts_stat\b|app\s*\.\s*empresa_id/i;
+  /set_config|pg_settings|query_to_xml|cursor_to_xml|ts_stat\b|ts_rewrite\b|app\s*\.\s*empresa_id/i;
 
 /**
  * `true` si el texto, sin literales ni comentarios, nombra una función o un objeto con el que se
@@ -169,4 +170,40 @@ const MENCION_DE_CONTEXTO =
 export function mencionaContextoDeEmpresa(texto: string): boolean {
   const limpio = quitarLiteralesYComentarios(texto, true);
   return limpio === null || MENCION_DE_CONTEXTO.test(limpio);
+}
+
+/**
+ * Primeras palabras de sentencia que la guarda de la API deja pasar dentro de una transacción
+ * autorizada (criterio 22d, lista blanca). Todo lo demás (`SET`, `RESET`, `ALTER`, `COPY`,
+ * `PREPARE`, `EXECUTE`, `DECLARE`, `FETCH`, `LISTEN`, `NOTIFY`, `CALL`, `DO`, `LOCK`, `ANALYZE`,
+ * `EXPLAIN`, `VACUUM`, `CREATE`, `GRANT`, `SHOW`…) se rechaza antes de llegar a la base.
+ */
+const PALABRAS_PERMITIDAS = new Set([
+  'SELECT',
+  'INSERT',
+  'UPDATE',
+  'DELETE',
+  'WITH',
+  'VALUES',
+  'TABLE',
+]);
+
+/**
+ * `true` si el texto tiene alguna sentencia cuya primera palabra no está en la lista blanca, o si no
+ * se puede analizar con certeza. Se examina sin comentarios ni literales y por sentencia (separadas
+ * por `;`), de modo que `SELECT 1; LISTEN x` y un `SET` tras un comentario se rechazan y un valor como
+ * `'SET x'` no cuenta. Los paréntesis de apertura iniciales (`(SELECT …)`) no cambian la sentencia.
+ * Las sentencias vacías (un `;` final) se ignoran. Un texto sin ninguna sentencia se rechaza.
+ */
+export function contieneSentenciaNoPermitida(texto: string): boolean {
+  const limpio = quitarLiteralesYComentarios(texto);
+  if (limpio === null) return true;
+  let hubo = false;
+  for (const sentencia of limpio.split(';')) {
+    if (sentencia.trim() === '') continue;
+    hubo = true;
+    const palabra = /^[\s(]*([A-Za-z]+)(?![A-Za-z0-9_$\u0080-\uffff])/.exec(sentencia)?.[1];
+    if (palabra === undefined || !PALABRAS_PERMITIDAS.has(palabra.toUpperCase())) return true;
+  }
+  return !hubo;
 }
