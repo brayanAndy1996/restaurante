@@ -8,7 +8,7 @@ import {
 } from '../../scripts/lib/roles';
 
 /** Base de datos de las pruebas de integración (se recrea en cada ejecución). */
-export const BASE_DE_PRUEBA = 'restaurante_test';
+export const BASE_DE_PRUEBA = process.env.BASE_DE_PRUEBA ?? 'restaurante_test';
 
 /** `admin` es el administrador de `DATABASE_ADMIN_URL`; los demás son los roles de la aplicación. */
 export type RolDePrueba = RolAplicacion | 'admin';
