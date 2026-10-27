@@ -25,7 +25,7 @@ pnpm install --frozen-lockfile
 
 ```bash
 pnpm local:preparar   # PostgreSQL 16 (puerto 5433), roles, base migrada y datos de demostración
-pnpm dev              # API en http://localhost:3000
+pnpm dev              # API en http://localhost:3000 y la app del personal en http://localhost:5173
 curl http://localhost:3000/health
 ```
 
@@ -169,10 +169,26 @@ superusuario, `DB_PROTECCION_CATALOGO=omitir` (ver arriba).
 | `pnpm build`                 | Compila los paquetes y la API                                            |
 | `pnpm test`                  | Todas las pruebas (la API necesita `DATABASE_ADMIN_URL`)                 |
 | `pnpm format:check`          | Comprueba el formato con Prettier (`pnpm format` lo corrige)             |
-| `pnpm dev`                   | API en modo desarrollo                                                   |
+| `pnpm dev`                   | API (puerto 3000) y app del personal (puerto 5173) en modo desarrollo    |
 | `pnpm build:compartidos`     | Compila `packages/dominio` y `packages/contratos` (`db:semilla` lo hace) |
 | `pnpm db:semilla`            | Superadministrador y dos empresas de demostración, con usuarios por rol  |
 | `pnpm plataforma:superadmin` | Crea o desactiva un superadministrador (ver "Superadministrador")        |
+
+## La app del personal (`apps/app`) y `packages/ui`
+
+PWA de React + Vite, móvil primero (se diseña a 360 px y se adapta a tablet y escritorio). Usa
+`packages/ui` (tokens de la dirección "Azulejo" de `DESIGN.md` y componentes base, consumido desde su
+código fuente), `packages/contratos` para hablar con la API y `packages/dominio` para las reglas.
+
+- `pnpm dev` la sirve en `http://localhost:5173` junto con la API; llama a `VITE_API_URL` (por defecto
+  `http://localhost:3000`, que ya está en `ORIGENES_PERMITIDOS`). Con la semilla puedes ingresar con
+  `fogon.admin` y la contraseña temporal `Temporal-Demo-1` (la app te pide cambiarla); el panel del
+  superadministrador está en `/plataforma/ingreso` (`superadmin` / `Superadmin-Demo-1`).
+- Pruebas: `pnpm --filter @restaurante/app test` y `pnpm --filter @restaurante/ui test` (Vitest con
+  Testing Library; no necesitan base de datos). `pnpm build` genera `apps/app/dist` con el service
+  worker (solo guarda archivos estáticos: nunca la API).
+- Los tokens de sesión viven en `sessionStorage` y los de equipo en `localStorage`; la app nunca guarda
+  un PIN ni una contraseña.
 
 ## Pruebas
 
@@ -353,7 +369,8 @@ equipo, superadministrador o actor de sistema). Lo llena la base, nunca el cuerp
 
 - La migración que crea la tabla usa `sqlTablaDeEmpresaTrazable(nombre, opciones)` en lugar de
   `sqlTablaDeEmpresa`: es lo mismo más las columnas `creado_por_*` y `actualizado_por_*`, sus `CHECK`, las
-  llaves compuestas hacia `usuario` y `equipo` y el trigger `trazabilidad`. Las únicas excepciones son
+  llaves compuestas hacia `usuario` y `equipo` (estas últimas con `llaveDeEquipo: true`, obligatorio en toda
+  tabla creada después de la migración de equipos) y el trigger `trazabilidad`. Las únicas excepciones son
   `auditoria`, `sesion`, `bloqueo_intentos` e `idempotencia`; la prueba de catálogo
   (`apps/api/test/acceso/catalogo-trazabilidad.spec.ts`) falla si una tabla nueva no cumple.
 - Toda escritura corre con un **actor fijado** en la transacción (`fijar_contexto_actor`, una sola vez, como

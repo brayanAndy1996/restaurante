@@ -36,6 +36,13 @@ typography:
     lineHeight: '2.75rem'
     letterSpacing: '0em'
     fontFeature: 'tnum'
+  cifras-pin:
+    fontFamily: 'Atkinson Hyperlegible Next, system-ui, sans-serif'
+    fontSize: '2.75rem'
+    fontWeight: 700
+    lineHeight: '3.25rem'
+    letterSpacing: '0.18em'
+    fontFeature: 'tnum'
   titulo:
     fontFamily: 'Atkinson Hyperlegible Next, system-ui, sans-serif'
     fontSize: '1.5rem'
@@ -154,7 +161,7 @@ components:
     padding: '12px 16px 16px'
 ---
 
-<!-- SEED: propuesta establecida antes de implementar; los tokens son los de la muestra `diseno/direccion-azulejo.html`. Volver a ejecutar `/impeccable document` cuando existan `apps/app` y `packages/ui` (T20) para capturar los tokens y componentes reales y generar `.impeccable/design.json`. -->
+<!-- Dirección aprobada por el usuario (2026-10-27). Los tokens son los de la muestra `diseno/direccion-azulejo.html` y viven en `packages/ui/src/tokens.css`. Volver a ejecutar `/impeccable document` cuando las pantallas se estabilicen, para generar `.impeccable/design.json`. -->
 
 # Design System: App del restaurante (Azulejo)
 
@@ -211,7 +218,7 @@ Cada aviso usa su color suave de fondo, su borde (`rocoto-borde`, `huacatay-bord
 **The Words Beside Color Rule.** Ningún estado se dice solo con color: va con texto y, cuando cabe, con un icono. Quitar el color no debe quitar información.
 **The Soporte Is Ink Rule.** El modo soporte y el panel de plataforma usan tinta oscura, color que ninguna sucursal usa, para que nadie los confunda con una sucursal.
 
-Tema nocturno (propuesto, no incluido en 002): fondo #0E1923, baldosa #16242F, texto #E8EEF3, texto suave #A9B8C4, acción #8FB1F2 con tinta encima (8.2:1), borde #6C7E8C, rocoto #FF9C93, ají #F5B94A, huacatay #6FD09A; todos sobre baldosa con 7.3:1 o más.
+Tema nocturno (previsto por el usuario para más adelante; no se construye en 002, pero los tokens ya son semánticos): fondo #0E1923, baldosa #16242F, texto #E8EEF3, texto suave #A9B8C4, acción #8FB1F2 con tinta encima (8.2:1), borde #6C7E8C, rocoto #FF9C93, ají #F5B94A, huacatay #6FD09A; todos sobre baldosa con 7.3:1 o más.
 
 ## Typography
 
@@ -286,6 +293,7 @@ Los componentes base de `packages/ui` (T20): Botón, Campo, TecladoNumerico, Pun
 - **Style:** baldosa blanca, borde de control de 1 px, 52 px de alto, etiqueta siempre visible arriba (nunca solo el marcador), texto de 17 px.
 - **Focus:** contorno cobalto de 3 px con 2 px de separación.
 - **Error:** borde rocoto de 2 px y mensaje debajo con icono y texto ("Escribe tu usuario"); el error general va en un aviso arriba del formulario.
+- **Interruptor:** pastilla de 52 x 32 px dentro de un área tocable de 56 x 48 px, con la etiqueta a la izquierda (toda la fila responde al toque); el estado se dice con la posición del pulgar, no solo con el color.
 - **Contraseña:** botón de ojo de 48 px dentro del campo; `autocomplete` correcto (`username`, `current-password`, `new-password`) para los administradores de contraseñas.
 
 ### Teclado numérico (firma táctil)
@@ -318,7 +326,7 @@ En celular, hoja que sube desde abajo con asa de 40 x 4 px, esquinas superiores 
 
 ### Lista de usuarios, tabla y editor de horario
 
-Filas de 72 px (inicial, nombre en 17 px, ayuda en 14 px, etiqueta de estado a la derecha: "Con horario", "Inactivo"), divididas por juntas. Desde 768 px se convierten en tabla con encabezados de 13 px, cifras a la derecha y botones de 48 px. **Editor de horario:** un bloque por día de 7, con el nombre del día a la izquierda, un botón de tramo de 44 px por cada tramo ("18:00 – 02:00" con X de 40 px), un botón de agregar tramo de 44 px con contorno punteado, y los errores de tramo en rocoto debajo del día afectado; la hora se elige con el selector nativo. Los tramos que cruzan la medianoche se escriben tal cual.
+Filas de 72 px (inicial, nombre en 17 px, ayuda en 14 px, etiqueta de estado a la derecha: "Con horario", "Inactivo"), divididas por juntas. Desde 768 px se convierten en tabla con encabezados de 13 px, cifras a la derecha y botones de 48 px. **Editor de horario:** un bloque por día de 7, con el nombre del día a la izquierda, un botón de tramo de 48 px por cada tramo ("18:00 – 02:00" con X de 44 px), un botón de agregar tramo de 44 px con contorno punteado, y los errores de tramo en rocoto debajo del día afectado; la hora se elige con el selector nativo. Los tramos que cruzan la medianoche se escriben tal cual.
 
 ### PIN mostrado una vez
 
@@ -331,6 +339,14 @@ Baldosa con borde de tinta de 2 px, el PIN en cifras de 44 px con espacio entre 
 - **Error de carga:** aviso rocoto que nombra el problema y botón "Reintentar" en la misma pantalla.
 - **Sin conexión:** cenefa y banner; las escrituras quedan en cola con la etiqueta "Pendiente de envío" y se reintentan sin duplicar.
 - **Bloqueo:** aviso rocoto con candado, cuenta regresiva de 40 px, teclado apagado y la salida "Ingresar con usuario y contraseña" siempre activa y principal.
+
+## Decisiones del usuario (2026-10-27)
+
+- **Dirección "Azulejo" aprobada**, con la muestra `diseno/direccion-azulejo.html` como referencia visual.
+- **Tema claro por ahora; el oscuro, más adelante.** Todo color de componente se pide por nombre semántico (`--color-fondo`, `--color-baldosa`, `--color-accion`, …) y nunca por valor, para que el tema oscuro solo cambie los valores de los tokens.
+- **Atkinson Hyperlegible Next, autoalojada** (archivo variable en el paquete, sin Google Fonts).
+- **Trato de "tú"** en etiquetas, avisos y errores.
+- **Extras incluidos:** atajos de motivo (un toque) en la ventana de clave de supervisor; cupos "3 de 5 personas" en la pantalla de PIN; aviso de "sesión por vencer" antes del cierre por inactividad.
 
 ## Do's and Don'ts
 

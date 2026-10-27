@@ -2,7 +2,7 @@
 
 <!-- impeccable:product-schema 1 -->
 
-> Estado: propuesta para aprobación del usuario. Los hechos salen de `CLAUDE.md`, de los documentos compartidos (extractos en `specs/002-plataforma-y-acceso/fuentes.md`) y del encargo del orquestador. No hubo entrevista directa con el usuario; lo inferido está marcado con "(inferido)" y lo pendiente, en "Decisiones abiertas".
+> Estado: aprobado por el usuario (2026-10-27). Los hechos salen de `CLAUDE.md`, de los documentos compartidos (extractos en `specs/002-plataforma-y-acceso/fuentes.md`) y del encargo del orquestador. Lo que sigue marcado con "(inferido)" no fue confirmado de forma directa; lo pendiente está en "Decisiones abiertas".
 
 ## Platform
 
@@ -80,6 +80,14 @@ Ninguno confirmado. No hay nombre comercial, logotipo ni colores de marca defini
 - Respeto de `prefers-reduced-motion`; movimiento mínimo.
 - Texto escalable hasta 200 % sin romper la pantalla; lectores de pantalla con etiquetas en español.
 - Usuarios con poca experiencia digital (inferido): lenguaje directo, sin jerga técnica en los mensajes ("Tu usuario o contraseña no son correctos", no "401").
+
+## Decisiones del usuario (2026-10-27)
+
+- **Dirección de diseño "Azulejo"** (`DESIGN.md`, muestra en `diseno/direccion-azulejo.html`): aprobada para la app del restaurante.
+- **Tema claro** por ahora. El tema oscuro queda para más adelante; los tokens de color son semánticos para sumarlo sin rehacer pantallas.
+- **Tipografía:** Atkinson Hyperlegible Next, autoalojada (sin servidores de terceros: carga rápida con datos móviles y sin enviar datos a otros).
+- **Trato de "tú"** en todo el texto de la interfaz ("Ingresa con tu usuario", "Tu contraseña no es correcta").
+- **Extras incluidos en 002:** atajos de motivo en la ventana de clave de supervisor, cupos "3 de 5 personas" en la pantalla de PIN y aviso de "sesión por vencer" antes del cierre por inactividad.
 
 ## Decisiones abiertas
 

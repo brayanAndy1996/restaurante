@@ -47,6 +47,8 @@ jobs:
       - run: pnpm lint
       - run: pnpm typecheck
       - run: pnpm build
+      # Peso del paquete inicial de la PWA (apps/app): carga rápida con datos móviles.
+      - run: pnpm --filter @restaurante/app presupuesto
       - run: pnpm test
         env:
           NODE_ENV: test # obligatoria (criterio 29b); las contraseñas de los roles las da el job

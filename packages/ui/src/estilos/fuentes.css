@@ -1,0 +1,6 @@
+/*
+ * Atkinson Hyperlegible Next, autoalojada (sin servidores de terceros). `wght.css` declara dos
+ * subconjuntos con `unicode-range`: el latino (unos 34 KB, todo el español y "S/") y el latino
+ * extendido, que el navegador solo descarga si un texto lo necesita.
+ */
+@import '@fontsource-variable/atkinson-hyperlegible-next/wght.css';

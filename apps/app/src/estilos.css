@@ -1,0 +1,271 @@
+@import '@restaurante/ui/estilos.css';
+
+/* Marco de la app: la pantalla es de la app, el contenido es lo que se desplaza. */
+html,
+body,
+#raiz {
+  height: 100%;
+}
+
+.app {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: auto auto minmax(0, 1fr);
+  height: 100dvh;
+}
+
+.app__avisos {
+  display: flex;
+  flex-direction: column;
+}
+
+.app__marco {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.app__principal {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+@media (min-width: 768px) {
+  .app__marco {
+    flex-direction: row;
+  }
+  .app__marco > .ui-nav {
+    order: -1;
+    flex: none;
+  }
+}
+
+/* Página: barra fija arriba, columna de contenido y acción principal fija abajo. */
+.pagina {
+  display: flex;
+  flex-direction: column;
+  min-height: 100%;
+}
+
+.pagina__barra {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+}
+
+.pagina__contenido {
+  flex: 1;
+  width: 100%;
+  margin-inline: auto;
+  padding: var(--espacio-xl) var(--espacio-lg) var(--espacio-lg);
+  display: flex;
+  flex-direction: column;
+  gap: var(--espacio-lg);
+}
+
+.pagina__contenido--estrecho {
+  max-width: 720px;
+}
+
+.pagina__contenido--ancho {
+  max-width: 1120px;
+}
+
+@media (min-width: 768px) {
+  .pagina__contenido {
+    padding-inline: var(--espacio-xl);
+  }
+}
+
+.pagina__pie {
+  position: sticky;
+  bottom: 0;
+  z-index: 1;
+  background: var(--color-fondo);
+  border-top: 1px solid var(--color-junta);
+}
+
+.pagina__contenido.pagina__pie-interior {
+  flex: none;
+  padding-block: var(--espacio-md);
+  padding-bottom: max(var(--espacio-md), env(safe-area-inset-bottom));
+}
+
+/* Formularios */
+.formulario {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espacio-lg);
+}
+
+.formulario__grupo {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espacio-md);
+}
+
+.formulario__titulo {
+  font-size: 1.125rem;
+  line-height: 1.5rem;
+  font-weight: 700;
+}
+
+.formulario__aparte {
+  margin-top: var(--espacio-sm);
+  padding-top: var(--espacio-xl);
+  border-top: 1px solid var(--color-junta);
+  display: flex;
+  flex-direction: column;
+  gap: var(--espacio-md);
+}
+
+.fila-botones {
+  display: flex;
+  gap: var(--espacio-sm);
+}
+
+.fila-botones > * {
+  flex: 1;
+}
+
+/* Pantalla de entrada (sin barra de sesión) */
+.entrada {
+  display: flex;
+  flex-direction: column;
+  min-height: 100%;
+}
+
+.entrada__marca {
+  display: flex;
+  align-items: center;
+  gap: var(--espacio-md);
+  min-height: var(--alto-barra);
+  padding: var(--espacio-xs) var(--espacio-lg);
+  font-size: 1.125rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  background: var(--color-baldosa);
+  border-bottom: 1px solid var(--color-junta);
+}
+
+.entrada__marca--plataforma {
+  background: var(--color-plataforma);
+  color: var(--color-sobre-plataforma);
+  border-bottom: 0;
+}
+
+.entrada__marca img {
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radio-baldosa);
+}
+
+.entrada__cuerpo {
+  flex: 1;
+  width: 100%;
+  max-width: 480px;
+  margin-inline: auto;
+  padding: var(--espacio-xl) var(--espacio-lg) var(--espacio-lg);
+  display: flex;
+  flex-direction: column;
+  gap: var(--espacio-lg);
+}
+
+.entrada__pie {
+  margin-top: auto;
+  padding-top: var(--espacio-lg);
+  text-align: center;
+  font-size: 0.875rem;
+}
+
+.cuenta-regresiva {
+  display: block;
+  margin-top: var(--espacio-sm);
+  font-size: 2.5rem;
+  line-height: 2.75rem;
+  font-weight: 700;
+  text-align: center;
+}
+
+/* Etiquetas de sucursal en filas */
+.etiquetas {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--espacio-xs);
+}
+
+.texto-ayuda {
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+  color: var(--color-tinta-suave);
+}
+
+.enlace-texto {
+  color: var(--color-accion);
+  font-weight: 600;
+}
+
+/* Saltar al contenido, para quien usa teclado o lector de pantalla */
+.saltar {
+  position: absolute;
+  left: var(--espacio-sm);
+  top: -100px;
+  z-index: 10;
+  padding: var(--espacio-sm) var(--espacio-md);
+  background: var(--color-baldosa);
+  border: 1px solid var(--color-borde-control);
+  border-radius: var(--radio-baldosa);
+}
+
+.saltar:focus {
+  top: var(--espacio-sm);
+}
+
+.plataforma-contenido {
+  background: var(--color-fondo);
+}
+
+.encabezado-de-pagina {
+  display: flex;
+  align-items: center;
+  gap: var(--espacio-md);
+}
+
+.encabezado-de-pagina > .ui-titulo {
+  flex: 1;
+  min-width: 0;
+}
+
+/* Botón principal fijo abajo: ancho completo en celular, a la derecha en tablet y escritorio */
+.boton-pie {
+  width: 100%;
+}
+
+@media (min-width: 768px) {
+  .boton-pie {
+    width: auto;
+    margin-left: auto;
+  }
+}
+
+.app__principal:focus {
+  outline: none;
+}
+
+.pagina__titulo {
+  overflow-wrap: anywhere;
+}
+
+.enlace-nombre {
+  text-decoration: none;
+}
+
+.enlace-nombre:hover {
+  text-decoration: underline;
+}
+
+.campo-busqueda {
+  max-width: 360px;
+}

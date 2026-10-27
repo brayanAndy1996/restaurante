@@ -1,0 +1,132 @@
+/**
+ * Almacenamiento de credenciales en el navegador (plan, "Almacenamiento"):
+ *
+ * - Tokens de equipo (`eq.…`): `localStorage`, un mapa `empresaId → token`. Deben sobrevivir al cierre
+ *   del navegador: son lo que permite entrar después con PIN.
+ * - Token de la sesión de empresa (`se.…`) y de superadministrador (`sa.…`): `sessionStorage`, así
+ *   mueren con la pestaña.
+ *
+ * La PWA nunca guarda un PIN ni una contraseña.
+ */
+
+const CLAVE_EQUIPOS = 'restaurante.equipos';
+const CLAVE_SESION = 'restaurante.sesion';
+const CLAVE_PLATAFORMA = 'restaurante.plataforma';
+const CLAVE_SOPORTE = 'restaurante.soporte';
+
+export type Ambito = 'empresa' | 'plataforma';
+
+function leerJson<T>(almacen: Storage | undefined, clave: string): T | null {
+  try {
+    const texto = almacen?.getItem(clave);
+    return texto ? (JSON.parse(texto) as T) : null;
+  } catch {
+    return null;
+  }
+}
+
+function guardarJson(almacen: Storage | undefined, clave: string, valor: unknown): void {
+  try {
+    almacen?.setItem(clave, JSON.stringify(valor));
+  } catch {
+    // Almacenamiento lleno o bloqueado (modo privado): la sesión sigue en memoria de la pestaña.
+  }
+}
+
+function borrar(almacen: Storage | undefined, clave: string): void {
+  try {
+    almacen?.removeItem(clave);
+  } catch {
+    // Nada que borrar.
+  }
+}
+
+const local = (): Storage | undefined =>
+  typeof localStorage === 'undefined' ? undefined : localStorage;
+const sesion = (): Storage | undefined =>
+  typeof sessionStorage === 'undefined' ? undefined : sessionStorage;
+
+// --- Tokens de equipo -----------------------------------------------------------------------------
+
+export function tokensDeEquipo(): Record<string, string> {
+  const mapa = leerJson<Record<string, unknown>>(local(), CLAVE_EQUIPOS) ?? {};
+  const limpio: Record<string, string> = {};
+  for (const [empresaId, token] of Object.entries(mapa)) {
+    if (typeof token === 'string' && token.startsWith('eq.')) limpio[empresaId] = token;
+  }
+  return limpio;
+}
+
+export function tokenDeEquipo(empresaId: string): string | null {
+  return tokensDeEquipo()[empresaId] ?? null;
+}
+
+export function guardarTokenDeEquipo(empresaId: string, token: string): void {
+  guardarJson(local(), CLAVE_EQUIPOS, { ...tokensDeEquipo(), [empresaId]: token });
+}
+
+export function borrarTokenDeEquipo(empresaId: string): void {
+  const { [empresaId]: _quitado, ...resto } = tokensDeEquipo();
+  guardarJson(local(), CLAVE_EQUIPOS, resto);
+}
+
+// --- Sesión de empresa -----------------------------------------------------------------------------
+
+export function tokenDeSesion(): string | null {
+  return leerJson<{ token: string }>(sesion(), CLAVE_SESION)?.token ?? null;
+}
+
+export function guardarTokenDeSesion(token: string): void {
+  guardarJson(sesion(), CLAVE_SESION, { token });
+}
+
+export function borrarTokenDeSesion(): void {
+  borrar(sesion(), CLAVE_SESION);
+}
+
+// --- Sesión del superadministrador ------------------------------------------------------------------
+
+export interface SesionPlataforma {
+  token: string;
+  superadministrador: { id: string; nombre: string };
+}
+
+export function sesionDePlataforma(): SesionPlataforma | null {
+  const dato = leerJson<SesionPlataforma>(sesion(), CLAVE_PLATAFORMA);
+  return dato?.token && dato.superadministrador ? dato : null;
+}
+
+export function guardarSesionDePlataforma(datos: SesionPlataforma): void {
+  guardarJson(sesion(), CLAVE_PLATAFORMA, datos);
+}
+
+export function borrarSesionDePlataforma(): void {
+  borrar(sesion(), CLAVE_PLATAFORMA);
+}
+
+// --- Modo soporte ------------------------------------------------------------------------------------
+
+/** Datos del soporte en curso: la sesión de empresa es la de soporte, y esto dice a quién se atiende. */
+export interface SoporteEnCurso {
+  empresaId: string;
+  empresaNombre: string;
+  /** Momento en que se abrió (ISO): el soporte dura 2 horas como máximo. */
+  iniciadoEn: string;
+}
+
+export function soporteEnCurso(): SoporteEnCurso | null {
+  return leerJson<SoporteEnCurso>(sesion(), CLAVE_SOPORTE);
+}
+
+export function guardarSoporteEnCurso(datos: SoporteEnCurso): void {
+  guardarJson(sesion(), CLAVE_SOPORTE, datos);
+}
+
+export function borrarSoporteEnCurso(): void {
+  borrar(sesion(), CLAVE_SOPORTE);
+}
+
+/** Token según el ámbito de la petición. */
+export function tokenDe(ambito: Ambito): string | null {
+  return ambito === 'plataforma' ? (sesionDePlataforma()?.token ?? null) : tokenDeSesion();
+}

@@ -1,0 +1,143 @@
+/*
+ * Tokens de la dirección "Azulejo" (DESIGN.md). Todo componente pide el color por su nombre
+ * semántico, nunca por su valor, para que el tema nocturno solo cambie los valores de este archivo.
+ */
+:root {
+  color-scheme: light;
+
+  /* Superficies */
+  --color-fondo: #f4f7f9; /* pared */
+  --color-baldosa: #ffffff; /* todo lo tocable y las filas */
+  --color-junta: #d3dbe1; /* divisores y bordes que no son controles */
+  --color-junta-teclado: #b7c3cc;
+  --color-borde-control: #6f808c; /* 3.3:1 sobre pared */
+  --color-inactivo: #e6ecf0;
+
+  /* Texto */
+  --color-tinta: #14222e; /* 15:1 */
+  --color-tinta-suave: #475965; /* 6.8:1 */
+  --color-tinta-tenue: #5e6f7b; /* 5.2:1 */
+
+  /* Acción y selección (cobalto de cevichería) */
+  --color-accion: #1d4a9e;
+  --color-accion-hundida: #143a80;
+  --color-accion-suave: #e4ecfa;
+  --color-accion-borde: #b4c8ee;
+  --color-accion-oscuro: #102f66;
+  --color-sobre-accion: #ffffff;
+
+  /* Estado: confirmación (huacatay) */
+  --color-exito: #17653f;
+  --color-exito-suave: #e3f3ea;
+  --color-exito-borde: #a9d6bc;
+  --color-exito-oscuro: #0f4a2d;
+
+  /* Estado: advertencia (ají amarillo). El ají puro nunca es texto. */
+  --color-aviso: #f2a900;
+  --color-aviso-texto: #7a4a00;
+  --color-aviso-suave: #fff0cc;
+  --color-aviso-borde: #e8c877;
+  --color-sobre-aviso: #14222e;
+
+  /* Estado: error, bloqueo, suspensión y acción destructiva (rocoto) */
+  --color-peligro: #b3261e;
+  --color-peligro-suave: #fce6e3;
+  --color-peligro-borde: #e7b3ae;
+  --color-peligro-oscuro: #7f1a14;
+  --color-sobre-peligro: #ffffff;
+
+  /* Plataforma y soporte: tinta oscura, color que ninguna sucursal usa */
+  --color-plataforma: #14222e;
+  --color-sobre-plataforma: #ffffff;
+  --color-sobre-plataforma-suave: #c5d0d8;
+
+  /* Cortina detrás de las hojas */
+  --color-cortina: rgba(20, 34, 46, 0.45);
+  --esqueleto-brillo: #f1f5f7;
+
+  /* Elevación: solo la hoja lleva sombra */
+  --sombra-hoja: 0 -8px 24px rgba(20, 34, 46, 0.16);
+
+  /* Formas */
+  --radio-etiqueta: 4px;
+  --radio-baldosa: 6px;
+  --radio-pared: 10px;
+  --radio-hoja: 16px;
+
+  /* Espacio: módulo de 8 px */
+  --espacio-xs: 4px;
+  --espacio-sm: 8px;
+  --espacio-md: 12px;
+  --espacio-lg: 16px;
+  --espacio-xl: 24px;
+  --espacio-xxl: 32px;
+  --espacio-xxxl: 48px;
+
+  /* Medidas de toque */
+  --alto-control: 48px;
+  --alto-principal: 56px;
+  --alto-campo: 52px;
+  --alto-tecla: 64px;
+  --alto-baldosa-persona: 72px;
+  --alto-barra: 56px;
+  --alto-navegacion: 64px;
+  --ancho-riel: 72px;
+
+  /* Tipografía */
+  --fuente:
+    'Atkinson Hyperlegible Next Variable', 'Atkinson Hyperlegible Next', system-ui, -apple-system,
+    'Segoe UI', Roboto, sans-serif;
+
+  /* Movimiento */
+  --ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --duracion-corta: 120ms;
+  --duracion-hoja: 200ms;
+}
+
+/*
+ * Tema nocturno: previsto por el usuario para más adelante (no se activa en 002). Valores de
+ * DESIGN.md; los fondos suaves y bordes son provisionales hasta diseñar el tema.
+ */
+[data-tema='oscuro'] {
+  color-scheme: dark;
+
+  --color-fondo: #0e1923;
+  --color-baldosa: #16242f;
+  --color-junta: #263745;
+  --color-junta-teclado: #34485a;
+  --color-borde-control: #6c7e8c;
+  --color-inactivo: #1d2e3b;
+
+  --color-tinta: #e8eef3;
+  --color-tinta-suave: #a9b8c4;
+  --color-tinta-tenue: #8da0ae;
+
+  --color-accion: #8fb1f2;
+  --color-accion-hundida: #6f98e8;
+  --color-accion-suave: #1d3358;
+  --color-accion-borde: #35538a;
+  --color-accion-oscuro: #cfe0fb;
+  --color-sobre-accion: #0e1923;
+
+  --color-exito: #6fd09a;
+  --color-exito-suave: #12342a;
+  --color-exito-borde: #2c6a4d;
+  --color-exito-oscuro: #bfeed3;
+
+  --color-aviso: #f5b94a;
+  --color-aviso-texto: #f5d28c;
+  --color-aviso-suave: #3a2d0f;
+  --color-aviso-borde: #7a5c1c;
+  --color-sobre-aviso: #0e1923;
+
+  --color-peligro: #ff9c93;
+  --color-peligro-suave: #3d1a1a;
+  --color-peligro-borde: #7d3a36;
+  --color-peligro-oscuro: #ffd0cb;
+  --color-sobre-peligro: #0e1923;
+
+  --color-plataforma: #070e14;
+  --color-cortina: rgba(0, 0, 0, 0.6);
+  --esqueleto-brillo: #243645;
+  --sombra-hoja: 0 -8px 24px rgba(0, 0, 0, 0.5);
+}
