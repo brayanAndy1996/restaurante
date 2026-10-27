@@ -656,7 +656,12 @@ describe('criterio 40 · configurar la inactividad de la sucursal', () => {
     expect(inicial.status).toBe(200);
     expect(inicial.body).toEqual({ sucursalId: S(2), minutosInactividad: 5 });
 
-    const antes = (await filasAuditoria(A.id, 'configurar_acceso_sucursal')).length;
+    const deEstaSucursal = async () =>
+      (await filasAuditoria(A.id, 'configurar_acceso_sucursal')).filter(
+        (f) => f.sucursal_id === S(2),
+      );
+    const previas = await deEstaSucursal();
+    const antes = previas.length;
     const cambio = await llamar(app(), 'patch', `/sucursales/${S(2)}/acceso`, {
       token: admin,
       cuerpo: { minutosInactividad: 10 },
@@ -666,9 +671,12 @@ describe('criterio 40 · configurar la inactividad de la sucursal', () => {
     const leido = await llamar(app(), 'get', `/sucursales/${S(2)}/acceso`, { token: admin });
     expect(leido.body.minutosInactividad).toBe(10);
 
-    const filas = await filasAuditoria(A.id, 'configurar_acceso_sucursal');
+    const filas = await deEstaSucursal();
     expect(filas).toHaveLength(antes + 1);
-    const ultima = filas[filas.length - 1]!;
+    const idsPrevios = new Set(previas.map((f) => f.id));
+    const nuevas = filas.filter((f) => !idsPrevios.has(f.id));
+    expect(nuevas).toHaveLength(1);
+    const ultima = nuevas[0]!;
     expect(ultima.actor_usuario_id).toBe(A.admin.id);
     expect(ultima.sucursal_id).toBe(S(2));
 

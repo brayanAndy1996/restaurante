@@ -608,7 +608,9 @@ describe('criterios 107 a 109 con PIN [C2]', () => {
   it('[C2] la sesión PIN abierta sigue después del horario, hasta salir o expirar; después no puede volver a entrar', async () => {
     const esc = await sc.obtener();
     const { u, tokenEquipo } = await mozoConEquipo(esc);
-    esc.reloj.fijar('2026-10-31T01:50:00-05:00');
+    // Ingreso a 2 minutos del fin del horario; cada petición queda a menos de los
+    // 5 minutos de inactividad por defecto (criterio 39) de la anterior.
+    esc.reloj.fijar('2026-10-31T01:58:00-05:00');
     const pin = await ingresarConPin(esc.api, tokenEquipo, u.id, u.pin);
     expect(pin.status, pin.text).toBe(201);
     const token = pin.body.token as string;
