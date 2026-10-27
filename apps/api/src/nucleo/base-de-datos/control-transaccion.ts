@@ -30,8 +30,16 @@ const PALABRAS_DE_CONTROL = new Set([
 
 const CARACTER_DE_IDENTIFICADOR = /[A-Za-z0-9_\u0080-￿$]/;
 
-/** Reemplaza comentarios y literales por un espacio. `null` si alguno queda sin cerrar. */
-function quitarLiteralesYComentarios(texto: string): string | null {
+/**
+ * Reemplaza comentarios y literales por un espacio. `null` si alguno queda sin cerrar. Con
+ * `conservarIdentificadores`, el contenido de un identificador entre comillas (`"set_config"`) se
+ * deja en el texto, porque nombra un objeto y no es un valor: así no sirve para esconder una función.
+ * Un identificador con escapes Unicode (`U&"…"`) no se puede leer sin interpretarlo y se rechaza.
+ */
+function quitarLiteralesYComentarios(
+  texto: string,
+  conservarIdentificadores = false,
+): string | null {
   let salida = '';
   let i = 0;
   const n = texto.length;
@@ -99,7 +107,12 @@ function quitarLiteralesYComentarios(texto: string): string | null {
         }
       }
       if (!cerrado) return null;
-      salida += ' ';
+      if (conservarIdentificadores) {
+        if (/U&$/i.test(texto.slice(Math.max(0, i - 2), i))) return null;
+        salida += ` ${texto.slice(i + 1, j)} `;
+      } else {
+        salida += ' ';
+      }
       i = j + 1;
     } else if (c === '$') {
       const previo = texto[i - 1];
@@ -136,4 +149,24 @@ export function contieneControlDeTransaccion(texto: string): boolean {
     if (palabra !== undefined && PALABRAS_DE_CONTROL.has(palabra.toUpperCase())) return true;
   }
   return false;
+}
+
+/**
+ * Funciones y objetos con los que una consulta podría cambiar el contexto de empresa o ejecutar SQL
+ * armado como texto: `set_config`, `pg_settings` (un `UPDATE` equivale a `set_config`), `query_to_xml*`
+ * y `cursor_to_xml*` (ejecutan la consulta que reciben como texto) y `ts_stat` (ídem), y el propio
+ * nombre del parámetro (`app.empresa_id`) fuera de un literal.
+ */
+const MENCION_DE_CONTEXTO =
+  /set_config|pg_settings|query_to_xml|cursor_to_xml|ts_stat\b|app\s*\.\s*empresa_id/i;
+
+/**
+ * `true` si el texto, sin literales ni comentarios, nombra una función o un objeto con el que se
+ * cambiaría el contexto de empresa o la sesión (ver `MENCION_DE_CONTEXTO`), o si no se puede analizar
+ * con certeza. Un valor que contiene `set_config` (por ejemplo `'x; set y'` o un nombre de sucursal)
+ * no cuenta: se decide sobre el texto limpio (criterio 22b).
+ */
+export function mencionaContextoDeEmpresa(texto: string): boolean {
+  const limpio = quitarLiteralesYComentarios(texto, true);
+  return limpio === null || MENCION_DE_CONTEXTO.test(limpio);
 }

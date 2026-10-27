@@ -15,4 +15,8 @@ if (!existsSync(join(raiz, '.env'))) {
 ejecutar('docker compose up -d --wait');
 ejecutar('pnpm db:preparar');
 ejecutar('pnpm db:migrar');
+// La semilla usa los paquetes compartidos (`dominio` y `contratos`), que se exportan desde `dist/`
+// y no se versionan: en un clon limpio hay que compilarlos antes (`db:semilla` también lo hace, pero
+// aquí queda como paso propio y visible).
+ejecutar('pnpm build:compartidos');
 ejecutar('pnpm db:semilla');

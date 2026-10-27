@@ -15,6 +15,12 @@ export default async function preparar(): Promise<void> {
         'pnpm test. No se saltan en silencio.',
     );
   }
-  await prepararBaseDeDatos({ baseDeDatos: BASE_DE_PRUEBA, recrear: true });
+  // NODE_ENV=test explícito: las contraseñas por defecto solo valen así (criterio 29b), y un proceso
+  // de prueba puede haberlo recibido vacío o con otro valor.
+  await prepararBaseDeDatos({
+    baseDeDatos: BASE_DE_PRUEBA,
+    recrear: true,
+    env: { ...process.env, NODE_ENV: 'test' },
+  });
   await migrarArriba(urlDeRol('migrador'));
 }

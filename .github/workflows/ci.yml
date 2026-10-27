@@ -45,3 +45,5 @@ jobs:
       - run: pnpm typecheck
       - run: pnpm build
       - run: pnpm test
+        env:
+          NODE_ENV: test # obligatoria (criterio 29b); las contraseñas de los roles las da el job

@@ -2,12 +2,13 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { EntornoInvalidoError, cargarEntorno } from '../src/config/entorno';
 
 const base = {
+  NODE_ENV: 'development',
   DATABASE_URL: 'postgres://restaurante_api:x@localhost:5432/restaurante_test',
   DATABASE_PLATAFORMA_URL: 'postgres://restaurante_plataforma:x@localhost:5432/restaurante_test',
 };
 
 describe('cargarEntorno', () => {
-  it('aplica valores por defecto', () => {
+  it('aplica valores por defecto (menos NODE_ENV, que es obligatoria: criterio 29b)', () => {
     const entorno = cargarEntorno(base);
     expect(entorno).toMatchObject({ NODE_ENV: 'development', PORT: 3000, DB_POOL_MAX: 10 });
     expect(entorno.EMPRESA_POR_HEADER).toBeUndefined();

@@ -23,46 +23,73 @@ pnpm dev              # API en http://localhost:3000
 curl http://localhost:3000/health
 ```
 
-`local:preparar` crea `.env` a partir de `.env.example` si falta, levanta `docker-compose.yml`, y
-ejecuta `db:preparar`, `db:migrar` y `db:semilla`. Se puede repetir sin duplicar nada.
+`local:preparar` crea `.env` a partir de `.env.example` si falta (trae todas las variables que
+necesita `pnpm dev`, incluida `NODE_ENV`), levanta `docker-compose.yml`, y ejecuta `db:preparar`,
+`db:migrar`, la compilación de los paquetes compartidos (`packages/dominio` y `packages/contratos`) y
+`db:semilla`. Funciona en un clon recién instalado, sin compilar nada antes: los paquetes compartidos
+se exportan desde `dist/`, que no se versiona. Se puede repetir sin duplicar nada.
 
 ## Levantar con un PostgreSQL propio (sin Docker)
 
 Necesitas un usuario administrador (`DATABASE_ADMIN_URL`) que pueda crear roles y bases y que sea
-**superusuario** (o dueño de los objetos de `pg_catalog`): `db:preparar` también quita a
-`restaurante_api` y `restaurante_plataforma` el acceso al texto de las consultas de otras sesiones
-(`pg_stat_activity`, `pg_stat_get_activity`, `pg_stat_get_backend_activity`) en la base de destino, y
-les quita poder cancelar o terminar sesiones ajenas (`pg_cancel_backend`, `pg_terminate_backend`), enumerarlas
-(`pg_stat_get_backend_*`) y ser miembros de `pg_signal_backend` (criterio 38c). Si el administrador no puede
-aplicarlo **falla con un mensaje que lo dice** en vez de dejar la base sin esa protección. En PostgreSQL
-gestionado sin superusuario, pide al proveedor que quite esos permisos de `pg_catalog` (`REVOKE ... FROM
-PUBLIC` sobre esas funciones y esa vista) o usa un usuario con permiso sobre `pg_catalog`. Los permisos de
-señal quedan para `pg_signal_backend` y `restaurante_migrador`; los de estadísticas, para `pg_read_all_stats`. Copia
-`.env.example` a `.env` y ajusta los puertos y las contraseñas, o exporta las variables:
+**superusuario** (o dueño de los objetos de `pg_catalog`): `db:preparar` también protege, en la base de
+destino, lo que comparten todas las conexiones de `restaurante_api` y `restaurante_plataforma` (mismo
+rol para todas las empresas) y no tiene RLS:
+
+- el texto de las consultas de otras sesiones (`pg_stat_activity`, `pg_stat_get_activity`,
+  `pg_stat_get_backend_activity`; criterio 38b);
+- cancelar o terminar sesiones ajenas (`pg_cancel_backend`, `pg_terminate_backend`), enumerarlas
+  (`pg_stat_get_backend_*`) y ser miembro de `pg_signal_backend` (criterio 38c);
+- los objetos grandes: todas las funciones `lo_*`, `loread` y `lowrite` de `pg_catalog` (todas sus
+  firmas, descubiertas en `pg_proc`) y `SELECT` sobre `pg_largeobject` y `pg_largeobject_metadata`
+  (criterio 38d).
+
+Si el administrador no puede aplicarlo **falla con un mensaje que lo dice** en vez de dejar la base sin
+esa protección. En PostgreSQL gestionado sin superusuario, pide al proveedor que quite esos permisos de
+`pg_catalog` (`REVOKE ... FROM PUBLIC` sobre esas funciones, esa vista y esas tablas) o usa un usuario
+con permiso sobre `pg_catalog`. Los permisos de señal quedan para `pg_signal_backend` y
+`restaurante_migrador`; los de estadísticas, para `pg_read_all_stats`.
+
+`NODE_ENV` es obligatoria (`development`, `test` o `production`; sin valor por defecto): sin ella la API
+no arranca, y `db:preparar` solo usa las contraseñas por defecto de los roles (`*_local`) con
+`NODE_ENV=development` o `NODE_ENV=test` escrito de forma explícita; en otro caso falla nombrando la
+`DB_PASSWORD_*` que falta, antes de conectarse. La secuencia completa, desde un clon recién instalado,
+con las variables que necesitan los comandos y `pnpm dev` (ajusta el puerto y las contraseñas; las URL
+de los roles deben usar las mismas contraseñas que `db:preparar` les asigna):
 
 ```bash
+export NODE_ENV=development
 export DATABASE_ADMIN_URL=postgres://postgres:postgres@localhost:5432/postgres
-pnpm db:preparar   # roles restaurante_migrador / _api / _plataforma, la base `restaurante` y la ocultación del texto de consultas ajenas (idempotente)
-pnpm db:migrar     # aplica las migraciones pendientes (idempotente)
-pnpm db:semilla    # dos empresas de demostración, actor `semilla` (idempotente)
-pnpm dev
+export DATABASE_URL=postgres://restaurante_api:api_local@localhost:5432/restaurante
+export DATABASE_PLATAFORMA_URL=postgres://restaurante_plataforma:plataforma_local@localhost:5432/restaurante
+export EMPRESA_POR_HEADER=habilitado   # opcional: resolutor por cabecera x-empresa-id (solo desarrollo y pruebas)
+pnpm install --frozen-lockfile
+pnpm db:preparar   # roles restaurante_migrador / _api / _plataforma, la base `restaurante` y las protecciones del catálogo (idempotente)
+pnpm db:migrar     # aplica las migraciones pendientes (idempotente); sin DATABASE_MIGRADOR_URL la deriva del admin
+pnpm db:semilla    # compila los paquetes compartidos y crea dos empresas de demostración, actor `semilla` (idempotente)
+pnpm dev           # API en http://localhost:3000
+curl http://localhost:3000/health
 ```
 
+En vez de exportar las variables puedes copiar `.env.example` a `.env` (la API y los scripts lo leen de
+la raíz) y cambiar el puerto `5433` por el de tu PostgreSQL. `pnpm db:semilla` compila por su cuenta
+los paquetes compartidos (`pnpm build:compartidos`); `pnpm dev` también los compila antes de arrancar.
 Si no defines `DATABASE_URL` ni `DATABASE_PLATAFORMA_URL`, `db:semilla` las deriva de
 `DATABASE_ADMIN_URL`; la API (`pnpm dev`) sí las necesita en el entorno o en `.env`. `pnpm db:revertir`
 deshace la última migración. En producción se corre el mismo `db:preparar` con el usuario administrador
-del proveedor de PostgreSQL y con `DB_PASSWORD_*` definidas.
+del proveedor de PostgreSQL, `NODE_ENV=production` y las tres `DB_PASSWORD_*` definidas.
 
 ## Comandos
 
-| Comando             | Qué hace                                                        |
-| ------------------- | --------------------------------------------------------------- |
-| `pnpm lint`         | ESLint en todo el monorepo (incluye las reglas del criterio 37) |
-| `pnpm typecheck`    | Verificación de tipos                                           |
-| `pnpm build`        | Compila los paquetes y la API                                   |
-| `pnpm test`         | Todas las pruebas (la API necesita `DATABASE_ADMIN_URL`)        |
-| `pnpm format:check` | Comprueba el formato con Prettier (`pnpm format` lo corrige)    |
-| `pnpm dev`          | API en modo desarrollo                                          |
+| Comando                  | Qué hace                                                                 |
+| ------------------------ | ------------------------------------------------------------------------ |
+| `pnpm lint`              | ESLint en todo el monorepo (incluye las reglas del criterio 37)          |
+| `pnpm typecheck`         | Verificación de tipos                                                    |
+| `pnpm build`             | Compila los paquetes y la API                                            |
+| `pnpm test`              | Todas las pruebas (la API necesita `DATABASE_ADMIN_URL`)                 |
+| `pnpm format:check`      | Comprueba el formato con Prettier (`pnpm format` lo corrige)             |
+| `pnpm dev`               | API en modo desarrollo                                                   |
+| `pnpm build:compartidos` | Compila `packages/dominio` y `packages/contratos` (`db:semilla` lo hace) |
 
 ## Pruebas
 
@@ -87,10 +114,11 @@ utilidades están en `apps/api/test/README.md`. Las pruebas de `packages/*` no u
 | `DATABASE_PLATAFORMA_URL`                                           | Conexión de plataforma (`restaurante_plataforma`)                                                             |
 | `DATABASE_MIGRADOR_URL`                                             | Migraciones (`restaurante_migrador`); si falta se deriva del admin                                            |
 | `DATABASE_ADMIN_URL`                                                | Solo `db:preparar` y las pruebas: administrador de PostgreSQL                                                 |
-| `DB_PASSWORD_MIGRADOR`, `DB_PASSWORD_API`, `DB_PASSWORD_PLATAFORMA` | Contraseñas que `db:preparar` asigna a los roles                                                              |
+| `DB_PASSWORD_MIGRADOR`, `DB_PASSWORD_API`, `DB_PASSWORD_PLATAFORMA` | Contraseñas que `db:preparar` asigna a los roles; obligatorias salvo con `NODE_ENV` `development` o `test`    |
 | `DB_POOL_MAX`                                                       | Tamaño del pool de la API (por defecto 10)                                                                    |
 | `EMPRESA_POR_HEADER`                                                | `habilitado` activa el resolutor por cabecera `x-empresa-id`; la API se niega a arrancar con él en producción |
-| `NODE_ENV`, `PORT`                                                  | Entorno y puerto (por defecto 3000)                                                                           |
+| `NODE_ENV`                                                          | Obligatoria, sin valor por defecto: `development`, `test` o `production`                                      |
+| `PORT`                                                              | Puerto de la API (por defecto 3000)                                                                           |
 
 ## Aislamiento entre empresas: reglas para quien programa
 
@@ -110,8 +138,19 @@ Una empresa nunca ve datos de otra. La garantía la da PostgreSQL (RLS) y la ref
   no puede controlar la transacción por SQL: `COMMIT`, `ROLLBACK`, `END`, `ABORT`, `SAVEPOINT`,
   `RELEASE`, `BEGIN`, `START TRANSACTION`, `PREPARE TRANSACTION` y similares (también entre varias
   sentencias o tras comentarios) lanzan `ConsultaProhibidaError` antes de llegar a la base; un literal con
-  ese texto en un valor sí se guarda. Tampoco sirven las transacciones anidadas de Sequelize (usan
-  `SAVEPOINT`): `ejecutar` confirma o revierte todo al terminar `fn`.
+  ese texto (o con `set_config`, `SET`, `;`…) en un valor sí se guarda, porque el rechazo se decide sobre
+  el texto sin literales ni comentarios. Tampoco sirven las transacciones anidadas de Sequelize (usan
+  `SAVEPOINT`): `ejecutar` confirma o revierte todo al terminar `fn`. Solo la transacción que abre
+  `ejecutar` cuando no hay contexto vigente queda autorizada: otra transacción de la API abierta desde
+  `fn` (`sequelize.transaction()`), aunque fije una empresa a mano, lanza error en cada consulta
+  (criterio 22c). El texto SQL que fija la empresa (`SQL_FIJAR_CONTEXTO`) y el registro de transacciones
+  por autorizar no se pueden usar fuera de `apps/api/src/nucleo/` (regla de ESLint).
+- **Después de `ejecutar` no queda contexto.** Un efecto secundario lanzado desde `fn` (imprimir, PSE,
+  avisos en tiempo real) corre después de confirmar y hereda el almacén asíncrono de la petición, pero
+  ya sin contexto: `empresaActual()` y los servicios de empresa lanzan `ContextoEmpresaAusenteError`.
+  Si necesita leer o escribir datos de la empresa, abre su propio `ContextoEmpresa.ejecutar(empresaId,
+…)` (con la misma empresa o con otra); y puede llamar `OperacionPlataforma`. Lo mismo vale tras una
+  `OperacionPlataforma.ejecutar` o `consultar` terminada (criterio 27b).
 - **Fuera de HTTP** (colas pg-boss, WebSockets, tareas programadas): envuelve siempre el trabajo en
   `ContextoEmpresa.ejecutar(empresaId, async () => { … })`. Sin eso, los servicios y modelos de
   empresa fallan. No lances efectos secundarios (imprimir, PSE, avisos) dentro de esa transacción: se
@@ -124,8 +163,10 @@ Una empresa nunca ve datos de otra. La garantía la da PostgreSQL (RLS) y la ref
   `import x = require()` y los reexportes, en archivos `.ts`, `.tsx`, `.mts` y `.cts`). `fn` no puede
   confirmar ni revertir la transacción (`commit()`, `rollback()` o SQL `COMMIT`/`ROLLBACK`/`END`/
   `ABORT`/`SAVEPOINT`…): la operación falla y no queda nada; `consultar` es de solo lectura.
-- **Entradas.** Los textos de `packages/contratos` (`textoSchema`) rechazan el carácter NUL (U+0000), y
-  cualquier cuerpo de petición de más de 100 KB responde 413 `CUERPO_DEMASIADO_GRANDE`.
+- **Entradas.** Los textos de `packages/contratos` (`textoSchema`, y `actor`/`motivo` de plataforma)
+  rechazan el carácter NUL (U+0000) y los sustitutos UTF-16 sin pareja (un par válido, como un emoji, se
+  acepta); cualquier cuerpo de petición de más de 100 KB responde 413 `CUERPO_DEMASIADO_GRANDE`, y un
+  JSON mal formado responde 400 `DATOS_INVALIDOS` con un mensaje fijo, sin el texto del analizador.
 - **Quién resuelve la empresa de la petición.** El token `RESOLUTOR_EMPRESA`: en producción es el
   resolutor nulo (siempre 401 `EMPRESA_NO_RESUELTA`) hasta que la historia 002 instale el de sesión; en
   desarrollo y pruebas, con `EMPRESA_POR_HEADER=habilitado`, lee `x-empresa-id`. Una ruta que no

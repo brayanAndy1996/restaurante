@@ -26,6 +26,26 @@ function esCuerpoDemasiadoGrande(excepcion: unknown): boolean {
   return type === 'entity.too.large' || status === 413 || statusCode === 413;
 }
 
+export const MENSAJE_CUERPO_MAL_FORMADO = 'El cuerpo de la petición no tiene un formato válido';
+
+/**
+ * El analizador de cuerpos de Express lanza un error de tipo `entity.parse.failed` cuando el cuerpo
+ * JSON está mal formado. Es un `SyntaxError` con el texto del analizador de JSON de Node (el fallo, la
+ * posición, a veces un fragmento del cuerpo), y Nest lo convierte en un `BadRequestException` con ese
+ * mismo texto antes de que llegue al filtro: por eso se traduce antes, en un middleware de errores
+ * que `crearAplicacion` registra justo después de los analizadores (criterio 40c). Cualquier otro
+ * error se devuelve igual.
+ */
+export function traducirErrorDeCuerpo(error: unknown): unknown {
+  const malFormado =
+    typeof error === 'object' &&
+    error !== null &&
+    (error as Record<string, unknown>).type === 'entity.parse.failed';
+  return malFormado
+    ? new ErrorAplicacion(400, 'DATOS_INVALIDOS', MENSAJE_CUERPO_MAL_FORMADO)
+    : error;
+}
+
 /**
  * Convierte cualquier excepción en `{ codigo, mensaje, campos? }`. Los errores no previstos
  * responden 500 genérico: nunca se devuelve el mensaje interno ni el detalle de PostgreSQL.

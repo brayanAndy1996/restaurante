@@ -3,7 +3,7 @@ import type { INestApplication, LogLevel, Type } from '@nestjs/common';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import { AppModule } from './app.module';
 import { cargarEntorno } from './config/entorno';
-import { LIMITE_CUERPO_BYTES } from './nucleo/errores/filtro-global-errores';
+import { LIMITE_CUERPO_BYTES, traducirErrorDeCuerpo } from './nucleo/errores/filtro-global-errores';
 
 export interface OpcionesAplicacion {
   /**
@@ -42,6 +42,11 @@ export async function crearAplicacion(
   // Un cuerpo mayor a 100 KB responde 413 CUERPO_DEMASIADO_GRANDE (lo traduce el filtro global).
   app.useBodyParser('json', { limit: LIMITE_CUERPO_BYTES });
   app.useBodyParser('urlencoded', { limit: LIMITE_CUERPO_BYTES, extended: true });
+  // Un JSON mal formado responde 400 DATOS_INVALIDOS con un mensaje fijo, no el del analizador (40c).
+  app.use(
+    (error: unknown, _peticion: unknown, _respuesta: unknown, siguiente: (e?: unknown) => void) =>
+      siguiente(traducirErrorDeCuerpo(error)),
+  );
   try {
     await app.init();
   } catch (error) {

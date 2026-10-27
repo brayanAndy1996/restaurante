@@ -10,7 +10,7 @@ export const ROLES = {
 
 export type RolAplicacion = keyof typeof ROLES;
 
-/** Contraseñas de desarrollo y pruebas; en producción hay que definir `DB_PASSWORD_*`. */
+/** Contraseñas de desarrollo y pruebas; fuera de `NODE_ENV` development o test hay que definir `DB_PASSWORD_*`. */
 export const CONTRASENAS_POR_DEFECTO: Record<RolAplicacion, string> = {
   migrador: 'migrador_local',
   api: 'api_local',
@@ -23,22 +23,35 @@ const VARIABLE_CONTRASENA: Record<RolAplicacion, string> = {
   plataforma: 'DB_PASSWORD_PLATAFORMA',
 };
 
-/** Contraseñas de `DB_PASSWORD_*` o, si faltan, las de desarrollo (nunca en producción). */
+/** Con estos valores de `NODE_ENV` (escritos de forma explícita) se aceptan las contraseñas por defecto. */
+const ENTORNOS_CON_CONTRASENA_POR_DEFECTO = ['development', 'test'];
+
+/**
+ * Contraseña de un rol: la de su `DB_PASSWORD_*` o, solo con `NODE_ENV` `development` o `test`
+ * explícito, la de desarrollo. Sin `NODE_ENV`, o con otro valor, falta la variable y falla nombrándola
+ * (criterio 29b): así un despliegue que olvide `NODE_ENV=production` no queda con contraseñas conocidas.
+ */
+export function contrasenaDeRol(rol: RolAplicacion, env: NodeJS.ProcessEnv = process.env): string {
+  const definida = env[VARIABLE_CONTRASENA[rol]];
+  if (definida) return definida;
+  if (env.NODE_ENV !== undefined && ENTORNOS_CON_CONTRASENA_POR_DEFECTO.includes(env.NODE_ENV)) {
+    return CONTRASENAS_POR_DEFECTO[rol];
+  }
+  throw new Error(
+    `Falta ${VARIABLE_CONTRASENA[rol]}: solo hay contraseña por defecto con NODE_ENV=development ` +
+      'o NODE_ENV=test escritos de forma explícita',
+  );
+}
+
+/** Contraseñas de los tres roles (ver `contrasenaDeRol`). */
 export function contrasenasDeRoles(
   env: NodeJS.ProcessEnv = process.env,
 ): Record<RolAplicacion, string> {
-  const resultado = { ...CONTRASENAS_POR_DEFECTO };
-  for (const rol of Object.keys(ROLES) as RolAplicacion[]) {
-    const definida = env[VARIABLE_CONTRASENA[rol]];
-    if (definida) {
-      resultado[rol] = definida;
-    } else if (env.NODE_ENV === 'production') {
-      throw new Error(
-        `Falta ${VARIABLE_CONTRASENA[rol]}: en producción no hay contraseña por defecto`,
-      );
-    }
-  }
-  return resultado;
+  return {
+    migrador: contrasenaDeRol('migrador', env),
+    api: contrasenaDeRol('api', env),
+    plataforma: contrasenaDeRol('plataforma', env),
+  };
 }
 
 export function validarNombreDeBase(nombre: string): string {
@@ -66,7 +79,7 @@ export function urlParaRol(
 ): string {
   const url = new URL(adminUrl);
   url.username = ROLES[rol];
-  url.password = contrasenasDeRoles(env)[rol];
+  url.password = contrasenaDeRol(rol, env);
   url.pathname = `/${validarNombreDeBase(baseDeDatos)}`;
   return url.toString();
 }

@@ -1,7 +1,12 @@
 import { Inject, Injectable } from '@nestjs/common';
 import type { Transaction } from 'sequelize';
 import type { TransaccionInterna } from '../../nucleo/base-de-datos/transaccion-interna';
-import { ejecutarConEstado, estadoActual } from '../../nucleo/base-de-datos';
+import {
+  ejecutarConEstado,
+  estadoActual,
+  terminarEstado,
+  type EstadoOperacion,
+} from '../../nucleo/base-de-datos';
 import {
   CONEXION_PLATAFORMA,
   ConexionPlataforma,
@@ -92,13 +97,21 @@ export class OperacionPlataforma {
     fn: (transaccion: TransaccionPlataforma) => Promise<T>,
     { confirmar }: { confirmar: boolean } = { confirmar: true },
   ): Promise<T> {
-    return ejecutarConEstado({ plataforma: true }, async () => {
+    const estado: EstadoOperacion = { plataforma: true };
+    return ejecutarConEstado(estado, async () => {
       const transaccion = (await this.conexion.abrirTransaccion({
         soloLectura: !confirmar,
       })) as TransaccionInterna;
       try {
-        const resultado = await fn(transaccion);
-        this.exigirAbierta(transaccion);
+        let resultado: T;
+        try {
+          resultado = await fn(transaccion);
+          this.exigirAbierta(transaccion);
+        } finally {
+          // `fn` terminó (bien o mal): el código que siga vivo con este almacén ya no está dentro de
+          // una operación de plataforma ni de ningún contexto (criterio 27b).
+          terminarEstado(estado);
+        }
         if (confirmar) await this.conexion.confirmar(transaccion);
         else await this.conexion.revertir(transaccion);
         return resultado;

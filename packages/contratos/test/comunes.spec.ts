@@ -104,6 +104,33 @@ describe('textoSchema (criterio 40b)', () => {
   });
 });
 
+describe('textoSchema (criterio 40c)', () => {
+  const texto = textoSchema(20);
+
+  it('rechaza un sustituto alto o bajo suelto en cualquier posición', () => {
+    for (const malo of [
+      '\ud800',
+      '\udc00',
+      'a\ud800b',
+      'a\udc00b',
+      'ab\ud800',
+      '\udfffab',
+      '\ude00\ud83d',
+      '\ud800A',
+      '\ud83d\ud83d\ude00',
+    ]) {
+      const resultado = texto.safeParse(malo);
+      expect(resultado.success, JSON.stringify(malo)).toBe(false);
+    }
+  });
+
+  it('acepta un par de sustitutos válido (emoji) tal cual', () => {
+    expect(texto.parse('Pizza \u{1F355}')).toBe('Pizza \u{1F355}');
+    expect(texto.parse('\ud83d\ude00')).toBe('\u{1F600}');
+    expect(texto.parse('\u{1F355}\u{1F355}')).toBe('\u{1F355}\u{1F355}');
+  });
+});
+
 describe('CODIGOS_ERROR', () => {
   it('incluye CUERPO_DEMASIADO_GRANDE', () => {
     expect(CODIGOS_ERROR).toContain('CUERPO_DEMASIADO_GRANDE');

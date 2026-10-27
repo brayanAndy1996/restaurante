@@ -15,12 +15,33 @@ export const MENSAJE_NUL = 'No puede contener el carácter NUL (U+0000)';
 export const sinNul = (texto: string): boolean => !texto.includes(NUL);
 
 /**
- * Texto libre de entrada: sin espacios en los extremos, de 1 a `max` caracteres y sin NUL. Es la
- * base de todos los textos que escribe una persona; úsalo en vez de `z.string()` suelto para que el
- * rechazo del NUL valga igual en la API y en la PWA.
+ * Sustituto UTF-16 alto sin un bajo detrás, o bajo sin un alto delante. Un par válido (por ejemplo un
+ * emoji) no coincide. Se usa una expresión regular y no `String.prototype.isWellFormed` para que el
+ * mismo código valga en navegadores antiguos (la PWA usa este paquete).
+ */
+const SUSTITUTO_SUELTO = /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/;
+
+/**
+ * Refinamiento común de los textos: sin sustitutos UTF-16 sueltos (criterio 40c). Un sustituto suelto
+ * no se puede codificar en UTF-8: PostgreSQL lo rechazaría o el servidor lo guardaría alterado
+ * (U+FFFD). Pensado para `.refine(sinSustitutosSueltos, mensaje)`.
+ */
+export const MENSAJE_SUSTITUTO_SUELTO = 'No puede contener sustitutos UTF-16 sin pareja';
+export const sinSustitutosSueltos = (texto: string): boolean => !SUSTITUTO_SUELTO.test(texto);
+
+/**
+ * Texto libre de entrada: sin espacios en los extremos, de 1 a `max` caracteres, sin NUL y sin
+ * sustitutos UTF-16 sueltos. Es la base de todos los textos que escribe una persona; úsalo en vez de
+ * `z.string()` suelto para que estos rechazos valgan igual en la API y en la PWA.
  */
 export function textoSchema(max: number) {
-  return z.string().trim().min(1).max(max).refine(sinNul, MENSAJE_NUL);
+  return z
+    .string()
+    .trim()
+    .min(1)
+    .max(max)
+    .refine(sinNul, MENSAJE_NUL)
+    .refine(sinSustitutosSueltos, MENSAJE_SUSTITUTO_SUELTO);
 }
 
 /** Hora `HH:MM`, de `00:00` a `23:59`. */

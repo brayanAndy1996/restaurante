@@ -216,12 +216,91 @@ async function protegerSenalesDeSesiones(adminUrl: string, baseDeDatos: string):
   }
 }
 
+/** Tablas de `pg_catalog` donde PostgreSQL guarda el contenido y los dueños de los objetos grandes. */
+const TABLAS_DE_OBJETOS_GRANDES = ['pg_largeobject', 'pg_largeobject_metadata'];
+/** Un catálogo de PostgreSQL 16 trae unas 14 funciones de objetos grandes; menos es una lectura rota. */
+const MINIMO_FUNCIONES_DE_OBJETOS_GRANDES = 10;
+
+/**
+ * Criterio 38d: los objetos grandes (large objects) de PostgreSQL no tienen RLS ni `empresa_id`, y
+ * todas las conexiones de la API comparten el rol `restaurante_api` (y las de plataforma,
+ * `restaurante_plataforma`). Con `lo_create`, `lo_put`, `lo_get`, `lo_unlink`, `lo_import`, `loread`,
+ * `lowrite`… (por defecto ejecutables por PUBLIC, salvo `lo_import` y `lo_export`) una empresa podría
+ * guardar o leer datos que cualquier otra sesión del rol también ve. Se quita el `EXECUTE` de todas
+ * las funciones `lo_*`, `loread` y `lowrite` de `pg_catalog` (todas las firmas, descubiertas en
+ * `pg_proc`, no una lista fija: una versión nueva de PostgreSQL puede agregar otras) y el `SELECT`
+ * sobre `pg_largeobject` y `pg_largeobject_metadata`, a PUBLIC y a los dos roles. Al ser objetos de
+ * `pg_catalog` existen por base de datos: hay que aplicarlo conectado a la base de destino. Es
+ * repetible y termina comprobando, rol por rol, que quedó aplicado. Falla con un mensaje claro si el
+ * administrador no puede aplicarlo.
+ */
+async function protegerObjetosGrandes(adminUrl: string, baseDeDatos: string): Promise<void> {
+  const cliente = new Client({ connectionString: urlAdminParaBase(adminUrl, baseDeDatos) });
+  cliente.on('error', () => undefined);
+  await cliente.connect();
+  const roles = [ROLES.api, ROLES.plataforma];
+  const listaRoles = roles.map((rol) => cliente.escapeIdentifier(rol)).join(', ');
+  try {
+    const { rows: funciones } = await cliente.query<{ firma: string }>(
+      `SELECT p.oid::regprocedure::text AS firma
+         FROM pg_proc p
+         JOIN pg_namespace n ON n.oid = p.pronamespace
+        WHERE n.nspname = 'pg_catalog'
+          AND (p.proname LIKE 'lo\\_%' OR p.proname IN ('loread', 'lowrite'))
+        ORDER BY 1`,
+    );
+    if (funciones.length < MINIMO_FUNCIONES_DE_OBJETOS_GRANDES) {
+      throw new Error(
+        `solo se encontraron ${funciones.length} funciones de objetos grandes en pg_catalog`,
+      );
+    }
+    const sentencias = funciones.map(
+      ({ firma }) => `REVOKE ALL ON FUNCTION ${firma} FROM PUBLIC, ${listaRoles}`,
+    );
+    for (const tabla of TABLAS_DE_OBJETOS_GRANDES) {
+      sentencias.push(`REVOKE ALL ON pg_catalog.${tabla} FROM PUBLIC, ${listaRoles}`);
+    }
+    for (const sentencia of sentencias) await cliente.query(sentencia);
+
+    // Verificación: un administrador sin permisos sobre pg_catalog no recibe error, solo avisos.
+    const pendientes: string[] = [];
+    for (const rol of roles) {
+      for (const { firma } of funciones) {
+        const { rows } = await cliente.query(
+          'SELECT has_function_privilege($1, $2::regprocedure, $3) AS permitido',
+          [rol, firma, 'EXECUTE'],
+        );
+        if (rows[0]?.permitido) pendientes.push(`${rol} puede ejecutar ${firma}`);
+      }
+      for (const tabla of TABLAS_DE_OBJETOS_GRANDES) {
+        const { rows } = await cliente.query(
+          'SELECT has_table_privilege($1, $2, $3) AS permitido',
+          [rol, `pg_catalog.${tabla}`, 'SELECT'],
+        );
+        if (rows[0]?.permitido) pendientes.push(`${rol} puede leer ${tabla}`);
+      }
+    }
+    if (pendientes.length > 0) throw new Error(pendientes.join('; '));
+  } catch (error) {
+    const motivo = error instanceof Error ? error.message : String(error);
+    throw new Error(
+      `No se pudo impedir que ${ROLES.api} y ${ROLES.plataforma} usen objetos grandes en la base ` +
+        `${baseDeDatos} (${motivo}). El usuario de DATABASE_ADMIN_URL debe ser superusuario (o ` +
+        'dueño de los objetos de pg_catalog) para quitar permisos sobre las funciones lo_*, loread y ' +
+        'lowrite y sobre pg_largeobject y pg_largeobject_metadata (criterio 38d). ' +
+        'La base queda sin esta protección.',
+    );
+  } finally {
+    await cliente.end();
+  }
+}
+
 /**
  * Prepara el clúster de forma idempotente: roles sin privilegios especiales (con contraseña),
  * la base con dueño `restaurante_migrador` y los permisos de conexión de la base. Es la única
  * fuente de verdad de los roles: la usan db:preparar, el entorno local, la nube, CI y las pruebas.
  * Los privilegios sobre el esquema y las tablas los fija la primera migración. Además quita a los dos
- * roles de la aplicación el acceso al texto de las consultas de otras sesiones (criterio 38b) y la posibilidad de cancelar, terminar o enumerar sesiones ajenas (criterio 38c), lo que
+ * roles de la aplicación el acceso al texto de las consultas de otras sesiones (criterio 38b) y la posibilidad de cancelar, terminar o enumerar sesiones ajenas (criterio 38c), y el uso de objetos grandes (criterio 38d), lo que
  * exige que el usuario de `DATABASE_ADMIN_URL` sea superusuario.
  */
 export async function prepararBaseDeDatos(opciones: OpcionesPrepararBd = {}): Promise<void> {
@@ -296,5 +375,11 @@ export async function prepararBaseDeDatos(opciones: OpcionesPrepararBd = {}): Pr
   await protegerSenalesDeSesiones(adminUrl, baseDeDatos);
   registrar(
     `base ${baseDeDatos}: ${ROLES.api} y ${ROLES.plataforma} no pueden cancelar, terminar ni enumerar sesiones ajenas`,
+  );
+
+  // 6. Objetos grandes, también en la base de destino (criterio 38d).
+  await protegerObjetosGrandes(adminUrl, baseDeDatos);
+  registrar(
+    `base ${baseDeDatos}: ${ROLES.api} y ${ROLES.plataforma} no pueden usar objetos grandes (large objects)`,
   );
 }

@@ -160,7 +160,7 @@ Las tablas son `empresa`, `emisor`, `sucursal` y `auditoria_plataforma`. Se crea
 
 ## Pruebas existentes (no protegidas)
 
-- `infraestructura.spec.ts`: roles, base, permisos de la base, idempotencia de `prepararBaseDeDatos`, umzug con la carpeta vacía y con una migración de ejemplo (`fixtures/migraciones/`).
+- `infraestructura.spec.ts`: roles, base, permisos de la base, idempotencia de `prepararBaseDeDatos`, umzug con una migración de ejemplo (`fixtures/migraciones/`).
 - `entorno.spec.ts`: validación de entorno (criterio 29).
 - `aplicacion.spec.ts`: la fábrica `crearAplicacion`, controladores extra y que las rutas existen.
 - `salud.spec.ts`: `GET /health` (criterios 5 y 6): 200 con la base disponible; 503 sin detalles en

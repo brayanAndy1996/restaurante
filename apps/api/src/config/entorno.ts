@@ -5,8 +5,15 @@ export const ENTORNO = Symbol('ENTORNO');
 
 const urlPostgres = z.string().regex(/^postgres(ql)?:\/\//, 'Debe ser una URL postgres://…');
 
+/** Valores válidos de `NODE_ENV` (criterio 29b). */
+export const VALORES_NODE_ENV = ['development', 'test', 'production'] as const;
+
 const entornoSchema = z.object({
-  NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
+  // Sin valor por defecto: un despliegue que olvide `NODE_ENV=production` no debe arrancar con
+  // el resolutor por cabecera ni con contraseñas conocidas (criterio 29b).
+  NODE_ENV: z.enum(VALORES_NODE_ENV, {
+    error: `NODE_ENV es obligatoria y debe ser uno de: ${VALORES_NODE_ENV.join(', ')}`,
+  }),
   PORT: z.coerce.number().int().min(1).max(65535).default(3000),
   DATABASE_URL: urlPostgres,
   DATABASE_PLATAFORMA_URL: urlPostgres,

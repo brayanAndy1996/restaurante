@@ -65,7 +65,7 @@ describe('preparación de la base de pruebas', () => {
     });
   });
 
-  it('las migraciones corrieron como migrador (tabla migraciones, aún sin migraciones reales)', async () => {
+  it('las migraciones corrieron como migrador (la tabla migraciones es del migrador)', async () => {
     await conCliente('migrador', async (migrador) => {
       const { rows } = await migrador.query(
         `SELECT tableowner FROM pg_tables WHERE schemaname = 'public' AND tablename = 'migraciones'`,
@@ -150,7 +150,7 @@ describe('scripts de preparación y migración', () => {
     }
   });
 
-  it('con la carpeta de migraciones reales vacía no hace nada', async () => {
+  it('con todas las migraciones ya aplicadas no hace nada (devuelve la lista vacía)', async () => {
     expect(await migrarArriba(urlDeRol('migrador'))).toEqual([]);
   });
 });

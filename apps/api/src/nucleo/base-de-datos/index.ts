@@ -14,4 +14,9 @@ export { SQLSTATE, restriccionDe, sqlstateDe } from './errores-pg';
 export { TIEMPO_LIMITE_SALUD_MS, comprobarConexion } from './salud';
 export { verificarRolDeConexion } from './verificar-roles';
 export type { MotivoSinEmpresa } from './consultas-sin-empresa';
-export { ejecutarConEstado, estadoActual, type EstadoOperacion } from './estado-operacion';
+export {
+  ejecutarConEstado,
+  estadoActual,
+  terminarEstado,
+  type EstadoOperacion,
+} from './estado-operacion';

@@ -153,6 +153,40 @@ describe('el contexto no se puede cambiar con SQL dentro de la transacción', ()
     });
   });
 
+  // Defensa añadida al decidir sobre el texto sin literales (criterio 22b): lo que sigue cambia el
+  // contexto o ejecuta SQL armado como texto, así que se rechaza aunque no lo diga una palabra suelta.
+  it.each([
+    ['set_config como identificador entre comillas', `SELECT "set_config"('a.b', 'c', true)`],
+    [
+      'set_config con escapes Unicode en el identificador',
+      `SELECT U&"set\\005fconfig"('a.b','c',true)`,
+    ],
+    [
+      'UPDATE de pg_settings (equivale a set_config)',
+      `UPDATE pg_settings SET setting = 'x' WHERE name = 'app.empresa_id'`,
+    ],
+    [
+      'query_to_xml (ejecuta la consulta que recibe)',
+      `SELECT query_to_xml('select 1', true, false, '')`,
+    ],
+    ['ts_stat (ejecuta la consulta que recibe)', `SELECT * FROM ts_stat('select 1::tsvector')`],
+    ['texto sin cerrar', `SELECT 'sin cerrar`],
+  ])('%s se rechaza', async (_nombre, sql) => {
+    await contexto.ejecutar(A.id, async () => {
+      await expect(sequelize.query(sql)).rejects.toBeInstanceOf(ConsultaProhibidaError);
+    });
+  });
+
+  it('los mismos nombres dentro de un valor no se rechazan', async () => {
+    await contexto.ejecutar(A.id, async () => {
+      const filas = await sequelize.query(
+        `SELECT id FROM sucursal WHERE nombre = 'pg_settings query_to_xml ts_stat set_config'`,
+        { type: QueryTypes.SELECT },
+      );
+      expect(filas).toEqual([]);
+    });
+  });
+
   it('fijar el contexto otra vez en la misma transacción lanza un conflicto', async () => {
     await contexto.ejecutar(A.id, async () => {
       await expect(

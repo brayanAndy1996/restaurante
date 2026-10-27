@@ -18,7 +18,8 @@
     "db:preparar": "pnpm --filter @restaurante/api db:preparar",
     "db:migrar": "pnpm --filter @restaurante/api db:migrar",
     "db:revertir": "pnpm --filter @restaurante/api db:revertir",
-    "db:semilla": "pnpm --filter @restaurante/api db:semilla",
+    "build:compartidos": "turbo run build --filter=@restaurante/api^...",
+    "db:semilla": "pnpm build:compartidos && pnpm --filter @restaurante/api db:semilla",
     "local:preparar": "node scripts/local-preparar.mjs"
   },
   "devDependencies": {

@@ -76,3 +76,64 @@ describe('criterio 37b · selectores adicionales', () => {
     },
   );
 });
+
+describe('criterio 22c · textos calculados y alcance de las reglas del contexto', () => {
+  const CONTEXTO = '../../nucleo/contexto-empresa/contexto-empresa';
+  const AUTORIZACION = '../../nucleo/base-de-datos/autorizacion-transaccion';
+
+  it.each([
+    ['partida en el medio de una palabra', "export const k = 'app.empresa' + '_id';\n"],
+    ['en cinco partes', "export const k = 'a' + 'pp' + '.' + 'empresa' + '_id';\n"],
+    ['con una plantilla y una concatenación', "export const k = `app.${'empresa' + '_id'}`;\n"],
+    ['con mayúsculas', "export const k = 'APP.' + 'Empresa_ID';\n"],
+    [
+      'entre paréntesis y con as',
+      "export const k = ('app.' as string) + ('empresa_id' as string);\n",
+    ],
+    [
+      'en la ruta de un import() de la conexión de plataforma',
+      "export const c = () => import('../../nucleo/base-de-datos/conexion-' + 'plataforma');\n",
+    ],
+  ])('el texto armado %s falla', async (_nombre, codigo) => {
+    expect((await mensajes('modulos/ventas/x.ts', codigo)).length).toBeGreaterThan(0);
+  });
+
+  it('una concatenación con una variable no se puede calcular y no falla', async () => {
+    const codigo = "export const k = (x: string) => 'app.' + x + 'empresa_id';\n";
+    expect(await mensajes('modulos/ventas/x.ts', codigo)).toEqual([]);
+  });
+
+  it.each([
+    ['import * del archivo', `import * as c from '${CONTEXTO}';\nexport const s = c;\n`],
+    ['export * del archivo', `export * from '${CONTEXTO}';\n`],
+    ['require del archivo', `export const c = require('${CONTEXTO}');\n`],
+    [
+      'propiedad con el nombre armado',
+      `export const f = (c: Record<string, string>) => c['SQL_FIJAR_' + 'CONTEXTO'];\n`,
+    ],
+    [
+      'propiedad de un espacio de nombres',
+      `export const f = (c: { SQL_FIJAR_CONTEXTO: string }) => c.SQL_FIJAR_CONTEXTO;\n`,
+    ],
+    [
+      'registro de autorización (import)',
+      `import { consumirPendienteDeAutorizar } from '${AUTORIZACION}';\nexport const f = consumirPendienteDeAutorizar;\n`,
+    ],
+    ['registro de autorización (import())', `export const f = () => import('${AUTORIZACION}');\n`],
+  ])('fuera de nucleo/: %s falla', async (_nombre, codigo) => {
+    expect((await mensajes('modulos/ventas/x.ts', codigo)).length).toBeGreaterThan(0);
+  });
+
+  it('el módulo de plataforma tampoco puede importar el texto SQL del contexto', async () => {
+    const codigo = `import { SQL_FIJAR_CONTEXTO } from '${CONTEXTO}';\nexport const s = SQL_FIJAR_CONTEXTO;\n`;
+    expect((await mensajes('modulos/plataforma/x.ts', codigo)).length).toBeGreaterThan(0);
+  });
+
+  it('dentro de nucleo/ se pueden usar ambos', async () => {
+    const codigo =
+      `import { SQL_FIJAR_CONTEXTO } from '../contexto-empresa/contexto-empresa';\n` +
+      `import { consumirPendienteDeAutorizar } from './autorizacion-transaccion';\n` +
+      `export const f = [SQL_FIJAR_CONTEXTO, consumirPendienteDeAutorizar];\n`;
+    expect(await mensajes('nucleo/base-de-datos/x.ts', codigo)).toEqual([]);
+  });
+});
