@@ -18,3 +18,13 @@
 .impeccable/live/pending-manual-edits.json
 .impeccable/critique/*
 !.impeccable/critique/ignore.md
+
+# Monorepo
+node_modules/
+dist/
+.turbo/
+coverage/
+*.tsbuildinfo
+.env
+.env.*
+!.env.example

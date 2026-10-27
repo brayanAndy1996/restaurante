@@ -1,0 +1,21 @@
+import { DynamicModule, Module, Type } from '@nestjs/common';
+import { ConfigModule } from './config/config.module';
+import { ContextoEmpresaModule } from './nucleo/contexto-empresa';
+import { ErroresModule } from './nucleo/errores';
+import { PlataformaModule } from './modulos/plataforma';
+import { SaludModule } from './modulos/salud';
+
+export interface OpcionesAppModule {
+  /** Controladores adicionales (las pruebas registran aquí un controlador sonda). */
+  controladoresExtra?: Type[];
+}
+
+@Module({
+  imports: [ConfigModule, ErroresModule, ContextoEmpresaModule, PlataformaModule, SaludModule],
+})
+export class AppModule {
+  /** `AppModule` más controladores extra, que pueden inyectar `ContextoEmpresa` y los servicios. */
+  static registrar(opciones: OpcionesAppModule = {}): DynamicModule {
+    return { module: AppModule, controllers: opciones.controladoresExtra ?? [] };
+  }
+}
