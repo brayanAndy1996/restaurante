@@ -116,13 +116,17 @@ export class SesionesService {
     nombreUsuario: string,
     contrasena: string,
   ): Promise<Resultado<IngresoRespuesta>> {
-    const ahora = this.reloj.ahora();
+    // `FOR NO KEY UPDATE` serializa los intentos de la misma persona (ingresos y cambios de contraseña):
+    // cada uno lee el bloqueo con los fallos de los anteriores ya confirmados, así que ninguna ráfaga
+    // evalúa más de 5 contraseñas (criterio 12). No estorba a las llaves foráneas ni a otras personas.
     const usuarios = await this.conexion.query<FilaUsuario>(
       `SELECT id, nombre, nombre_usuario, hash_contrasena, contrasena_temporal, horario,
               es_administrador, activo
-         FROM usuario WHERE nombre_usuario = $1`,
+         FROM usuario WHERE nombre_usuario = $1
+          FOR NO KEY UPDATE`,
       { bind: [nombreUsuario], type: QueryTypes.SELECT },
     );
+    const ahora = this.reloj.ahora(); // después de esperar el turno
     const usuario = usuarios[0];
     if (usuario === undefined || !usuario.activo) {
       await this.credenciales.verificarContrasenaFalsa(contrasena);
@@ -403,13 +407,17 @@ export class SesionesService {
     principal: Principal,
     entrada: CambiarContrasenaEntrada,
   ): Promise<Resultado<true>> {
-    const ahora = this.reloj.ahora();
+    // `FOR NO KEY UPDATE` serializa los intentos de la misma persona (ingresos y cambios de contraseña):
+    // cada uno lee el bloqueo con los fallos de los anteriores ya confirmados, así que ninguna ráfaga
+    // evalúa más de 5 contraseñas (criterio 12). No estorba a las llaves foráneas ni a otras personas.
     const usuarios = await this.conexion.query<FilaUsuario>(
       `SELECT id, nombre, nombre_usuario, hash_contrasena, contrasena_temporal, horario,
               es_administrador, activo
-         FROM usuario WHERE id = $1`,
+         FROM usuario WHERE id = $1
+          FOR NO KEY UPDATE`,
       { bind: [principal.usuarioId], type: QueryTypes.SELECT },
     );
+    const ahora = this.reloj.ahora(); // después de esperar el turno
     const usuario = usuarios[0];
     if (usuario === undefined || !usuario.activo) {
       await this.credenciales.verificarContrasenaFalsa(entrada.actual);

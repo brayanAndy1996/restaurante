@@ -1,5 +1,6 @@
 import { Inject, Injectable } from '@nestjs/common';
 import type { IngresoRespuesta, SoporteEntrada } from '@restaurante/contratos';
+import { permisosDeRol } from '@restaurante/dominio';
 import { randomUUID } from 'node:crypto';
 import { QueryTypes, type Sequelize, type Transaction } from 'sequelize';
 import { ErrorAplicacion } from '../../nucleo/errores/error-aplicacion';
@@ -112,7 +113,8 @@ export class SoporteService {
               rol: 'ADMINISTRADOR' as const,
             })),
             equipo: null,
-            permisos: null,
+            // Los mismos que `GET /sesion` de esta sesión: Administrador con o sin sucursal activa.
+            permisos: permisosDeRol('ADMINISTRADOR'),
             modulos:
               activa === null || activa === undefined
                 ? []

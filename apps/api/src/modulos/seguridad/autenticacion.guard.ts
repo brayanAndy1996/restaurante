@@ -174,7 +174,8 @@ export class AutenticacionGuard implements CanActivate {
    * Busca la sesión por id bajo RLS (con la empresa del token: una ajena no aparece, criterio 3), compara
    * la huella del secreto en tiempo constante, comprueba que no esté cerrada ni vencida (máximo absoluto
    * e inactividad, con el reloj de la API) y, según el tipo, que la persona siga activa y con acceso a la
-   * sucursal activa (criterio 6; si no, cierra la sesión). **No** comprueba el horario (criterio 108).
+   * sucursal activa (criterio 6; si no, cierra la sesión) y, en el soporte, que el superadministrador siga
+   * activo (criterio 61; si no, cierra la sesión). **No** comprueba el horario (criterio 108).
    * Si la petición no trae `X-Actividad: segundo-plano`, renueva la actividad. Calcula el rol.
    *
    * Sesión PIN (criterio 37 y 39): exige el `X-Equipo` del mismo equipo (con el secreto correcto) y que el
@@ -247,6 +248,13 @@ export class AutenticacionGuard implements CanActivate {
     let principal: Principal;
     if (sesion.tipo === 'SOPORTE') {
       if (sesion.superadministrador_id === null) return { error: noAutenticado() };
+      // El superadministrador sigue activo (criterios 61 y 66): si la desactivación ganó la carrera contra
+      // la creación de esta sesión, la sesión no vale y se cierra. La API no puede leer su tabla; lo dice
+      // una función de la base que solo responde si ese id es de un superadministrador activo.
+      if (!(await this.superadministradorActivo(sesion.superadministrador_id))) {
+        await this.cerrar(sesion.id, ahora, 'SUPERADMINISTRADOR_INACTIVO');
+        return { error: noAutenticado() };
+      }
       principal = {
         tipo: 'SOPORTE',
         empresaId: partes.empresaId,
@@ -302,6 +310,14 @@ export class AutenticacionGuard implements CanActivate {
       );
     }
     return { principal };
+  }
+
+  private async superadministradorActivo(superadministradorId: string): Promise<boolean> {
+    const filas = await this.conexion.query<{ activo: boolean }>(
+      'SELECT public.superadministrador_activo($1) AS activo',
+      { bind: [superadministradorId], type: QueryTypes.SELECT },
+    );
+    return filas[0]?.activo === true;
   }
 
   /** El `X-Equipo` es el equipo de la sesión de la misma empresa y su secreto coincide (criterio 37). */

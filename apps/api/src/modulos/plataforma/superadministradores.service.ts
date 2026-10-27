@@ -16,7 +16,7 @@ import {
   segundosHasta,
 } from '../seguridad';
 import { OperacionPlataforma } from './operacion-plataforma';
-import type { SuperadministradorAutenticado } from './tipos';
+import type { SuperadministradorAutenticado, TransaccionPlataforma } from './tipos';
 
 /** Duración de una sesión de superadministrador (criterio 61); sin inactividad en el servidor. */
 export const HORAS_SESION_SUPERADMINISTRADOR = 8;
@@ -32,6 +32,22 @@ const sequelizeDe = (transaccion: Transaction) =>
 
 const credencialesInvalidas = () =>
   new ErrorAplicacion(401, 'CREDENCIALES_INVALIDAS', 'Usuario o contraseña incorrectos');
+
+interface FilaSuperadministrador {
+  id: string;
+  nombre: string;
+  hash_contrasena: string;
+  activo: boolean;
+  bloqueado_hasta: Date | null;
+}
+
+/** Avisos internos de `ingresar`: revierten la operación del intento, que en esos casos no escribe nada. */
+class InexistenteOInactivo extends Error {}
+class ContrasenaVerificada extends Error {
+  constructor(readonly fila: FilaSuperadministrador) {
+    super('contraseña verificada');
+  }
+}
 
 /** Resultado de validar un token `sa.…`: la persona o por qué no vale. */
 export type ValidacionSesionSuperadministrador =
@@ -52,31 +68,63 @@ export class SuperadministradoresService {
     @Inject(Credenciales) private readonly credenciales: Credenciales,
   ) {}
 
-  /** `POST /plataforma/sesiones`. */
+  /**
+   * `POST /plataforma/sesiones`. Los intentos de la misma persona se atienden de uno en uno: la fila del
+   * superadministrador se bloquea (`FOR NO KEY UPDATE`) y, con ella bloqueada, se lee el bloqueo, se evalúa
+   * la contraseña y se cuenta el fallo, todo en una misma operación. Así ninguna ráfaga evalúa más de 5
+   * contraseñas antes del bloqueo (criterio 61). Solo el fallo deja fila de auditoría y la operación se
+   * confirma; los demás resultados (inexistente, bloqueado, correcta) no escriben nada, así que revierten
+   * la operación con un aviso interno y el trabajo sigue fuera de ella.
+   */
   async ingresar(
     entrada: IngresoSuperadministradorEntrada,
   ): Promise<IngresoSuperadministradorRespuesta> {
     const usuario = minusculasAscii(entrada.usuario);
-    const ahora = this.reloj.ahora();
-    const fila = await this.operacion.consultar(async (transaccion) => {
-      const filas = await sequelizeDe(transaccion).query<{
-        id: string;
-        nombre: string;
-        hash_contrasena: string;
-        activo: boolean;
-        bloqueado_hasta: Date | null;
-      }>(
-        `SELECT id, nombre, hash_contrasena, activo, bloqueado_hasta
-           FROM superadministrador WHERE usuario = $1`,
-        { transaction: transaccion, bind: [usuario], type: QueryTypes.SELECT },
+    let fila: FilaSuperadministrador | undefined;
+    try {
+      await this.operacion.ejecutar(
+        {
+          actor: 'autenticacion',
+          motivo: 'Ingreso fallido de superadministrador',
+          operacion: 'ingreso_superadministrador_fallido',
+        },
+        (transaccion) => this.evaluarIntento(transaccion, usuario, entrada.contrasena),
       );
-      return filas[0];
-    });
-    if (fila === undefined || !fila.activo) {
-      // Inexistente o inactivo: el mismo tiempo y el mismo cuerpo que una contraseña incorrecta.
-      await this.credenciales.verificarContrasenaFalsa(entrada.contrasena);
-      throw credencialesInvalidas();
+    } catch (error) {
+      if (error instanceof InexistenteOInactivo) {
+        // Inexistente o inactivo: el mismo tiempo y el mismo cuerpo que una contraseña incorrecta.
+        await this.credenciales.verificarContrasenaFalsa(entrada.contrasena);
+        throw credencialesInvalidas();
+      }
+      if (!(error instanceof ContrasenaVerificada)) throw error;
+      fila = error.fila;
     }
+    // La operación se confirmó sin lanzar: el fallo quedó contado y guardado.
+    if (fila === undefined) throw credencialesInvalidas();
+    return this.abrirSesion(fila, usuario);
+  }
+
+  /**
+   * Un intento, con la fila bloqueada. Lanza `InexistenteOInactivo` o `ContrasenaVerificada` (la operación se
+   * revierte: no hay nada que guardar) o `BLOQUEO_TEMPORAL` si hay un bloqueo vigente; con la contraseña
+   * incorrecta cuenta el fallo y devuelve normalmente para que la operación se confirme.
+   */
+  private async evaluarIntento(
+    transaccion: TransaccionPlataforma,
+    usuario: string,
+    contrasena: string,
+  ): Promise<void> {
+    const sequelize = sequelizeDe(transaccion);
+    const filas = await sequelize.query<FilaSuperadministrador>(
+      `SELECT id, nombre, hash_contrasena, activo, bloqueado_hasta
+         FROM superadministrador WHERE usuario = $1
+          FOR NO KEY UPDATE`,
+      { transaction: transaccion, bind: [usuario], type: QueryTypes.SELECT },
+    );
+    // La hora se toma después de esperar el turno.
+    const ahora = this.reloj.ahora();
+    const fila = filas[0];
+    if (fila === undefined || !fila.activo) throw new InexistenteOInactivo();
     if (fila.bloqueado_hasta !== null && fila.bloqueado_hasta.getTime() > ahora.getTime()) {
       throw new ErrorAplicacion(
         429,
@@ -86,16 +134,18 @@ export class SuperadministradoresService {
         segundosHasta(fila.bloqueado_hasta, ahora),
       );
     }
-
-    const correcta = await this.credenciales.verificarContrasena(
-      entrada.contrasena,
-      fila.hash_contrasena,
-    );
-    if (!correcta) {
-      await this.registrarFallo(fila.id, usuario);
-      throw credencialesInvalidas();
+    if (await this.credenciales.verificarContrasena(contrasena, fila.hash_contrasena)) {
+      throw new ContrasenaVerificada(fila);
     }
+    await this.contarFallo(transaccion, fila.id, usuario, ahora);
+  }
 
+  /** Contraseña correcta: crea la sesión, reinicia la cuenta de fallos y audita el ingreso. */
+  private async abrirSesion(
+    fila: FilaSuperadministrador,
+    usuario: string,
+  ): Promise<IngresoSuperadministradorRespuesta> {
+    const ahora = this.reloj.ahora();
     const secreto = this.credenciales.generarSecreto();
     const sesionId = randomUUID();
     await this.operacion.ejecutar(
@@ -139,71 +189,68 @@ export class SuperadministradoresService {
     };
   }
 
-  /** Cuenta un fallo; al quinto bloquea 15 minutos y deja su fila de auditoría. Actor: `autenticacion`. */
-  private async registrarFallo(superadministradorId: string, usuario: string): Promise<void> {
-    const ahora = this.reloj.ahora();
-    await this.operacion.ejecutar(
+  /**
+   * Cuenta un fallo; al quinto bloquea 15 minutos y deja su fila de auditoría. Actor: `autenticacion`.
+   * Corre en la operación del intento, con la fila ya bloqueada.
+   */
+  private async contarFallo(
+    transaccion: TransaccionPlataforma,
+    superadministradorId: string,
+    usuario: string,
+    ahora: Date,
+  ): Promise<void> {
+    const sequelize = sequelizeDe(transaccion);
+    // Si el bloqueo anterior ya venció, la cuenta vuelve a empezar en 1.
+    const contados = await sequelize.query<{ fallos_seguidos: number }>(
+      `UPDATE superadministrador SET
+          fallos_seguidos = CASE
+            WHEN bloqueado_hasta IS NOT NULL AND bloqueado_hasta <= $2 THEN 1
+            ELSE fallos_seguidos + 1 END,
+          bloqueado_hasta = CASE
+            WHEN bloqueado_hasta IS NOT NULL AND bloqueado_hasta <= $2 THEN NULL
+            ELSE bloqueado_hasta END,
+          actualizado_en = $2
+        WHERE id = $1
+        RETURNING fallos_seguidos`,
       {
-        actor: 'autenticacion',
-        motivo: 'Ingreso fallido de superadministrador',
-        operacion: 'ingreso_superadministrador_fallido',
-      },
-      async (transaccion) => {
-        const sequelize = sequelizeDe(transaccion);
-        // Si el bloqueo anterior ya venció, la cuenta vuelve a empezar en 1; la fila queda bloqueada
-        // para que los fallos concurrentes se cuenten uno detrás de otro.
-        const contados = await sequelize.query<{ fallos_seguidos: number }>(
-          `UPDATE superadministrador SET
-              fallos_seguidos = CASE
-                WHEN bloqueado_hasta IS NOT NULL AND bloqueado_hasta <= $2 THEN 1
-                ELSE fallos_seguidos + 1 END,
-              bloqueado_hasta = CASE
-                WHEN bloqueado_hasta IS NOT NULL AND bloqueado_hasta <= $2 THEN NULL
-                ELSE bloqueado_hasta END,
-              actualizado_en = $2
-            WHERE id = $1
-            RETURNING fallos_seguidos`,
-          {
-            transaction: transaccion,
-            bind: [superadministradorId, ahora],
-            type: QueryTypes.SELECT,
-          },
-        );
-        const fallos = contados[0]!.fallos_seguidos;
-        this.operacion.registrarDatosDeAuditoria(transaccion, {
-          entidad: 'superadministrador',
-          entidadId: superadministradorId,
-          detalle: { superadministradorId, usuario, fallosSeguidos: fallos },
-        });
-        if (fallos < FALLOS_PARA_BLOQUEAR_SUPERADMINISTRADOR) return;
-        const hasta = new Date(ahora.getTime() + MINUTOS_BLOQUEO_SUPERADMINISTRADOR * MINUTO_MS);
-        const bloqueadas = await sequelize.query<{ id: string }>(
-          `UPDATE superadministrador SET bloqueado_hasta = $2
-            WHERE id = $1 AND bloqueado_hasta IS NULL
-            RETURNING id`,
-          {
-            transaction: transaccion,
-            bind: [superadministradorId, hasta],
-            type: QueryTypes.SELECT,
-          },
-        );
-        if (bloqueadas.length > 0) {
-          await insertarAuditoriaPlataforma(transaccion, {
-            accion: 'bloqueo_superadministrador',
-            motivo: 'Bloqueo por intentos fallidos de superadministrador',
-            entidad: 'superadministrador',
-            entidadId: superadministradorId,
-            detalle: {
-              superadministradorId,
-              usuario,
-              fallosSeguidos: fallos,
-              bloqueadoHasta: hasta.toISOString(),
-            },
-            ocurridoEn: ahora,
-          });
-        }
+        transaction: transaccion,
+        bind: [superadministradorId, ahora],
+        type: QueryTypes.SELECT,
       },
     );
+    const fallos = contados[0]!.fallos_seguidos;
+    this.operacion.registrarDatosDeAuditoria(transaccion, {
+      entidad: 'superadministrador',
+      entidadId: superadministradorId,
+      detalle: { superadministradorId, usuario, fallosSeguidos: fallos },
+    });
+    if (fallos < FALLOS_PARA_BLOQUEAR_SUPERADMINISTRADOR) return;
+    const hasta = new Date(ahora.getTime() + MINUTOS_BLOQUEO_SUPERADMINISTRADOR * MINUTO_MS);
+    const bloqueadas = await sequelize.query<{ id: string }>(
+      `UPDATE superadministrador SET bloqueado_hasta = $2
+        WHERE id = $1 AND bloqueado_hasta IS NULL
+        RETURNING id`,
+      {
+        transaction: transaccion,
+        bind: [superadministradorId, hasta],
+        type: QueryTypes.SELECT,
+      },
+    );
+    if (bloqueadas.length > 0) {
+      await insertarAuditoriaPlataforma(transaccion, {
+        accion: 'bloqueo_superadministrador',
+        motivo: 'Bloqueo por intentos fallidos de superadministrador',
+        entidad: 'superadministrador',
+        entidadId: superadministradorId,
+        detalle: {
+          superadministradorId,
+          usuario,
+          fallosSeguidos: fallos,
+          bloqueadoHasta: hasta.toISOString(),
+        },
+        ocurridoEn: ahora,
+      });
+    }
   }
 
   /** `DELETE /plataforma/sesion`: cierra la sesión y la audita. */
