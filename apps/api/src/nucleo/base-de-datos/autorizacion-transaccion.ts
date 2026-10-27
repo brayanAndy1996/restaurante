@@ -25,3 +25,22 @@ export function registrarPendienteDeAutorizar(transaccion: Transaction): void {
 export function consumirPendienteDeAutorizar(transaccion: Transaction): boolean {
   return pendientes.delete(transaccion);
 }
+
+/**
+ * Lo mismo para el actor de la transacción (historia 002): `ContextoEmpresa` declara que va a mandar
+ * `fijar_contexto_actor` por esta transacción justo antes de mandarlo, y la guarda solo deja pasar esa
+ * sentencia si está registrada. Código de `fn` que escriba el mismo texto no la encuentra registrada y
+ * recibe el rechazo de la guarda: el actor solo lo fija `ContextoEmpresa` (con `actor` al abrir el
+ * contexto o con `fijarActor` después de verificar las credenciales).
+ */
+const actoresPendientes = new WeakSet<Transaction>();
+
+/** `ContextoEmpresa` declara que va a fijar el actor en esta transacción (se manda en el mismo instante). */
+export function registrarActorPendiente(transaccion: Transaction): void {
+  actoresPendientes.add(transaccion);
+}
+
+/** La guarda consume el registro: `true` solo la primera vez y solo si `ContextoEmpresa` lo registró. */
+export function consumirActorPendiente(transaccion: Transaction): boolean {
+  return actoresPendientes.delete(transaccion);
+}

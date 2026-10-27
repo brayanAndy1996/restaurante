@@ -17,6 +17,12 @@
 //    de transacciones por autorizar (`nucleo/base-de-datos/autorizacion-transaccion`) solo se usan
 //    dentro de `src/nucleo/` (criterio 22c), con las mismas formas de importación de la regla 1.
 //
+// 4. (Historia 002) Los nombres de la función que fija el actor de la transacción (`fijar_contexto_actor`) y
+//    de la que busca la empresa de un usuario al ingresar (`empresa_de_usuario`) reciben el mismo trato que
+//    `fijar_contexto_empresa`: solo los escribe `src/nucleo/fijar-contexto.ts` (que define `SQL_FIJAR_ACTOR`),
+//    `src/nucleo/base-de-datos/consultas-sin-empresa.ts` (la consulta fija de ingreso) y las migraciones;
+//    y la constante `SQL_FIJAR_ACTOR` solo se usa dentro de `src/nucleo/`.
+//
 // Todas aplican a todo archivo `.ts`, `.tsx`, `.mts` y `.cts` de `src/`. Las migraciones quedan fuera
 // de la regla 2 porque su SQL tiene que nombrar el parámetro y la función; las pruebas
 // y los scripts quedan fuera de todas porque no son código de la API.
@@ -29,6 +35,7 @@ const PLATAFORMA = `src/modulos/plataforma/**/*.${EXTENSIONES}`;
 const NUCLEO = `src/nucleo/**/*.${EXTENSIONES}`;
 const SERVICIO_DE_CONTEXTO = 'src/nucleo/contexto-empresa/contexto-empresa.ts';
 const TEXTO_DE_FIJACION = 'src/nucleo/fijar-contexto.ts';
+const CONSULTAS_SIN_EMPRESA = 'src/nucleo/base-de-datos/consultas-sin-empresa.ts';
 const MIGRACIONES = `src/migraciones/**/*.${EXTENSIONES}`;
 
 // Fragmentos de ruta. Sin `/` en los selectores (esquery no admite la barra dentro de una expresión
@@ -53,6 +60,11 @@ const MENSAJE_DINAMICO =
 const MENSAJE_PARAMETRO =
   'Solo ContextoEmpresa (src/nucleo/contexto-empresa/contexto-empresa.ts) puede escribir el ' +
   'parámetro de contexto de empresa ni la función que lo fija. Usa ContextoEmpresa.ejecutar.';
+const MENSAJE_FUNCIONES_DE_ACCESO =
+  'Solo src/nucleo/fijar-contexto.ts (SQL_FIJAR_ACTOR) y la consulta fija de ' +
+  'src/nucleo/base-de-datos/consultas-sin-empresa.ts pueden escribir el nombre de la función que fija el ' +
+  'actor (fijar_contexto_actor) ni el de la que busca la empresa de un usuario (empresa_de_usuario). ' +
+  'Usa ContextoEmpresa.ejecutar con { actor } o ContextoEmpresa.fijarActor.';
 
 /** Formas de cargar un módulo concreto que `no-restricted-imports` no ve. */
 function selectoresDeRuta(ruta, message) {
@@ -101,6 +113,8 @@ const SELECTORES_CONEXION = [
 const SELECTORES_SQL_CONTEXTO = [
   { selector: "Identifier[name='SQL_FIJAR_CONTEXTO']", message: MENSAJE_SQL_CONTEXTO },
   { selector: "Literal[value='SQL_FIJAR_CONTEXTO']", message: MENSAJE_SQL_CONTEXTO },
+  { selector: "Identifier[name='SQL_FIJAR_ACTOR']", message: MENSAJE_SQL_CONTEXTO },
+  { selector: "Literal[value='SQL_FIJAR_ACTOR']", message: MENSAJE_SQL_CONTEXTO },
   ...selectoresDeRuta(RUTA_SQL_CONTEXTO, MENSAJE_SQL_CONTEXTO),
   ...selectoresDeRuta(RUTA_AUTORIZACION, MENSAJE_AUTORIZACION),
 ];
@@ -118,6 +132,24 @@ const SELECTORES_PARAMETRO = [
   {
     selector: 'TemplateElement[value.raw=/app\\.empresa_id|fijar_contexto_empresa/i]',
     message: MENSAJE_PARAMETRO,
+  },
+];
+
+/**
+ * Los nombres de la función que fija el actor y de la que busca la empresa de un usuario (historia 002),
+ * entre comillas o en una plantilla (ya calculado por el parser), sin distinguir mayúsculas y sin
+ * confundirlos con otro identificador que los contenga (`fijar_contexto_actores`).
+ */
+const SELECTORES_FUNCIONES_DE_ACCESO = [
+  {
+    selector:
+      'Literal[value=/fijar_contexto_actor(?![A-Za-z0-9_$])|empresa_de_usuario(?![A-Za-z0-9_$])/i]',
+    message: MENSAJE_FUNCIONES_DE_ACCESO,
+  },
+  {
+    selector:
+      'TemplateElement[value.raw=/fijar_contexto_actor(?![A-Za-z0-9_$])|empresa_de_usuario(?![A-Za-z0-9_$])/i]',
+    message: MENSAJE_FUNCIONES_DE_ACCESO,
   },
 ];
 
@@ -192,6 +224,7 @@ module.exports = [
         ...SELECTORES_CONEXION,
         ...SELECTORES_SQL_CONTEXTO,
         ...SELECTORES_PARAMETRO,
+        ...SELECTORES_FUNCIONES_DE_ACCESO,
       ],
     },
   },
@@ -206,20 +239,44 @@ module.exports = [
     // El módulo de plataforma sí puede usar la conexión de plataforma.
     files: [PLATAFORMA],
     rules: {
-      'no-restricted-syntax': ['error', ...SELECTORES_SQL_CONTEXTO, ...SELECTORES_PARAMETRO],
+      'no-restricted-syntax': [
+        'error',
+        ...SELECTORES_SQL_CONTEXTO,
+        ...SELECTORES_PARAMETRO,
+        ...SELECTORES_FUNCIONES_DE_ACCESO,
+      ],
     },
   },
   {
-    // `src/nucleo/`, salvo el servicio de contexto: sí usa el SQL de fijación, pero no escribe el parámetro.
+    // `src/nucleo/`, salvo el servicio de contexto, el archivo del texto de fijación y las consultas sin
+    // empresa: sí usa el SQL de fijación, pero no escribe el parámetro ni los nombres de las funciones.
     files: [NUCLEO],
-    ignores: [SERVICIO_DE_CONTEXTO, TEXTO_DE_FIJACION],
+    ignores: [SERVICIO_DE_CONTEXTO, TEXTO_DE_FIJACION, CONSULTAS_SIN_EMPRESA],
     rules: {
-      'no-restricted-syntax': ['error', ...SELECTORES_CONEXION, ...SELECTORES_PARAMETRO],
+      'no-restricted-syntax': [
+        'error',
+        ...SELECTORES_CONEXION,
+        ...SELECTORES_PARAMETRO,
+        ...SELECTORES_FUNCIONES_DE_ACCESO,
+      ],
     },
   },
   {
-    // El servicio de contexto y el archivo del texto de fijación sí nombran el parámetro y la función.
-    files: [SERVICIO_DE_CONTEXTO, TEXTO_DE_FIJACION],
+    // El servicio de contexto nombra el parámetro y la función de la empresa; el actor lo fija con
+    // `SQL_FIJAR_ACTOR`, sin escribir el nombre de su función.
+    files: [SERVICIO_DE_CONTEXTO],
+    rules: {
+      'no-restricted-syntax': ['error', ...SELECTORES_CONEXION, ...SELECTORES_FUNCIONES_DE_ACCESO],
+    },
+  },
+  {
+    // El archivo del texto de fijación nombra el parámetro y las funciones.
+    files: [TEXTO_DE_FIJACION],
     rules: { 'no-restricted-syntax': ['error', ...SELECTORES_CONEXION] },
+  },
+  {
+    // Las consultas sin empresa nombran `empresa_de_usuario` (la consulta fija de ingreso).
+    files: [CONSULTAS_SIN_EMPRESA],
+    rules: { 'no-restricted-syntax': ['error', ...SELECTORES_CONEXION, ...SELECTORES_PARAMETRO] },
   },
 ];

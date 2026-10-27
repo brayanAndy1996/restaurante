@@ -1,8 +1,9 @@
 import { SetMetadata, UseGuards, applyDecorators } from '@nestjs/common';
 import { SinEmpresa } from '../../nucleo/contexto-empresa';
+import { METADATO_SUPERADMINISTRADOR } from '../../nucleo/principal';
 import { SuperadministradorGuard } from './superadministrador.guard';
 
-export const SUPERADMINISTRADOR = 'superadministrador';
+export const SUPERADMINISTRADOR = METADATO_SUPERADMINISTRADOR;
 
 /**
  * Ruta de plataforma: compone `@SinEmpresa()` (no pertenece a ninguna empresa), la marca de metadatos

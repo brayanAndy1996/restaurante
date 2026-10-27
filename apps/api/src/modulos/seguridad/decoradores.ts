@@ -3,10 +3,11 @@ import type { Accion, Modulo } from '@restaurante/dominio';
 import { SinEmpresa } from '../../nucleo/contexto-empresa';
 
 /**
- * Decoradores de metadatos de las rutas (historia 002). Hasta las tareas de la fase C solo dejan la
- * marca: el guard global de autenticación y los interceptores que las leen todavía no se registran.
- * `@Idempotente()` vive en `nucleo/idempotencia` y se reexporta desde el índice de este módulo.
- * `@Superadministrador()` vive en `modulos/plataforma`.
+ * Decoradores de metadatos de las rutas (historia 002). `@Publica`, `@SoloAdministrador`,
+ * `@RequiereSucursal` y `@PermiteContrasenaTemporal` los lee el guard global de autenticación
+ * (`AutenticacionGuard`); `@Permiso` y `@RequiereModulo` los leerán sus interceptores (tareas T38 y T29,
+ * hasta entonces solo dejan la marca). `@Idempotente()` vive en `nucleo/idempotencia` y se reexporta
+ * desde el índice de este módulo. `@Superadministrador()` vive en `modulos/plataforma`.
  */
 
 export const PUBLICA = 'publica';
@@ -14,6 +15,7 @@ export const SOLO_ADMINISTRADOR = 'solo-administrador';
 export const REQUIERE_SUCURSAL = 'requiere-sucursal';
 export const PERMISO = 'permiso';
 export const REQUIERE_MODULO = 'requiere-modulo';
+export const PERMITE_CONTRASENA_TEMPORAL = 'permite-contrasena-temporal';
 
 /**
  * Ruta pública: pasa sin sesión (lista cerrada en el criterio 1). Implica `@SinEmpresa()`: sin
@@ -26,6 +28,13 @@ export const SoloAdministrador = () => SetMetadata(SOLO_ADMINISTRADOR, true);
 
 /** Ruta que necesita sucursal activa: sin ella responde 409 `SUCURSAL_NO_ELEGIDA`. */
 export const RequiereSucursal = () => SetMetadata(REQUIERE_SUCURSAL, true);
+
+/**
+ * Ruta que una sesión con contraseña temporal sí puede usar (criterio 15): `GET /sesion`,
+ * `PUT /sesion/contrasena` y `DELETE /sesion`. Toda otra ruta autenticada responde 403
+ * `CAMBIO_CONTRASENA_REQUERIDO` hasta que la persona cambia su contraseña.
+ */
+export const PermiteContrasenaTemporal = () => SetMetadata(PERMITE_CONTRASENA_TEMPORAL, true);
 
 /**
  * Acción protegida de la matriz de permisos (criterio 48): `prohibido` → 403, `permitido` → sigue,

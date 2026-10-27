@@ -1,9 +1,15 @@
 import type { Transaction } from 'sequelize';
 
+/**
+ * Quién hace una operación de plataforma: un texto (actor de sistema, de 1 a 100 caracteres: `semilla`,
+ * `cli:<nombre>`) o un superadministrador (`{ superadministradorId }`, en las rutas HTTP de plataforma y
+ * en el soporte). Es también el actor de trazabilidad de la transacción (criterio 117).
+ */
+export type ActorPlataforma = string | { superadministradorId: string };
+
 /** Quién hace una operación de plataforma y por qué; ambos son obligatorios y no pueden ir vacíos. */
 export interface AuditoriaPlataformaEntrada {
-  /** Texto libre (`semilla`, `cli:<nombre>`) hasta que la historia 002 cree al superadministrador. */
-  actor: string;
+  actor: ActorPlataforma;
   motivo: string;
 }
 
@@ -12,6 +18,8 @@ export interface OpcionesOperacionPlataforma extends AuditoriaPlataformaEntrada 
   operacion: string;
   /** Empresa afectada, si ya existe. Si la operación la crea, `fn` devuelve su id. */
   empresaId?: string;
+  /** Sesión de superadministrador o de soporte desde la que se hace, si la hay (queda en la auditoría). */
+  sesionId?: string;
 }
 
 /** Transacción explícita de la conexión de plataforma que recibe `fn`. */

@@ -37,7 +37,12 @@ Contraseñas de los roles: `DB_PASSWORD_MIGRADOR|API|PLATAFORMA`; si faltan, `mi
    `202610280003-auditoria-general.ts` de la historia 002 reemplaza por `auditoria`) con su RLS forzada,
    políticas y privilegios; `202610270002-contexto-empresa-unico.ts` (criterio 22e) crea el esquema
    interno `contexto`, la tabla `contexto.sesion_empresa` y las funciones `fijar_contexto_empresa(uuid)`
-   y `empresa_actual()`, que la RLS lee.
+   y `empresa_actual()`, que la RLS lee. Las de la historia 002 (grupo C0): `202610280001-acceso-base.ts`
+   (esquema `autenticacion`, `usuario`, `acceso_sucursal`, `sesion`, `bloqueo_intentos`, `idempotencia`,
+   `superadministrador`, `sesion_superadministrador`, `idempotencia_plataforma` y `empresa_de_usuario`),
+   `202610280002-trazabilidad.ts` (`contexto.sesion_actor`, `fijar_contexto_actor`, `trazabilidad()` y el
+   trigger en `empresa`, `emisor`, `sucursal`, `usuario` y `acceso_sucursal`) y
+   `202610280003-auditoria-general.ts` (`auditoria`, que copia y reemplaza a `auditoria_plataforma`).
 
 Cada archivo de prueba corre en su propio proceso; no hay que limpiar tablas porque cada prueba
 crea sus propias empresas con UUID aleatorios.
@@ -288,11 +293,16 @@ fondo sigue siendo la RLS, que ningún rol de la aplicación puede apagar (crite
 ## Historia 002 · fase A: contratos públicos para las pruebas de la fase B
 
 Lo que dejó la fase A (T1 a T5 de `specs/002-plataforma-y-acceso/tasks.md`). Todo compila; casi toda
-la lógica de acceso **no existe todavía**: las firmas de la ruta crítica lanzan `Error('No implementado')`
-y las rutas nuevas responden 500 `ERROR_INTERNO` (el guard de autenticación y el resolutor de sesión
-**no están registrados**, así que las rutas de empresa siguen resolviéndose por la cabecera
-`x-empresa-id`, como en 001). Las pruebas de la fase B deben fallar por eso (o por tablas, columnas y
-funciones que aún no existen), no por errores de importación.
+la lógica de acceso **no existía todavía**: las firmas de la ruta crítica lanzan `Error('No implementado')`
+y las rutas nuevas responden 500 `ERROR_INTERNO`. Las pruebas de la fase B deben fallar por eso (o por
+tablas, columnas y funciones que aún no existen), no por errores de importación.
+
+Desde el grupo C0 (T6 a T11) ya están **registrados** el guard global de autenticación y el resolutor de
+sesión: toda ruta exige sesión (`Authorization: Bearer se.<empresa>.<sesión>.<secreto>`) salvo las
+`@Publica()`, y la cabecera `x-empresa-id` solo vale con `NODE_ENV=test` y `EMPRESA_POR_HEADER=habilitado`
+(modo de prueba: sin `Authorization`, principal de prueba con permisos de Administrador y actor `prueba`).
+Con `development` la API no arranca si la cabecera está habilitada. Siguen sin lógica las rutas de las
+tareas T12 en adelante (ingreso, usuarios, equipos, PIN, autorizaciones, plataforma por HTTP).
 
 ### Reloj de la API y `RelojManual`
 
@@ -464,3 +474,24 @@ Ayudantes en `test/acceso/fabrica-plataforma.ts` (import `./fabrica-plataforma`)
 - `crearBaseNueva(etiqueta)`, `migrarHasta(base, prefijo?)`, `revertirHasta(base, prefijo)`: bases temporales para probar
   migraciones con filas de 001 (`PREFIJO_*` de las migraciones nuevas).
 - Las sondas de las pruebas de 001 son ahora `@Publica()` (las rutas están protegidas por defecto, criterio 1).
+
+## Historia 002 · grupo C0, primera parte (T6 a T11): pruebas del desarrollador
+
+En `test/seguridad/` (no protegidas; lo que las pruebas protegidas de `test/acceso/` no alcanzan mientras
+falten T12 y siguientes). Siembran por SQL lo que el ingreso y el alta de usuarios crearán más adelante:
+
+| Archivo                       | Qué prueba                                                                                                                                                                                |
+| ----------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `sembrado.ts`                 | Ayudantes: `insertarUsuario`, `insertarSesion` (devuelve el token en claro) e `insertarSuperadministrador`, más la instancia `credenciales`                                               |
+| `credenciales.spec.ts`        | T9: scrypt de contraseñas, huella HMAC del PIN, generación del PIN único, secretos y huellas de tokens, comparación en tiempo constante y formato de los tokens                           |
+| `autenticacion-guard.spec.ts` | T10: guard global (401 sin abrir contexto), principal, renovación e inactividad con el reloj, rol y acceso en cada petición, reglas de ruta, soporte, trazabilidad, CORS y modo de prueba |
+| `contexto-actor.spec.ts`      | T7 y T9: `ContextoEmpresa.ejecutar(…, { actor })` y `fijarActor`, la guarda ante `fijar_contexto_actor` y la consulta fija `autenticacion` (`buscarEmpresaDeUsuario`)                     |
+| `auditoria-servicio.spec.ts`  | T8: `AuditoriaService.registrar`, la auditoría de `OperacionPlataforma` (actor de texto o `{ superadministradorId }`, hora del reloj, todo o nada) y que el actor lo pone la base         |
+| `horario-service.spec.ts`     | T11: `HorarioService` con el reloj de la API                                                                                                                                              |
+
+Símbolos nuevos (desde `test/seguridad/`): `Credenciales`, `armarToken*`/`parsearToken*` (`src/modulos/seguridad`);
+`HorarioService`; `buscarEmpresaDeUsuario` y `SQL_EMPRESA_DE_USUARIO` (`src/nucleo/base-de-datos/consultas-sin-empresa`);
+`SQL_FIJAR_ACTOR` (`src/nucleo/fijar-contexto`, solo dentro de `src/nucleo/` por la regla de lint);
+`ConexionPlataforma.fijarActor` (lo llama `OperacionPlataforma`); `PrincipalInterceptor` y `principalActual`
+(`src/nucleo/principal`); `exigirEntornoDeProduccion` (`src/config/entorno`: en producción `PIN_PEPPER` y
+`ORIGENES_PERMITIDOS` son obligatorias al crear la aplicación).

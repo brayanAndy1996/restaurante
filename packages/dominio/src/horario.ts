@@ -103,14 +103,40 @@ export function validarHorario(tramos: TramoHorario[]): ResultadoValidacion {
   return errores.length === 0 ? { valido: true } : { valido: false, errores };
 }
 
+/** Desfase de Lima respecto de UTC en milisegundos (UTC−5, sin horario de verano). */
+const DESFASE_LIMA_MS = 5 * 60 * 60 * 1000;
+const MS_POR_MINUTO = 60 * 1000;
+const MS_POR_DIA = MINUTOS_POR_DIA * MS_POR_MINUTO;
+/** El 1 de enero de 1970 fue jueves: índice 3 con el lunes en 0. */
+const INDICE_DIA_EPOCA = 3;
+
 /**
  * `true` si `instante` cae dentro de algún tramo del horario de acceso de un trabajador (criterio
  * 105), con la hora de Lima (UTC−5, sin horario de verano) y sin depender de la zona del proceso;
  * `null` significa sin horario (siempre `true`). Intervalo `[desde, hasta)`; un tramo con
  * `hasta` < `desde` cruza la medianoche y el del domingo sigue el lunes (los mismos intervalos
- * semanales circulares de `validarHorario`). Es de la ruta crítica: su lógica llega con la tarea T11
- * (hasta entonces lanza `Error('No implementado')`).
+ * semanales circulares de `validarHorario`). Una lista vacía no contiene ningún instante, y un tramo
+ * mal formado se ignora (no da acceso). No modifica sus argumentos.
  */
-export function dentroDeHorario(_tramos: TramoHorario[] | null, _instante: Date): boolean {
-  throw new Error('No implementado');
+export function dentroDeHorario(tramos: TramoHorario[] | null, instante: Date): boolean {
+  if (tramos === null) return true;
+  const tiempo = instante.getTime();
+  if (!Number.isFinite(tiempo)) return false;
+
+  // Minutos (con fracción) desde el lunes 00:00 de Lima, sin pasar por `Intl` ni por la zona del proceso.
+  const limaMs = tiempo - DESFASE_LIMA_MS;
+  const dias = Math.floor(limaMs / MS_POR_DIA);
+  const diaDeSemana = (((dias + INDICE_DIA_EPOCA) % 7) + 7) % 7;
+  const msDelDia = limaMs - dias * MS_POR_DIA;
+  const minutoDeSemana = diaDeSemana * MINUTOS_POR_DIA + msDelDia / MS_POR_MINUTO;
+
+  return tramos.some((tramo, indice) => {
+    if (!Number.isInteger(tramo.dia) || tramo.dia < 1 || tramo.dia > 7) return false;
+    const desde = aMinutos(tramo.desde);
+    const hasta = aMinutos(tramo.hasta);
+    if (desde === null || hasta === null || desde === hasta) return false;
+    return intervalosSemanales(indice, tramo.dia, desde, hasta).some(
+      (intervalo) => minutoDeSemana >= intervalo.inicio && minutoDeSemana < intervalo.fin,
+    );
+  });
 }

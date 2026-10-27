@@ -4,7 +4,7 @@ import {
   ContextoEmpresaAusenteError,
   ContextoEmpresaConflictoError,
 } from '../contexto-empresa/errores';
-import { SQL_FIJAR_CONTEXTO } from '../fijar-contexto';
+import { SQL_FIJAR_ACTOR, SQL_FIJAR_CONTEXTO } from '../fijar-contexto';
 import {
   esConsultaSinEmpresaValida,
   esControlDeTransaccion,
@@ -12,7 +12,7 @@ import {
   type OpcionesSinEmpresa,
 } from './consultas-sin-empresa';
 import { estaCerrandoPropio } from './cierre-propio';
-import { consumirPendienteDeAutorizar } from './autorizacion-transaccion';
+import { consumirActorPendiente, consumirPendienteDeAutorizar } from './autorizacion-transaccion';
 import {
   contieneControlDeTransaccion,
   contieneSentenciaNoPermitida,
@@ -44,8 +44,8 @@ const PROHIBIDO_SENTENCIA =
  * instancia (modelos, `queryInterface`, consultas crudas y las sentencias de transacción).
  *
  * Reglas:
- * 1. Una consulta marcada `sinEmpresa` solo pasa si es una de las dos consultas fijas de salud y de
- *    verificación de roles (ver `consultas-sin-empresa.ts`).
+ * 1. Una consulta marcada `sinEmpresa` solo pasa si es una de las tres consultas fijas de salud, de
+ *    verificación de roles y de búsqueda de la empresa de un usuario (ver `consultas-sin-empresa.ts`).
  * 2. Toda otra consulta debe correr en una transacción abierta por `ContextoEmpresa.ejecutar`: la
  *    pasada en `options.transaction` o, si no hay, la del `AsyncLocalStorage`. Si no la hay, lanza
  *    `ContextoEmpresaAusenteError` antes de pedir una conexión al pool, y la consulta nunca sale.
@@ -55,6 +55,9 @@ const PROHIBIDO_SENTENCIA =
  *    código que corre dentro de `fn` y abre otra transacción no puede autorizarla fijando una empresa
  *    (ni otra ni la propia). El registro es de un solo uso, así que una transacción no cambia de
  *    empresa.
+ *    Con la empresa ya fijada, el actor (historia 002, criterio 117) se fija con el texto exacto de
+ *    `SQL_FIJAR_ACTOR`, que solo pasa si `ContextoEmpresa` la registró como pendiente en el mismo
+ *    instante (`autorizacion-transaccion.ts`); cualquier otra mención de la función se rechaza (punto 5).
  * 4. Las sentencias de control de transacción (`START TRANSACTION`, `COMMIT`, `ROLLBACK`) pasan solo
  *    antes de la autorización, porque la transacción tiene que abrirse antes de poder fijar la
  *    empresa. Ya autorizada, solo pasan el `COMMIT` y el `ROLLBACK` de `ContextoEmpresa.ejecutar`
@@ -88,9 +91,12 @@ export function instalarGuardaApi(sequelize: Sequelize): void {
     const texto = textoDeConsulta(sql);
 
     if (opts.sinEmpresa !== undefined) {
-      if (!esConsultaSinEmpresaValida(texto, opts, ['salud', 'verificacion-roles'])) {
+      if (
+        !esConsultaSinEmpresaValida(texto, opts, ['salud', 'verificacion-roles', 'autenticacion'])
+      ) {
         throw new ContextoEmpresaAusenteError(
-          'La marca sinEmpresa solo vale para las consultas fijas de salud y de verificación de roles',
+          'La marca sinEmpresa solo vale para las consultas fijas de salud, de verificación de roles y de ' +
+            'búsqueda de la empresa de un usuario',
         );
       }
       return consultar(sql, opts);
@@ -127,6 +133,25 @@ export function instalarGuardaApi(sequelize: Sequelize): void {
       const resultado = await cola.ejecutar(transaccion, () => consultar(sql, opts));
       autorizadas.add(transaccion);
       return resultado;
+    }
+
+    if (texto === SQL_FIJAR_ACTOR) {
+      // El actor se fija después de la empresa y solo lo manda `ContextoEmpresa` (con `actor` al abrir el
+      // contexto o con `fijarActor`), que registra el envío justo antes: el mismo texto escrito por el
+      // código de `fn` recibe el rechazo de la guarda, como cualquier otra mención del nombre.
+      if (!autorizadas.has(transaccion)) throw new ContextoEmpresaAusenteError();
+      if (!consumirActorPendiente(transaccion)) {
+        throw new ConsultaProhibidaError(PROHIBIDO_NOMBRE);
+      }
+      const bind = opts.bind;
+      if (
+        !Array.isArray(bind) ||
+        bind.length !== 4 ||
+        !bind.every((valor) => valor === null || typeof valor === 'string')
+      ) {
+        throw new ConsultaProhibidaError();
+      }
+      return cola.ejecutar(transaccion, () => consultar(sql, opts));
     }
 
     if (!autorizadas.has(transaccion)) throw new ContextoEmpresaAusenteError();

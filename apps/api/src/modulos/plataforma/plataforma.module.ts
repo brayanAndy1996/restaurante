@@ -27,7 +27,7 @@ import { SuscripcionService } from './suscripcion.service';
 import { SuscripcionesController } from './suscripciones.controller';
 
 /**
- * Dueño de las tablas de plataforma (empresa, emisor, sucursal, auditoría). Provee la conexión de
+ * Dueño de las tablas de plataforma (empresa, emisor, sucursal; la auditoría es del módulo `auditoria`). Provee la conexión de
  * plataforma (`CONEXION_PLATAFORMA`, no exportada) y los dos juegos de modelos: los de la API (bajo
  * RLS, solo dentro de `ContextoEmpresa`) y los de plataforma (solo dentro de `OperacionPlataforma`).
  */
@@ -50,13 +50,12 @@ import { SuscripcionesController } from './suscripciones.controller';
     {
       provide: MODELOS_PLATAFORMA,
       inject: [CONEXION_PLATAFORMA],
-      useFactory: (conexion: ConexionPlataforma) =>
-        definirModelos(conexion.sequelize, { conAuditoria: true }),
+      useFactory: (conexion: ConexionPlataforma) => definirModelos(conexion.sequelize),
     },
     {
       provide: MODELOS_API,
       inject: [CONEXION_API],
-      useFactory: (sequelize: Sequelize) => definirModelos(sequelize, { conAuditoria: false }),
+      useFactory: (sequelize: Sequelize) => definirModelos(sequelize),
     },
     OperacionPlataforma,
     PlataformaEmpresasService,

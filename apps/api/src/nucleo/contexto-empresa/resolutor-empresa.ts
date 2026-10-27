@@ -9,7 +9,8 @@ export interface ResolutorEmpresa {
   resolver(peticion: Request): Promise<string | null>;
   /**
    * Actor de la petición para la trazabilidad (criterio 117), o `null` si no hay. El interceptor lo
-   * pasa a `ContextoEmpresa.ejecutar` desde la tarea T7; opcional hasta entonces.
+   * pasa a `ContextoEmpresa.ejecutar`; sin actor la transacción puede leer pero no escribir en tablas
+   * trazadas (criterio 115).
    */
   actor?(peticion: Request): Promise<ActorTransaccion | null>;
 }

@@ -1,7 +1,8 @@
 /**
  * Roles, acciones y matriz de permisos (HU-03, RF-12; tabla "Roles y permisos" del documento de
- * diseño). Las funciones de este archivo son parte de la ruta crítica: sus firmas están fijadas y su
- * lógica llega con la tarea T37 (hasta entonces lanzan `Error('No implementado')`).
+ * diseño). Las funciones de este archivo son parte de la ruta crítica: sus firmas están fijadas. `largoPin`
+ * está implementada (tarea T9); la matriz de permisos llega con la tarea T37 (hasta entonces
+ * `requisitoPermiso`, `puedeAutorizar`, `alcanceReportes` y `permisosDeRol` lanzan `Error('No implementado')`).
  */
 
 /** Roles de una persona dentro de una sucursal. `ADMINISTRADOR` es de toda la empresa. */
@@ -44,6 +45,13 @@ export type LargoPin = 4 | 6;
 
 const NO_IMPLEMENTADO = 'No implementado';
 
+/** Roles que llevan PIN de 6 dígitos: autorizan acciones o cobran, así que el PIN es más difícil de adivinar. */
+const ROLES_CON_PIN_DE_SEIS: ReadonlySet<Rol> = new Set<Rol>([
+  'CAJERO',
+  'SUPERVISOR',
+  'ADMINISTRADOR',
+]);
+
 /** Requisito de `accion` para `rol` (criterio 43). */
 export function requisitoPermiso(_rol: Rol, _accion: Accion): RequisitoPermiso {
   throw new Error(NO_IMPLEMENTADO);
@@ -68,6 +76,7 @@ export function permisosDeRol(_rol: Rol): Record<Accion, RequisitoPermiso> {
  * Largo del PIN de un usuario (criterio 21): 6 si es Administrador o tiene `CAJERO` o `SUPERVISOR`
  * en alguna sucursal; 4 si todos sus roles son `MOZO` o `COCINA_BARRA`.
  */
-export function largoPin(_usuario: { esAdministrador: boolean; roles: readonly Rol[] }): LargoPin {
-  throw new Error(NO_IMPLEMENTADO);
+export function largoPin(usuario: { esAdministrador: boolean; roles: readonly Rol[] }): LargoPin {
+  if (usuario.esAdministrador) return 6;
+  return usuario.roles.some((rol) => ROLES_CON_PIN_DE_SEIS.has(rol)) ? 6 : 4;
 }

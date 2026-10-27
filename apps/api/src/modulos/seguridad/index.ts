@@ -1,8 +1,10 @@
 export { SeguridadModule } from './seguridad.module';
 export {
   PERMISO,
+  PERMITE_CONTRASENA_TEMPORAL,
   PUBLICA,
   Permiso,
+  PermiteContrasenaTemporal,
   Publica,
   REQUIERE_MODULO,
   REQUIERE_SUCURSAL,
@@ -13,6 +15,17 @@ export {
 } from './decoradores';
 export { IDEMPOTENTE, Idempotente } from '../../nucleo/idempotencia';
 export { AutenticacionGuard } from './autenticacion.guard';
+export { Credenciales } from './credenciales';
+export { HorarioService } from './horario.service';
+export type { UsuarioConHorario } from './horario.service';
+export {
+  armarTokenEquipo,
+  armarTokenSesion,
+  armarTokenSuperadministrador,
+  parsearTokenEquipo,
+  parsearTokenSesion,
+  parsearTokenSuperadministrador,
+} from './tokens';
 export { ResolutorEmpresaSesion } from './resolutor-empresa-sesion';
 export { SesionActual } from './sesion-actual';
 export { AutorizacionService } from './autorizacion.service';

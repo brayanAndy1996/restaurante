@@ -15,7 +15,9 @@ import { fijarEntornoDePrueba, rutasDeNest, rutasRegistradas } from './utilidade
 import { Controller, Get } from '@nestjs/common';
 
 // Fase A de la historia 002 (prueba del desarrollador, no protegida): las rutas y los decoradores de
-// metadatos están declarados; sin lógica todavía.
+// metadatos están declarados. Desde T10 el guard global de autenticación está registrado: estas pruebas
+// usan el modo de prueba (NODE_ENV=test con la cabecera), que da un principal de prueba; las rutas cuya
+// lógica llega en tareas posteriores (T12 en adelante) siguen respondiendo 500 sin detalles.
 
 const RUTAS_ESPERADAS = [
   'GET /health',
@@ -145,7 +147,7 @@ describe('rutas de la sección de acceso (fase A)', () => {
     expect((await request(app.getHttpServer()).get('/health')).status).toBe(200);
   });
 
-  it('las rutas nuevas responden "No implementado" como 500 sin detalles (el guard aún no está registrado)', async () => {
+  it('las rutas cuya lógica llega en tareas posteriores responden "No implementado" como 500 sin detalles', async () => {
     const id = '11111111-1111-1111-1111-111111111111';
     const servidor = () => request(app.getHttpServer());
     const casos = [

@@ -1,7 +1,10 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { uuidSchema } from '@restaurante/contratos';
 import type { Sequelize } from 'sequelize';
-import { registrarPendienteDeAutorizar } from '../base-de-datos/autorizacion-transaccion';
+import {
+  registrarActorPendiente,
+  registrarPendienteDeAutorizar,
+} from '../base-de-datos/autorizacion-transaccion';
 import { confirmarPropia, revertirPropia } from '../base-de-datos/cierre-propio';
 import {
   ejecutarConEstado,
@@ -10,9 +13,9 @@ import {
   type EstadoOperacion,
 } from '../base-de-datos/estado-operacion';
 import { CONEXION_API } from '../base-de-datos/token-api';
-import { SQL_FIJAR_CONTEXTO } from '../fijar-contexto';
+import { SQL_FIJAR_ACTOR, SQL_FIJAR_CONTEXTO } from '../fijar-contexto';
 import type { TransaccionInterna } from '../base-de-datos/transaccion-interna';
-import type { ActorTransaccion, OpcionesEjecucion } from './actor';
+import { argumentosDeActor, type ActorTransaccion, type OpcionesEjecucion } from './actor';
 import {
   ContextoEmpresaAusenteError,
   ContextoEmpresaConflictoError,
@@ -26,6 +29,9 @@ import {
  */
 @Injectable()
 export class ContextoEmpresa {
+  /** Transacciones que ya tienen su actor (se fija una sola vez; la base también lo exige). */
+  private readonly conActor = new WeakSet<TransaccionInterna>();
+
   constructor(@Inject(CONEXION_API) private readonly conexion: Sequelize) {}
 
   /**
@@ -41,7 +47,7 @@ export class ContextoEmpresa {
   async ejecutar<T>(
     empresaId: string,
     fn: () => Promise<T>,
-    _opciones: OpcionesEjecucion = {},
+    opciones: OpcionesEjecucion = {},
   ): Promise<T> {
     if (typeof empresaId !== 'string' || !uuidSchema.safeParse(empresaId).success) {
       throw new EmpresaIdInvalidoError();
@@ -66,6 +72,7 @@ export class ContextoEmpresa {
       // Solo esta transacción, abierta aquí sin contexto vigente, puede autorizarse (criterio 22c).
       registrarPendienteDeAutorizar(transaccion);
       await this.conexion.query(SQL_FIJAR_CONTEXTO, { bind: [empresa], transaction: transaccion });
+      if (opciones.actor !== undefined) await this.enviarActor(transaccion, opciones.actor);
       let resultado: T;
       try {
         resultado = await ejecutarConEstado(nuevoEstado, fn);
@@ -90,11 +97,32 @@ export class ContextoEmpresa {
 
   /**
    * Fija el actor de la transacción en curso, una sola vez, cuando se conoce más tarde que al abrir el
-   * contexto (los ingresos lo fijan después de verificar las credenciales). Hasta la tarea T7 se
-   * acepta y no hace nada.
+   * contexto (los ingresos lo fijan después de verificar las credenciales: el usuario si son correctas y
+   * `{ sistema: 'autenticacion' }` si no). Exige un contexto activo; un segundo actor en la misma
+   * transacción lanza `ContextoEmpresaConflictoError` (la base también lo rechaza, `42501`). Es la única
+   * vía, junto con `opciones.actor` de `ejecutar`: la guarda rechaza el texto de la función en el código
+   * de `fn`.
    */
-  async fijarActor(_actor: ActorTransaccion): Promise<void> {
+  async fijarActor(actor: ActorTransaccion): Promise<void> {
     this.empresaActual(); // exige un contexto activo, como el resto de la API
+    const transaccion = estadoActual()?.transaccion as TransaccionInterna | undefined;
+    if (transaccion === undefined) throw new ContextoEmpresaAusenteError();
+    await this.enviarActor(transaccion, actor);
+  }
+
+  /** Manda `fijar_contexto_actor` por la transacción; la guarda lo deja pasar solo si se registró aquí. */
+  private async enviarActor(
+    transaccion: TransaccionInterna,
+    actor: ActorTransaccion,
+  ): Promise<void> {
+    if (this.conActor.has(transaccion)) {
+      throw new ContextoEmpresaConflictoError('El actor de la transacción ya está fijado');
+    }
+    const argumentos = argumentosDeActor(actor);
+    this.conActor.add(transaccion);
+    // Se registra y se manda en el mismo instante: la guarda consume el registro de forma síncrona.
+    registrarActorPendiente(transaccion);
+    await this.conexion.query(SQL_FIJAR_ACTOR, { bind: argumentos, transaction: transaccion });
   }
 
   /** Empresa del contexto activo; lanza `ContextoEmpresaAusenteError` si no hay contexto. */

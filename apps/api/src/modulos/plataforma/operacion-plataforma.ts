@@ -1,5 +1,8 @@
 import { Inject, Injectable } from '@nestjs/common';
 import type { Transaction } from 'sequelize';
+import type { ActorTransaccion } from '../../nucleo/contexto-empresa';
+import { RELOJ, type Reloj } from '../../nucleo/reloj';
+import { insertarAuditoriaPlataforma } from '../auditoria';
 import type { TransaccionInterna } from '../../nucleo/base-de-datos/transaccion-interna';
 import {
   ejecutarConEstado,
@@ -13,20 +16,28 @@ import {
 } from '../../nucleo/base-de-datos/conexion-plataforma';
 import { textoObligatorio, validarAuditoria } from './auditoria';
 import { OperacionPlataformaAnidadaError, OperacionPlataformaCerradaError } from './errores';
-import { MODELOS_PLATAFORMA, type Modelos } from './modelos';
-import type { OpcionesOperacionPlataforma, TransaccionPlataforma } from './tipos';
+import type { ActorPlataforma, OpcionesOperacionPlataforma, TransaccionPlataforma } from './tipos';
 
 /** Datos que una operación agrega a su fila de auditoría mientras corre. */
 export interface DatosAuditoria {
   empresaId?: string;
+  sucursalId?: string;
+  entidad?: string;
+  entidadId?: string;
   detalle?: unknown;
+}
+
+/** Actor de trazabilidad de la transacción: texto → sistema; `{ superadministradorId }` → superadministrador. */
+function actorDeTransaccion(actor: ActorPlataforma): ActorTransaccion {
+  return typeof actor === 'string' ? { sistema: actor } : actor;
 }
 
 /**
  * Operaciones del superadministrador que no pertenecen a una empresa. Usa la conexión de
- * `restaurante_plataforma`, abre una transacción explícita, corre `fn` y escribe la fila de
- * auditoría en esa misma transacción antes de confirmar: o queda el cambio con su auditoría, o no
- * queda nada. `fn` no puede confirmar ni revertir la transacción por su cuenta: si lo intenta, la
+ * `restaurante_plataforma`, abre una transacción explícita, fija su actor (historia 002, criterio 117: un
+ * texto es un actor de sistema y `{ superadministradorId }`, el superadministrador), corre `fn` y escribe
+ * la fila de auditoría en `auditoria` (origen plataforma, con la hora del reloj de la API) en esa misma
+ * transacción antes de confirmar: o queda el cambio con su auditoría, o no queda nada. `fn` no puede confirmar ni revertir la transacción por su cuenta: si lo intenta, la
  * operación falla y no queda nada (criterio 32b). No se puede llamar dentro de un contexto de empresa ni de otra operación de plataforma.
  */
 @Injectable()
@@ -35,7 +46,7 @@ export class OperacionPlataforma {
 
   constructor(
     @Inject(CONEXION_PLATAFORMA) private readonly conexion: ConexionPlataforma,
-    @Inject(MODELOS_PLATAFORMA) private readonly modelos: Modelos,
+    @Inject(RELOJ) private readonly reloj: Reloj,
   ) {}
 
   async ejecutar<T>(
@@ -46,25 +57,26 @@ export class OperacionPlataforma {
     const operacion = textoObligatorio('operacion', opciones.operacion, 'La operación');
     this.exigirSinContexto();
 
-    const Auditoria = this.modelos.AuditoriaPlataforma;
-    if (!Auditoria) throw new Error('Los modelos de plataforma no incluyen la auditoría');
-
-    return this.enTransaccion(async (transaccion) => {
-      const resultado = await fn(transaccion);
-      this.exigirAbierta(transaccion);
-      const datos = this.datosDeAuditoria.get(transaccion);
-      await Auditoria.create(
-        {
-          actor,
-          operacion,
-          motivo,
+    return this.enTransaccion(
+      async (transaccion) => {
+        const resultado = await fn(transaccion);
+        this.exigirAbierta(transaccion);
+        const datos = this.datosDeAuditoria.get(transaccion);
+        await insertarAuditoriaPlataforma(transaccion, {
+          accion: operacion,
           empresaId: opciones.empresaId ?? datos?.empresaId ?? null,
+          sucursalId: datos?.sucursalId ?? null,
+          motivo,
+          entidad: datos?.entidad ?? null,
+          entidadId: datos?.entidadId ?? null,
+          sesionId: opciones.sesionId ?? null,
           detalle: datos?.detalle ?? {},
-        },
-        { transaction: transaccion },
-      );
-      return resultado;
-    });
+          ocurridoEn: this.reloj.ahora(),
+        });
+        return resultado;
+      },
+      { confirmar: true, actor: actorDeTransaccion(actor) },
+    );
   }
 
   /**
@@ -95,7 +107,7 @@ export class OperacionPlataforma {
 
   private enTransaccion<T>(
     fn: (transaccion: TransaccionPlataforma) => Promise<T>,
-    { confirmar }: { confirmar: boolean } = { confirmar: true },
+    { confirmar, actor }: { confirmar: boolean; actor?: ActorTransaccion } = { confirmar: true },
   ): Promise<T> {
     const estado: EstadoOperacion = { plataforma: true };
     return ejecutarConEstado(estado, async () => {
@@ -105,6 +117,8 @@ export class OperacionPlataforma {
       try {
         let resultado: T;
         try {
+          // El actor se fija antes que nada: toda escritura de la operación (y su auditoría) lo lleva.
+          if (actor !== undefined) await this.conexion.fijarActor(transaccion, actor);
           resultado = await fn(transaccion);
           this.exigirAbierta(transaccion);
         } finally {

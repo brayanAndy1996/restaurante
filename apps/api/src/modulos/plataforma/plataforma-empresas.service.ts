@@ -59,7 +59,7 @@ function empresaNoEncontrada(): ErrorAplicacion {
 /**
  * Alta y consulta de empresas por la vía de plataforma (sin contexto de empresa). Cada operación
  * valida la auditoría y los datos antes de abrir la transacción, y deja su fila en
- * `auditoria_plataforma`. No crea la suscripción (llega con RF-03).
+ * `auditoria` (origen plataforma). No crea la suscripción (llega con RF-03).
  */
 @Injectable()
 export class PlataformaEmpresasService {

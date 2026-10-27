@@ -39,16 +39,6 @@ export interface SucursalAtributos {
   actualizadoEn: Date;
 }
 
-export interface AuditoriaPlataformaAtributos {
-  id: string;
-  ocurridoEn: Date;
-  actor: string;
-  operacion: string;
-  motivo: string;
-  empresaId: string | null;
-  detalle: unknown;
-}
-
 type Opcional<T, K extends keyof T> = Omit<T, K> & Partial<Pick<T, K>>;
 
 export type EmpresaModelo = Model<
@@ -69,23 +59,10 @@ export type SucursalModelo = Model<
   >
 > &
   SucursalAtributos;
-export type AuditoriaPlataformaModelo = Model<
-  AuditoriaPlataformaAtributos,
-  Opcional<AuditoriaPlataformaAtributos, 'id' | 'ocurridoEn' | 'empresaId' | 'detalle'>
-> &
-  AuditoriaPlataformaAtributos;
-
 export interface Modelos {
   Empresa: ModelStatic<EmpresaModelo>;
   Emisor: ModelStatic<EmisorModelo>;
   Sucursal: ModelStatic<SucursalModelo>;
-  /** Solo existe en la instancia de plataforma: la API no tiene ningún privilegio sobre la tabla. */
-  AuditoriaPlataforma?: ModelStatic<AuditoriaPlataformaModelo>;
-}
-
-export interface OpcionesModelos {
-  /** Define también `AuditoriaPlataforma` (solo la instancia de plataforma). */
-  conAuditoria: boolean;
 }
 
 const COLUMNAS_DE_TIEMPO = {
@@ -103,7 +80,7 @@ const MARCAS_DE_TIEMPO = {
  * Define los modelos sobre una instancia de Sequelize. Cada instancia (API y plataforma) tiene su
  * propio juego de modelos, así que cada modelo solo habla por la conexión de su instancia.
  */
-export function definirModelos(sequelize: Sequelize, opciones: OpcionesModelos): Modelos {
+export function definirModelos(sequelize: Sequelize): Modelos {
   const Empresa = sequelize.define<EmpresaModelo>(
     'Empresa',
     {
@@ -144,22 +121,5 @@ export function definirModelos(sequelize: Sequelize, opciones: OpcionesModelos):
     { tableName: 'sucursal', ...MARCAS_DE_TIEMPO },
   );
 
-  const modelos: Modelos = { Empresa, Emisor, Sucursal };
-
-  if (opciones.conAuditoria) {
-    modelos.AuditoriaPlataforma = sequelize.define<AuditoriaPlataformaModelo>(
-      'AuditoriaPlataforma',
-      {
-        id: { type: DataTypes.UUID, primaryKey: true, defaultValue: DataTypes.UUIDV4 },
-        ocurridoEn: { type: DataTypes.DATE, allowNull: false, defaultValue: DataTypes.NOW },
-        actor: { type: DataTypes.TEXT, allowNull: false },
-        operacion: { type: DataTypes.TEXT, allowNull: false },
-        motivo: { type: DataTypes.TEXT, allowNull: false },
-        empresaId: { type: DataTypes.UUID, allowNull: true },
-        detalle: { type: DataTypes.JSONB, allowNull: false, defaultValue: {} },
-      },
-      { tableName: 'auditoria_plataforma', timestamps: false },
-    );
-  }
-  return modelos;
+  return { Empresa, Emisor, Sucursal };
 }

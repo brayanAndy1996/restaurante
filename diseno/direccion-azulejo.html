@@ -1,530 +1,2083 @@
 <!doctype html>
 <html lang="es-PE">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Dirección de diseño · App del restaurante · Azulejo</title>
-<!-- Muestra estática de la dirección de diseño (T19). Datos sintéticos: ninguna persona, empresa ni monto es real. No es código de producción: lo construyen T20 a T23. -->
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible+Next:wght@400..700&display=swap" rel="stylesheet">
-<style>
-:root{
-  --fondo:#F4F7F9; --baldosa:#FFFFFF; --junta:#D3DBE1; --borde:#6F808C;
-  --tinta:#14222E; --tinta-suave:#475965; --tinta-tenue:#5E6F7B; --inactivo:#E6ECF0;
-  --cobalto:#1D4A9E; --cobalto-hundido:#143A80; --cobalto-suave:#E4ECFA;
-  --huacatay:#17653F; --huacatay-suave:#E3F3EA;
-  --aji:#F2A900; --aji-texto:#7A4A00; --aji-suave:#FFF0CC;
-  --rocoto:#B3261E; --rocoto-suave:#FCE6E3;
-  --m:8px; --r:6px; --r-hoja:16px;
-  --ease:cubic-bezier(.2,.8,.2,1);
-  --sombra-hoja:0 -8px 24px rgba(20,34,46,.16);
-}
-*{box-sizing:border-box;margin:0}
-html{-webkit-text-size-adjust:100%}
-body{font-family:"Atkinson Hyperlegible Next",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;font-size:16px;line-height:24px;color:var(--tinta);background:#E9EEF1;font-variant-numeric:tabular-nums}
-svg.i{width:24px;height:24px;fill:none;stroke:currentColor;stroke-width:1.75;stroke-linecap:round;stroke-linejoin:round;flex:none}
-svg.i.s{width:20px;height:20px}
-button,input,textarea{font:inherit;color:inherit}
-::selection{background:var(--cobalto);color:#fff}
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Dirección de diseño · App del restaurante · Azulejo</title>
+    <!-- Muestra estática de la dirección de diseño (T19). Datos sintéticos: ninguna persona, empresa ni monto es real. No es código de producción: lo construyen T20 a T23. -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible+Next:wght@400..700&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      :root {
+        --fondo: #f4f7f9;
+        --baldosa: #ffffff;
+        --junta: #d3dbe1;
+        --borde: #6f808c;
+        --tinta: #14222e;
+        --tinta-suave: #475965;
+        --tinta-tenue: #5e6f7b;
+        --inactivo: #e6ecf0;
+        --cobalto: #1d4a9e;
+        --cobalto-hundido: #143a80;
+        --cobalto-suave: #e4ecfa;
+        --huacatay: #17653f;
+        --huacatay-suave: #e3f3ea;
+        --aji: #f2a900;
+        --aji-texto: #7a4a00;
+        --aji-suave: #fff0cc;
+        --rocoto: #b3261e;
+        --rocoto-suave: #fce6e3;
+        --m: 8px;
+        --r: 6px;
+        --r-hoja: 16px;
+        --ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+        --sombra-hoja: 0 -8px 24px rgba(20, 34, 46, 0.16);
+      }
+      * {
+        box-sizing: border-box;
+        margin: 0;
+      }
+      html {
+        -webkit-text-size-adjust: 100%;
+      }
+      body {
+        font-family:
+          'Atkinson Hyperlegible Next',
+          system-ui,
+          -apple-system,
+          'Segoe UI',
+          Roboto,
+          sans-serif;
+        font-size: 16px;
+        line-height: 24px;
+        color: var(--tinta);
+        background: #e9eef1;
+        font-variant-numeric: tabular-nums;
+      }
+      svg.i {
+        width: 24px;
+        height: 24px;
+        fill: none;
+        stroke: currentColor;
+        stroke-width: 1.75;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+        flex: none;
+      }
+      svg.i.s {
+        width: 20px;
+        height: 20px;
+      }
+      button,
+      input,
+      textarea {
+        font: inherit;
+        color: inherit;
+      }
+      ::selection {
+        background: var(--cobalto);
+        color: #fff;
+      }
 
-/* ---------- página de muestra ---------- */
-.pag{max-width:1240px;margin:0 auto;padding:32px 16px 96px}
-.pag h1{font-size:28px;line-height:34px;font-weight:700}
-.pag>p{max-width:68ch;color:var(--tinta-suave);margin-top:8px}
-.pag h2{font-size:20px;line-height:26px;font-weight:700;margin:48px 0 4px}
-.pag h2+p{color:var(--tinta-suave);max-width:68ch;margin-bottom:16px}
-.fila{display:flex;flex-wrap:wrap;gap:24px;align-items:flex-start}
-.esc{width:360px}
-.esc>b{display:block;font-size:14px;line-height:20px;font-weight:600;margin:12px 0 2px}
-.esc>span{display:block;font-size:13px;line-height:18px;color:var(--tinta-suave)}
-.ancho{width:min(100%,1100px)}
-.muestras{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px}
-.mu{background:var(--baldosa);border:1px solid var(--junta);border-radius:var(--r);overflow:hidden;font-size:13px;line-height:18px}
-.mu i{display:block;height:48px;border-bottom:1px solid var(--junta)}
-.mu div{padding:8px}
-.mu b{display:block;font-weight:600}
-.mu code{font-size:12px;color:var(--tinta-suave)}
+      /* ---------- página de muestra ---------- */
+      .pag {
+        max-width: 1240px;
+        margin: 0 auto;
+        padding: 32px 16px 96px;
+      }
+      .pag h1 {
+        font-size: 28px;
+        line-height: 34px;
+        font-weight: 700;
+      }
+      .pag > p {
+        max-width: 68ch;
+        color: var(--tinta-suave);
+        margin-top: 8px;
+      }
+      .pag h2 {
+        font-size: 20px;
+        line-height: 26px;
+        font-weight: 700;
+        margin: 48px 0 4px;
+      }
+      .pag h2 + p {
+        color: var(--tinta-suave);
+        max-width: 68ch;
+        margin-bottom: 16px;
+      }
+      .fila {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 24px;
+        align-items: flex-start;
+      }
+      .esc {
+        width: 360px;
+      }
+      .esc > b {
+        display: block;
+        font-size: 14px;
+        line-height: 20px;
+        font-weight: 600;
+        margin: 12px 0 2px;
+      }
+      .esc > span {
+        display: block;
+        font-size: 13px;
+        line-height: 18px;
+        color: var(--tinta-suave);
+      }
+      .ancho {
+        width: min(100%, 1100px);
+      }
+      .muestras {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+        gap: 8px;
+      }
+      .mu {
+        background: var(--baldosa);
+        border: 1px solid var(--junta);
+        border-radius: var(--r);
+        overflow: hidden;
+        font-size: 13px;
+        line-height: 18px;
+      }
+      .mu i {
+        display: block;
+        height: 48px;
+        border-bottom: 1px solid var(--junta);
+      }
+      .mu div {
+        padding: 8px;
+      }
+      .mu b {
+        display: block;
+        font-weight: 600;
+      }
+      .mu code {
+        font-size: 12px;
+        color: var(--tinta-suave);
+      }
 
-/* ---------- el teléfono (360 px) ---------- */
-.tel{width:360px;min-height:720px;background:var(--fondo);border:1px solid var(--borde);border-radius:20px;overflow:hidden;display:flex;flex-direction:column;position:relative}
-.tel.ancho-tab{width:768px}
+      /* ---------- el teléfono (360 px) ---------- */
+      .tel {
+        width: 360px;
+        min-height: 720px;
+        background: var(--fondo);
+        border: 1px solid var(--borde);
+        border-radius: 20px;
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+        position: relative;
+      }
+      .tel.ancho-tab {
+        width: 768px;
+      }
 
-/* cenefa: la banda de baldosas que dice en qué situación está la app */
-.cenefa{height:8px;flex:none;--c:var(--cobalto);background:repeating-linear-gradient(90deg,var(--c) 0 14px,transparent 14px 16px)}
-.cenefa.aji{--c:var(--aji)} .cenefa.rocoto{--c:var(--rocoto)} .cenefa.soporte{--c:var(--aji);background-color:var(--tinta)}
-.cenefa.soporte{background-image:repeating-linear-gradient(90deg,var(--aji) 0 14px,transparent 14px 16px)}
-.aviso-estado{display:flex;gap:12px;align-items:flex-start;padding:12px 16px;font-size:15px;line-height:22px;font-weight:600}
-.aviso-estado.aji{background:var(--aji);color:var(--tinta)}
-.aviso-estado.rocoto{background:var(--rocoto);color:#fff}
-.aviso-estado.soporte{background:var(--tinta);color:#fff;align-items:center}
-.aviso-estado .btn{margin-left:auto}
-.aviso-estado p{font-weight:400}
-.aviso-estado p b{font-weight:700}
+      /* cenefa: la banda de baldosas que dice en qué situación está la app */
+      .cenefa {
+        height: 8px;
+        flex: none;
+        --c: var(--cobalto);
+        background: repeating-linear-gradient(90deg, var(--c) 0 14px, transparent 14px 16px);
+      }
+      .cenefa.aji {
+        --c: var(--aji);
+      }
+      .cenefa.rocoto {
+        --c: var(--rocoto);
+      }
+      .cenefa.soporte {
+        --c: var(--aji);
+        background-color: var(--tinta);
+      }
+      .cenefa.soporte {
+        background-image: repeating-linear-gradient(
+          90deg,
+          var(--aji) 0 14px,
+          transparent 14px 16px
+        );
+      }
+      .aviso-estado {
+        display: flex;
+        gap: 12px;
+        align-items: flex-start;
+        padding: 12px 16px;
+        font-size: 15px;
+        line-height: 22px;
+        font-weight: 600;
+      }
+      .aviso-estado.aji {
+        background: var(--aji);
+        color: var(--tinta);
+      }
+      .aviso-estado.rocoto {
+        background: var(--rocoto);
+        color: #fff;
+      }
+      .aviso-estado.soporte {
+        background: var(--tinta);
+        color: #fff;
+        align-items: center;
+      }
+      .aviso-estado .btn {
+        margin-left: auto;
+      }
+      .aviso-estado p {
+        font-weight: 400;
+      }
+      .aviso-estado p b {
+        font-weight: 700;
+      }
 
-/* barra superior de la sesión */
-.barra{display:flex;align-items:center;gap:12px;min-height:56px;padding:4px 8px 4px 16px;background:var(--baldosa);border-bottom:1px solid var(--junta)}
-.barra .marca{font-weight:700;font-size:18px;letter-spacing:-.01em}
-.barra .quien{display:flex;flex-direction:column;min-width:0;line-height:18px;font-size:13px;color:var(--tinta-suave)}
-.barra .quien b{font-size:15px;line-height:20px;color:var(--tinta);font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.barra .esp{flex:1}
-.suc{display:flex;align-items:center;gap:8px;min-height:48px;padding:0 12px;border:1px solid var(--borde);border-radius:var(--r);background:var(--baldosa);font-weight:600;font-size:15px}
+      /* barra superior de la sesión */
+      .barra {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        min-height: 56px;
+        padding: 4px 8px 4px 16px;
+        background: var(--baldosa);
+        border-bottom: 1px solid var(--junta);
+      }
+      .barra .marca {
+        font-weight: 700;
+        font-size: 18px;
+        letter-spacing: -0.01em;
+      }
+      .barra .quien {
+        display: flex;
+        flex-direction: column;
+        min-width: 0;
+        line-height: 18px;
+        font-size: 13px;
+        color: var(--tinta-suave);
+      }
+      .barra .quien b {
+        font-size: 15px;
+        line-height: 20px;
+        color: var(--tinta);
+        font-weight: 600;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .barra .esp {
+        flex: 1;
+      }
+      .suc {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        min-height: 48px;
+        padding: 0 12px;
+        border: 1px solid var(--borde);
+        border-radius: var(--r);
+        background: var(--baldosa);
+        font-weight: 600;
+        font-size: 15px;
+      }
 
-.cuerpo{flex:1;display:flex;flex-direction:column;padding:24px 16px 16px;gap:16px}
-.cuerpo h3{font-size:24px;line-height:30px;font-weight:700;letter-spacing:-.01em}
-.cuerpo .sub{color:var(--tinta-suave);margin-top:-8px}
+      .cuerpo {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        padding: 24px 16px 16px;
+        gap: 16px;
+      }
+      .cuerpo h3 {
+        font-size: 24px;
+        line-height: 30px;
+        font-weight: 700;
+        letter-spacing: -0.01em;
+      }
+      .cuerpo .sub {
+        color: var(--tinta-suave);
+        margin-top: -8px;
+      }
 
-/* botones: 48 px mínimo, 56 px el principal de pantalla */
-.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:48px;padding:0 16px;border-radius:var(--r);border:1px solid var(--borde);background:var(--baldosa);color:var(--tinta);font-weight:600;font-size:16px;line-height:24px;cursor:pointer;transition:background-color .12s var(--ease),transform .12s var(--ease)}
-.btn:active{transform:translateY(1px);background:var(--cobalto-suave)}
-.btn.principal{background:var(--cobalto);border-color:var(--cobalto);color:#fff;min-height:56px;font-size:17px}
-.btn.principal:active{background:var(--cobalto-hundido)}
-.btn.bloque{width:100%}
-.btn.texto{border-color:transparent;background:transparent;color:var(--cobalto);padding:0 8px}
-.btn.peligro{border-color:var(--rocoto);color:var(--rocoto)}
-.btn.peligro-lleno{background:var(--rocoto);border-color:var(--rocoto);color:#fff}
-.btn.chico{min-height:48px;font-size:15px}
-.btn.sobre-oscuro{background:transparent;border-color:#fff;color:#fff;min-height:40px;font-size:14px;padding:0 12px}
-.btn[disabled]{background:var(--inactivo);border-color:var(--junta);color:var(--tinta-tenue);cursor:not-allowed}
-.btn.foco,.campo input.foco,.tecla.foco,.persona.foco{outline:3px solid var(--cobalto);outline-offset:2px}
-:focus-visible{outline:3px solid var(--cobalto);outline-offset:2px}
+      /* botones: 48 px mínimo, 56 px el principal de pantalla */
+      .btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        min-height: 48px;
+        padding: 0 16px;
+        border-radius: var(--r);
+        border: 1px solid var(--borde);
+        background: var(--baldosa);
+        color: var(--tinta);
+        font-weight: 600;
+        font-size: 16px;
+        line-height: 24px;
+        cursor: pointer;
+        transition:
+          background-color 0.12s var(--ease),
+          transform 0.12s var(--ease);
+      }
+      .btn:active {
+        transform: translateY(1px);
+        background: var(--cobalto-suave);
+      }
+      .btn.principal {
+        background: var(--cobalto);
+        border-color: var(--cobalto);
+        color: #fff;
+        min-height: 56px;
+        font-size: 17px;
+      }
+      .btn.principal:active {
+        background: var(--cobalto-hundido);
+      }
+      .btn.bloque {
+        width: 100%;
+      }
+      .btn.texto {
+        border-color: transparent;
+        background: transparent;
+        color: var(--cobalto);
+        padding: 0 8px;
+      }
+      .btn.peligro {
+        border-color: var(--rocoto);
+        color: var(--rocoto);
+      }
+      .btn.peligro-lleno {
+        background: var(--rocoto);
+        border-color: var(--rocoto);
+        color: #fff;
+      }
+      .btn.chico {
+        min-height: 48px;
+        font-size: 15px;
+      }
+      .btn.sobre-oscuro {
+        background: transparent;
+        border-color: #fff;
+        color: #fff;
+        min-height: 40px;
+        font-size: 14px;
+        padding: 0 12px;
+      }
+      .btn[disabled] {
+        background: var(--inactivo);
+        border-color: var(--junta);
+        color: var(--tinta-tenue);
+        cursor: not-allowed;
+      }
+      .btn.foco,
+      .campo input.foco,
+      .tecla.foco,
+      .persona.foco {
+        outline: 3px solid var(--cobalto);
+        outline-offset: 2px;
+      }
+      :focus-visible {
+        outline: 3px solid var(--cobalto);
+        outline-offset: 2px;
+      }
 
-/* campos */
-.campo{display:flex;flex-direction:column;gap:4px}
-.campo label{font-weight:600;font-size:15px;line-height:20px}
-.campo .entrada{display:flex;align-items:center;border:1px solid var(--borde);border-radius:var(--r);background:var(--baldosa);min-height:52px}
-.campo input,.campo textarea{flex:1;border:0;background:transparent;padding:12px;min-width:0;outline:0;font-size:17px;resize:none}
-.campo .entrada:focus-within{outline:3px solid var(--cobalto);outline-offset:2px;border-color:var(--cobalto)}
-.campo .entrada button{width:48px;height:48px;border:0;background:transparent;color:var(--tinta-suave);display:grid;place-items:center}
-.campo .ayuda{font-size:14px;line-height:20px;color:var(--tinta-suave)}
-.campo.error .entrada{border-color:var(--rocoto);border-width:2px}
-.campo .msj{display:flex;gap:6px;color:var(--rocoto);font-weight:600;font-size:14px;line-height:20px}
-::placeholder{color:var(--tinta-tenue);opacity:1}
+      /* campos */
+      .campo {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+      }
+      .campo label {
+        font-weight: 600;
+        font-size: 15px;
+        line-height: 20px;
+      }
+      .campo .entrada {
+        display: flex;
+        align-items: center;
+        border: 1px solid var(--borde);
+        border-radius: var(--r);
+        background: var(--baldosa);
+        min-height: 52px;
+      }
+      .campo input,
+      .campo textarea {
+        flex: 1;
+        border: 0;
+        background: transparent;
+        padding: 12px;
+        min-width: 0;
+        outline: 0;
+        font-size: 17px;
+        resize: none;
+      }
+      .campo .entrada:focus-within {
+        outline: 3px solid var(--cobalto);
+        outline-offset: 2px;
+        border-color: var(--cobalto);
+      }
+      .campo .entrada button {
+        width: 48px;
+        height: 48px;
+        border: 0;
+        background: transparent;
+        color: var(--tinta-suave);
+        display: grid;
+        place-items: center;
+      }
+      .campo .ayuda {
+        font-size: 14px;
+        line-height: 20px;
+        color: var(--tinta-suave);
+      }
+      .campo.error .entrada {
+        border-color: var(--rocoto);
+        border-width: 2px;
+      }
+      .campo .msj {
+        display: flex;
+        gap: 6px;
+        color: var(--rocoto);
+        font-weight: 600;
+        font-size: 14px;
+        line-height: 20px;
+      }
+      ::placeholder {
+        color: var(--tinta-tenue);
+        opacity: 1;
+      }
 
-/* avisos en línea */
-.aviso{display:flex;gap:12px;padding:12px;border-radius:var(--r);font-size:15px;line-height:22px;border:1px solid}
-.aviso b{display:block;font-weight:700}
-.aviso.error{background:var(--rocoto-suave);border-color:#E7B3AE;color:#7F1A14}
-.aviso.error svg{color:var(--rocoto)}
-.aviso.ok{background:var(--huacatay-suave);border-color:#A9D6BC;color:#0F4A2D}
-.aviso.alerta{background:var(--aji-suave);border-color:#E8C877;color:var(--aji-texto)}
-.aviso.info{background:var(--cobalto-suave);border-color:#B4C8EE;color:#102F66}
+      /* avisos en línea */
+      .aviso {
+        display: flex;
+        gap: 12px;
+        padding: 12px;
+        border-radius: var(--r);
+        font-size: 15px;
+        line-height: 22px;
+        border: 1px solid;
+      }
+      .aviso b {
+        display: block;
+        font-weight: 700;
+      }
+      .aviso.error {
+        background: var(--rocoto-suave);
+        border-color: #e7b3ae;
+        color: #7f1a14;
+      }
+      .aviso.error svg {
+        color: var(--rocoto);
+      }
+      .aviso.ok {
+        background: var(--huacatay-suave);
+        border-color: #a9d6bc;
+        color: #0f4a2d;
+      }
+      .aviso.alerta {
+        background: var(--aji-suave);
+        border-color: #e8c877;
+        color: var(--aji-texto);
+      }
+      .aviso.info {
+        background: var(--cobalto-suave);
+        border-color: #b4c8ee;
+        color: #102f66;
+      }
 
-/* personas: baldosas grandes */
-.persona{display:flex;align-items:center;gap:12px;min-height:72px;padding:12px;border:1px solid var(--borde);border-radius:var(--r);background:var(--baldosa);width:100%;text-align:left;cursor:pointer;transition:background-color .12s var(--ease)}
-.persona:active{background:var(--cobalto-suave)}
-.inicial{width:48px;height:48px;border-radius:var(--r);background:var(--cobalto-suave);color:var(--cobalto);display:grid;place-items:center;font-weight:700;font-size:20px;flex:none}
-.persona .n{font-weight:700;font-size:18px;line-height:24px}
-.persona .d{font-size:14px;line-height:20px;color:var(--tinta-suave)}
-.persona .txt{flex:1;min-width:0}
-.persona.bloq{background:var(--inactivo);border-color:var(--junta)}
-.persona.bloq .inicial{background:var(--junta);color:var(--tinta-tenue)}
-.persona.bloq .d{color:var(--rocoto);font-weight:600}
-.lista{display:flex;flex-direction:column;gap:8px}
+      /* personas: baldosas grandes */
+      .persona {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        min-height: 72px;
+        padding: 12px;
+        border: 1px solid var(--borde);
+        border-radius: var(--r);
+        background: var(--baldosa);
+        width: 100%;
+        text-align: left;
+        cursor: pointer;
+        transition: background-color 0.12s var(--ease);
+      }
+      .persona:active {
+        background: var(--cobalto-suave);
+      }
+      .inicial {
+        width: 48px;
+        height: 48px;
+        border-radius: var(--r);
+        background: var(--cobalto-suave);
+        color: var(--cobalto);
+        display: grid;
+        place-items: center;
+        font-weight: 700;
+        font-size: 20px;
+        flex: none;
+      }
+      .persona .n {
+        font-weight: 700;
+        font-size: 18px;
+        line-height: 24px;
+      }
+      .persona .d {
+        font-size: 14px;
+        line-height: 20px;
+        color: var(--tinta-suave);
+      }
+      .persona .txt {
+        flex: 1;
+        min-width: 0;
+      }
+      .persona.bloq {
+        background: var(--inactivo);
+        border-color: var(--junta);
+      }
+      .persona.bloq .inicial {
+        background: var(--junta);
+        color: var(--tinta-tenue);
+      }
+      .persona.bloq .d {
+        color: var(--rocoto);
+        font-weight: 600;
+      }
+      .lista {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
 
-/* cupos del equipo: 3 de 5 */
-.cupos{display:flex;align-items:center;gap:12px;font-size:14px;line-height:20px;color:var(--tinta-suave)}
-.cupos .q{display:flex;gap:4px}
-.cupos .q i{width:16px;height:16px;border-radius:4px;border:1.5px solid var(--borde)}
-.cupos .q i.l{background:var(--cobalto);border-color:var(--cobalto)}
+      /* cupos del equipo: 3 de 5 */
+      .cupos {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        font-size: 14px;
+        line-height: 20px;
+        color: var(--tinta-suave);
+      }
+      .cupos .q {
+        display: flex;
+        gap: 4px;
+      }
+      .cupos .q i {
+        width: 16px;
+        height: 16px;
+        border-radius: 4px;
+        border: 1.5px solid var(--borde);
+      }
+      .cupos .q i.l {
+        background: var(--cobalto);
+        border-color: var(--cobalto);
+      }
 
-/* PIN: puntos y teclado */
-.puntos{display:flex;gap:16px;justify-content:center;padding:8px 0}
-.puntos i{width:20px;height:20px;border-radius:50%;border:2px solid var(--borde);background:transparent}
-.puntos i.l{background:var(--tinta);border-color:var(--tinta)}
-.puntos.mal i{border-color:var(--rocoto)}
-.puntos.mal i.l{background:var(--rocoto)}
-.puntos.dis i{border-color:var(--junta)}
-.teclado{display:grid;grid-template-columns:repeat(3,1fr);gap:2px;margin-top:auto;background:#B7C3CC;border:1px solid var(--borde);border-radius:10px;overflow:hidden}
-.teclado>span{background:var(--fondo)}
-.tecla{min-height:64px;border:0;border-radius:0;background:var(--baldosa);font-size:28px;line-height:32px;font-weight:600;display:grid;place-items:center;cursor:pointer;transition:background-color .1s var(--ease)}
-.tecla:active,.tecla.hund{background:var(--cobalto-suave);color:var(--cobalto)}
-.tecla.fn{background:var(--fondo);color:var(--tinta-suave);font-size:15px;line-height:20px}
-.tecla.fn:active{background:var(--cobalto-suave)}
-.tecla[disabled]{background:var(--inactivo);color:var(--tinta-tenue);cursor:not-allowed}
-.teclado.compacto .tecla{min-height:52px;font-size:24px}
-.tecla:focus-visible{outline-offset:-4px}
-.reserva{min-height:44px;display:flex;align-items:center;justify-content:center;text-align:center;font-weight:600;font-size:15px;line-height:22px}
-.reserva.mal{color:var(--rocoto)}
-.cuenta{font-size:40px;line-height:44px;font-weight:700;text-align:center}
+      /* PIN: puntos y teclado */
+      .puntos {
+        display: flex;
+        gap: 16px;
+        justify-content: center;
+        padding: 8px 0;
+      }
+      .puntos i {
+        width: 20px;
+        height: 20px;
+        border-radius: 50%;
+        border: 2px solid var(--borde);
+        background: transparent;
+      }
+      .puntos i.l {
+        background: var(--tinta);
+        border-color: var(--tinta);
+      }
+      .puntos.mal i {
+        border-color: var(--rocoto);
+      }
+      .puntos.mal i.l {
+        background: var(--rocoto);
+      }
+      .puntos.dis i {
+        border-color: var(--junta);
+      }
+      .teclado {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 2px;
+        margin-top: auto;
+        background: #b7c3cc;
+        border: 1px solid var(--borde);
+        border-radius: 10px;
+        overflow: hidden;
+      }
+      .teclado > span {
+        background: var(--fondo);
+      }
+      .tecla {
+        min-height: 64px;
+        border: 0;
+        border-radius: 0;
+        background: var(--baldosa);
+        font-size: 28px;
+        line-height: 32px;
+        font-weight: 600;
+        display: grid;
+        place-items: center;
+        cursor: pointer;
+        transition: background-color 0.1s var(--ease);
+      }
+      .tecla:active,
+      .tecla.hund {
+        background: var(--cobalto-suave);
+        color: var(--cobalto);
+      }
+      .tecla.fn {
+        background: var(--fondo);
+        color: var(--tinta-suave);
+        font-size: 15px;
+        line-height: 20px;
+      }
+      .tecla.fn:active {
+        background: var(--cobalto-suave);
+      }
+      .tecla[disabled] {
+        background: var(--inactivo);
+        color: var(--tinta-tenue);
+        cursor: not-allowed;
+      }
+      .teclado.compacto .tecla {
+        min-height: 52px;
+        font-size: 24px;
+      }
+      .tecla:focus-visible {
+        outline-offset: -4px;
+      }
+      .reserva {
+        min-height: 44px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        text-align: center;
+        font-weight: 600;
+        font-size: 15px;
+        line-height: 22px;
+      }
+      .reserva.mal {
+        color: var(--rocoto);
+      }
+      .cuenta {
+        font-size: 40px;
+        line-height: 44px;
+        font-weight: 700;
+        text-align: center;
+      }
 
-/* hoja inferior (clave de supervisor) */
-.fondo-op{position:absolute;inset:0;background:rgba(20,34,46,.45)}
-.hoja{position:absolute;left:0;right:0;bottom:0;background:var(--baldosa);border-radius:var(--r-hoja) var(--r-hoja) 0 0;box-shadow:var(--sombra-hoja);padding:12px 16px 16px;display:flex;flex-direction:column;gap:12px}
-.hoja .asa{width:40px;height:4px;border-radius:2px;background:var(--junta);align-self:center}
-.hoja h4{font-size:20px;line-height:26px;font-weight:700}
-.contexto{border:1px solid var(--junta);border-radius:var(--r);padding:8px 12px;font-size:15px;line-height:22px;background:var(--fondo)}
-.contexto b{font-weight:700}
-.motivos{display:flex;gap:8px;flex-wrap:wrap}
-.chip{display:inline-flex;align-items:center;min-height:40px;padding:0 12px;border:1px solid var(--borde);border-radius:var(--r);font-size:14px;font-weight:600;background:var(--baldosa)}
-.chip.sel{background:var(--cobalto-suave);border-color:var(--cobalto);color:var(--cobalto)}
-.fondo-sim{padding:16px;display:flex;flex-direction:column;gap:12px;flex:1}
-.fondo-sim .linea{display:flex;justify-content:space-between;padding:12px;background:var(--baldosa);border:1px solid var(--junta);border-radius:var(--r)}
+      /* hoja inferior (clave de supervisor) */
+      .fondo-op {
+        position: absolute;
+        inset: 0;
+        background: rgba(20, 34, 46, 0.45);
+      }
+      .hoja {
+        position: absolute;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: var(--baldosa);
+        border-radius: var(--r-hoja) var(--r-hoja) 0 0;
+        box-shadow: var(--sombra-hoja);
+        padding: 12px 16px 16px;
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+      }
+      .hoja .asa {
+        width: 40px;
+        height: 4px;
+        border-radius: 2px;
+        background: var(--junta);
+        align-self: center;
+      }
+      .hoja h4 {
+        font-size: 20px;
+        line-height: 26px;
+        font-weight: 700;
+      }
+      .contexto {
+        border: 1px solid var(--junta);
+        border-radius: var(--r);
+        padding: 8px 12px;
+        font-size: 15px;
+        line-height: 22px;
+        background: var(--fondo);
+      }
+      .contexto b {
+        font-weight: 700;
+      }
+      .motivos {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+      }
+      .chip {
+        display: inline-flex;
+        align-items: center;
+        min-height: 40px;
+        padding: 0 12px;
+        border: 1px solid var(--borde);
+        border-radius: var(--r);
+        font-size: 14px;
+        font-weight: 600;
+        background: var(--baldosa);
+      }
+      .chip.sel {
+        background: var(--cobalto-suave);
+        border-color: var(--cobalto);
+        color: var(--cobalto);
+      }
+      .fondo-sim {
+        padding: 16px;
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+        flex: 1;
+      }
+      .fondo-sim .linea {
+        display: flex;
+        justify-content: space-between;
+        padding: 12px;
+        background: var(--baldosa);
+        border: 1px solid var(--junta);
+        border-radius: var(--r);
+      }
 
-/* etiquetas de estado: siempre con texto */
-.etq{display:inline-flex;align-items:center;gap:4px;min-height:24px;padding:0 8px;border-radius:4px;font-size:13px;line-height:18px;font-weight:700;white-space:nowrap}
-.etq.ok{background:var(--huacatay-suave);color:var(--huacatay)}
-.etq.alerta{background:var(--aji-suave);color:var(--aji-texto)}
-.etq.mal{background:var(--rocoto-suave);color:var(--rocoto)}
-.etq.neutro{background:var(--inactivo);color:var(--tinta-suave)}
-.etq.info{background:var(--cobalto-suave);color:var(--cobalto)}
+      /* etiquetas de estado: siempre con texto */
+      .etq {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        min-height: 24px;
+        padding: 0 8px;
+        border-radius: 4px;
+        font-size: 13px;
+        line-height: 18px;
+        font-weight: 700;
+        white-space: nowrap;
+      }
+      .etq.ok {
+        background: var(--huacatay-suave);
+        color: var(--huacatay);
+      }
+      .etq.alerta {
+        background: var(--aji-suave);
+        color: var(--aji-texto);
+      }
+      .etq.mal {
+        background: var(--rocoto-suave);
+        color: var(--rocoto);
+      }
+      .etq.neutro {
+        background: var(--inactivo);
+        color: var(--tinta-suave);
+      }
+      .etq.info {
+        background: var(--cobalto-suave);
+        color: var(--cobalto);
+      }
 
-/* lista de usuarios (celular) y tabla (tablet y más) */
-.fila-u{display:flex;align-items:center;gap:12px;min-height:72px;padding:12px 16px;border-bottom:1px solid var(--junta);background:var(--baldosa)}
-.fila-u .txt{flex:1;min-width:0}
-.fila-u .n{font-weight:700;font-size:17px;line-height:22px}
-.fila-u .d{font-size:14px;line-height:20px;color:var(--tinta-suave)}
-.fila-u.off .n{color:var(--tinta-suave)}
-.pie-fijo{position:sticky;bottom:0;margin-top:auto;padding:12px 16px;background:var(--fondo);border-top:1px solid var(--junta)}
-.nav{display:grid;grid-template-columns:repeat(3,1fr);background:var(--baldosa);border-top:1px solid var(--junta)}
-.nav a{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;min-height:64px;font-size:13px;line-height:18px;font-weight:600;color:var(--tinta-suave);position:relative}
-.nav a.act{color:var(--cobalto)}
-.nav a.act::before{content:"";position:absolute;top:0;left:20%;right:20%;height:3px;background:var(--cobalto);border-radius:0 0 3px 3px}
+      /* lista de usuarios (celular) y tabla (tablet y más) */
+      .fila-u {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        min-height: 72px;
+        padding: 12px 16px;
+        border-bottom: 1px solid var(--junta);
+        background: var(--baldosa);
+      }
+      .fila-u .txt {
+        flex: 1;
+        min-width: 0;
+      }
+      .fila-u .n {
+        font-weight: 700;
+        font-size: 17px;
+        line-height: 22px;
+      }
+      .fila-u .d {
+        font-size: 14px;
+        line-height: 20px;
+        color: var(--tinta-suave);
+      }
+      .fila-u.off .n {
+        color: var(--tinta-suave);
+      }
+      .pie-fijo {
+        position: sticky;
+        bottom: 0;
+        margin-top: auto;
+        padding: 12px 16px;
+        background: var(--fondo);
+        border-top: 1px solid var(--junta);
+      }
+      .nav {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        background: var(--baldosa);
+        border-top: 1px solid var(--junta);
+      }
+      .nav a {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 2px;
+        min-height: 64px;
+        font-size: 13px;
+        line-height: 18px;
+        font-weight: 600;
+        color: var(--tinta-suave);
+        position: relative;
+      }
+      .nav a.act {
+        color: var(--cobalto);
+      }
+      .nav a.act::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 20%;
+        right: 20%;
+        height: 3px;
+        background: var(--cobalto);
+        border-radius: 0 0 3px 3px;
+      }
 
-/* horario */
-.bloque-form{background:var(--baldosa);border:1px solid var(--junta);border-radius:var(--r);padding:12px;display:flex;flex-direction:column;gap:12px}
-.interr{display:flex;align-items:center;gap:12px;min-height:48px;font-weight:600}
-.interr .sw{margin-left:auto;width:52px;height:32px;border-radius:16px;background:var(--cobalto);position:relative;flex:none}
-.interr .sw::after{content:"";position:absolute;top:4px;right:4px;width:24px;height:24px;border-radius:50%;background:#fff}
-.dia{display:flex;align-items:flex-start;gap:8px;padding:8px 0;border-top:1px solid var(--junta)}
-.dia .nd{width:40px;font-weight:700;padding-top:10px}
-.dia .tr{display:flex;flex-wrap:wrap;gap:8px;flex:1}
-.dia .tramo{display:inline-flex;align-items:center;gap:4px;min-height:44px;padding:0 4px 0 12px;border:1px solid var(--borde);border-radius:var(--r);font-weight:600;background:var(--baldosa)}
-.dia .tramo button{width:40px;height:40px;border:0;background:transparent;color:var(--tinta-suave);display:grid;place-items:center}
-.dia .vacio{color:var(--tinta-tenue);padding-top:10px}
-.dia.mal .tramo{border-color:var(--rocoto);border-width:2px}
-.dia .mas{width:44px;height:44px;border:1px dashed var(--borde);border-radius:var(--r);background:transparent;color:var(--cobalto);display:grid;place-items:center}
+      /* horario */
+      .bloque-form {
+        background: var(--baldosa);
+        border: 1px solid var(--junta);
+        border-radius: var(--r);
+        padding: 12px;
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+      }
+      .interr {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        min-height: 48px;
+        font-weight: 600;
+      }
+      .interr .sw {
+        margin-left: auto;
+        width: 52px;
+        height: 32px;
+        border-radius: 16px;
+        background: var(--cobalto);
+        position: relative;
+        flex: none;
+      }
+      .interr .sw::after {
+        content: '';
+        position: absolute;
+        top: 4px;
+        right: 4px;
+        width: 24px;
+        height: 24px;
+        border-radius: 50%;
+        background: #fff;
+      }
+      .dia {
+        display: flex;
+        align-items: flex-start;
+        gap: 8px;
+        padding: 8px 0;
+        border-top: 1px solid var(--junta);
+      }
+      .dia .nd {
+        width: 40px;
+        font-weight: 700;
+        padding-top: 10px;
+      }
+      .dia .tr {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        flex: 1;
+      }
+      .dia .tramo {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        min-height: 44px;
+        padding: 0 4px 0 12px;
+        border: 1px solid var(--borde);
+        border-radius: var(--r);
+        font-weight: 600;
+        background: var(--baldosa);
+      }
+      .dia .tramo button {
+        width: 40px;
+        height: 40px;
+        border: 0;
+        background: transparent;
+        color: var(--tinta-suave);
+        display: grid;
+        place-items: center;
+      }
+      .dia .vacio {
+        color: var(--tinta-tenue);
+        padding-top: 10px;
+      }
+      .dia.mal .tramo {
+        border-color: var(--rocoto);
+        border-width: 2px;
+      }
+      .dia .mas {
+        width: 44px;
+        height: 44px;
+        border: 1px dashed var(--borde);
+        border-radius: var(--r);
+        background: transparent;
+        color: var(--cobalto);
+        display: grid;
+        place-items: center;
+      }
 
-/* PIN mostrado una vez */
-.pin-una-vez{background:var(--baldosa);border:2px solid var(--tinta);border-radius:var(--r);padding:16px;text-align:center}
-.pin-una-vez .num{font-size:44px;line-height:52px;font-weight:700;letter-spacing:.18em;padding-left:.18em}
-.pin-una-vez small{display:block;font-size:14px;line-height:20px;color:var(--tinta-suave)}
+      /* PIN mostrado una vez */
+      .pin-una-vez {
+        background: var(--baldosa);
+        border: 2px solid var(--tinta);
+        border-radius: var(--r);
+        padding: 16px;
+        text-align: center;
+      }
+      .pin-una-vez .num {
+        font-size: 44px;
+        line-height: 52px;
+        font-weight: 700;
+        letter-spacing: 0.18em;
+        padding-left: 0.18em;
+      }
+      .pin-una-vez small {
+        display: block;
+        font-size: 14px;
+        line-height: 20px;
+        color: var(--tinta-suave);
+      }
 
-/* esqueleto y vacío */
-.esq{background:linear-gradient(90deg,var(--inactivo),#F1F5F7,var(--inactivo));background-size:200% 100%;border-radius:4px;animation:brilla 1.4s linear infinite}
-@keyframes brilla{to{background-position:-200% 0}}
-@media (prefers-reduced-motion:reduce){.esq{animation:none}.btn,.tecla,.persona{transition:none}}
-.vacio-e{display:flex;flex-direction:column;align-items:center;gap:8px;text-align:center;padding:32px 16px;color:var(--tinta-suave)}
-.vacio-e b{color:var(--tinta);font-size:18px}
+      /* esqueleto y vacío */
+      .esq {
+        background: linear-gradient(90deg, var(--inactivo), #f1f5f7, var(--inactivo));
+        background-size: 200% 100%;
+        border-radius: 4px;
+        animation: brilla 1.4s linear infinite;
+      }
+      @keyframes brilla {
+        to {
+          background-position: -200% 0;
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .esq {
+          animation: none;
+        }
+        .btn,
+        .tecla,
+        .persona {
+          transition: none;
+        }
+      }
+      .vacio-e {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 8px;
+        text-align: center;
+        padding: 32px 16px;
+        color: var(--tinta-suave);
+      }
+      .vacio-e b {
+        color: var(--tinta);
+        font-size: 18px;
+      }
 
-/* panel de plataforma (escritorio) */
-.plat{background:var(--fondo);border:1px solid var(--borde);border-radius:12px;overflow:hidden}
-.plat .barra{background:var(--tinta);color:#fff;border-bottom:0;padding:4px 16px}
-.plat .barra .quien,.plat .barra .quien b{color:#fff}
-.plat .barra .quien{color:#C5D0D8}
-.plat .cont{padding:24px;display:flex;flex-direction:column;gap:16px}
-.plat h3{font-size:24px;line-height:30px}
-.tabla{width:100%;border-collapse:collapse;background:var(--baldosa);border:1px solid var(--junta);border-radius:var(--r)}
-.tabla th{text-align:left;font-size:13px;line-height:18px;font-weight:700;color:var(--tinta-suave);padding:12px;border-bottom:2px solid var(--junta);background:var(--fondo)}
-.tabla td{padding:12px;border-bottom:1px solid var(--junta);font-size:15px;line-height:22px;vertical-align:middle}
-.tabla td.num,.tabla th.num{text-align:right}
-.tabla tr:last-child td{border-bottom:0}
-.suc-lin{display:flex;gap:4px;flex-wrap:wrap}
+      /* panel de plataforma (escritorio) */
+      .plat {
+        background: var(--fondo);
+        border: 1px solid var(--borde);
+        border-radius: 12px;
+        overflow: hidden;
+      }
+      .plat .barra {
+        background: var(--tinta);
+        color: #fff;
+        border-bottom: 0;
+        padding: 4px 16px;
+      }
+      .plat .barra .quien,
+      .plat .barra .quien b {
+        color: #fff;
+      }
+      .plat .barra .quien {
+        color: #c5d0d8;
+      }
+      .plat .cont {
+        padding: 24px;
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+      }
+      .plat h3 {
+        font-size: 24px;
+        line-height: 30px;
+      }
+      .tabla {
+        width: 100%;
+        border-collapse: collapse;
+        background: var(--baldosa);
+        border: 1px solid var(--junta);
+        border-radius: var(--r);
+      }
+      .tabla th {
+        text-align: left;
+        font-size: 13px;
+        line-height: 18px;
+        font-weight: 700;
+        color: var(--tinta-suave);
+        padding: 12px;
+        border-bottom: 2px solid var(--junta);
+        background: var(--fondo);
+      }
+      .tabla td {
+        padding: 12px;
+        border-bottom: 1px solid var(--junta);
+        font-size: 15px;
+        line-height: 22px;
+        vertical-align: middle;
+      }
+      .tabla td.num,
+      .tabla th.num {
+        text-align: right;
+      }
+      .tabla tr:last-child td {
+        border-bottom: 0;
+      }
+      .suc-lin {
+        display: flex;
+        gap: 4px;
+        flex-wrap: wrap;
+      }
 
-@media (max-width:420px){.esc,.tel{width:100%}}
-</style>
-</head>
-<body>
-<svg width="0" height="0" style="position:absolute" aria-hidden="true">
-  <symbol id="i-borrar" viewBox="0 0 24 24"><path d="M10 5a2 2 0 0 0-1.344.519l-6.328 5.74a1 1 0 0 0 0 1.481l6.328 5.741A2 2 0 0 0 10 19h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2z"/><path d="m12 9 6 6"/><path d="m18 9-6 6"/></symbol>
-  <symbol id="i-sinred" viewBox="0 0 24 24"><path d="M12 20h.01"/><path d="M8.5 16.429a5 5 0 0 1 7 0"/><path d="M5 12.859a10 10 0 0 1 5.17-2.69"/><path d="M19 12.859a10 10 0 0 0-2.007-1.523"/><path d="M2 8.82a15 15 0 0 1 4.177-2.643"/><path d="M22 8.82a15 15 0 0 0-11.288-3.764"/><path d="m2 2 20 20"/></symbol>
-  <symbol id="i-alerta" viewBox="0 0 24 24"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/></symbol>
-  <symbol id="i-candado" viewBox="0 0 24 24"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></symbol>
-  <symbol id="i-ojo" viewBox="0 0 24 24"><path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"/><circle cx="12" cy="12" r="3"/></symbol>
-  <symbol id="i-mas" viewBox="0 0 24 24"><path d="M5 12h14"/><path d="M12 5v14"/></symbol>
-  <symbol id="i-x" viewBox="0 0 24 24"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></symbol>
-  <symbol id="i-der" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></symbol>
-  <symbol id="i-izq" viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"/></symbol>
-  <symbol id="i-abajo" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol>
-  <symbol id="i-ok" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></symbol>
-  <symbol id="i-cel" viewBox="0 0 24 24"><rect width="14" height="20" x="5" y="2" rx="2" ry="2"/><path d="M12 18h.01"/></symbol>
-  <symbol id="i-reloj" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></symbol>
-  <symbol id="i-escudo" viewBox="0 0 24 24"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="m9 12 2 2 4-4"/></symbol>
-  <symbol id="i-salir" viewBox="0 0 24 24"><path d="m16 17 5-5-5-5"/><path d="M21 12H9"/><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/></symbol>
-  <symbol id="i-usuarios" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></symbol>
-  <symbol id="i-tienda" viewBox="0 0 24 24"><path d="m2 7 4.41-4.41A2 2 0 0 1 7.83 2h8.34a2 2 0 0 1 1.42.59L22 7"/><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><path d="M2 7h20"/></symbol>
-  <symbol id="i-persona" viewBox="0 0 24 24"><circle cx="12" cy="8" r="5"/><path d="M20 21a8 8 0 0 0-16 0"/></symbol>
-</svg>
+      @media (max-width: 420px) {
+        .esc,
+        .tel {
+          width: 100%;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <svg width="0" height="0" style="position: absolute" aria-hidden="true">
+      <symbol id="i-borrar" viewBox="0 0 24 24">
+        <path
+          d="M10 5a2 2 0 0 0-1.344.519l-6.328 5.74a1 1 0 0 0 0 1.481l6.328 5.741A2 2 0 0 0 10 19h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2z"
+        />
+        <path d="m12 9 6 6" />
+        <path d="m18 9-6 6" />
+      </symbol>
+      <symbol id="i-sinred" viewBox="0 0 24 24">
+        <path d="M12 20h.01" />
+        <path d="M8.5 16.429a5 5 0 0 1 7 0" />
+        <path d="M5 12.859a10 10 0 0 1 5.17-2.69" />
+        <path d="M19 12.859a10 10 0 0 0-2.007-1.523" />
+        <path d="M2 8.82a15 15 0 0 1 4.177-2.643" />
+        <path d="M22 8.82a15 15 0 0 0-11.288-3.764" />
+        <path d="m2 2 20 20" />
+      </symbol>
+      <symbol id="i-alerta" viewBox="0 0 24 24">
+        <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3" />
+        <path d="M12 9v4" />
+        <path d="M12 17h.01" />
+      </symbol>
+      <symbol id="i-candado" viewBox="0 0 24 24">
+        <rect width="18" height="11" x="3" y="11" rx="2" ry="2" />
+        <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+      </symbol>
+      <symbol id="i-ojo" viewBox="0 0 24 24">
+        <path
+          d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"
+        />
+        <circle cx="12" cy="12" r="3" />
+      </symbol>
+      <symbol id="i-mas" viewBox="0 0 24 24">
+        <path d="M5 12h14" />
+        <path d="M12 5v14" />
+      </symbol>
+      <symbol id="i-x" viewBox="0 0 24 24">
+        <path d="M18 6 6 18" />
+        <path d="m6 6 12 12" />
+      </symbol>
+      <symbol id="i-der" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6" /></symbol>
+      <symbol id="i-izq" viewBox="0 0 24 24"><path d="m15 18-6-6 6-6" /></symbol>
+      <symbol id="i-abajo" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6" /></symbol>
+      <symbol id="i-ok" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5" /></symbol>
+      <symbol id="i-cel" viewBox="0 0 24 24">
+        <rect width="14" height="20" x="5" y="2" rx="2" ry="2" />
+        <path d="M12 18h.01" />
+      </symbol>
+      <symbol id="i-reloj" viewBox="0 0 24 24">
+        <circle cx="12" cy="12" r="10" />
+        <path d="M12 6v6l4 2" />
+      </symbol>
+      <symbol id="i-escudo" viewBox="0 0 24 24">
+        <path
+          d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"
+        />
+        <path d="m9 12 2 2 4-4" />
+      </symbol>
+      <symbol id="i-salir" viewBox="0 0 24 24">
+        <path d="m16 17 5-5-5-5" />
+        <path d="M21 12H9" />
+        <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+      </symbol>
+      <symbol id="i-usuarios" viewBox="0 0 24 24">
+        <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+        <circle cx="9" cy="7" r="4" />
+        <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
+        <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+      </symbol>
+      <symbol id="i-tienda" viewBox="0 0 24 24">
+        <path d="m2 7 4.41-4.41A2 2 0 0 1 7.83 2h8.34a2 2 0 0 1 1.42.59L22 7" />
+        <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8" />
+        <path d="M2 7h20" />
+      </symbol>
+      <symbol id="i-persona" viewBox="0 0 24 24">
+        <circle cx="12" cy="8" r="5" />
+        <path d="M20 21a8 8 0 0 0-16 0" />
+      </symbol>
+    </svg>
 
-<main class="pag">
-  <h1>Azulejo · dirección de diseño de la app del restaurante</h1>
-  <p>Muestra estática de la dirección propuesta en <code>DESIGN.md</code>. Pantallas a 360 px, controles de 48 px o más, tipografía Atkinson Hyperlegible Next. Todos los nombres, empresas y montos son sintéticos. La muestra no es código de producción: T20 a T23 construyen los componentes.</p>
+    <main class="pag">
+      <h1>Azulejo · dirección de diseño de la app del restaurante</h1>
+      <p>
+        Muestra estática de la dirección propuesta en <code>DESIGN.md</code>. Pantallas a 360 px,
+        controles de 48 px o más, tipografía Atkinson Hyperlegible Next. Todos los nombres, empresas
+        y montos son sintéticos. La muestra no es código de producción: T20 a T23 construyen los
+        componentes.
+      </p>
 
-  <h2>Colores</h2>
-  <p>Una pared de baldosas blancas, juntas finas y cobalto de cevichería para la acción. El ají amarillo avisa, el rocoto bloquea y el huacatay confirma. Cada color lleva siempre texto.</p>
-  <div class="muestras">
-    <div class="mu"><i style="background:#F4F7F9"></i><div><b>Pared</b><code>#F4F7F9 · fondo</code></div></div>
-    <div class="mu"><i style="background:#FFFFFF"></i><div><b>Baldosa</b><code>#FFFFFF · superficie</code></div></div>
-    <div class="mu"><i style="background:#D3DBE1"></i><div><b>Junta</b><code>#D3DBE1 · divisores</code></div></div>
-    <div class="mu"><i style="background:#6F808C"></i><div><b>Borde de control</b><code>#6F808C · 3.3:1</code></div></div>
-    <div class="mu"><i style="background:#14222E"></i><div><b>Tinta</b><code>#14222E · 15:1</code></div></div>
-    <div class="mu"><i style="background:#475965"></i><div><b>Tinta suave</b><code>#475965 · 6.8:1</code></div></div>
-    <div class="mu"><i style="background:#1D4A9E"></i><div><b>Cobalto</b><code>#1D4A9E · 8.3:1 con blanco</code></div></div>
-    <div class="mu"><i style="background:#E4ECFA"></i><div><b>Cobalto suave</b><code>#E4ECFA · selección</code></div></div>
-    <div class="mu"><i style="background:#F2A900"></i><div><b>Ají amarillo</b><code>#F2A900 · tinta encima</code></div></div>
-    <div class="mu"><i style="background:#B3261E"></i><div><b>Rocoto</b><code>#B3261E · 6.5:1 con blanco</code></div></div>
-    <div class="mu"><i style="background:#17653F"></i><div><b>Huacatay</b><code>#17653F · 7.1:1</code></div></div>
-  </div>
-
-  <h2>Pantalla de entrada: elegir persona, PIN, bloqueo, contraseña</h2>
-  <p>El flujo más repetido del día. La cenefa azul indica que todo está en orden; el banner de estado solo aparece cuando algo cambia.</p>
-  <div class="fila">
-
-    <div class="esc"><div class="tel">
-      <div class="cenefa"></div>
-      <div class="barra"><span class="marca">Restaurante</span><span class="esp"></span></div>
-      <div class="cuerpo">
-        <h3>¿Quién eres?</h3>
-        <p class="sub">Toca tu nombre y escribe tu PIN.</p>
-        <div class="lista">
-          <button class="persona"><span class="inicial">R</span><span class="txt"><span class="n">Rosa Quispe</span><br><span class="d">PIN de 4 dígitos</span></span><svg class="i"><use href="#i-der"/></svg></button>
-          <button class="persona"><span class="inicial">L</span><span class="txt"><span class="n">Luis Paredes</span><br><span class="d">PIN de 6 dígitos</span></span><svg class="i"><use href="#i-der"/></svg></button>
-          <button class="persona bloq"><span class="inicial">J</span><span class="txt"><span class="n">Jorge Ríos</span><br><span class="d">Bloqueado: vuelve en 4:32</span></span><svg class="i"><use href="#i-candado"/></svg></button>
+      <h2>Colores</h2>
+      <p>
+        Una pared de baldosas blancas, juntas finas y cobalto de cevichería para la acción. El ají
+        amarillo avisa, el rocoto bloquea y el huacatay confirma. Cada color lleva siempre texto.
+      </p>
+      <div class="muestras">
+        <div class="mu">
+          <i style="background: #f4f7f9"></i>
+          <div><b>Pared</b><code>#F4F7F9 · fondo</code></div>
         </div>
-        <div class="cupos"><span class="q"><i class="l"></i><i class="l"></i><i class="l"></i><i></i><i></i></span><span>Este celular recuerda a 3 de 5 personas.</span></div>
-        <div style="margin-top:auto"><button class="btn bloque">Ingresar con usuario y contraseña</button></div>
-      </div>
-    </div><b style="display:block;font-size:14px;margin:12px 0 2px">Elegir persona</b><span style="font-size:13px;color:var(--tinta-suave)">Criterio 94. Los cupos muestran el máximo de 5 del equipo.</span></div>
-
-    <div class="esc"><div class="tel">
-      <div class="cenefa"></div>
-      <div class="barra"><button class="btn texto"><svg class="i s"><use href="#i-izq"/></svg>Cambiar de persona</button></div>
-      <div class="cuerpo">
-        <div style="display:flex;gap:12px;align-items:center"><span class="inicial">R</span><div><h3 style="font-size:20px;line-height:26px">Rosa Quispe</h3><span style="color:var(--tinta-suave);font-size:14px">Escribe tu PIN de 4 dígitos</span></div></div>
-        <div class="puntos" role="status" aria-label="2 de 4 dígitos"><i class="l"></i><i class="l"></i><i></i><i></i></div>
-        <div class="reserva"></div>
-        <div class="teclado">
-          <button class="tecla">1</button><button class="tecla">2</button><button class="tecla">3</button>
-          <button class="tecla">4</button><button class="tecla hund">5</button><button class="tecla">6</button>
-          <button class="tecla">7</button><button class="tecla">8</button><button class="tecla">9</button>
-          <span></span><button class="tecla">0</button><button class="tecla fn" aria-label="Borrar"><svg class="i"><use href="#i-borrar"/></svg></button>
+        <div class="mu">
+          <i style="background: #ffffff"></i>
+          <div><b>Baldosa</b><code>#FFFFFF · superficie</code></div>
         </div>
-        <button class="btn texto bloque">Olvidé mi PIN: ingresar con usuario y contraseña</button>
-      </div>
-    </div><b style="display:block;font-size:14px;margin:12px 0 2px">PIN de 4 dígitos</b><span style="font-size:13px;color:var(--tinta-suave)">Tecla 5 hundida. Envío automático al completar el largo. Los puntos nunca muestran el dígito.</span></div>
-
-    <div class="esc"><div class="tel">
-      <div class="cenefa rocoto"></div>
-      <div class="barra"><button class="btn texto"><svg class="i s"><use href="#i-izq"/></svg>Cambiar de persona</button></div>
-      <div class="cuerpo">
-        <div style="display:flex;gap:12px;align-items:center"><span class="inicial" style="background:var(--junta);color:var(--tinta-tenue)">J</span><div><h3 style="font-size:20px;line-height:26px">Jorge Ríos</h3><span style="color:var(--tinta-suave);font-size:14px">PIN de 4 dígitos</span></div></div>
-        <div class="aviso error" role="alert"><svg class="i"><use href="#i-candado"/></svg><div><b>Demasiados intentos</b>Por seguridad, espera para volver a intentar con tu PIN.</div></div>
-        <div class="cuenta" aria-live="off">4:32</div>
-        <div class="puntos dis"><i></i><i></i><i></i><i></i></div>
-        <div class="teclado" style="opacity:1">
-          <button class="tecla" disabled>1</button><button class="tecla" disabled>2</button><button class="tecla" disabled>3</button>
-          <button class="tecla" disabled>4</button><button class="tecla" disabled>5</button><button class="tecla" disabled>6</button>
-          <button class="tecla" disabled>7</button><button class="tecla" disabled>8</button><button class="tecla" disabled>9</button>
-          <span></span><button class="tecla" disabled>0</button><span></span>
+        <div class="mu">
+          <i style="background: #d3dbe1"></i>
+          <div><b>Junta</b><code>#D3DBE1 · divisores</code></div>
         </div>
-        <button class="btn bloque principal">Ingresar con usuario y contraseña</button>
-      </div>
-    </div><b style="display:block;font-size:14px;margin:12px 0 2px">PIN bloqueado</b><span style="font-size:13px;color:var(--tinta-suave)">Cuenta regresiva grande, teclado apagado y salida a la contraseña siempre disponible.</span></div>
-
-    <div class="esc"><div class="tel">
-      <div class="cenefa"></div>
-      <div class="barra"><span class="marca">Restaurante</span></div>
-      <div class="cuerpo">
-        <h3>Ingresa a tu cuenta</h3>
-        <div class="aviso error" role="alert"><svg class="i"><use href="#i-alerta"/></svg><div><b>No pudimos ingresarte</b>Tu usuario o contraseña no son correctos. Revisa y vuelve a intentar.</div></div>
-        <div class="campo error"><label for="u">Usuario</label><div class="entrada"><input id="u" value="rosa.quispe" autocomplete="username" autocapitalize="none"></div></div>
-        <div class="campo error"><label for="c">Contraseña</label><div class="entrada"><input id="c" type="password" value="contrasena" autocomplete="current-password"><button aria-label="Mostrar contraseña"><svg class="i"><use href="#i-ojo"/></svg></button></div></div>
-        <button class="btn principal bloque">Ingresar</button>
-        <div class="aviso info"><svg class="i"><use href="#i-cel"/></svg><div>La primera vez en este celular entras con tu contraseña. Después podrás entrar solo con tu PIN.</div></div>
-      </div>
-    </div><b style="display:block;font-size:14px;margin:12px 0 2px">Usuario y contraseña con error</b><span style="font-size:13px;color:var(--tinta-suave)">Criterio 93. El mensaje es el mismo para usuario inexistente y contraseña incorrecta. Fuera de horario y bloqueo tienen su propio texto.</span></div>
-
-  </div>
-
-  <h2>Clave de supervisor</h2>
-  <p>Hoja inferior reutilizable: dice qué se autoriza, pide el motivo (con atajos) y el PIN de 6 dígitos. La hoja es el único elemento con sombra de la app.</p>
-  <div class="fila">
-    <div class="esc"><div class="tel" style="min-height:760px">
-      <div class="cenefa"></div>
-      <div class="barra"><span class="marca">Restaurante</span><span class="esp"></span><span class="quien" style="text-align:right"><b>Luis Paredes</b>Cajero · Miraflores</span></div>
-      <div class="fondo-sim"><h3 style="font-size:20px">Mesa 4</h3>
-        <div class="linea"><span>Ceviche mixto x1</span><b>S/ 38.00</b></div>
-        <div class="linea"><span>Chicha morada x2</span><b>S/ 14.00</b></div></div>
-      <div class="fondo-op"></div>
-      <div class="hoja" role="dialog" aria-modal="true" aria-labelledby="ts">
-        <span class="asa"></span>
-        <div style="display:flex;align-items:center;gap:8px"><h4 id="ts" style="flex:1">Se necesita un supervisor</h4><button class="btn texto" aria-label="Cerrar" style="min-width:48px"><svg class="i"><use href="#i-x"/></svg></button></div>
-        <div class="contexto"><b>Anular ítem:</b> Ceviche mixto x1 · S/ 38.00</div>
-        <div class="campo"><label for="m">Motivo</label>
-          <div class="motivos"><span class="chip">Error al comandar</span><span class="chip sel">El cliente no lo quiso</span><span class="chip">Demora en cocina</span></div>
-          <div class="entrada"><input id="m" value="El cliente no lo quiso" style="font-size:16px"></div></div>
-        <div style="font-weight:600;font-size:15px">PIN del supervisor (6 dígitos)</div>
-        <div class="puntos" style="padding:0"><i class="l"></i><i class="l"></i><i class="l"></i><i></i><i></i><i></i></div>
-        <div class="teclado compacto" style="margin-top:0">
-          <button class="tecla">1</button><button class="tecla">2</button><button class="tecla">3</button>
-          <button class="tecla">4</button><button class="tecla">5</button><button class="tecla">6</button>
-          <button class="tecla">7</button><button class="tecla">8</button><button class="tecla">9</button>
-          <span></span><button class="tecla">0</button><button class="tecla fn" aria-label="Borrar"><svg class="i"><use href="#i-borrar"/></svg></button>
+        <div class="mu">
+          <i style="background: #6f808c"></i>
+          <div><b>Borde de control</b><code>#6F808C · 3.3:1</code></div>
+        </div>
+        <div class="mu">
+          <i style="background: #14222e"></i>
+          <div><b>Tinta</b><code>#14222E · 15:1</code></div>
+        </div>
+        <div class="mu">
+          <i style="background: #475965"></i>
+          <div><b>Tinta suave</b><code>#475965 · 6.8:1</code></div>
+        </div>
+        <div class="mu">
+          <i style="background: #1d4a9e"></i>
+          <div><b>Cobalto</b><code>#1D4A9E · 8.3:1 con blanco</code></div>
+        </div>
+        <div class="mu">
+          <i style="background: #e4ecfa"></i>
+          <div><b>Cobalto suave</b><code>#E4ECFA · selección</code></div>
+        </div>
+        <div class="mu">
+          <i style="background: #f2a900"></i>
+          <div><b>Ají amarillo</b><code>#F2A900 · tinta encima</code></div>
+        </div>
+        <div class="mu">
+          <i style="background: #b3261e"></i>
+          <div><b>Rocoto</b><code>#B3261E · 6.5:1 con blanco</code></div>
+        </div>
+        <div class="mu">
+          <i style="background: #17653f"></i>
+          <div><b>Huacatay</b><code>#17653F · 7.1:1</code></div>
         </div>
       </div>
-    </div><b style="display:block;font-size:14px;margin:12px 0 2px">Ventana de clave de supervisor</b><span style="font-size:13px;color:var(--tinta-suave)">Criterio 98. El PIN no se guarda. Con clave inválida: el aviso rocoto aparece sobre los puntos y los puntos se vacían.</span></div>
 
-    <div class="esc"><div class="tel" style="min-height:760px">
-      <div class="cenefa"></div>
-      <div class="barra"><span class="marca">Restaurante</span><span class="esp"></span></div>
-      <div class="fondo-sim"><h3 style="font-size:20px">Mesa 4</h3>
-        <div class="linea"><span>Ceviche mixto x1</span><b>S/ 38.00</b></div></div>
-      <div class="fondo-op"></div>
-      <div class="hoja" role="alertdialog" aria-modal="true">
-        <span class="asa"></span>
-        <h4>Se necesita un supervisor</h4>
-        <div class="aviso error" role="alert"><svg class="i"><use href="#i-candado"/></svg><div><b>Clave no válida</b>Revisa el PIN con tu supervisor. Te quedan 3 intentos antes de un bloqueo de 5 minutos.</div></div>
-        <div class="puntos mal" style="padding:0"><i></i><i></i><i></i><i></i><i></i><i></i></div>
-        <div class="teclado compacto" style="margin-top:0">
-          <button class="tecla">1</button><button class="tecla">2</button><button class="tecla">3</button>
-          <button class="tecla">4</button><button class="tecla">5</button><button class="tecla">6</button>
-          <button class="tecla">7</button><button class="tecla">8</button><button class="tecla">9</button>
-          <span></span><button class="tecla">0</button><button class="tecla fn" aria-label="Borrar"><svg class="i"><use href="#i-borrar"/></svg></button>
-        </div>
-      </div>
-    </div><b style="display:block;font-size:14px;margin:12px 0 2px">Clave rechazada</b><span style="font-size:13px;color:var(--tinta-suave)">El error nombra el problema y la salida. Cuenta de intentos restantes visible.</span></div>
-  </div>
-
-  <h2>Estados globales</h2>
-  <p>Cinco situaciones, siempre en el mismo lugar: la cenefa cambia de color y un banner dice con palabras qué pasa y qué hacer. Prioridad si coinciden: sin conexión, soporte, suspendida, en gracia.</p>
-  <div class="fila">
-    <div class="esc"><div class="tel" style="min-height:0">
-      <div class="cenefa"></div>
-      <div class="barra"><span class="marca">Restaurante</span></div>
-      <div style="padding:12px 16px;font-size:13px;color:var(--tinta-suave)">Normal: solo la cenefa cobalto, sin banner.</div>
-      <div class="cenefa aji"></div>
-      <div class="aviso-estado aji"><svg class="i"><use href="#i-sinred"/></svg><div>Sin conexión<p>Lo que escribas se guardará y se enviará al volver. 2 cambios por enviar.</p></div></div>
-      <div style="padding:12px 16px;font-size:13px;color:var(--tinta-suave)">Reconectando: el banner se vuelve “Enviando 2 cambios…” y se retira al terminar.</div>
-      <div class="cenefa aji"></div>
-      <div class="aviso-estado aji"><svg class="i"><use href="#i-alerta"/></svg><div>Suscripción vencida: quedan 5 días de gracia<p>Se suspenderá el <b>18 de noviembre de 2026</b>. Comunícate con soporte para registrar tu pago.</p></div></div>
-      <div style="padding:12px 16px;font-size:13px;color:var(--tinta-suave)">En gracia: aviso persistente que no se puede cerrar. Solo lo ve el administrador.</div>
-      <div class="cenefa rocoto"></div>
-      <div class="aviso-estado rocoto"><svg class="i"><use href="#i-candado"/></svg><div>Sucursal suspendida<p style="color:#fff">No se puede abrir caja. Puedes consultar y exportar tus datos.</p></div></div>
-      <div style="padding:12px 16px;font-size:13px;color:var(--tinta-suave)">Suspendida: no corta un turno abierto.</div>
-      <div class="cenefa soporte"></div>
-      <div class="aviso-estado soporte"><svg class="i"><use href="#i-escudo"/></svg><div style="flex:1;line-height:20px;font-size:14px">Soporte en <b>Inversiones Sol del Norte</b><br><span style="font-weight:400">Ana Torres · hasta las 15:40</span></div><button class="btn sobre-oscuro">Terminar</button></div>
-    </div><b style="display:block;font-size:14px;margin:12px 0 2px">Banderas de estado</b><span style="font-size:13px;color:var(--tinta-suave)">Criterios 99 y 102. Fondo ámbar con tinta (9:1), rocoto con blanco (6.5:1), tinta con blanco (16:1).</span></div>
-
-    <div class="esc"><div class="tel" style="min-height:0">
-      <div class="cenefa"></div>
-      <div class="barra"><span class="marca">Usuarios</span></div>
-      <div style="padding:16px;display:flex;flex-direction:column;gap:12px">
-        <div style="display:flex;gap:12px"><span class="esq" style="width:48px;height:48px"></span><div style="flex:1;display:flex;flex-direction:column;gap:8px;padding-top:4px"><span class="esq" style="height:16px;width:60%"></span><span class="esq" style="height:12px;width:40%"></span></div></div>
-        <div style="display:flex;gap:12px"><span class="esq" style="width:48px;height:48px"></span><div style="flex:1;display:flex;flex-direction:column;gap:8px;padding-top:4px"><span class="esq" style="height:16px;width:50%"></span><span class="esq" style="height:12px;width:35%"></span></div></div>
-        <div style="display:flex;gap:12px"><span class="esq" style="width:48px;height:48px"></span><div style="flex:1;display:flex;flex-direction:column;gap:8px;padding-top:4px"><span class="esq" style="height:16px;width:65%"></span><span class="esq" style="height:12px;width:30%"></span></div></div>
-        <span style="font-size:13px;color:var(--tinta-suave)">Carga: esqueleto con la forma de la lista, nunca pantalla en blanco ni rueda sola. Más de 8 s: “Esto tarda más de lo normal. Seguimos intentando.”</span>
-      </div>
-      <div class="vacio-e" style="border-top:1px solid var(--junta)"><svg class="i" style="width:32px;height:32px"><use href="#i-usuarios"/></svg><b>Aún no hay usuarios</b><span>Agrega a tu primer trabajador para que pueda ingresar con su PIN.</span><button class="btn principal" style="margin-top:8px"><svg class="i s"><use href="#i-mas"/></svg>Agregar usuario</button></div>
-      <div style="border-top:1px solid var(--junta);padding:16px;display:flex;flex-direction:column;gap:12px">
-        <div class="aviso error"><svg class="i"><use href="#i-alerta"/></svg><div><b>No pudimos cargar los usuarios</b>Revisa tu conexión e inténtalo de nuevo.</div></div>
-        <button class="btn bloque">Reintentar</button>
-      </div>
-    </div><b style="display:block;font-size:14px;margin:12px 0 2px">Carga, vacío y error de carga</b><span style="font-size:13px;color:var(--tinta-suave)">El error de carga ofrece la acción de recuperación en la misma pantalla.</span></div>
-  </div>
-
-  <h2>Administración de usuarios</h2>
-  <p>Lista a 360 px, con una sola acción principal fija abajo. Las acciones que destruyen o cierran sesiones viven dentro del detalle, aisladas, y piden confirmación.</p>
-  <div class="fila">
-
-    <div class="esc"><div class="tel">
-      <div class="cenefa aji"></div>
-      <div class="aviso-estado aji"><svg class="i"><use href="#i-alerta"/></svg><div>Suscripción vencida: quedan 5 días de gracia<p>Se suspenderá el <b>18 de noviembre de 2026</b>. Comunícate con soporte para registrar tu pago.</p></div></div>
-      <div class="barra"><span class="marca" style="font-size:20px">Usuarios</span><span class="esp"></span><button class="suc"><svg class="i s"><use href="#i-tienda"/></svg>Miraflores<svg class="i s"><use href="#i-abajo"/></svg></button></div>
-      <div style="flex:1">
-        <div class="fila-u"><span class="inicial">R</span><div class="txt"><div class="n">Rosa Quispe</div><div class="d">Mozo · 2 celulares</div></div><span class="etq info"><svg class="i s" style="width:14px;height:14px"><use href="#i-reloj"/></svg>Con horario</span></div>
-        <div class="fila-u"><span class="inicial">L</span><div class="txt"><div class="n">Luis Paredes</div><div class="d">Cajero · 1 celular</div></div><svg class="i" style="color:var(--tinta-suave)"><use href="#i-der"/></svg></div>
-        <div class="fila-u"><span class="inicial">M</span><div class="txt"><div class="n">Marta Salas</div><div class="d">Administrador · todas las sucursales</div></div><svg class="i" style="color:var(--tinta-suave)"><use href="#i-der"/></svg></div>
-        <div class="fila-u off"><span class="inicial" style="background:var(--junta);color:var(--tinta-tenue)">J</span><div class="txt"><div class="n">Jorge Ríos</div><div class="d">Cocina/Barra · sin celulares</div></div><span class="etq neutro">Inactivo</span></div>
-      </div>
-      <div class="pie-fijo"><button class="btn principal bloque"><svg class="i"><use href="#i-mas"/></svg>Agregar usuario</button></div>
-      <nav class="nav" aria-label="Principal"><a class="act" href="#"><svg class="i"><use href="#i-usuarios"/></svg>Usuarios</a><a href="#"><svg class="i"><use href="#i-tienda"/></svg>Sucursal</a><a href="#"><svg class="i"><use href="#i-persona"/></svg>Mi cuenta</a></nav>
-    </div><b style="display:block;font-size:14px;margin:12px 0 2px">Lista de usuarios (con aviso de gracia)</b><span style="font-size:13px;color:var(--tinta-suave)">Criterios 99 y 100. El administrador ve el aviso de suscripción; los demás roles no.</span></div>
-
-    <div class="esc"><div class="tel">
-      <div class="cenefa"></div>
-      <div class="barra"><button class="btn texto"><svg class="i s"><use href="#i-izq"/></svg>Usuarios</button></div>
-      <div class="cuerpo" style="gap:12px">
-        <h3 style="font-size:22px">Rosa Quispe</h3>
-        <div class="bloque-form">
-          <div class="interr"><svg class="i"><use href="#i-reloj"/></svg>Limitar horario de acceso<span class="sw" role="switch" aria-checked="true"></span></div>
-          <div class="ayuda" style="font-size:14px;color:var(--tinta-suave)">Fuera de este horario no podrá ingresar ni autorizar. Hora de Lima.</div>
-          <div class="dia"><span class="nd">Lun</span><div class="tr"><span class="vacio">Sin acceso</span></div><button class="mas" aria-label="Agregar tramo el lunes"><svg class="i s"><use href="#i-mas"/></svg></button></div>
-          <div class="dia"><span class="nd">Mar</span><div class="tr"><span class="tramo">11:00 – 17:00<button aria-label="Quitar"><svg class="i s"><use href="#i-x"/></svg></button></span></div><button class="mas" aria-label="Agregar tramo el martes"><svg class="i s"><use href="#i-mas"/></svg></button></div>
-          <div class="dia mal"><span class="nd">Vie</span><div class="tr"><span class="tramo">18:00 – 02:00<button aria-label="Quitar"><svg class="i s"><use href="#i-x"/></svg></button></span><span class="tramo">01:00 – 03:00<button aria-label="Quitar"><svg class="i s"><use href="#i-x"/></svg></button></span><div class="msj" style="display:flex;gap:6px;color:var(--rocoto);font-weight:600;font-size:14px;line-height:20px;width:100%"><svg class="i s"><use href="#i-alerta"/></svg>Los tramos del viernes se cruzan. Cambia uno de los dos.</div></div><button class="mas" aria-label="Agregar tramo el viernes"><svg class="i s"><use href="#i-mas"/></svg></button></div>
-          <div class="dia"><span class="nd">Sáb</span><div class="tr"><span class="tramo">11:00 – 23:00<button aria-label="Quitar"><svg class="i s"><use href="#i-x"/></svg></button></span></div><button class="mas" aria-label="Agregar tramo el sábado"><svg class="i s"><use href="#i-mas"/></svg></button></div>
-          <div class="ayuda" style="font-size:13px;color:var(--tinta-suave)">Lun, Mié, Jue y Dom ocultos en esta muestra.</div>
-        </div>
-        <div style="margin-top:auto;display:flex;flex-direction:column;gap:12px">
-          <button class="btn principal bloque" disabled>Guardar cambios</button>
-          <div style="border-top:1px solid var(--junta);padding-top:24px;display:flex;flex-direction:column;gap:12px">
-            <button class="btn bloque">Regenerar PIN</button><button class="btn bloque">Restablecer contraseña</button><button class="btn peligro bloque">Desactivar usuario</button>
+      <h2>Pantalla de entrada: elegir persona, PIN, bloqueo, contraseña</h2>
+      <p>
+        El flujo más repetido del día. La cenefa azul indica que todo está en orden; el banner de
+        estado solo aparece cuando algo cambia.
+      </p>
+      <div class="fila">
+        <div class="esc">
+          <div class="tel">
+            <div class="cenefa"></div>
+            <div class="barra"><span class="marca">Restaurante</span><span class="esp"></span></div>
+            <div class="cuerpo">
+              <h3>¿Quién eres?</h3>
+              <p class="sub">Toca tu nombre y escribe tu PIN.</p>
+              <div class="lista">
+                <button class="persona">
+                  <span class="inicial">R</span
+                  ><span class="txt"
+                    ><span class="n">Rosa Quispe</span><br /><span class="d"
+                      >PIN de 4 dígitos</span
+                    ></span
+                  ><svg class="i"><use href="#i-der" /></svg>
+                </button>
+                <button class="persona">
+                  <span class="inicial">L</span
+                  ><span class="txt"
+                    ><span class="n">Luis Paredes</span><br /><span class="d"
+                      >PIN de 6 dígitos</span
+                    ></span
+                  ><svg class="i"><use href="#i-der" /></svg>
+                </button>
+                <button class="persona bloq">
+                  <span class="inicial">J</span
+                  ><span class="txt"
+                    ><span class="n">Jorge Ríos</span><br /><span class="d"
+                      >Bloqueado: vuelve en 4:32</span
+                    ></span
+                  ><svg class="i"><use href="#i-candado" /></svg>
+                </button>
+              </div>
+              <div class="cupos">
+                <span class="q"
+                  ><i class="l"></i><i class="l"></i><i class="l"></i><i></i><i></i></span
+                ><span>Este celular recuerda a 3 de 5 personas.</span>
+              </div>
+              <div style="margin-top: auto">
+                <button class="btn bloque">Ingresar con usuario y contraseña</button>
+              </div>
+            </div>
           </div>
+          <b style="display: block; font-size: 14px; margin: 12px 0 2px">Elegir persona</b
+          ><span style="font-size: 13px; color: var(--tinta-suave)"
+            >Criterio 94. Los cupos muestran el máximo de 5 del equipo.</span
+          >
+        </div>
+
+        <div class="esc">
+          <div class="tel">
+            <div class="cenefa"></div>
+            <div class="barra">
+              <button class="btn texto">
+                <svg class="i s"><use href="#i-izq" /></svg>Cambiar de persona
+              </button>
+            </div>
+            <div class="cuerpo">
+              <div style="display: flex; gap: 12px; align-items: center">
+                <span class="inicial">R</span>
+                <div>
+                  <h3 style="font-size: 20px; line-height: 26px">Rosa Quispe</h3>
+                  <span style="color: var(--tinta-suave); font-size: 14px"
+                    >Escribe tu PIN de 4 dígitos</span
+                  >
+                </div>
+              </div>
+              <div class="puntos" role="status" aria-label="2 de 4 dígitos">
+                <i class="l"></i><i class="l"></i><i></i><i></i>
+              </div>
+              <div class="reserva"></div>
+              <div class="teclado">
+                <button class="tecla">1</button><button class="tecla">2</button
+                ><button class="tecla">3</button> <button class="tecla">4</button
+                ><button class="tecla hund">5</button><button class="tecla">6</button>
+                <button class="tecla">7</button><button class="tecla">8</button
+                ><button class="tecla">9</button> <span></span><button class="tecla">0</button
+                ><button class="tecla fn" aria-label="Borrar">
+                  <svg class="i"><use href="#i-borrar" /></svg>
+                </button>
+              </div>
+              <button class="btn texto bloque">
+                Olvidé mi PIN: ingresar con usuario y contraseña
+              </button>
+            </div>
+          </div>
+          <b style="display: block; font-size: 14px; margin: 12px 0 2px">PIN de 4 dígitos</b
+          ><span style="font-size: 13px; color: var(--tinta-suave)"
+            >Tecla 5 hundida. Envío automático al completar el largo. Los puntos nunca muestran el
+            dígito.</span
+          >
+        </div>
+
+        <div class="esc">
+          <div class="tel">
+            <div class="cenefa rocoto"></div>
+            <div class="barra">
+              <button class="btn texto">
+                <svg class="i s"><use href="#i-izq" /></svg>Cambiar de persona
+              </button>
+            </div>
+            <div class="cuerpo">
+              <div style="display: flex; gap: 12px; align-items: center">
+                <span class="inicial" style="background: var(--junta); color: var(--tinta-tenue)"
+                  >J</span
+                >
+                <div>
+                  <h3 style="font-size: 20px; line-height: 26px">Jorge Ríos</h3>
+                  <span style="color: var(--tinta-suave); font-size: 14px">PIN de 4 dígitos</span>
+                </div>
+              </div>
+              <div class="aviso error" role="alert">
+                <svg class="i"><use href="#i-candado" /></svg>
+                <div>
+                  <b>Demasiados intentos</b>Por seguridad, espera para volver a intentar con tu PIN.
+                </div>
+              </div>
+              <div class="cuenta" aria-live="off">4:32</div>
+              <div class="puntos dis"><i></i><i></i><i></i><i></i></div>
+              <div class="teclado" style="opacity: 1">
+                <button class="tecla" disabled>1</button><button class="tecla" disabled>2</button
+                ><button class="tecla" disabled>3</button> <button class="tecla" disabled>4</button
+                ><button class="tecla" disabled>5</button><button class="tecla" disabled>6</button>
+                <button class="tecla" disabled>7</button><button class="tecla" disabled>8</button
+                ><button class="tecla" disabled>9</button> <span></span
+                ><button class="tecla" disabled>0</button><span></span>
+              </div>
+              <button class="btn bloque principal">Ingresar con usuario y contraseña</button>
+            </div>
+          </div>
+          <b style="display: block; font-size: 14px; margin: 12px 0 2px">PIN bloqueado</b
+          ><span style="font-size: 13px; color: var(--tinta-suave)"
+            >Cuenta regresiva grande, teclado apagado y salida a la contraseña siempre
+            disponible.</span
+          >
+        </div>
+
+        <div class="esc">
+          <div class="tel">
+            <div class="cenefa"></div>
+            <div class="barra"><span class="marca">Restaurante</span></div>
+            <div class="cuerpo">
+              <h3>Ingresa a tu cuenta</h3>
+              <div class="aviso error" role="alert">
+                <svg class="i"><use href="#i-alerta" /></svg>
+                <div>
+                  <b>No pudimos ingresarte</b>Tu usuario o contraseña no son correctos. Revisa y
+                  vuelve a intentar.
+                </div>
+              </div>
+              <div class="campo error">
+                <label for="u">Usuario</label>
+                <div class="entrada">
+                  <input id="u" value="rosa.quispe" autocomplete="username" autocapitalize="none" />
+                </div>
+              </div>
+              <div class="campo error">
+                <label for="c">Contraseña</label>
+                <div class="entrada">
+                  <input
+                    id="c"
+                    type="password"
+                    value="contrasena"
+                    autocomplete="current-password"
+                  /><button aria-label="Mostrar contraseña">
+                    <svg class="i"><use href="#i-ojo" /></svg>
+                  </button>
+                </div>
+              </div>
+              <button class="btn principal bloque">Ingresar</button>
+              <div class="aviso info">
+                <svg class="i"><use href="#i-cel" /></svg>
+                <div>
+                  La primera vez en este celular entras con tu contraseña. Después podrás entrar
+                  solo con tu PIN.
+                </div>
+              </div>
+            </div>
+          </div>
+          <b style="display: block; font-size: 14px; margin: 12px 0 2px"
+            >Usuario y contraseña con error</b
+          ><span style="font-size: 13px; color: var(--tinta-suave)"
+            >Criterio 93. El mensaje es el mismo para usuario inexistente y contraseña incorrecta.
+            Fuera de horario y bloqueo tienen su propio texto.</span
+          >
         </div>
       </div>
-    </div><b style="display:block;font-size:14px;margin:12px 0 2px">Editor de horario y acciones aisladas</b><span style="font-size:13px;color:var(--tinta-suave)">Criterio 100. Varios tramos por día, tramos que cruzan la medianoche (18:00 – 02:00) y errores en palabras. “Guardar” queda apagado mientras haya error. Las acciones sensibles van separadas por 24 px y 1 junta del botón de guardar.</span></div>
 
-    <div class="esc"><div class="tel">
-      <div class="cenefa"></div>
-      <div class="barra"><span class="marca" style="font-size:20px">Usuario creado</span></div>
-      <div class="cuerpo">
-        <div class="aviso ok"><svg class="i"><use href="#i-ok"/></svg><div><b>Rosa Quispe ya puede ingresar</b>Con su contraseña temporal. Al entrar, la cambiará.</div></div>
-        <div class="pin-una-vez"><small>PIN de Rosa Quispe</small><div class="num">4821</div><small>Se muestra una sola vez</small></div>
-        <div class="aviso alerta"><svg class="i"><use href="#i-alerta"/></svg><div>Anótalo y entrégaselo en persona. Si sales sin anotarlo, tendrás que generar uno nuevo.</div></div>
-        <div style="margin-top:auto;display:flex;flex-direction:column;gap:12px">
-          <button class="btn bloque">Copiar PIN</button>
-          <button class="btn principal bloque">Ya lo anoté</button>
+      <h2>Clave de supervisor</h2>
+      <p>
+        Hoja inferior reutilizable: dice qué se autoriza, pide el motivo (con atajos) y el PIN de 6
+        dígitos. La hoja es el único elemento con sombra de la app.
+      </p>
+      <div class="fila">
+        <div class="esc">
+          <div class="tel" style="min-height: 760px">
+            <div class="cenefa"></div>
+            <div class="barra">
+              <span class="marca">Restaurante</span><span class="esp"></span
+              ><span class="quien" style="text-align: right"
+                ><b>Luis Paredes</b>Cajero · Miraflores</span
+              >
+            </div>
+            <div class="fondo-sim">
+              <h3 style="font-size: 20px">Mesa 4</h3>
+              <div class="linea"><span>Ceviche mixto x1</span><b>S/ 38.00</b></div>
+              <div class="linea"><span>Chicha morada x2</span><b>S/ 14.00</b></div>
+            </div>
+            <div class="fondo-op"></div>
+            <div class="hoja" role="dialog" aria-modal="true" aria-labelledby="ts">
+              <span class="asa"></span>
+              <div style="display: flex; align-items: center; gap: 8px">
+                <h4 id="ts" style="flex: 1">Se necesita un supervisor</h4>
+                <button class="btn texto" aria-label="Cerrar" style="min-width: 48px">
+                  <svg class="i"><use href="#i-x" /></svg>
+                </button>
+              </div>
+              <div class="contexto"><b>Anular ítem:</b> Ceviche mixto x1 · S/ 38.00</div>
+              <div class="campo">
+                <label for="m">Motivo</label>
+                <div class="motivos">
+                  <span class="chip">Error al comandar</span
+                  ><span class="chip sel">El cliente no lo quiso</span
+                  ><span class="chip">Demora en cocina</span>
+                </div>
+                <div class="entrada">
+                  <input id="m" value="El cliente no lo quiso" style="font-size: 16px" />
+                </div>
+              </div>
+              <div style="font-weight: 600; font-size: 15px">PIN del supervisor (6 dígitos)</div>
+              <div class="puntos" style="padding: 0">
+                <i class="l"></i><i class="l"></i><i class="l"></i><i></i><i></i><i></i>
+              </div>
+              <div class="teclado compacto" style="margin-top: 0">
+                <button class="tecla">1</button><button class="tecla">2</button
+                ><button class="tecla">3</button> <button class="tecla">4</button
+                ><button class="tecla">5</button><button class="tecla">6</button>
+                <button class="tecla">7</button><button class="tecla">8</button
+                ><button class="tecla">9</button> <span></span><button class="tecla">0</button
+                ><button class="tecla fn" aria-label="Borrar">
+                  <svg class="i"><use href="#i-borrar" /></svg>
+                </button>
+              </div>
+            </div>
+          </div>
+          <b style="display: block; font-size: 14px; margin: 12px 0 2px"
+            >Ventana de clave de supervisor</b
+          ><span style="font-size: 13px; color: var(--tinta-suave)"
+            >Criterio 98. El PIN no se guarda. Con clave inválida: el aviso rocoto aparece sobre los
+            puntos y los puntos se vacían.</span
+          >
+        </div>
+
+        <div class="esc">
+          <div class="tel" style="min-height: 760px">
+            <div class="cenefa"></div>
+            <div class="barra"><span class="marca">Restaurante</span><span class="esp"></span></div>
+            <div class="fondo-sim">
+              <h3 style="font-size: 20px">Mesa 4</h3>
+              <div class="linea"><span>Ceviche mixto x1</span><b>S/ 38.00</b></div>
+            </div>
+            <div class="fondo-op"></div>
+            <div class="hoja" role="alertdialog" aria-modal="true">
+              <span class="asa"></span>
+              <h4>Se necesita un supervisor</h4>
+              <div class="aviso error" role="alert">
+                <svg class="i"><use href="#i-candado" /></svg>
+                <div>
+                  <b>Clave no válida</b>Revisa el PIN con tu supervisor. Te quedan 3 intentos antes
+                  de un bloqueo de 5 minutos.
+                </div>
+              </div>
+              <div class="puntos mal" style="padding: 0">
+                <i></i><i></i><i></i><i></i><i></i><i></i>
+              </div>
+              <div class="teclado compacto" style="margin-top: 0">
+                <button class="tecla">1</button><button class="tecla">2</button
+                ><button class="tecla">3</button> <button class="tecla">4</button
+                ><button class="tecla">5</button><button class="tecla">6</button>
+                <button class="tecla">7</button><button class="tecla">8</button
+                ><button class="tecla">9</button> <span></span><button class="tecla">0</button
+                ><button class="tecla fn" aria-label="Borrar">
+                  <svg class="i"><use href="#i-borrar" /></svg>
+                </button>
+              </div>
+            </div>
+          </div>
+          <b style="display: block; font-size: 14px; margin: 12px 0 2px">Clave rechazada</b
+          ><span style="font-size: 13px; color: var(--tinta-suave)"
+            >El error nombra el problema y la salida. Cuenta de intentos restantes visible.</span
+          >
         </div>
       </div>
-    </div><b style="display:block;font-size:14px;margin:12px 0 2px">PIN mostrado una vez</b><span style="font-size:13px;color:var(--tinta-suave)">Criterio 100. Mismo componente al crear, regenerar o cambiar de largo.</span></div>
 
-  </div>
+      <h2>Estados globales</h2>
+      <p>
+        Cinco situaciones, siempre en el mismo lugar: la cenefa cambia de color y un banner dice con
+        palabras qué pasa y qué hacer. Prioridad si coinciden: sin conexión, soporte, suspendida, en
+        gracia.
+      </p>
+      <div class="fila">
+        <div class="esc">
+          <div class="tel" style="min-height: 0">
+            <div class="cenefa"></div>
+            <div class="barra"><span class="marca">Restaurante</span></div>
+            <div style="padding: 12px 16px; font-size: 13px; color: var(--tinta-suave)">
+              Normal: solo la cenefa cobalto, sin banner.
+            </div>
+            <div class="cenefa aji"></div>
+            <div class="aviso-estado aji">
+              <svg class="i"><use href="#i-sinred" /></svg>
+              <div>
+                Sin conexión
+                <p>Lo que escribas se guardará y se enviará al volver. 2 cambios por enviar.</p>
+              </div>
+            </div>
+            <div style="padding: 12px 16px; font-size: 13px; color: var(--tinta-suave)">
+              Reconectando: el banner se vuelve “Enviando 2 cambios…” y se retira al terminar.
+            </div>
+            <div class="cenefa aji"></div>
+            <div class="aviso-estado aji">
+              <svg class="i"><use href="#i-alerta" /></svg>
+              <div>
+                Suscripción vencida: quedan 5 días de gracia
+                <p>
+                  Se suspenderá el <b>18 de noviembre de 2026</b>. Comunícate con soporte para
+                  registrar tu pago.
+                </p>
+              </div>
+            </div>
+            <div style="padding: 12px 16px; font-size: 13px; color: var(--tinta-suave)">
+              En gracia: aviso persistente que no se puede cerrar. Solo lo ve el administrador.
+            </div>
+            <div class="cenefa rocoto"></div>
+            <div class="aviso-estado rocoto">
+              <svg class="i"><use href="#i-candado" /></svg>
+              <div>
+                Sucursal suspendida
+                <p style="color: #fff">
+                  No se puede abrir caja. Puedes consultar y exportar tus datos.
+                </p>
+              </div>
+            </div>
+            <div style="padding: 12px 16px; font-size: 13px; color: var(--tinta-suave)">
+              Suspendida: no corta un turno abierto.
+            </div>
+            <div class="cenefa soporte"></div>
+            <div class="aviso-estado soporte">
+              <svg class="i"><use href="#i-escudo" /></svg>
+              <div style="flex: 1; line-height: 20px; font-size: 14px">
+                Soporte en <b>Inversiones Sol del Norte</b><br /><span style="font-weight: 400"
+                  >Ana Torres · hasta las 15:40</span
+                >
+              </div>
+              <button class="btn sobre-oscuro">Terminar</button>
+            </div>
+          </div>
+          <b style="display: block; font-size: 14px; margin: 12px 0 2px">Banderas de estado</b
+          ><span style="font-size: 13px; color: var(--tinta-suave)"
+            >Criterios 99 y 102. Fondo ámbar con tinta (9:1), rocoto con blanco (6.5:1), tinta con
+            blanco (16:1).</span
+          >
+        </div>
 
-  <h2>Panel del superadministrador</h2>
-  <p>Misma app, otra barra: tinta oscura para que nadie confunda “Plataforma” con una sucursal. En celular, lista; desde 768 px, tabla con encabezados fijos y números alineados a la derecha.</p>
-  <div class="fila">
-    <div class="esc"><div class="tel">
-      <div class="cenefa soporte" style="background-color:var(--tinta)"></div>
-      <div class="barra" style="background:var(--tinta);color:#fff;border-bottom:0"><span class="marca">Plataforma</span><span class="esp"></span><span class="quien" style="color:#C5D0D8;text-align:right"><b style="color:#fff">Ana Torres</b>Superadministrador</span></div>
-      <div style="padding:16px 16px 8px"><h3 style="font-size:22px;line-height:28px">Empresas</h3></div>
-      <div>
-        <div class="fila-u" style="flex-wrap:wrap"><div class="txt"><div class="n">Inversiones Sol del Norte</div><div class="d">RUC 20512345678 · 2 sucursales</div></div><svg class="i" style="color:var(--tinta-suave)"><use href="#i-der"/></svg><div class="suc-lin" style="width:100%"><span class="etq ok">Miraflores · Activa</span><span class="etq alerta">Surco · En gracia (5 días)</span></div></div>
-        <div class="fila-u" style="flex-wrap:wrap"><div class="txt"><div class="n">Cevichería La Marea</div><div class="d">RUC 20498765432 · 1 sucursal</div></div><svg class="i" style="color:var(--tinta-suave)"><use href="#i-der"/></svg><div class="suc-lin" style="width:100%"><span class="etq mal">Barranco · Suspendida</span></div></div>
-        <div class="fila-u" style="flex-wrap:wrap"><div class="txt"><div class="n">Pollería El Fogón</div><div class="d">RUC 20601122334 · 1 sucursal</div></div><svg class="i" style="color:var(--tinta-suave)"><use href="#i-der"/></svg><div class="suc-lin" style="width:100%"><span class="etq ok">San Miguel · Activa</span></div></div>
+        <div class="esc">
+          <div class="tel" style="min-height: 0">
+            <div class="cenefa"></div>
+            <div class="barra"><span class="marca">Usuarios</span></div>
+            <div style="padding: 16px; display: flex; flex-direction: column; gap: 12px">
+              <div style="display: flex; gap: 12px">
+                <span class="esq" style="width: 48px; height: 48px"></span>
+                <div
+                  style="flex: 1; display: flex; flex-direction: column; gap: 8px; padding-top: 4px"
+                >
+                  <span class="esq" style="height: 16px; width: 60%"></span
+                  ><span class="esq" style="height: 12px; width: 40%"></span>
+                </div>
+              </div>
+              <div style="display: flex; gap: 12px">
+                <span class="esq" style="width: 48px; height: 48px"></span>
+                <div
+                  style="flex: 1; display: flex; flex-direction: column; gap: 8px; padding-top: 4px"
+                >
+                  <span class="esq" style="height: 16px; width: 50%"></span
+                  ><span class="esq" style="height: 12px; width: 35%"></span>
+                </div>
+              </div>
+              <div style="display: flex; gap: 12px">
+                <span class="esq" style="width: 48px; height: 48px"></span>
+                <div
+                  style="flex: 1; display: flex; flex-direction: column; gap: 8px; padding-top: 4px"
+                >
+                  <span class="esq" style="height: 16px; width: 65%"></span
+                  ><span class="esq" style="height: 12px; width: 30%"></span>
+                </div>
+              </div>
+              <span style="font-size: 13px; color: var(--tinta-suave)"
+                >Carga: esqueleto con la forma de la lista, nunca pantalla en blanco ni rueda sola.
+                Más de 8 s: “Esto tarda más de lo normal. Seguimos intentando.”</span
+              >
+            </div>
+            <div class="vacio-e" style="border-top: 1px solid var(--junta)">
+              <svg class="i" style="width: 32px; height: 32px"><use href="#i-usuarios" /></svg
+              ><b>Aún no hay usuarios</b
+              ><span>Agrega a tu primer trabajador para que pueda ingresar con su PIN.</span
+              ><button class="btn principal" style="margin-top: 8px">
+                <svg class="i s"><use href="#i-mas" /></svg>Agregar usuario
+              </button>
+            </div>
+            <div
+              style="
+                border-top: 1px solid var(--junta);
+                padding: 16px;
+                display: flex;
+                flex-direction: column;
+                gap: 12px;
+              "
+            >
+              <div class="aviso error">
+                <svg class="i"><use href="#i-alerta" /></svg>
+                <div>
+                  <b>No pudimos cargar los usuarios</b>Revisa tu conexión e inténtalo de nuevo.
+                </div>
+              </div>
+              <button class="btn bloque">Reintentar</button>
+            </div>
+          </div>
+          <b style="display: block; font-size: 14px; margin: 12px 0 2px"
+            >Carga, vacío y error de carga</b
+          ><span style="font-size: 13px; color: var(--tinta-suave)"
+            >El error de carga ofrece la acción de recuperación en la misma pantalla.</span
+          >
+        </div>
       </div>
-      <div class="pie-fijo"><button class="btn principal bloque"><svg class="i"><use href="#i-mas"/></svg>Registrar empresa</button></div>
-    </div><b style="display:block;font-size:14px;margin:12px 0 2px">Empresas en celular</b><span style="font-size:13px;color:var(--tinta-suave)">Datos sintéticos. Criterio 101.</span></div>
-  </div>
-  <div style="height:24px"></div>
-  <div class="plat ancho">
-    <div class="cenefa soporte" style="background-color:var(--tinta)"></div>
-    <div class="barra"><span class="marca" style="color:#fff">Plataforma</span><span class="esp"></span><span class="quien"><b>Ana Torres</b>Superadministrador</span><button class="btn sobre-oscuro" style="margin-left:12px"><svg class="i s"><use href="#i-salir"/></svg>Salir</button></div>
-    <div class="cont">
-      <div style="display:flex;align-items:center;gap:16px"><h3 style="flex:1">Empresas</h3><button class="btn principal" style="min-height:48px"><svg class="i s"><use href="#i-mas"/></svg>Registrar empresa</button></div>
-      <table class="tabla">
-        <thead><tr><th scope="col">Empresa</th><th scope="col">RUC</th><th scope="col">Sucursal</th><th scope="col">Suscripción</th><th scope="col" class="num">Vence</th><th scope="col"><span style="position:absolute;left:-9999px">Acciones</span></th></tr></thead>
-        <tbody>
-          <tr><td><b>Inversiones Sol del Norte</b></td><td>20512345678</td><td>Miraflores</td><td><span class="etq ok">Activa</span></td><td class="num">10/11/2026</td><td style="text-align:right"><button class="btn chico">Entrar a dar soporte</button></td></tr>
-          <tr><td></td><td></td><td>Surco</td><td><span class="etq alerta">En gracia · 5 días</span></td><td class="num">02/11/2026</td><td style="text-align:right"><button class="btn chico">Registrar pago</button></td></tr>
-          <tr><td><b>Cevichería La Marea</b></td><td>20498765432</td><td>Barranco</td><td><span class="etq mal">Suspendida</span></td><td class="num">08/10/2026</td><td style="text-align:right"><button class="btn chico">Registrar pago</button></td></tr>
-          <tr><td><b>Pollería El Fogón</b></td><td>20601122334</td><td>San Miguel</td><td><span class="etq ok">Activa</span></td><td class="num">24/11/2026</td><td style="text-align:right"><button class="btn chico">Entrar a dar soporte</button></td></tr>
-        </tbody>
-      </table>
-    </div>
-  </div>
 
-  <h2>Tipografía, medidas y reglas de toque</h2>
-  <p>Una sola familia legible, con cifras tabulares para PIN, cuentas regresivas y montos.</p>
-  <div class="fila">
-    <div class="esc" style="width:520px;background:var(--baldosa);border:1px solid var(--junta);border-radius:var(--r);padding:16px">
-      <div style="font-size:40px;line-height:44px;font-weight:700">4:32 · S/ 1,284.50</div><span style="font-size:13px;color:var(--tinta-suave)">Cifras 40/44 · 700 · tabulares</span>
-      <div style="font-size:24px;line-height:30px;font-weight:700;margin-top:12px">Título de pantalla</div><span style="font-size:13px;color:var(--tinta-suave)">Título 24/30 · 700</span>
-      <div style="font-size:18px;line-height:24px;font-weight:700;margin-top:12px">Nombre de una persona</div><span style="font-size:13px;color:var(--tinta-suave)">Subtítulo 18/24 · 700</span>
-      <div style="margin-top:12px">Texto de cuerpo 16/24, nunca menos en campos para evitar el zoom de iPhone.</div>
-      <div style="font-size:14px;line-height:20px;color:var(--tinta-suave);margin-top:12px">Ayuda y detalle 14/20 · tinta suave</div>
-      <div style="font-size:13px;line-height:18px;font-weight:700;margin-top:12px">ETIQUETA 13/18 · mínimo absoluto</div>
-      <div style="margin-top:12px;font-size:20px" id="tn">0000 · 1111 · 1234567890</div>
-    </div>
-  </div>
-</main>
-</body>
+      <h2>Administración de usuarios</h2>
+      <p>
+        Lista a 360 px, con una sola acción principal fija abajo. Las acciones que destruyen o
+        cierran sesiones viven dentro del detalle, aisladas, y piden confirmación.
+      </p>
+      <div class="fila">
+        <div class="esc">
+          <div class="tel">
+            <div class="cenefa aji"></div>
+            <div class="aviso-estado aji">
+              <svg class="i"><use href="#i-alerta" /></svg>
+              <div>
+                Suscripción vencida: quedan 5 días de gracia
+                <p>
+                  Se suspenderá el <b>18 de noviembre de 2026</b>. Comunícate con soporte para
+                  registrar tu pago.
+                </p>
+              </div>
+            </div>
+            <div class="barra">
+              <span class="marca" style="font-size: 20px">Usuarios</span><span class="esp"></span
+              ><button class="suc">
+                <svg class="i s"><use href="#i-tienda" /></svg>Miraflores<svg class="i s">
+                  <use href="#i-abajo" />
+                </svg>
+              </button>
+            </div>
+            <div style="flex: 1">
+              <div class="fila-u">
+                <span class="inicial">R</span>
+                <div class="txt">
+                  <div class="n">Rosa Quispe</div>
+                  <div class="d">Mozo · 2 celulares</div>
+                </div>
+                <span class="etq info"
+                  ><svg class="i s" style="width: 14px; height: 14px"><use href="#i-reloj" /></svg
+                  >Con horario</span
+                >
+              </div>
+              <div class="fila-u">
+                <span class="inicial">L</span>
+                <div class="txt">
+                  <div class="n">Luis Paredes</div>
+                  <div class="d">Cajero · 1 celular</div>
+                </div>
+                <svg class="i" style="color: var(--tinta-suave)"><use href="#i-der" /></svg>
+              </div>
+              <div class="fila-u">
+                <span class="inicial">M</span>
+                <div class="txt">
+                  <div class="n">Marta Salas</div>
+                  <div class="d">Administrador · todas las sucursales</div>
+                </div>
+                <svg class="i" style="color: var(--tinta-suave)"><use href="#i-der" /></svg>
+              </div>
+              <div class="fila-u off">
+                <span class="inicial" style="background: var(--junta); color: var(--tinta-tenue)"
+                  >J</span
+                >
+                <div class="txt">
+                  <div class="n">Jorge Ríos</div>
+                  <div class="d">Cocina/Barra · sin celulares</div>
+                </div>
+                <span class="etq neutro">Inactivo</span>
+              </div>
+            </div>
+            <div class="pie-fijo">
+              <button class="btn principal bloque">
+                <svg class="i"><use href="#i-mas" /></svg>Agregar usuario
+              </button>
+            </div>
+            <nav class="nav" aria-label="Principal">
+              <a class="act" href="#"
+                ><svg class="i"><use href="#i-usuarios" /></svg>Usuarios</a
+              ><a href="#"
+                ><svg class="i"><use href="#i-tienda" /></svg>Sucursal</a
+              ><a href="#"
+                ><svg class="i"><use href="#i-persona" /></svg>Mi cuenta</a
+              >
+            </nav>
+          </div>
+          <b style="display: block; font-size: 14px; margin: 12px 0 2px"
+            >Lista de usuarios (con aviso de gracia)</b
+          ><span style="font-size: 13px; color: var(--tinta-suave)"
+            >Criterios 99 y 100. El administrador ve el aviso de suscripción; los demás roles
+            no.</span
+          >
+        </div>
+
+        <div class="esc">
+          <div class="tel">
+            <div class="cenefa"></div>
+            <div class="barra">
+              <button class="btn texto">
+                <svg class="i s"><use href="#i-izq" /></svg>Usuarios
+              </button>
+            </div>
+            <div class="cuerpo" style="gap: 12px">
+              <h3 style="font-size: 22px">Rosa Quispe</h3>
+              <div class="bloque-form">
+                <div class="interr">
+                  <svg class="i"><use href="#i-reloj" /></svg>Limitar horario de acceso<span
+                    class="sw"
+                    role="switch"
+                    aria-checked="true"
+                  ></span>
+                </div>
+                <div class="ayuda" style="font-size: 14px; color: var(--tinta-suave)">
+                  Fuera de este horario no podrá ingresar ni autorizar. Hora de Lima.
+                </div>
+                <div class="dia">
+                  <span class="nd">Lun</span>
+                  <div class="tr"><span class="vacio">Sin acceso</span></div>
+                  <button class="mas" aria-label="Agregar tramo el lunes">
+                    <svg class="i s"><use href="#i-mas" /></svg>
+                  </button>
+                </div>
+                <div class="dia">
+                  <span class="nd">Mar</span>
+                  <div class="tr">
+                    <span class="tramo"
+                      >11:00 – 17:00<button aria-label="Quitar">
+                        <svg class="i s"><use href="#i-x" /></svg></button
+                    ></span>
+                  </div>
+                  <button class="mas" aria-label="Agregar tramo el martes">
+                    <svg class="i s"><use href="#i-mas" /></svg>
+                  </button>
+                </div>
+                <div class="dia mal">
+                  <span class="nd">Vie</span>
+                  <div class="tr">
+                    <span class="tramo"
+                      >18:00 – 02:00<button aria-label="Quitar">
+                        <svg class="i s"><use href="#i-x" /></svg></button></span
+                    ><span class="tramo"
+                      >01:00 – 03:00<button aria-label="Quitar">
+                        <svg class="i s"><use href="#i-x" /></svg></button
+                    ></span>
+                    <div
+                      class="msj"
+                      style="
+                        display: flex;
+                        gap: 6px;
+                        color: var(--rocoto);
+                        font-weight: 600;
+                        font-size: 14px;
+                        line-height: 20px;
+                        width: 100%;
+                      "
+                    >
+                      <svg class="i s"><use href="#i-alerta" /></svg>Los tramos del viernes se
+                      cruzan. Cambia uno de los dos.
+                    </div>
+                  </div>
+                  <button class="mas" aria-label="Agregar tramo el viernes">
+                    <svg class="i s"><use href="#i-mas" /></svg>
+                  </button>
+                </div>
+                <div class="dia">
+                  <span class="nd">Sáb</span>
+                  <div class="tr">
+                    <span class="tramo"
+                      >11:00 – 23:00<button aria-label="Quitar">
+                        <svg class="i s"><use href="#i-x" /></svg></button
+                    ></span>
+                  </div>
+                  <button class="mas" aria-label="Agregar tramo el sábado">
+                    <svg class="i s"><use href="#i-mas" /></svg>
+                  </button>
+                </div>
+                <div class="ayuda" style="font-size: 13px; color: var(--tinta-suave)">
+                  Lun, Mié, Jue y Dom ocultos en esta muestra.
+                </div>
+              </div>
+              <div style="margin-top: auto; display: flex; flex-direction: column; gap: 12px">
+                <button class="btn principal bloque" disabled>Guardar cambios</button>
+                <div
+                  style="
+                    border-top: 1px solid var(--junta);
+                    padding-top: 24px;
+                    display: flex;
+                    flex-direction: column;
+                    gap: 12px;
+                  "
+                >
+                  <button class="btn bloque">Regenerar PIN</button
+                  ><button class="btn bloque">Restablecer contraseña</button
+                  ><button class="btn peligro bloque">Desactivar usuario</button>
+                </div>
+              </div>
+            </div>
+          </div>
+          <b style="display: block; font-size: 14px; margin: 12px 0 2px"
+            >Editor de horario y acciones aisladas</b
+          ><span style="font-size: 13px; color: var(--tinta-suave)"
+            >Criterio 100. Varios tramos por día, tramos que cruzan la medianoche (18:00 – 02:00) y
+            errores en palabras. “Guardar” queda apagado mientras haya error. Las acciones sensibles
+            van separadas por 24 px y 1 junta del botón de guardar.</span
+          >
+        </div>
+
+        <div class="esc">
+          <div class="tel">
+            <div class="cenefa"></div>
+            <div class="barra">
+              <span class="marca" style="font-size: 20px">Usuario creado</span>
+            </div>
+            <div class="cuerpo">
+              <div class="aviso ok">
+                <svg class="i"><use href="#i-ok" /></svg>
+                <div>
+                  <b>Rosa Quispe ya puede ingresar</b>Con su contraseña temporal. Al entrar, la
+                  cambiará.
+                </div>
+              </div>
+              <div class="pin-una-vez">
+                <small>PIN de Rosa Quispe</small>
+                <div class="num">4821</div>
+                <small>Se muestra una sola vez</small>
+              </div>
+              <div class="aviso alerta">
+                <svg class="i"><use href="#i-alerta" /></svg>
+                <div>
+                  Anótalo y entrégaselo en persona. Si sales sin anotarlo, tendrás que generar uno
+                  nuevo.
+                </div>
+              </div>
+              <div style="margin-top: auto; display: flex; flex-direction: column; gap: 12px">
+                <button class="btn bloque">Copiar PIN</button>
+                <button class="btn principal bloque">Ya lo anoté</button>
+              </div>
+            </div>
+          </div>
+          <b style="display: block; font-size: 14px; margin: 12px 0 2px">PIN mostrado una vez</b
+          ><span style="font-size: 13px; color: var(--tinta-suave)"
+            >Criterio 100. Mismo componente al crear, regenerar o cambiar de largo.</span
+          >
+        </div>
+      </div>
+
+      <h2>Panel del superadministrador</h2>
+      <p>
+        Misma app, otra barra: tinta oscura para que nadie confunda “Plataforma” con una sucursal.
+        En celular, lista; desde 768 px, tabla con encabezados fijos y números alineados a la
+        derecha.
+      </p>
+      <div class="fila">
+        <div class="esc">
+          <div class="tel">
+            <div class="cenefa soporte" style="background-color: var(--tinta)"></div>
+            <div class="barra" style="background: var(--tinta); color: #fff; border-bottom: 0">
+              <span class="marca">Plataforma</span><span class="esp"></span
+              ><span class="quien" style="color: #c5d0d8; text-align: right"
+                ><b style="color: #fff">Ana Torres</b>Superadministrador</span
+              >
+            </div>
+            <div style="padding: 16px 16px 8px">
+              <h3 style="font-size: 22px; line-height: 28px">Empresas</h3>
+            </div>
+            <div>
+              <div class="fila-u" style="flex-wrap: wrap">
+                <div class="txt">
+                  <div class="n">Inversiones Sol del Norte</div>
+                  <div class="d">RUC 20512345678 · 2 sucursales</div>
+                </div>
+                <svg class="i" style="color: var(--tinta-suave)"><use href="#i-der" /></svg>
+                <div class="suc-lin" style="width: 100%">
+                  <span class="etq ok">Miraflores · Activa</span
+                  ><span class="etq alerta">Surco · En gracia (5 días)</span>
+                </div>
+              </div>
+              <div class="fila-u" style="flex-wrap: wrap">
+                <div class="txt">
+                  <div class="n">Cevichería La Marea</div>
+                  <div class="d">RUC 20498765432 · 1 sucursal</div>
+                </div>
+                <svg class="i" style="color: var(--tinta-suave)"><use href="#i-der" /></svg>
+                <div class="suc-lin" style="width: 100%">
+                  <span class="etq mal">Barranco · Suspendida</span>
+                </div>
+              </div>
+              <div class="fila-u" style="flex-wrap: wrap">
+                <div class="txt">
+                  <div class="n">Pollería El Fogón</div>
+                  <div class="d">RUC 20601122334 · 1 sucursal</div>
+                </div>
+                <svg class="i" style="color: var(--tinta-suave)"><use href="#i-der" /></svg>
+                <div class="suc-lin" style="width: 100%">
+                  <span class="etq ok">San Miguel · Activa</span>
+                </div>
+              </div>
+            </div>
+            <div class="pie-fijo">
+              <button class="btn principal bloque">
+                <svg class="i"><use href="#i-mas" /></svg>Registrar empresa
+              </button>
+            </div>
+          </div>
+          <b style="display: block; font-size: 14px; margin: 12px 0 2px">Empresas en celular</b
+          ><span style="font-size: 13px; color: var(--tinta-suave)"
+            >Datos sintéticos. Criterio 101.</span
+          >
+        </div>
+      </div>
+      <div style="height: 24px"></div>
+      <div class="plat ancho">
+        <div class="cenefa soporte" style="background-color: var(--tinta)"></div>
+        <div class="barra">
+          <span class="marca" style="color: #fff">Plataforma</span><span class="esp"></span
+          ><span class="quien"><b>Ana Torres</b>Superadministrador</span
+          ><button class="btn sobre-oscuro" style="margin-left: 12px">
+            <svg class="i s"><use href="#i-salir" /></svg>Salir
+          </button>
+        </div>
+        <div class="cont">
+          <div style="display: flex; align-items: center; gap: 16px">
+            <h3 style="flex: 1">Empresas</h3>
+            <button class="btn principal" style="min-height: 48px">
+              <svg class="i s"><use href="#i-mas" /></svg>Registrar empresa
+            </button>
+          </div>
+          <table class="tabla">
+            <thead>
+              <tr>
+                <th scope="col">Empresa</th>
+                <th scope="col">RUC</th>
+                <th scope="col">Sucursal</th>
+                <th scope="col">Suscripción</th>
+                <th scope="col" class="num">Vence</th>
+                <th scope="col"><span style="position: absolute; left: -9999px">Acciones</span></th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><b>Inversiones Sol del Norte</b></td>
+                <td>20512345678</td>
+                <td>Miraflores</td>
+                <td><span class="etq ok">Activa</span></td>
+                <td class="num">10/11/2026</td>
+                <td style="text-align: right">
+                  <button class="btn chico">Entrar a dar soporte</button>
+                </td>
+              </tr>
+              <tr>
+                <td></td>
+                <td></td>
+                <td>Surco</td>
+                <td><span class="etq alerta">En gracia · 5 días</span></td>
+                <td class="num">02/11/2026</td>
+                <td style="text-align: right"><button class="btn chico">Registrar pago</button></td>
+              </tr>
+              <tr>
+                <td><b>Cevichería La Marea</b></td>
+                <td>20498765432</td>
+                <td>Barranco</td>
+                <td><span class="etq mal">Suspendida</span></td>
+                <td class="num">08/10/2026</td>
+                <td style="text-align: right"><button class="btn chico">Registrar pago</button></td>
+              </tr>
+              <tr>
+                <td><b>Pollería El Fogón</b></td>
+                <td>20601122334</td>
+                <td>San Miguel</td>
+                <td><span class="etq ok">Activa</span></td>
+                <td class="num">24/11/2026</td>
+                <td style="text-align: right">
+                  <button class="btn chico">Entrar a dar soporte</button>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <h2>Tipografía, medidas y reglas de toque</h2>
+      <p>Una sola familia legible, con cifras tabulares para PIN, cuentas regresivas y montos.</p>
+      <div class="fila">
+        <div
+          class="esc"
+          style="
+            width: 520px;
+            background: var(--baldosa);
+            border: 1px solid var(--junta);
+            border-radius: var(--r);
+            padding: 16px;
+          "
+        >
+          <div style="font-size: 40px; line-height: 44px; font-weight: 700">4:32 · S/ 1,284.50</div>
+          <span style="font-size: 13px; color: var(--tinta-suave)"
+            >Cifras 40/44 · 700 · tabulares</span
+          >
+          <div style="font-size: 24px; line-height: 30px; font-weight: 700; margin-top: 12px">
+            Título de pantalla
+          </div>
+          <span style="font-size: 13px; color: var(--tinta-suave)">Título 24/30 · 700</span>
+          <div style="font-size: 18px; line-height: 24px; font-weight: 700; margin-top: 12px">
+            Nombre de una persona
+          </div>
+          <span style="font-size: 13px; color: var(--tinta-suave)">Subtítulo 18/24 · 700</span>
+          <div style="margin-top: 12px">
+            Texto de cuerpo 16/24, nunca menos en campos para evitar el zoom de iPhone.
+          </div>
+          <div
+            style="font-size: 14px; line-height: 20px; color: var(--tinta-suave); margin-top: 12px"
+          >
+            Ayuda y detalle 14/20 · tinta suave
+          </div>
+          <div style="font-size: 13px; line-height: 18px; font-weight: 700; margin-top: 12px">
+            ETIQUETA 13/18 · mínimo absoluto
+          </div>
+          <div style="margin-top: 12px; font-size: 20px" id="tn">0000 · 1111 · 1234567890</div>
+        </div>
+      </div>
+    </main>
+  </body>
 </html>

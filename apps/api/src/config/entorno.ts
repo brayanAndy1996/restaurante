@@ -36,8 +36,9 @@ type EntornoLeido = z.infer<typeof entornoSchema>;
 export interface Entorno extends Omit<EntornoLeido, 'PIN_PEPPER' | 'ORIGENES_PERMITIDOS'> {
   /**
    * Secreto con el que se calcula la huella de los PIN (base64, 32 bytes o más). Con `NODE_ENV`
-   * `development` o `test` tiene un valor por defecto. Será obligatoria en producción desde la tarea
-   * T10; hasta entonces puede faltar (`undefined`).
+   * `development` o `test` tiene un valor por defecto; en producción es obligatoria
+   * (`exigirEntornoDeProduccion`, que `crearAplicacion` llama al arrancar), así que puede faltar
+   * (`undefined`) solo al leer el entorno, no en una API que arrancó. Cambiarla invalida todos los PIN.
    */
   PIN_PEPPER: string | undefined;
   /** Orígenes de la PWA permitidos por CORS (`ORIGENES_PERMITIDOS`, separados por coma). */
@@ -101,15 +102,22 @@ export function cargarEntorno(env: NodeJS.ProcessEnv = process.env): Entorno {
       problemas.push(`${issue.path.join('.') || 'entorno'}: ${issue.message}`);
     }
   }
-  // Se comprueba aparte de zod para que el motivo salga siempre, aunque falte otra variable.
-  if (limpio.NODE_ENV === 'production' && limpio.EMPRESA_POR_HEADER === 'habilitado') {
+  // Se comprueba aparte de zod para que el motivo salga siempre, aunque falte otra variable. Desde la
+  // historia 002 (criterio 7) la cabecera solo vale con NODE_ENV=test: es el punto de enganche de las
+  // pruebas, y con cualquier otro entorno permitiría suplantar a cualquier empresa.
+  if (limpio.EMPRESA_POR_HEADER === 'habilitado' && limpio.NODE_ENV === 'production') {
     problemas.push(
       'EMPRESA_POR_HEADER=habilitado está prohibido en producción (NODE_ENV=production): ' +
-        'la cabecera x-empresa-id permitiría suplantar a cualquier empresa',
+        'la cabecera x-empresa-id permitiría suplantar a cualquier empresa; solo vale con NODE_ENV=test',
+    );
+  } else if (limpio.EMPRESA_POR_HEADER === 'habilitado' && limpio.NODE_ENV !== 'test') {
+    problemas.push(
+      `EMPRESA_POR_HEADER=habilitado solo vale con NODE_ENV=test (NODE_ENV=${limpio.NODE_ENV ?? ''}): ` +
+        'la empresa de cada petición sale de la sesión; quita EMPRESA_POR_HEADER',
     );
   }
-  // Con development o test las dos variables nuevas tienen valor por defecto; en producción pueden
-  // faltar hasta la tarea T10, que las vuelve obligatorias.
+  // Con development o test las dos variables nuevas tienen valor por defecto; en producción las exige
+  // `exigirEntornoDeProduccion` al crear la aplicación (esta función solo lee y valida el formato).
   const conDefectos = limpio.NODE_ENV === 'development' || limpio.NODE_ENV === 'test';
   const pinPepper = limpio.PIN_PEPPER ?? (conDefectos ? PIN_PEPPER_LOCAL : undefined);
   if (typeof limpio.PIN_PEPPER === 'string') validarPinPepper(limpio.PIN_PEPPER, problemas);
@@ -119,4 +127,27 @@ export function cargarEntorno(env: NodeJS.ProcessEnv = process.env): Entorno {
 
   if (problemas.length > 0 || !resultado.success) throw new EntornoInvalidoError(problemas);
   return { ...resultado.data, PIN_PEPPER: pinPepper, ORIGENES_PERMITIDOS: origenes };
+}
+
+/**
+ * Lo que la API exige para arrancar en producción y que `cargarEntorno` no exige al leer el entorno:
+ * `PIN_PEPPER` (sin ella no se puede calcular la huella de los PIN) y `ORIGENES_PERMITIDOS` (CORS de la
+ * PWA). Con `development` y `test` tienen valor por defecto. `crearAplicacion` la llama antes de
+ * construir nada; lanza `EntornoInvalidoError` con todo lo que falte.
+ */
+export function exigirEntornoDeProduccion(entorno: Entorno): void {
+  if (entorno.NODE_ENV !== 'production') return;
+  const problemas: string[] = [];
+  if (entorno.PIN_PEPPER === undefined) {
+    problemas.push(
+      'PIN_PEPPER es obligatoria en producción (base64, al menos 32 bytes): sin ella no se puede ' +
+        'calcular la huella de los PIN',
+    );
+  }
+  if (entorno.ORIGENES_PERMITIDOS.length === 0) {
+    problemas.push(
+      'ORIGENES_PERMITIDOS es obligatoria en producción (orígenes de la PWA separados por coma)',
+    );
+  }
+  if (problemas.length > 0) throw new EntornoInvalidoError(problemas);
 }

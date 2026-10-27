@@ -24,4 +24,9 @@ export interface Principal {
   /** Equipo y equipo recordado de la sesión (en sesiones PIN y de contraseña ya recordadas). */
   equipoId: string | null;
   equipoRecordadoId: string | null;
+  /**
+   * La contraseña es temporal (alta o restablecimiento): toda ruta salvo `GET /sesion`,
+   * `PUT /sesion/contrasena` y `DELETE /sesion` responde 403 `CAMBIO_CONTRASENA_REQUERIDO` (criterio 15).
+   */
+  debeCambiarContrasena: boolean;
 }

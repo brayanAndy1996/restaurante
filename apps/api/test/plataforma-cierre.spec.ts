@@ -1,5 +1,7 @@
 // Criterio 32b (pruebas del desarrollador, complementan las protegidas de aislamiento/): `fn` no puede
-// cerrar la transacción de plataforma por ninguna vía, y `consultar` es de solo lectura.
+// cerrar la transacción de plataforma por ninguna vía, y `consultar` es de solo lectura. Desde la historia
+// 002 la auditoría de plataforma es la tabla `auditoria` (con `origen = 'plataforma'` y el actor de texto en
+// `actor_sistema`).
 import type { INestApplication } from '@nestjs/common';
 import type { Client } from 'pg';
 import type { Sequelize } from 'sequelize';
@@ -52,7 +54,7 @@ async function nombreActual(): Promise<string> {
 
 async function auditorias(actor: string): Promise<number> {
   const { rows } = await admin.query<{ n: string }>(
-    'SELECT count(*)::text AS n FROM auditoria_plataforma WHERE actor = $1',
+    "SELECT count(*)::text AS n FROM auditoria WHERE origen = 'plataforma' AND actor_sistema = $1",
     [actor],
   );
   return Number(rows[0]!.n);

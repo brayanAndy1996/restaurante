@@ -13,12 +13,14 @@ import {
 import { SinEmpresa } from '../../nucleo/contexto-empresa';
 import { noImplementado } from '../../nucleo/errores';
 import { PipeUuid, PipeZod } from '../../nucleo/errores/pipes';
+import { PermiteContrasenaTemporal } from './decoradores';
 
 /** Sesión actual de quien llama y sus equipos recordados. Lógica en las tareas T12 y T33. */
 @Controller('sesion')
 export class SesionController {
-  /** 200 `sesionRespuesta`. */
+  /** 200 `sesionRespuesta`. También con contraseña temporal. */
   @Get()
+  @PermiteContrasenaTemporal()
   async actual(): Promise<SesionRespuesta> {
     return noImplementado();
   }
@@ -37,6 +39,7 @@ export class SesionController {
    */
   @Put('contrasena')
   @SinEmpresa()
+  @PermiteContrasenaTemporal()
   @HttpCode(204)
   async cambiarContrasena(
     @Body(new PipeZod(cambiarContrasenaEntradaSchema)) _entrada: CambiarContrasenaEntrada,
@@ -44,8 +47,9 @@ export class SesionController {
     return noImplementado();
   }
 
-  /** 204: cierra la sesión y el token deja de valer. */
+  /** 204: cierra la sesión y el token deja de valer. También con contraseña temporal. */
   @Delete()
+  @PermiteContrasenaTemporal()
   @HttpCode(204)
   async salir(): Promise<void> {
     return noImplementado();

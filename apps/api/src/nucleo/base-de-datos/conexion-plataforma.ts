@@ -24,6 +24,8 @@ import {
 } from './consultas-sin-empresa';
 import type { OpcionesSinEmpresa } from './consultas-sin-empresa';
 import { contieneControlDeTransaccion, mencionaContextoDeEmpresa } from './control-transaccion';
+import { argumentosDeActor, type ActorTransaccion } from '../contexto-empresa/actor';
+import { SQL_FIJAR_ACTOR } from '../fijar-contexto';
 import { crearSequelize } from './crear-sequelize';
 import { ConsultaProhibidaError } from './errores';
 import { estadoActual } from './estado-operacion';
@@ -59,7 +61,10 @@ export class ConexionPlataforma {
   readonly sequelize: Sequelize;
   private readonly autorizadas = new WeakSet<Transaction>();
   private readonly cerrando = new WeakSet<Transaction>();
+  private readonly conActor = new WeakSet<Transaction>();
   private readonly cola = new ColaPorTransaccion();
+  /** `sequelize.query` original, sin la guarda: solo lo usa `fijarActor` con el texto exacto del actor. */
+  private readonly consultarDirecto: (sql: unknown, opciones?: unknown) => Promise<unknown>;
 
   constructor(url: string) {
     this.sequelize = crearSequelize({
@@ -67,7 +72,37 @@ export class ConexionPlataforma {
       poolMax: POOL_PLATAFORMA,
       aplicacion: 'restaurante-plataforma',
     });
+    this.consultarDirecto = this.sequelize.query.bind(this.sequelize) as (
+      sql: unknown,
+      opciones?: unknown,
+    ) => Promise<unknown>;
     this.instalarGuarda();
+  }
+
+  /**
+   * Fija el actor de la transacción de la operación en curso (historia 002, criterio 117), una sola vez:
+   * la base rechaza una segunda fijación. Es la única vía: la guarda rechaza toda mención de la función
+   * que fija el actor dentro de `fn` (como las de la empresa, criterio 38e), y este método manda la
+   * sentencia fija por la instancia sin guarda. Debe llamarse al empezar la operación.
+   */
+  async fijarActor(transaccion: Transaction, actor: ActorTransaccion): Promise<void> {
+    if (!estadoActual()?.plataforma) throw new OperacionPlataformaAusenteError();
+    const interna = transaccion as TransaccionInterna;
+    if (!this.autorizadas.has(transaccion) || interna.finished) {
+      throw new OperacionPlataformaAusenteError();
+    }
+    if (this.conActor.has(transaccion)) {
+      throw new Error('El actor de la transacción de plataforma ya está fijado');
+    }
+    const argumentos = argumentosDeActor(actor);
+    this.conActor.add(transaccion);
+    await this.cola.ejecutar(transaccion, () =>
+      this.consultarDirecto(SQL_FIJAR_ACTOR, {
+        bind: argumentos,
+        transaction: transaccion,
+        raw: true,
+      }),
+    );
   }
 
   /**
@@ -165,7 +200,8 @@ export class ConexionPlataforma {
         throw new OperacionPlataformaAusenteError();
       }
       // Criterio 38e: la misma lista de nombres que la guarda de la API (set_config, pg_settings,
-      // ts_*, *_to_xml*, app.empresa_id, fijar_contexto_empresa sin excepción, pg_stat_activity,
+      // ts_*, *_to_xml*, app.empresa_id, fijar_contexto_empresa y fijar_contexto_actor sin excepción
+      // (el actor lo fija `fijarActor`, que no pasa por aquí), empresa_de_usuario, pg_stat_activity,
       // señales, objetos grandes…) y el rechazo de `U&"…"`. Aquí no hay lista blanca de sentencias,
       // pero `DO`, `PREPARE` y `SET` (las vías para ejecutar SQL dinámico sin nombrarlo) ya se
       // rechazaron arriba. Es un `ConsultaProhibidaError`, no un error de la base.

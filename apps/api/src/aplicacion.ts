@@ -2,7 +2,7 @@ import { NestFactory } from '@nestjs/core';
 import type { INestApplication, LogLevel, Type } from '@nestjs/common';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import { AppModule } from './app.module';
-import { cargarEntorno } from './config/entorno';
+import { cargarEntorno, exigirEntornoDeProduccion } from './config/entorno';
 import type { Reloj } from './nucleo/reloj';
 import { LIMITE_CUERPO_BYTES, traducirErrorDeCuerpo } from './nucleo/errores/filtro-global-errores';
 
@@ -34,6 +34,7 @@ export async function crearAplicacion(
   opciones: OpcionesAplicacion = {},
 ): Promise<INestApplication> {
   const entorno = cargarEntorno(process.env); // falla antes de construir nada
+  exigirEntornoDeProduccion(entorno); // en producción exige PIN_PEPPER y ORIGENES_PERMITIDOS
   const app = await NestFactory.create<NestExpressApplication>(
     AppModule.registrar({ controladoresExtra: opciones.controladoresExtra, reloj: opciones.reloj }),
     {
@@ -45,6 +46,24 @@ export async function crearAplicacion(
       bodyParser: false,
     },
   );
+  // CORS solo para los orígenes de la PWA (`ORIGENES_PERMITIDOS`), sin cookies: la autenticación va en
+  // `Authorization` y en `X-Equipo` (historia 002). Con la lista vacía (solo en pruebas) no se permite
+  // ningún origen de navegador.
+  app.enableCors({
+    origin: entorno.ORIGENES_PERMITIDOS,
+    credentials: false,
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    allowedHeaders: [
+      'Authorization',
+      'Content-Type',
+      'X-Equipo',
+      'X-Actividad',
+      'X-Autorizacion',
+      'Idempotency-Key',
+    ],
+    exposedHeaders: ['Retry-After'],
+    maxAge: 600,
+  });
   // Un cuerpo mayor a 100 KB responde 413 CUERPO_DEMASIADO_GRANDE (lo traduce el filtro global).
   app.useBodyParser('json', { limit: LIMITE_CUERPO_BYTES });
   app.useBodyParser('urlencoded', { limit: LIMITE_CUERPO_BYTES, extended: true });

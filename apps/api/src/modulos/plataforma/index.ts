@@ -5,6 +5,7 @@ export { SucursalService } from './sucursal.service';
 export { SucursalesController } from './sucursales.controller';
 export { PlataformaModule } from './plataforma.module';
 export type {
+  ActorPlataforma,
   AuditoriaPlataformaEntrada,
   EmpresaResumen,
   OpcionesOperacionPlataforma,

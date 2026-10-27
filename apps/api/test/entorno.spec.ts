@@ -4,12 +4,22 @@ import {
   ORIGENES_PERMITIDOS_LOCAL,
   PIN_PEPPER_LOCAL,
   cargarEntorno,
+  exigirEntornoDeProduccion,
 } from '../src/config/entorno';
 
 const base = {
   NODE_ENV: 'development',
   DATABASE_URL: 'postgres://restaurante_api:x@localhost:5432/restaurante_test',
   DATABASE_PLATAFORMA_URL: 'postgres://restaurante_plataforma:x@localhost:5432/restaurante_test',
+};
+
+const pepperValido = Buffer.alloc(32, 7).toString('base64');
+
+/** Lo mínimo para arrancar en producción: desde la historia 002 `PIN_PEPPER` y `ORIGENES_PERMITIDOS` son obligatorias. */
+const baseProduccion = {
+  ...base,
+  PIN_PEPPER: pepperValido,
+  ORIGENES_PERMITIDOS: 'https://app.ejemplo.pe',
 };
 
 describe('cargarEntorno', () => {
@@ -35,11 +45,36 @@ describe('cargarEntorno', () => {
     }
   });
 
-  it('acepta EMPRESA_POR_HEADER=habilitado en development y test', () => {
-    for (const NODE_ENV of ['development', 'test']) {
-      expect(cargarEntorno({ ...base, NODE_ENV, EMPRESA_POR_HEADER: 'habilitado' })).toMatchObject({
-        EMPRESA_POR_HEADER: 'habilitado',
-      });
+  it('acepta EMPRESA_POR_HEADER=habilitado solo con NODE_ENV=test (criterio 7 de 002)', () => {
+    expect(
+      cargarEntorno({ ...base, NODE_ENV: 'test', EMPRESA_POR_HEADER: 'habilitado' }),
+    ).toMatchObject({ EMPRESA_POR_HEADER: 'habilitado' });
+  });
+
+  it('rechaza EMPRESA_POR_HEADER=habilitado con development y explica que solo vale con test', () => {
+    const intento = () =>
+      cargarEntorno({ ...base, NODE_ENV: 'development', EMPRESA_POR_HEADER: 'habilitado' });
+    expect(intento).toThrow(EntornoInvalidoError);
+    expect(intento).toThrow(/EMPRESA_POR_HEADER=habilitado solo vale con NODE_ENV=test/);
+  });
+
+  it('rechaza EMPRESA_POR_HEADER=habilitado sin NODE_ENV válido', () => {
+    expect(() =>
+      cargarEntorno({ ...base, NODE_ENV: undefined, EMPRESA_POR_HEADER: 'habilitado' }),
+    ).toThrow(/EMPRESA_POR_HEADER/);
+  });
+
+  it('EMPRESA_POR_HEADER=deshabilitado vale en cualquier entorno', () => {
+    for (const NODE_ENV of ['development', 'test', 'production']) {
+      expect(
+        cargarEntorno({
+          ...base,
+          NODE_ENV,
+          EMPRESA_POR_HEADER: 'deshabilitado',
+          PIN_PEPPER: pepperValido,
+          ORIGENES_PERMITIDOS: 'http://localhost:5173',
+        }),
+      ).toMatchObject({ EMPRESA_POR_HEADER: 'deshabilitado' });
     }
   });
 
@@ -72,10 +107,31 @@ describe('PIN_PEPPER y ORIGENES_PERMITIDOS (historia 002)', () => {
     expect(Buffer.from(PIN_PEPPER_LOCAL, 'base64').length).toBeGreaterThanOrEqual(32);
   });
 
-  it('el valor por defecto de PIN_PEPPER no se aplica en producción (será obligatoria desde T10)', () => {
+  it('el valor por defecto de PIN_PEPPER y de ORIGENES_PERMITIDOS no se aplica en producción', () => {
     const entorno = cargarEntorno({ ...base, NODE_ENV: 'production' });
     expect(entorno.PIN_PEPPER).toBeUndefined();
     expect(entorno.ORIGENES_PERMITIDOS).toEqual([]);
+  });
+
+  it('en producción PIN_PEPPER y ORIGENES_PERMITIDOS son obligatorias al arrancar (exigirEntornoDeProduccion)', () => {
+    const sinNada = () =>
+      exigirEntornoDeProduccion(cargarEntorno({ ...base, NODE_ENV: 'production' }));
+    expect(sinNada).toThrow(EntornoInvalidoError);
+    expect(sinNada).toThrow(/PIN_PEPPER es obligatoria en producción/);
+    expect(sinNada).toThrow(/ORIGENES_PERMITIDOS es obligatoria en producción/);
+    const sinOrigenes = () =>
+      exigirEntornoDeProduccion(
+        cargarEntorno({ ...base, NODE_ENV: 'production', PIN_PEPPER: pepperValido }),
+      );
+    expect(sinOrigenes).toThrow(/ORIGENES_PERMITIDOS es obligatoria/);
+    expect(sinOrigenes).not.toThrow(/PIN_PEPPER es obligatoria/);
+    expect(() => exigirEntornoDeProduccion(cargarEntorno(baseProduccion))).not.toThrow();
+  });
+
+  it('con development y test no exige nada más: usan los valores por defecto', () => {
+    for (const NODE_ENV of ['development', 'test']) {
+      expect(() => exigirEntornoDeProduccion(cargarEntorno({ ...base, NODE_ENV }))).not.toThrow();
+    }
   });
 
   it('acepta los valores explícitos, también en producción', () => {
@@ -122,13 +178,6 @@ describe('PIN_PEPPER y ORIGENES_PERMITIDOS (historia 002)', () => {
         /ORIGENES_PERMITIDOS/,
       );
     }
-  });
-
-  it('no cambia la regla de EMPRESA_POR_HEADER (se cambia en la fase C)', () => {
-    expect(
-      cargarEntorno({ ...base, NODE_ENV: 'development', EMPRESA_POR_HEADER: 'habilitado' })
-        .EMPRESA_POR_HEADER,
-    ).toBe('habilitado');
   });
 });
 

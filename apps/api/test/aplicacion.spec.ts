@@ -51,7 +51,7 @@ describe('crearAplicacion', () => {
     expect(res.body).toMatchObject({ codigo: 'NO_ENCONTRADO' });
   });
 
-  it('las rutas existen: sin empresa resuelta las de empresa responden 401 y /health responde', async () => {
+  it('las rutas existen: sin sesión las de empresa responden 401 NO_AUTENTICADO y /health responde', async () => {
     fijarEntornoDePrueba({ empresaPorHeader: false });
     const app = await crear();
     for (const [metodo, ruta] of [
@@ -61,7 +61,9 @@ describe('crearAplicacion', () => {
     ] as const) {
       const res = await request(app.getHttpServer())[metodo](ruta);
       expect(res.status, `${metodo} ${ruta}`).toBe(401);
-      expect(res.body).toMatchObject({ codigo: 'EMPRESA_NO_RESUELTA' });
+      // Desde la historia 002 las rutas están protegidas por defecto: sin sesión (y sin la cabecera de
+      // prueba habilitada) el código es NO_AUTENTICADO, no EMPRESA_NO_RESUELTA.
+      expect(res.body).toMatchObject({ codigo: 'NO_AUTENTICADO' });
     }
     const salud = await request(app.getHttpServer()).get('/health');
     expect(salud.status).toBe(200);

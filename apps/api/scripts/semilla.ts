@@ -1,6 +1,6 @@
 // pnpm db:semilla  ->  dos empresas de demostración. Idempotente: si una ya existe (mismo nombre), no hace nada.
 // Usa la vía de plataforma (PlataformaEmpresasService) con el actor `semilla`, así que deja su
-// fila en auditoria_plataforma. Toma DATABASE_URL y DATABASE_PLATAFORMA_URL del entorno o del .env;
+// fila en `auditoria` (origen plataforma, actor de sistema `semilla`, que también es el actor de trazabilidad). Toma DATABASE_URL y DATABASE_PLATAFORMA_URL del entorno o del .env;
 // si faltan, las deriva de DATABASE_ADMIN_URL (roles de la aplicación, base `restaurante`).
 import 'reflect-metadata';
 import type { RegistrarEmpresaEntrada } from '@restaurante/contratos';

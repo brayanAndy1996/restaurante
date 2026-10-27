@@ -1,17 +1,24 @@
 /**
- * Consultas que pueden correr sin contexto de empresa: la verificación de salud y la verificación
- * de roles al arrancar. Se marcan con la opción `{ sinEmpresa: 'salud' | 'verificacion-roles' }`.
+ * Consultas que pueden correr sin contexto de empresa: la verificación de salud, la verificación de
+ * roles al arrancar y la búsqueda de la empresa de un usuario al ingresar. Se marcan con la opción
+ * `{ sinEmpresa: 'salud' | 'verificacion-roles' | 'autenticacion' }`.
  *
  * La marca no es un permiso general: cada motivo solo acepta un texto SQL exacto (definido aquí), sin
- * parámetros, sin transacción y fuera de cualquier contexto de empresa u operación de plataforma.
+ * transacción y fuera de cualquier contexto de empresa u operación de plataforma; `salud` y
+ * `verificacion-roles` sin parámetros y `autenticacion` con exactamente uno (el nombre de usuario).
  * Marcar otra consulta con `sinEmpresa` la hace fallar igual que si no tuviera contexto. Las dos
- * consultas leen solo el catálogo de PostgreSQL o devuelven una constante, así que aunque alguien
- * las ejecute no obtienen datos de ninguna empresa.
+ * primeras leen solo el catálogo de PostgreSQL o devuelven una constante; la tercera llama a
+ * `empresa_de_usuario`, que solo responde por un nombre exacto (no se puede enumerar: el esquema
+ * `autenticacion` no tiene `USAGE` para la API).
  */
-import type { QueryOptions } from 'sequelize';
+import { QueryTypes, type QueryOptions, type Sequelize } from 'sequelize';
+import { NOMBRE_FUNCION_EMPRESA_DE_USUARIO } from '../fijar-contexto';
 import { estadoActual } from './estado-operacion';
 
-export type MotivoSinEmpresa = 'salud' | 'verificacion-roles';
+export type MotivoSinEmpresa = 'salud' | 'verificacion-roles' | 'autenticacion';
+
+/** Búsqueda de la empresa de un usuario por su nombre (criterio 89). Lleva un parámetro: el nombre. */
+export const SQL_EMPRESA_DE_USUARIO = `SELECT ${NOMBRE_FUNCION_EMPRESA_DE_USUARIO}($1) AS empresa_id`;
 
 export const SQL_SALUD = 'SELECT 1 AS ok';
 
@@ -75,7 +82,11 @@ SELECT r.rolname AS rol,
 const SQL_POR_MOTIVO: Record<MotivoSinEmpresa, string> = {
   salud: SQL_SALUD,
   'verificacion-roles': SQL_VERIFICACION_ROLES,
+  autenticacion: SQL_EMPRESA_DE_USUARIO,
 };
+
+/** Motivos cuya consulta lleva un único parámetro de texto; los demás no llevan ninguno. */
+const MOTIVOS_CON_PARAMETRO: readonly MotivoSinEmpresa[] = ['autenticacion'];
 
 /** Opciones de una consulta marcada como excepción. */
 export interface OpcionesSinEmpresa extends QueryOptions {
@@ -96,7 +107,13 @@ export function esConsultaSinEmpresaValida(
   const esperado = SQL_POR_MOTIVO[motivo];
   if (esperado === undefined || texto === undefined || texto.trim() !== esperado) return false;
   if (opciones.transaction !== undefined && opciones.transaction !== null) return false;
-  if (opciones.bind !== undefined || opciones.replacements !== undefined) return false;
+  if (opciones.replacements !== undefined) return false;
+  if (MOTIVOS_CON_PARAMETRO.includes(motivo)) {
+    const { bind } = opciones;
+    if (!Array.isArray(bind) || bind.length !== 1 || typeof bind[0] !== 'string') return false;
+  } else if (opciones.bind !== undefined) {
+    return false;
+  }
   // Ni dentro de un contexto de empresa ni de una operación de plataforma.
   return estadoActual() === undefined;
 }
@@ -121,4 +138,21 @@ export function esControlDeTransaccion(texto: string | undefined): boolean {
   return /^(START TRANSACTION|COMMIT|ROLLBACK|SET TRANSACTION ISOLATION LEVEL (READ COMMITTED|READ UNCOMMITTED|REPEATABLE READ|SERIALIZABLE));?$/i.test(
     texto,
   );
+}
+
+/**
+ * Empresa del usuario con ese nombre de usuario (sin distinguir mayúsculas ASCII), o `null` si no existe.
+ * Corre fuera de todo contexto de empresa, con la consulta fija marcada `autenticacion`; la API no puede
+ * enumerar nombres: solo la función de la base responde, y solo por un nombre exacto (criterio 89).
+ */
+export async function buscarEmpresaDeUsuario(
+  conexion: Sequelize,
+  nombreUsuario: string,
+): Promise<string | null> {
+  const filas = await conexion.query<{ empresa_id: string | null }>(SQL_EMPRESA_DE_USUARIO, {
+    sinEmpresa: 'autenticacion',
+    bind: [nombreUsuario],
+    type: QueryTypes.SELECT,
+  } as OpcionesSinEmpresa & { type: QueryTypes.SELECT });
+  return filas[0]?.empresa_id ?? null;
 }

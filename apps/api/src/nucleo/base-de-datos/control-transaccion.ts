@@ -11,7 +11,11 @@
  * `UPDATE …; COMMIT` en un mismo texto sí. Si el texto tiene un literal o comentario sin cerrar, se
  * rechaza (no se puede saber dónde termina).
  */
-import { NOMBRE_FUNCION_FIJAR_CONTEXTO } from '../fijar-contexto';
+import {
+  NOMBRE_FUNCION_EMPRESA_DE_USUARIO,
+  NOMBRE_FUNCION_FIJAR_ACTOR,
+  NOMBRE_FUNCION_FIJAR_CONTEXTO,
+} from '../fijar-contexto';
 
 const PALABRAS_DE_CONTROL = new Set([
   'COMMIT',
@@ -221,8 +225,9 @@ export function contieneControlDeTransaccion(texto: string): boolean {
  *
  * - Cambiar el contexto o ejecutar SQL armado como texto: `set_config`, `pg_settings` (un `UPDATE`
  *   equivale a `set_config`), `ts_rewrite`, `ts_stat` y la fijación del contexto
- *   (`fijar_contexto_empresa`, salvo la fijación propia de `ContextoEmpresa`, que la guarda reconoce
- *   por su origen antes de llegar aquí).
+ *   (`fijar_contexto_empresa` y `fijar_contexto_actor`, salvo la fijación propia de `ContextoEmpresa`,
+ *   que la guarda reconoce por su origen antes de llegar aquí) y la búsqueda del usuario al ingresar
+ *   (`empresa_de_usuario`, que solo corre fuera de todo contexto con su consulta fija).
  * - Texto de consultas y sesiones ajenas (38b y 38c): `pg_stat_activity`, `pg_stat_get_activity`,
  *   `pg_cancel_backend`, `pg_terminate_backend` y `pg_signal_backend`.
  * - Objetos grandes (38d): `pg_largeobject`, `pg_largeobject_metadata`, `loread` y `lowrite`.
@@ -236,6 +241,8 @@ export const NOMBRES_PROHIBIDOS: readonly string[] = [
   'ts_rewrite',
   'ts_stat',
   NOMBRE_FUNCION_FIJAR_CONTEXTO,
+  NOMBRE_FUNCION_FIJAR_ACTOR,
+  NOMBRE_FUNCION_EMPRESA_DE_USUARIO,
   'pg_stat_activity',
   'pg_stat_get_activity',
   'pg_cancel_backend',
