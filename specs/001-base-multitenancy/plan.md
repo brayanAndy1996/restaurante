@@ -77,7 +77,7 @@ Petición HTTP
 
 - El token `RESOLUTOR_EMPRESA` se registra en `ContextoEmpresaModule` según la configuración: `ResolutorEmpresaPorCabecera` si `NODE_ENV` es `development` o `test` y `EMPRESA_POR_HEADER=habilitado`; si no, `ResolutorEmpresaNulo`.
 - La validación del entorno rechaza `EMPRESA_POR_HEADER=habilitado` con `NODE_ENV=production`, y además el proveedor vuelve a comprobar `NODE_ENV` al construirse (dos barreras).
-- La historia 002 agrega `ResolutorEmpresaSesion`, que lee la empresa que su guard de autenticación dejó en la petición, y lo registra en el mismo token. Nada más cambia en el interceptor ni en los servicios.
+- La historia 002 agrega `ResolutorEmpresaSesion`, que lee la empresa que su guard de autenticación dejó en la petición, y lo registra en el mismo token. Nada más cambia en el interceptor ni en los servicios. Por decisión del usuario, desde 002 `ResolutorEmpresaPorCabecera` queda solo para las pruebas automáticas: la condición de registro pasa a ser únicamente `NODE_ENV=test`.
 
 ### Operaciones de plataforma
 
@@ -91,13 +91,16 @@ Petición HTTP
 
 Así la auditoría y el cambio son atómicos: no hay cambio sin auditoría ni auditoría de un cambio que no ocurrió. Escribirla al final permite registrar el `empresa_id` recién creado.
 
-`PlataformaEmpresasService.registrarEmpresa` valida la entrada con `registrarEmpresaEntradaSchema` antes de abrir la transacción, inserta empresa, emisores y sucursales con la transacción explícita, y traduce las violaciones de unicidad (RUC ya registrado, código repetido) a errores de validación con el campo.
+`PlataformaEmpresasService.registrarEmpresa` valida la entrada con `registrarEmpresaEntradaSchema` antes de abrir la transacción, inserta empresa, emisores y sucursales con la transacción explícita, y traduce las violaciones de unicidad (RUC ya registrado, código repetido) a errores de validación con el campo. `agregarSucursal` valida con `sucursalEntradaSchema` de la misma forma. Ninguno de los dos crea la suscripción (llega con RF-03).
+
+El `actor` de la auditoría es texto libre (`semilla`, `cli:<nombre>`) hasta que 002 cree el superadministrador.
 
 ### Sucursales (contexto de empresa)
 
 - `SucursalService.obtener(id)` usa `findByPk`: con RLS, una sucursal de otra empresa no aparece y se trata igual que una inexistente.
 - `configurar(id, cambios)`: valida con `sucursalConfigurarEntradaSchema`; si trae `emisorId`, comprueba que el emisor se vea en el contexto actual (si no, `EMISOR_INVALIDO`); actualiza; traduce `23505` (unicidad) a 409 `CONFLICTO` y `23503` (llave foránea compuesta) a 422 `EMISOR_INVALIDO`.
-- `horaCorte` se guarda como `time` y se devuelve como `HH:MM`.
+- `horaCorte` se guarda como `time` y se devuelve como `HH:MM`. En el alta es opcional: `sucursalEntradaSchema` aplica `.default('05:00')`, y la columna `hora_corte` lleva `DEFAULT '05:00'` para que también la cubra una inserción por SQL sin la columna (criterio 35b). En `PATCH` sigue siendo opcional sin valor por defecto: si no viene, no cambia; no acepta `null`.
+- El cambio de `emisorId` por `PATCH` se permite sin condiciones en esta historia; la historia de facturación agregará el bloqueo cuando la sucursal ya haya emitido comprobantes (consultando al módulo de facturación por su servicio, no sus tablas).
 
 ### Salud y verificación de arranque
 
@@ -149,6 +152,9 @@ Así la auditoría y el cambio son atómicos: no hay cambio sin auditoría ni au
 | Transacción por petición, también en lecturas | Fijar el contexto con `SET` de sesión al tomar la conexión del pool | `set_config(..., true)` muere con la transacción: una conexión devuelta al pool no puede llevar el contexto a otra petición |
 | La tasa de IGV con vigencia va en la historia de cálculo de montos y facturación | Crear ahora `emisor_tasa_igv` | Nada la usa aquí; elegir la tasa de una fecha es cálculo de montos (ruta crítica, con sus propias pruebas primero); la tasa aplicable está pendiente con el contador; agregarla luego es una tabla nueva sin reescribir datos |
 | Sin endpoints HTTP de plataforma en 001; servicio + semilla | Endpoints de alta de empresa sin autenticación | Un endpoint de alta sin superadministrador autenticado sería una puerta abierta. Llegan con 002 |
+| `restaurante_api` puede insertar emisores y sucursales de su propia empresa (criterio 16b), sin endpoint HTTP de creación en 001 | Reservar la creación al rol de plataforma | Decisión del usuario: el Administrador también creará emisores y sucursales de su empresa desde 002; la base ya lo permite bajo RLS y la regla de rol se aplica en la API |
+| Hora de corte por defecto `05:00` en el esquema zod del alta y en la columna | Hora de corte obligatoria sin valor por defecto | Decisión del usuario; el `DEFAULT` en la columna mantiene la regla también fuera de la API (semilla, SQL directo) |
+| `auditoria_plataforma` como tabla propia en 001 | Crear ya la auditoría general | La auditoría general nace con el módulo de seguridad en 002; por decisión del usuario, ahí se unirá `auditoria_plataforma` |
 | Endpoints de sucursal reales, cerrados en producción por el resolutor nulo | Solo controladores de prueba | Prueban el camino completo (interceptor, CLS, pool) con código de producción, y en producción responden 401 hasta 002 |
 | Sequelize 6 con proveedores propios | `@nestjs/sequelize` + `sequelize-typescript` | Control directo de dos instancias, sus hooks y el CLS; menos magia en la parte más delicada |
 | Migraciones con umzug y SQL explícito | `sequelize-cli` y `queryInterface` | La CLI de Sequelize está pensada para JavaScript; RLS, políticas y privilegios necesitan SQL de todos modos |
@@ -160,7 +166,7 @@ Así la auditoría y el cambio son atómicos: no hay cambio sin auditoría ni au
 
 - `202610270001-plataforma-base.ts`:
   - función `empresa_actual()` y `GRANT EXECUTE` a `restaurante_api`;
-  - tablas `empresa`, `emisor`, `sucursal`, `auditoria_plataforma` con sus restricciones, índices y llaves compuestas;
+  - tablas `empresa`, `emisor`, `sucursal`, `auditoria_plataforma` con sus restricciones, índices y llaves compuestas (incluido `sucursal.hora_corte` con `DEFAULT '05:00'`);
   - `ENABLE` y `FORCE ROW LEVEL SECURITY` en las cuatro;
   - políticas `aislamiento_empresa` (`TO restaurante_api`) y `acceso_plataforma` (`TO restaurante_plataforma`);
   - privilegios de la tabla de permisos de `spec.md`;
@@ -177,4 +183,5 @@ Así la auditoría y el cambio son atómicos: no hay cambio sin auditoría ni au
 - **Fuga por mensajes de error:** las violaciones de unicidad o de llave foránea podrían revelar datos de otra empresa. Mitigación: el filtro de errores nunca devuelve el detalle de PostgreSQL; las respuestas 404 y 422 no distinguen entre inexistente y ajeno.
 - **Rendimiento de la RLS** con la función en la política. Mitigación: initplan con `(SELECT empresa_actual())` e índice por `empresa_id`; a 30 empresas el costo es despreciable.
 - **TDD sin código previo:** las pruebas protegidas no compilan si no existen los contratos. Mitigación: la fase A de `tasks.md` deja el monorepo, la preparación de la base de pruebas y las firmas públicas (que lanzan "no implementado") antes de que escriba el test-writer.
+- **Unión de `auditoria_plataforma` con la auditoría general en 002.** Habrá que migrar las filas existentes y convertir el `actor` de texto libre al id del superadministrador, sin perder la inmutabilidad (los triggers impiden `UPDATE` y `DELETE`). Mitigación: 002 decide si copia las filas a la tabla nueva conservando el actor original como texto o si mantiene la tabla actual como histórico de solo lectura; en 001 no se hace nada que lo complique.
 - **Diferencias entre el PostgreSQL de Docker, el nativo de la nube y el administrado de producción.** Mitigación: el mismo script de preparación en todos, y ningún atributo especial de rol.

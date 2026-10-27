@@ -1,8 +1,8 @@
 # 001 · Base del proyecto: monorepo, multitenancy y aislamiento entre empresas
 
 - **Historias y requerimientos:** RF-01 y RF-02 (modelo de datos y servicios; sus pantallas y endpoints de plataforma llegan con la autenticación), RNF-06, RNF-17. Relacionadas: HU-01 (parcial: la suscripción de la sucursal es RF-03), RNF-09 (auditoría de las operaciones de plataforma).
-- **Ruta crítica:** sí. Implementa el aislamiento entre empresas (RLS), que es el primer punto de la lista de ruta crítica de `CLAUDE.md`.
-- **Estado:** borrador
+- **Ruta crítica:** sí (confirmado por el usuario). Implementa el aislamiento entre empresas (RLS), que es el primer punto de la lista de ruta crítica de `CLAUDE.md`.
+- **Estado:** aprobada
 
 ## Objetivo
 
@@ -46,6 +46,9 @@ Salvo que se diga otra cosa, los escenarios de aislamiento parten de dos empresa
 14. **Cambio de dueño.** Dado el contexto de A, cuando se actualiza una sucursal o un emisor de A con `empresa_id` = B, entonces la sentencia falla y la fila no cambia.
 15. **Borrado.** Dado el contexto de A, cuando se ejecuta un `DELETE` de la sucursal de B por id, y otro `DELETE` sin `WHERE` (dentro de una transacción que luego se revierte), entonces el primero afecta 0 filas y el segundo solo afecta filas de A.
 16. **Inserción ajena.** Dado el contexto de A, cuando se inserta una sucursal o un emisor con `empresa_id` = B, entonces la sentencia falla y no se crea nada.
+
+16b. **Inserción propia.** Dado `restaurante_api` conectado con el contexto de A, cuando inserta un emisor con `empresa_id` = A y luego una sucursal con `empresa_id` = A que referencia ese emisor, entonces ambas inserciones tienen éxito, las filas quedan con `empresa_id` = A y se ven en el contexto de A pero no en el de B. (La base permite a la API crear emisores y sucursales de su propia empresa; qué rol de aplicación puede hacerlo se aplica en la historia 002.)
+
 17. **Referencia cruzada.** Dado el contexto de A, cuando se inserta o actualiza una sucursal de A con `emisor_id` de un emisor de B, entonces la sentencia falla por la llave foránea compuesta, igual que con un `emisor_id` inexistente.
 18. **HTTP.** Dado el resolutor de desarrollo con la empresa A: `GET /sucursales` devuelve solo sucursales de A; `GET /sucursales/{id de B}` y `PATCH /sucursales/{id de B}` responden 404 con el mismo cuerpo que un id inexistente, y la sucursal de B no cambia; `PATCH /sucursales/{id de A}` con `emisorId` de B responde 422 `EMISOR_INVALIDO`, igual que con un emisor inexistente.
 
@@ -79,6 +82,9 @@ Salvo que se diga otra cosa, los escenarios de aislamiento parten de dos empresa
 33. Dado `actor` o `motivo` vacíos o solo con espacios, cuando se llama cualquier operación de plataforma, entonces lanza un error de validación y no se crea nada, tampoco la fila de auditoría.
 34. Dados datos inválidos (RUC con dígito verificador incorrecto, RUC repetido en la entrada, RUC ya registrado, sucursal que referencia un RUC que no está en la entrada, código de establecimiento que no tiene 4 dígitos, dos sucursales del mismo emisor con el mismo código, hora de corte o WhatsApp mal formados), cuando se llama `registrarEmpresa`, entonces lanza un error de validación que indica el campo, y no queda nada creado ni auditado.
 35. Dada una empresa existente, cuando se llaman `PlataformaEmpresasService.agregarEmisor` o `agregarSucursal`, entonces se crea el registro en esa empresa y se audita con la operación `agregar_emisor` o `agregar_sucursal`.
+
+35b. **Hora de corte por defecto.** Dada una sucursal sin `horaCorte` en la entrada de `registrarEmpresa` o de `agregarSucursal`, cuando se crea, entonces queda con hora de corte `05:00` (y `sucursalRespuesta.horaCorte` es `"05:00"`). Lo mismo ocurre si `restaurante_api`, con el contexto de A, inserta por SQL una sucursal de A sin la columna `hora_corte`. La hora de corte se puede cambiar después con `PATCH` (criterio 39).
+
 36. Dados los roles, cuando `restaurante_plataforma` intenta `UPDATE`, `DELETE` o `TRUNCATE` sobre `auditoria_plataforma`, entonces falla; y cuando `restaurante_api` intenta leer o escribir `auditoria_plataforma`, también falla.
 37. Dado el código de la API, cuando un archivo fuera de `apps/api/src/modulos/plataforma/` importa la conexión de plataforma, o un archivo distinto del servicio de contexto escribe el texto `app.empresa_id`, entonces `pnpm lint` falla.
 
@@ -107,15 +113,24 @@ Salvo que se diga otra cosa, los escenarios de aislamiento parten de dos empresa
 - Peticiones concurrentes con `Promise.all` dentro de un mismo controlador: todas usan la misma transacción y el mismo contexto.
 - Operaciones fuera de HTTP (colas, WebSockets, tareas programadas de historias futuras): deben envolver su trabajo en `ContextoEmpresa.ejecutar`; sin eso fallan por el criterio 22.
 - Mensajes de error: un 404 o 422 por un recurso de otra empresa no se distingue de uno inexistente (mismo código, mismo mensaje).
-- Unicidad global del RUC: un intento de registrar un RUC que ya usa otra empresa revela que el RUC existe en el sistema. Solo la plataforma registra emisores en esta historia, y el padrón de RUC es público, así que se acepta.
+- Unicidad global del RUC: un intento de registrar un RUC que ya usa otra empresa revela que el RUC existe en el sistema. En esta historia solo la plataforma registra emisores, pero desde la historia 002 el Administrador de una empresa también podrá hacerlo, así que el aviso le llegará a un usuario de empresa. Como el padrón de RUC es público, se acepta (decisión del usuario).
 - `DELETE` de una sucursal o emisor referenciado por otras filas: falla por llave foránea; esta historia no ofrece borrados por la API.
 - Horario con tramos que cruzan la medianoche (por ejemplo, 18:00 a 02:00): se acepta; `hasta` menor que `desde` significa el día siguiente. Un tramo con `desde` igual a `hasta`, o dos tramos solapados el mismo día, se rechazan.
+- Sucursal sin `horaCorte` en el alta: queda con `05:00` (criterio 35b). Una `horaCorte` enviada pero mal formada sigue siendo un error de validación (criterios 34 y 40).
+- Sucursal sin WhatsApp: se acepta; el campo es opcional y en `PATCH` se puede quitar con `null`.
+- Cambio de emisor de una sucursal: en esta historia se permite siempre (criterio 39), porque todavía no existen comprobantes.
 
 ## Reglas de negocio aplicables
 
 - Una empresa tiene uno o varios emisores (RUC); cada sucursal pertenece a una empresa y a uno de sus emisores, y tiene su código de establecimiento SUNAT (RF-01, RF-02, HU-01).
+- Los emisores y las sucursales los crean el superadministrador y también el Administrador, este último solo dentro de su propia empresa (decisión del usuario). La regla de rol se aplica en la historia 002; en esta historia la base ya permite a la API crear emisores y sucursales de su propia empresa (criterio 16b).
+- El RUC tiene 11 dígitos, prefijo 10, 15, 16, 17 o 20 y dígito verificador correcto. Cada RUC pertenece a una sola empresa del sistema (decisión del usuario). No se valida todavía la relación entre el régimen Nuevo RUS y el RUC de persona natural.
 - El emisor guarda su régimen tributario, que define qué comprobantes puede emitir (en el Nuevo RUS, solo boletas). En esta historia solo se guarda; la restricción se aplica en la historia de facturación (RF-65).
-- Cada sucursal tiene una hora de corte del día operativo; las ventas de madrugada cuentan para el día anterior (documento de diseño). Supuesto de esta especificación: a la hora de corte exacta empieza el nuevo día.
+- No se puede cambiar el emisor (RUC) de una sucursal que ya emitió comprobantes (decisión del usuario). El bloqueo lo implementa la historia de facturación; en esta historia el cambio se permite porque aún no hay comprobantes.
+- El nombre de la sucursal no se repite dentro de la empresa, sin distinguir mayúsculas.
+- El horario de la sucursal es una lista de tramos por día de la semana (varios por día), que pueden cruzar la medianoche, y puede quedar vacío. Los feriados y las excepciones por fecha quedan para más adelante.
+- El WhatsApp de la sucursal es un celular peruano (`+51 9XXXXXXXX`) y es opcional.
+- Cada sucursal tiene una hora de corte del día operativo; las ventas de madrugada cuentan para el día anterior (documento de diseño). Por defecto es `05:00` y se puede modificar; a la hora de corte exacta empieza el nuevo día (decisión del usuario).
 - Los datos de una empresa nunca se comparten con otra (RNF-06, regla de delivery sobre datos de clientes).
 - Toda operación del superadministrador queda registrada en una auditoría que no se puede modificar (RNF-09, RF-07).
 - Identificadores UUID en todas las tablas (documento de diseño).
@@ -132,7 +147,7 @@ Salvo que se diga otra cosa, los escenarios de aislamiento parten de dos empresa
   - `whatsappSchema`: celular peruano en formato E.164, `^\+519\d{8}$`.
   - `rucSchema`, `codigoEstablecimientoSchema` (`^\d{4}$`), `regimenTributarioSchema`.
   - `emisorEntradaSchema`: `{ ruc, razonSocial (1..200), regimen }`.
-  - `sucursalEntradaSchema`: `{ rucEmisor, nombre (1..100), codigoEstablecimiento, direccion (1..300), horario (opcional, por defecto []), whatsapp (opcional), horaCorte }`.
+  - `sucursalEntradaSchema`: `{ rucEmisor, nombre (1..100), codigoEstablecimiento, direccion (1..300), horario (opcional, por defecto []), whatsapp (opcional), horaCorte (opcional, por defecto '05:00') }`.
   - `registrarEmpresaEntradaSchema`: `{ nombre (1..150), emisores: emisorEntrada[] (mínimo 1), sucursales: sucursalEntrada[] (mínimo 1) }`, con RUC únicos y cada `rucEmisor` presente en `emisores`.
   - `sucursalConfigurarEntradaSchema`: parcial de `{ emisorId (uuid), nombre, codigoEstablecimiento, direccion, horario, whatsapp (o null para quitarlo), horaCorte }`, con al menos un campo.
   - `sucursalRespuestaSchema`: `{ id, empresaId, emisorId, nombre, codigoEstablecimiento, direccion, horario, whatsapp | null, horaCorte (HH:MM), creadoEn, actualizadoEn (ISO 8601) }`.
@@ -182,7 +197,7 @@ Salvo que se diga otra cosa, los escenarios de aislamiento parten de dos empresa
 ### Permisos
 
 - En esta historia no hay usuarios ni roles de aplicación (llegan con 002). Los endpoints de sucursal solo son accesibles con el resolutor por cabecera en desarrollo y pruebas; en producción responden 401 hasta que 002 instale su resolutor.
-- **Para la historia 002:** `PATCH /sucursales/:id` debe exigir el rol Administrador; `GET /sucursales` y `GET /sucursales/:id`, cualquier rol con acceso a la empresa.
+- **Para la historia 002:** `PATCH /sucursales/:id` debe exigir el rol Administrador; `GET /sucursales` y `GET /sucursales/:id`, cualquier rol con acceso a la empresa. Crear emisores y sucursales lo podrán el Superadministrador y el Administrador, este último solo en su propia empresa.
 - Permisos de la base de datos:
 
 | Tabla | `restaurante_api` | `restaurante_plataforma` |
@@ -202,8 +217,8 @@ Todas las tablas usan UUID (`gen_random_uuid()` por defecto) y `creado_en`, `act
 - **Función `empresa_actual()`** (`public`, `STABLE`, dueña `restaurante_migrador`): lee `current_setting('app.empresa_id', true)`; si es nulo o vacío lanza SQLSTATE `42501` con el mensaje `contexto de empresa ausente`; si no es UUID, lanza el error de conversión; si no, lo devuelve como `uuid`. `EXECUTE` para `restaurante_api`.
 - **`empresa`**: `id`, `nombre` (texto, 1 a 150).
 - **`emisor`**: `id`, `empresa_id` (FK `empresa`), `ruc` (`char(11)`, único en todo el sistema), `razon_social` (1 a 200), `regimen` (texto con `CHECK` en `NUEVO_RUS`, `RER`, `MYPE_TRIBUTARIO`, `GENERAL`). Único `(id, empresa_id)` para las llaves compuestas. Índice por `empresa_id`.
-- **`sucursal`**: `id`, `empresa_id` (FK `empresa`), `emisor_id`, `nombre` (1 a 100), `codigo_establecimiento` (`char(4)`, `CHECK ~ '^\d{4}$'`), `direccion` (1 a 300), `horario` (`jsonb`, no nulo, por defecto `[]`), `whatsapp` (texto nulo, `CHECK ~ '^\+519\d{8}$'`), `hora_corte` (`time`, no nulo). FK compuesta `(emisor_id, empresa_id)` → `emisor (id, empresa_id)`. Únicos `(emisor_id, codigo_establecimiento)` y `(empresa_id, lower(nombre))`. Índice por `empresa_id`.
-- **`auditoria_plataforma`**: `id`, `ocurrido_en` (`timestamptz`, por defecto `now()`), `actor` (texto no vacío), `operacion` (texto no vacío), `motivo` (texto no vacío), `empresa_id` (uuid nulo, FK `empresa`), `detalle` (`jsonb`). Un trigger rechaza `UPDATE` y `DELETE`, y otro rechaza `TRUNCATE`.
+- **`sucursal`**: `id`, `empresa_id` (FK `empresa`), `emisor_id`, `nombre` (1 a 100), `codigo_establecimiento` (`char(4)`, `CHECK ~ '^\d{4}$'`), `direccion` (1 a 300), `horario` (`jsonb`, no nulo, por defecto `[]`), `whatsapp` (texto nulo, `CHECK ~ '^\+519\d{8}$'`), `hora_corte` (`time`, no nulo, `DEFAULT '05:00'`). FK compuesta `(emisor_id, empresa_id)` → `emisor (id, empresa_id)`. Únicos `(emisor_id, codigo_establecimiento)` y `(empresa_id, lower(nombre))`. Índice por `empresa_id`.
+- **`auditoria_plataforma`**: `id`, `ocurrido_en` (`timestamptz`, por defecto `now()`), `actor` (texto libre no vacío; en 002 pasa a ser el id del superadministrador), `operacion` (texto no vacío), `motivo` (texto no vacío), `empresa_id` (uuid nulo, FK `empresa`), `detalle` (`jsonb`). Un trigger rechaza `UPDATE` y `DELETE`, y otro rechaza `TRUNCATE`.
 - **RLS**: `ENABLE` y `FORCE ROW LEVEL SECURITY` en las cuatro tablas.
   - Política `aislamiento_empresa` `TO restaurante_api` en `emisor` y `sucursal`: `USING (empresa_id = (SELECT empresa_actual())) WITH CHECK (empresa_id = (SELECT empresa_actual()))`; en `empresa`, lo mismo con `id`.
   - Política `acceso_plataforma` `TO restaurante_plataforma` en `empresa`, `emisor`, `sucursal` y `auditoria_plataforma`: `USING (true) WITH CHECK (true)`.
@@ -215,23 +230,39 @@ Todas las tablas usan UUID (`gen_random_uuid()` por defecto) y `creado_en`, `act
 
 - Autenticación, usuarios, roles, PIN y equipos vinculados (historia 002), incluido el resolutor de empresa definitivo y los endpoints de plataforma por HTTP.
 - La PWA (`apps/app`), la carta web (`apps/web`), el puente Android y `packages/ui`.
-- Suscripciones, planes y módulos por sucursal (RF-03 a RF-07). La sucursal nace sin suscripción; la historia de suscripciones extenderá `registrarEmpresa`.
+- Suscripciones, planes y módulos por sucursal (RF-03 a RF-07). El alta de empresa (`registrarEmpresa`, `agregarSucursal`) **no** crea la suscripción: la sucursal nace sin suscripción, y la creación de la suscripción llega con RF-03, cuya historia extenderá `registrarEmpresa`.
+- Feriados y excepciones del horario por fecha (para más adelante).
+- Validar que un emisor del Nuevo RUS tenga RUC de persona natural.
+- Bloquear el cambio de emisor de una sucursal que ya emitió comprobantes (historia de facturación).
+- Endpoints HTTP para crear emisores y sucursales (llegan con 002, junto con la regla de rol).
 - La tasa de IGV con vigencia del emisor y la restricción de comprobantes por régimen: van en la historia de cálculo de montos y facturación. Motivo: (1) nada en esta historia la usa; (2) decidir qué tasa aplica a una fecha es cálculo de montos, ruta crítica que merece sus propias pruebas primero; (3) la tasa aplicable está pendiente de validar con el contador (18 % o la tasa reducida para restaurantes MYPE); (4) agregarla después es una tabla nueva, sin reescribir datos.
 - Datos del emisor que pedirá la facturación (domicilio fiscal, ubigeo, nombre comercial) y el slug de la carta web.
 - Colas (pg-boss), WebSockets, Sentry, despliegue y staging.
 - Claves de idempotencia (no hay escrituras no idempotentes en esta historia).
 
-## Preguntas abiertas
+## Notas para otras historias
 
-Ninguna bloquea esta historia; las marcadas como **supuesto** se implementan así salvo que el usuario diga otra cosa.
+- **Historia 002 (autenticación):**
+  - Aplicar la regla de rol para crear emisores y sucursales: Superadministrador y Administrador de su propia empresa (ver "Permisos").
+  - Unir `auditoria_plataforma` a la auditoría general del módulo de seguridad.
+  - El `actor` de la auditoría pasa de texto libre al id del superadministrador.
+  - `ResolutorEmpresaPorCabecera` queda solo para las pruebas automáticas: permitirlo únicamente con `NODE_ENV=test` (deja de valer `development`).
+- **Historia de facturación:** bloquear el cambio de emisor (RUC) de una sucursal que ya emitió comprobantes; aplicar la restricción de comprobantes por régimen (RF-65).
+- **Historia de suscripciones (RF-03):** el alta de empresa y de sucursal debe crear la suscripción.
 
-1. ¿Quién puede crear emisores y sucursales: solo el superadministrador o también el Administrador de la empresa? La base lo permite a la API; la regla se aplicará en 002. (HU-01 habla del superadministrador; el documento de diseño dice que el Administrador "configura sucursales".)
-2. ¿Se puede cambiar el emisor de una sucursal después de que haya emitido comprobantes? Aquí se permite porque aún no hay comprobantes; la historia de facturación debería bloquearlo o pedir un procedimiento.
-3. **Supuesto:** el horario es una lista de tramos por día de la semana (varios por día, por ejemplo almuerzo y cena), con tramos que pueden cruzar la medianoche, y puede quedar vacío. ¿Sirve para la carta web (RF-45)? ¿Hacen falta feriados o excepciones por fecha?
-4. **Supuesto:** el WhatsApp de la sucursal es un celular peruano (`+51 9XXXXXXXX`) y es opcional en el alta. ¿Puede faltar si la sucursal no usa la carta web?
-5. **Supuesto:** la hora de corte es obligatoria y no tiene valor por defecto; a la hora exacta empieza el nuevo día. ¿Prefieren un valor por defecto (por ejemplo 05:00)?
-6. **Supuesto:** se aceptan RUC con prefijo 10, 15, 16, 17 y 20, y un RUC solo puede estar en una empresa del sistema. ¿Validamos también que un emisor del Nuevo RUS tenga RUC de persona natural?
-7. **Supuesto:** el nombre de la sucursal es único dentro de la empresa (sin distinguir mayúsculas).
-8. ¿`auditoria_plataforma` se une a la tabla de auditoría del módulo de seguridad cuando llegue 002, o se mantienen separadas (una de plataforma, otra por empresa)?
-9. Mientras no exista el usuario superadministrador, el `actor` de la auditoría es un texto libre (por ejemplo `semilla` o `cli:brayan`). En 002 pasará a ser el id del superadministrador.
-10. Después de 002, ¿el resolutor por cabecera se mantiene solo para pruebas o se elimina?
+## Decisiones del usuario
+
+No quedan preguntas abiertas. Respuestas del usuario a las preguntas de la versión en borrador:
+
+1. **Quién crea emisores y sucursales:** el superadministrador y también el Administrador, dentro de su propia empresa. La regla de rol se aplica en 002; esta historia deja que `restaurante_api` inserte emisores y sucursales de su propia empresa bajo RLS (criterio 16b) y sigue impidiendo hacerlo en otra (criterio 16). No hay endpoints HTTP de creación en esta historia.
+2. **Cambio de emisor con comprobantes emitidos:** no se permite. Lo bloquea la historia de facturación; en 001 el cambio sigue permitido porque aún no hay comprobantes.
+3. **Horario:** tramos por día de la semana que pueden cruzar la medianoche, como se especificó. Feriados y excepciones por fecha quedan fuera de alcance.
+4. **WhatsApp:** celular peruano `+51 9XXXXXXXX`, opcional.
+5. **Hora de corte:** `05:00` por defecto y modificable; a la hora exacta empieza el nuevo día. `horaCorte` es opcional en el alta (criterio 35b) y la columna lleva `DEFAULT '05:00'`.
+6. **RUC:** prefijos 10, 15, 16, 17 o 20; cada RUC pertenece a una sola empresa. La relación con el Nuevo RUS (persona natural) no se valida todavía.
+7. **Nombre de la sucursal:** no se repite dentro de la empresa, sin distinguir mayúsculas.
+8. **Auditoría de plataforma:** se unirá a la auditoría general en la historia 002; en 001 vive en `auditoria_plataforma`.
+9. **Actor de la auditoría:** texto libre hasta que exista el superadministrador; en 002 pasa a ser su id.
+10. **Resolutor por cabecera:** cuando exista el login (002), quedará solo para las pruebas automáticas (`NODE_ENV=test`).
+
+Además: el alta de empresa todavía no crea la suscripción; llega con RF-03 (ver "Fuera de alcance").
