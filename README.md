@@ -6,6 +6,12 @@ Turborepo: `apps/api` (NestJS + Sequelize + PostgreSQL), `packages/dominio` (reg
 llegan en historias posteriores. El diseño y los requerimientos viven en los documentos compartidos
 que enlaza `CLAUDE.md`; las historias, en `specs/NNN-nombre/`.
 
+## Estado
+
+La historia 001 (base del monorepo, multitenancy y aislamiento entre empresas) está terminada. Su especificación, plan y tareas están en [`specs/001-base-multitenancy/`](specs/001-base-multitenancy/).
+
+Hasta la historia 002 (autenticación) las rutas de empresa responden 401 `EMPRESA_NO_RESUELTA`, salvo con el resolutor por cabecera de desarrollo y pruebas (`EMPRESA_POR_HEADER=habilitado`): todavía no hay forma de saber la empresa de una petición real.
+
 ## Requisitos
 
 - Node 22 y pnpm 10 (`corepack enable` toma la versión de `packageManager`).
