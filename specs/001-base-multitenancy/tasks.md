@@ -114,5 +114,6 @@ Trabajo posterior a la ronda 4 del adversarial, hasta el cierre de la historia.
 
 - [x] P14 · test-writer · `comentarios-retorno.spec.ts`: la guarda terminaba los comentarios `--` solo en `\n`, pero PostgreSQL también los termina en `\r` (criterios 22b, 22d y 32b).
 - [x] T40 · backend · Analizador revisado contra el escáner de PostgreSQL; regex de sustitutos sin lookbehind; límites de identificador en la mención de contexto; `db:preparar` y `db:migrar` toman la base de `DATABASE_URL`.
+- [x] T40b · adversarial (ronda 5) · Inventario de funciones de `pg_catalog` (SECURITY DEFINER, `proconfig`, SQL desde texto, casts y operadores), evasiones de la lista blanca, `replacements` de Sequelize y anidamiento: sin fallas tras las correcciones de la ronda 4.
 - [x] T41 · adversarial (ronda 6) · Fuzzer diferencial contra PostgreSQL real, sin fallas.
 - [x] T42 · tester · Suite completa en verde.
