@@ -8,7 +8,7 @@ que enlaza `CLAUDE.md`; las historias, en `specs/NNN-nombre/`.
 
 ## Estado
 
-Historia 001 (base del monorepo, multitenancy y aislamiento entre empresas) terminada; fase E (fijación única del contexto, errores 4xx y modo sin superusuario) en cierre. Su especificación, plan y tareas están en [`specs/001-base-multitenancy/`](specs/001-base-multitenancy/).
+Historia 001 (base del monorepo, multitenancy y aislamiento entre empresas) terminada, con la fase E incluida (fijación única del contexto, errores 4xx y modo sin superusuario para PostgreSQL administrado). Su especificación, plan y tareas están en [`specs/001-base-multitenancy/`](specs/001-base-multitenancy/). La sección 1 de los requerimientos, «Plataforma y acceso», tiene su especificación en borrador en [`specs/002-plataforma-y-acceso/`](specs/002-plataforma-y-acceso/), pendiente de aprobación.
 
 Hasta la historia 002 (autenticación) las rutas de empresa responden 401 `EMPRESA_NO_RESUELTA`, salvo con el resolutor por cabecera de desarrollo y pruebas (`EMPRESA_POR_HEADER=habilitado`): todavía no hay forma de saber la empresa de una petición real.
 
