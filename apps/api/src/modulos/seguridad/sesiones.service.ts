@@ -510,8 +510,8 @@ export class SesionesService {
   /**
    * Arma `sesionRespuesta`. `modulos` son los del plan de la sucursal activa (criterio 77; vacío sin
    * sucursal activa). `equipo` es el equipo recordado de la sesión, si lo tiene. `permisos` es la matriz del
-   * rol en la sucursal activa (criterio 43; `null` sin rol) y `avisoSuscripcion` queda en `null` hasta la
-   * suspensión (T41).
+   * rol en la sucursal activa (criterio 43; `null` sin rol). `avisoSuscripcion` (criterio 80) solo lo ve el
+   * Administrador y el soporte (`esAdministrador`), tenga o no sucursal activa; para los demás es `null`.
    */
   async armarRespuesta(datos: {
     tipo: TipoSesion;
@@ -540,7 +540,7 @@ export class SesionesService {
       // Sin rol todavía (sin sucursal elegida y sin ser Administrador) no hay permisos que mostrar.
       permisos: rol === null ? null : permisosDeRol(rol),
       modulos: activa === null ? [] : await this.suscripciones.modulosDeSucursal(activa.id),
-      avisoSuscripcion: null,
+      avisoSuscripcion: datos.esAdministrador ? await this.suscripciones.avisoDeEmpresa() : null,
       debeCambiarContrasena: datos.debeCambiarContrasena,
       expiraPorInactividadEn: datos.expiraPorInactividadEn?.toISOString() ?? null,
     };

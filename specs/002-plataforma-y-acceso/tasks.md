@@ -95,7 +95,7 @@ Commit propio. HU-03, RF-12, RNF-09.
 
 Commit propio. HU-04, RF-06.
 
-- [ ] T41 · backend · `avisoSuscripcion` en `GET /sesion` para Administrador y soporte; `exigirAperturaDeCaja`; comprobar que nada más consulta el estado. Pruebas de integración no protegidas con un controlador sonda y el reloj (gracia, suspensión, reactivación con un pago, rutas que siguen funcionando suspendida). (criterios 80 a 84)
+- [x] T41 · backend · `avisoSuscripcion` en `GET /sesion` para Administrador y soporte; `exigirAperturaDeCaja`; comprobar que nada más consulta el estado. Pruebas de integración no protegidas con un controlador sonda y el reloj (gracia, suspensión, reactivación con un pago, rutas que siguen funcionando suspendida). (criterios 80 a 84)
 - [ ] T42 · frontend · Aviso de gracia y de suspensión para el Administrador, legible en celular. (criterio 99)
 - [ ] T43 · tester · Suite completa, lint, tipos, build y E2E.
 

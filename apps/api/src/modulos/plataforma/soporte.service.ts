@@ -117,7 +117,11 @@ export class SoporteService {
               activa === null || activa === undefined
                 ? []
                 : await this.suscripciones.modulosPlataforma(transaccion, activa.id),
-            avisoSuscripcion: null,
+            avisoSuscripcion: await this.suscripciones.avisoPlataforma(
+              transaccion,
+              empresaId,
+              ahora,
+            ),
             debeCambiarContrasena: false,
             expiraPorInactividadEn: new Date(
               ahora.getTime() + MINUTOS_INACTIVIDAD_SOPORTE * MINUTO_MS,

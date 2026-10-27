@@ -548,8 +548,8 @@ Lo que hay ahora además de lo anterior:
   acepta ahora `privilegiosApi: []` (tabla sin ningún privilegio para la API, como `pago_suscripcion`).
 - **Servicios** (`src/modulos/plataforma`, desde `'../../src/modulos/plataforma'`): `SuscripcionService`
   (`estadoDeSucursal`, `registrarComprobanteEmitido`, `modulosDeSucursal` y `crearParaSucursal` con contexto de
-  empresa; los demás métodos reciben la transacción de `OperacionPlataforma`; `exigirAperturaDeCaja` llega con
-  C4), `PlanesService` (plan por defecto, 409 y auditoría), `SuscripcionesPlataformaService` y
+  empresa, más `exigirAperturaDeCaja` y `avisoDeEmpresa` del grupo C4; los demás métodos reciben la transacción
+  de `OperacionPlataforma`, entre ellos `avisoPlataforma` para el soporte), `PlanesService` (plan por defecto, 409 y auditoría), `SuscripcionesPlataformaService` y
   `SuscripcionModule` (global, sin dependencias: lo usan la sesión y `ModuloInterceptor`).
   `PlataformaEmpresasService.registrarEmpresa` y `agregarSucursal` siguen devolviendo `{ id, nombre }` y crean la
   suscripción; `registrarEmpresaConSuscripciones` y `agregarSucursalPorHttp` la devuelven (alta por HTTP).

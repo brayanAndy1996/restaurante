@@ -1,5 +1,6 @@
 import { Inject, Injectable } from '@nestjs/common';
 import type {
+  AvisoSuscripcion,
   ConsumoPeriodo,
   PagoEntrada,
   PagoRespuesta,
@@ -18,7 +19,6 @@ import {
 import { QueryTypes, type Sequelize, type Transaction } from 'sequelize';
 import { CONEXION_API, SQLSTATE, sqlstateDe } from '../../nucleo/base-de-datos';
 import { ContextoEmpresa } from '../../nucleo/contexto-empresa';
-import { noImplementado } from '../../nucleo/errores';
 import { ErrorAplicacion } from '../../nucleo/errores/error-aplicacion';
 import { RELOJ, type Reloj } from '../../nucleo/reloj';
 
@@ -68,6 +68,43 @@ interface FilaSuscripcion {
   plan_nombre: string;
   dias_gracia: number;
 }
+
+interface FilaAviso extends FilaSuscripcion {
+  sucursal_nombre: string;
+}
+
+/**
+ * `avisoSuscripcion` (criterio 80) con las sucursales en gracia o suspendidas en `ahora`, en el orden
+ * recibido; `null` si todas están `ACTIVA`.
+ */
+function aAviso(filas: FilaAviso[], ahora: Date): AvisoSuscripcion | null {
+  const sucursales: AvisoSuscripcion['sucursales'] = [];
+  for (const fila of filas) {
+    const estado = estadoSuscripcion(
+      { vencimiento: fila.vencimiento, diasGracia: fila.dias_gracia },
+      ahora,
+    );
+    if (estado.estado === 'ACTIVA') continue;
+    sucursales.push({
+      sucursalId: fila.sucursal_id,
+      nombre: fila.sucursal_nombre,
+      estado: estado.estado,
+      vencimiento: fila.vencimiento,
+      suspensionDesde: estado.suspensionDesde,
+      diasRestantesGracia: estado.diasRestantesGracia,
+    });
+  }
+  return sucursales.length === 0 ? null : { sucursales };
+}
+
+const SQL_AVISOS = `SELECT s.id, s.empresa_id, s.sucursal_id, s.vencimiento::text AS vencimiento,
+       p.id AS plan_id, p.codigo AS plan_codigo, p.nombre AS plan_nombre, p.dias_gracia,
+       su.nombre AS sucursal_nombre
+  FROM suscripcion s
+  JOIN plan p ON p.id = s.plan_id
+  JOIN sucursal su ON su.id = s.sucursal_id AND su.empresa_id = s.empresa_id
+ WHERE s.empresa_id = $1
+ ORDER BY su.nombre, su.id`;
 
 const SQL_SUSCRIPCION = `SELECT s.id, s.empresa_id, s.sucursal_id, s.vencimiento::text AS vencimiento,
        p.id AS plan_id, p.codigo AS plan_codigo, p.nombre AS plan_nombre, p.dias_gracia
@@ -151,10 +188,44 @@ export class SuscripcionService {
 
   /**
    * No lanza si la sucursal está `ACTIVA` o `EN_GRACIA`; lanza 403 `SUCURSAL_SUSPENDIDA` si está
-   * `SUSPENDIDA` (criterio 81). La llama solo la apertura de caja. Llega con la tarea T41 (grupo C4).
+   * `SUSPENDIDA` (criterio 81), evaluado con el reloj de la API en ese momento. La llama solo la apertura
+   * de caja (criterio 84): ninguna otra operación consulta el estado de la suscripción.
    */
-  async exigirAperturaDeCaja(_sucursalId: string): Promise<void> {
-    return noImplementado();
+  async exigirAperturaDeCaja(sucursalId: string): Promise<void> {
+    const estado = await this.estadoDeSucursal(sucursalId);
+    if (estado.estado === 'SUSPENDIDA') {
+      throw new ErrorAplicacion(
+        403,
+        'SUCURSAL_SUSPENDIDA',
+        'La sucursal está suspendida por falta de pago: no se puede abrir caja',
+      );
+    }
+  }
+
+  /**
+   * Aviso para el Administrador (criterio 80): las sucursales de la empresa del contexto en gracia o
+   * suspendidas, o `null` si todas están `ACTIVA`. Corre bajo RLS dentro de un contexto de empresa.
+   */
+  async avisoDeEmpresa(): Promise<AvisoSuscripcion | null> {
+    const filas = await this.conexion.query<FilaAviso>(SQL_AVISOS, {
+      bind: [this.contexto.empresaActual()],
+      type: QueryTypes.SELECT,
+    });
+    return aAviso(filas, this.reloj.ahora());
+  }
+
+  /** Lo mismo que `avisoDeEmpresa` para la sesión de soporte, que abre la plataforma (sin contexto). */
+  async avisoPlataforma(
+    transaccion: Transaction,
+    empresaId: string,
+    ahora: Date,
+  ): Promise<AvisoSuscripcion | null> {
+    const filas = await sequelizeDe(transaccion).query<FilaAviso>(SQL_AVISOS, {
+      transaction: transaccion,
+      bind: [empresaId],
+      type: QueryTypes.SELECT,
+    });
+    return aAviso(filas, ahora);
   }
 
   /**
