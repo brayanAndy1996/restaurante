@@ -307,8 +307,7 @@ sesión: toda ruta exige sesión (`Authorization: Bearer se.<empresa>.<sesión>.
 (modo de prueba: sin `Authorization`, principal de prueba con permisos de Administrador y actor `prueba`).
 Con `development` la API no arranca si la cabecera está habilitada. Desde el grupo C0 segunda parte (T12 a
 T18) funcionan el ingreso con contraseña y la sesión, los usuarios, los emisores y sucursales, el
-superadministrador, el soporte y la idempotencia (ver el final de este archivo); sigue sin lógica
-(responde 500 `ERROR_INTERNO`) la clave de supervisor (T38). Los planes y las suscripciones (T28) funcionan
+superadministrador, el soporte y la idempotencia (ver el final de este archivo); la clave de supervisor (T38) funciona desde el grupo C3. Los planes y las suscripciones (T28) funcionan
 desde el grupo C1; los equipos recordados, el ingreso con PIN y el acceso de la sucursal (T33 y T34), desde
 el grupo C2.
 
@@ -610,3 +609,32 @@ Las pruebas que cambian el plan por defecto lo dejan siempre en `BASE` (la base 
   migración de equipos subiendo, bajando con datos y volviendo a subir). `sembrado.ts` gana `insertarEquipo`
   (las llaves exigen que el equipo exista). Las pruebas de la raíz `rutas-acceso.spec.ts` y
   `sql-tabla-trazable.spec.ts` se actualizaron para C2.
+
+## Historia 002 · grupo C3 (T37 y T38): clave de supervisor
+
+- **T37:** la matriz de permisos (`requisitoPermiso`, `puedeAutorizar`, `alcanceReportes`, `permisosDeRol`) y `permisos`
+  en `GET /sesion` se implementaron junto con C2 (`pin.spec.ts` los exige); C3 solo los revisó.
+- **Migración** `202610280006-autorizaciones.ts`: `autorizacion` (sesión, solicitante, autorizador distinto, sucursal,
+  equipo de la sesión, acción, motivo, `expira_en`, `usada_en`), con `sqlTablaDeEmpresaTrazable(…, { llaveDeEquipo: true })`
+  y solo `SELECT`, `INSERT` y `UPDATE` para `restaurante_api`. Agrega `sesion (id, empresa_id)` único y la llave
+  `auditoria.autorizacion_id` → `autorizacion` (`NOT VALID`: la auditoría es inmutable y sus filas viejas pueden nombrar
+  autorizaciones que `db:revertir` borró). `down` conserva las filas de auditoría.
+- **`POST /autorizaciones`** (`ClaveSupervisorService`, `@SinEmpresa()`): valida primero el rol del solicitante (`prohibido`
+  → 403, `permitido` → 409; soporte y prueba son Administrador), luego, en su propia transacción con el solicitante y su
+  equipo como actor, bloquea la fila del solicitante y la del equipo (`FOR NO KEY UPDATE`, así los intentos
+  concurrentes no evaden el quinto fallo), mira los bloqueos (`CLAVE_USUARIO` y `CLAVE_EQUIPO`, 5 fallos, 5 minutos),
+  busca al supervisor por la huella de su PIN y lo rechaza con el mismo cuerpo `CLAVE_INVALIDA` en cada caso
+  (el motivo interno `PIN_INEXISTENTE`, `USUARIO_INACTIVO`, `PROPIO_SOLICITANTE`, `SIN_ROL_AUTORIZADOR` o
+  `FUERA_DE_HORARIO` solo va al detalle de la auditoría). El error se lanza después de confirmar, así la cuenta y la
+  fila `autorizacion_rechazada` quedan guardadas. Un bloqueo nuevo se audita (`bloqueo_clave`) en una segunda transacción
+  con el actor `autenticacion`. La `Idempotency-Key` se maneja dentro del servicio (la ruta es `@SinEmpresa()`).
+- **`@Permiso(accion)`** aplica `PermisoInterceptor` (dentro de la transacción del controlador): `prohibido` → 403
+  `PROHIBIDO`, `permitido` → sigue, `clave` → exige `X-Autorizacion` (403 `CLAVE_REQUERIDA`) y llama
+  `AutorizacionService.consumir`, un `UPDATE` condicional (misma sesión, persona, acción y sucursal; sin usar y
+  `expira_en > ahora`) que resuelve la concurrencia; si no actualiza ninguna fila, 403 `AUTORIZACION_INVALIDA`.
+  `consumir` deja también la fila de auditoría de la acción (solicitante como actor, `autorizado_por_id`, motivo y
+  `autorizacion_id`) en la misma transacción: si la acción falla, se revierten las dos.
+- **Pruebas del desarrollador** (`test/seguridad/clave-supervisor-servicio.spec.ts`): idempotencia de la ruta, diez PIN
+  malos simultáneos (cinco 403 y cinco 429, un solo bloqueo), el actor de cada fila de auditoría, la fila de la acción
+  con el equipo, `X-Autorizacion` mal formada o vencida con el reloj, y la migración (subir, bajar con datos y volver a
+  subir).

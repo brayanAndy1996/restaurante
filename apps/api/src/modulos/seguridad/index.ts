@@ -28,7 +28,9 @@ export {
 } from './tokens';
 export { ResolutorEmpresaSesion } from './resolutor-empresa-sesion';
 export { SesionActual } from './sesion-actual';
-export { AutorizacionService } from './autorizacion.service';
+export { AutorizacionService, autorizacionInvalida } from './autorizacion.service';
+export { ClaveSupervisorService } from './clave-supervisor.service';
+export { PermisoInterceptor } from './permiso.interceptor';
 export type { AutorizacionConsumida, ConsumirAutorizacion } from './autorizacion.service';
 export type { Principal, TipoPrincipal } from '../../nucleo/principal';
 export { AccesoSucursalController } from './acceso-sucursal.controller';

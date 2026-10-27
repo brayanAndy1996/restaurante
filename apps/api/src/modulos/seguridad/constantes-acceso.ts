@@ -18,3 +18,10 @@ export const MINUTOS_BLOQUEO_PIN = 5;
 /** Por qué un equipo deja de recordar a una persona (columna `equipo_recordado.motivo_revocacion`). */
 export type MotivoRevocacion =
   'REVOCADO' | 'OLVIDADO' | 'REEMPLAZADO' | 'BLOQUEO' | 'DESACTIVADO' | 'CONTRASENA_RESTABLECIDA';
+
+/** Minutos que vale una autorización de supervisor desde que se crea (criterio 44). */
+export const MINUTOS_VIGENCIA_AUTORIZACION = 2;
+/** Fallos seguidos de clave de supervisor (por solicitante o por equipo) que bloquean (criterio 47). */
+export const FALLOS_PARA_BLOQUEAR_CLAVE = 5;
+/** Duración del bloqueo de la clave de supervisor, en minutos (criterio 47). */
+export const MINUTOS_BLOQUEO_CLAVE = 5;

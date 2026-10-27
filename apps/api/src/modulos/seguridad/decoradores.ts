@@ -2,21 +2,21 @@ import { SetMetadata, UseInterceptors, applyDecorators } from '@nestjs/common';
 import type { Accion, Modulo } from '@restaurante/dominio';
 import { SinEmpresa } from '../../nucleo/contexto-empresa';
 import { ModuloInterceptor, REQUIERE_MODULO } from './modulo.interceptor';
+import { PERMISO, PermisoInterceptor } from './permiso.interceptor';
 
-export { REQUIERE_MODULO };
+export { PERMISO, REQUIERE_MODULO };
 
 /**
  * Decoradores de metadatos de las rutas (historia 002). `@Publica`, `@SoloAdministrador`,
  * `@RequiereSucursal` y `@PermiteContrasenaTemporal` los lee el guard global de autenticación
- * (`AutenticacionGuard`); `@Permiso` y `@RequiereModulo` los leerán sus interceptores (tareas T38 y T29,
- * `@Permiso` hasta entonces solo deja la marca). `@Idempotente()` vive en `nucleo/idempotencia` y se reexporta
+ * (`AutenticacionGuard`); `@Permiso` y `@RequiereModulo` los leen sus interceptores (`PermisoInterceptor` y
+ * `ModuloInterceptor`, que se aplican con el propio decorador). `@Idempotente()` vive en `nucleo/idempotencia` y se reexporta
  * desde el índice de este módulo. `@Superadministrador()` vive en `modulos/plataforma`.
  */
 
 export const PUBLICA = 'publica';
 export const SOLO_ADMINISTRADOR = 'solo-administrador';
 export const REQUIERE_SUCURSAL = 'requiere-sucursal';
-export const PERMISO = 'permiso';
 export const PERMITE_CONTRASENA_TEMPORAL = 'permite-contrasena-temporal';
 
 /**
@@ -40,9 +40,11 @@ export const PermiteContrasenaTemporal = () => SetMetadata(PERMITE_CONTRASENA_TE
 
 /**
  * Acción protegida de la matriz de permisos (criterio 48): `prohibido` → 403, `permitido` → sigue,
- * `clave` → exige `X-Autorizacion`. La aplica el `PermisoInterceptor` (tarea T38).
+ * `clave` → exige `X-Autorizacion` y consume la autorización en la misma transacción de la acción.
+ * La aplica el `PermisoInterceptor`.
  */
-export const Permiso = (accion: Accion) => SetMetadata(PERMISO, accion);
+export const Permiso = (accion: Accion) =>
+  applyDecorators(SetMetadata(PERMISO, accion), UseInterceptors(PermisoInterceptor));
 
 /**
  * Ruta de un módulo del plan: 403 `MODULO_NO_INCLUIDO` si la sucursal activa no lo tiene (criterio 77).

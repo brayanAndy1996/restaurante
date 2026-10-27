@@ -13,6 +13,7 @@ import { AutenticacionGuard, MODO_PRUEBA } from './autenticacion.guard';
 import { AutorizacionesController } from './autorizaciones.controller';
 import { AutorizacionService } from './autorizacion.service';
 import { BloqueosService } from './bloqueos.service';
+import { ClaveSupervisorService } from './clave-supervisor.service';
 import { Credenciales } from './credenciales';
 import { EquipoController } from './equipo.controller';
 import { EquiposService } from './equipos.service';
@@ -67,6 +68,7 @@ import { UsuariosService } from './usuarios.service';
     { provide: APP_GUARD, useClass: AutenticacionGuard },
     SesionActual,
     AutorizacionService,
+    ClaveSupervisorService,
   ],
   exports: [
     Credenciales,
@@ -82,6 +84,7 @@ import { UsuariosService } from './usuarios.service';
     AutenticacionGuard,
     SesionActual,
     AutorizacionService,
+    ClaveSupervisorService,
   ],
 })
 export class SeguridadModule {}

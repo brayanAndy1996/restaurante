@@ -86,8 +86,8 @@ Commit propio. HU-02, RF-09 (PIN), RF-10, RF-11, RNF-08 (texto nuevo).
 
 Commit propio. HU-03, RF-12, RNF-09.
 
-- [ ] T37 · backend · Matriz de permisos en `packages/dominio` (`requisitoPermiso`, `puedeAutorizar`, `alcanceReportes`, `permisosDeRol`) y `permisos` en `GET /sesion`. (criterios 42, 43)
-- [ ] T38 · backend · Migración `202610280006-autorizaciones.ts` (`autorizacion` trazable y llave de `auditoria.autorizacion_id`); `POST /autorizaciones` con transacción propia, PIN de 6 dígitos, horario del autorizador, bloqueos e idempotencia; `AutorizacionService.consumir`, `@Permiso` y `PermisoInterceptor` con la auditoría de la acción. (criterios 44 a 53, 85, 110)
+- [x] T37 · backend · Matriz de permisos en `packages/dominio` (`requisitoPermiso`, `puedeAutorizar`, `alcanceReportes`, `permisosDeRol`) y `permisos` en `GET /sesion`. (criterios 42, 43)
+- [x] T38 · backend · Migración `202610280006-autorizaciones.ts` (`autorizacion` trazable y llave de `auditoria.autorizacion_id`); `POST /autorizaciones` con transacción propia, PIN de 6 dígitos, horario del autorizador, bloqueos e idempotencia; `AutorizacionService.consumir`, `@Permiso` y `PermisoInterceptor` con la auditoría de la acción. (criterios 44 a 53, 85, 110)
 - [ ] T39 · frontend · `VentanaClaveSupervisor` (PIN de 6 dígitos, motivo, errores, bloqueo), con pruebas de componente; los permisos de la sesión disponibles para las pantallas futuras. (criterio 98)
 - [ ] T40 · tester · Suite completa, lint, tipos y build; P6 y P11 completas en verde.
 
