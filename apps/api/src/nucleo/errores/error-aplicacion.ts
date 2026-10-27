@@ -9,6 +9,8 @@ export class ErrorAplicacion extends HttpException {
     readonly codigo: CodigoError,
     mensaje: string,
     readonly campos?: CampoError[],
+    /** Solo en `BLOQUEO_TEMPORAL` (429): segundos que faltan; el filtro lo pone también en `Retry-After`. */
+    readonly reintentarEnSegundos?: number,
   ) {
     super(mensaje, estado);
   }

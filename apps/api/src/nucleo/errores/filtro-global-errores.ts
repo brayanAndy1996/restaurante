@@ -140,6 +140,10 @@ export class FiltroGlobalErrores implements ExceptionFilter {
   catch(excepcion: unknown, host: ArgumentsHost): void {
     const respuesta = host.switchToHttp().getResponse<Response>();
     const { estado, cuerpo } = this.traducir(excepcion);
+    // `Retry-After` solo acompaña al bloqueo temporal (429 con `reintentarEnSegundos`).
+    if (cuerpo.reintentarEnSegundos !== undefined) {
+      respuesta.setHeader('Retry-After', String(cuerpo.reintentarEnSegundos));
+    }
     respuesta.status(estado).json(cuerpo);
   }
 
@@ -147,6 +151,9 @@ export class FiltroGlobalErrores implements ExceptionFilter {
     if (excepcion instanceof ErrorAplicacion) {
       const cuerpo: ErrorRespuesta = { codigo: excepcion.codigo, mensaje: excepcion.message };
       if (excepcion.campos) cuerpo.campos = excepcion.campos;
+      if (excepcion.reintentarEnSegundos !== undefined) {
+        cuerpo.reintentarEnSegundos = excepcion.reintentarEnSegundos;
+      }
       return { estado: excepcion.getStatus(), cuerpo };
     }
     const estado = estado4xxDe(excepcion);

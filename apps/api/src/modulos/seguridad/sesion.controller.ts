@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, HttpCode, Param, Post, Put } from '@nestjs/common';
+import { Body, Controller, Delete, Get, HttpCode, Inject, Param, Post, Put } from '@nestjs/common';
 import {
   cambiarContrasenaEntradaSchema,
   elegirSucursalEntradaSchema,
@@ -14,23 +14,27 @@ import { SinEmpresa } from '../../nucleo/contexto-empresa';
 import { noImplementado } from '../../nucleo/errores';
 import { PipeUuid, PipeZod } from '../../nucleo/errores/pipes';
 import { PermiteContrasenaTemporal } from './decoradores';
+import { SesionesService } from './sesiones.service';
 
 /** Sesión actual de quien llama y sus equipos recordados. Lógica en las tareas T12 y T33. */
 @Controller('sesion')
 export class SesionController {
+  constructor(@Inject(SesionesService) private readonly sesiones: SesionesService) {}
+
   /** 200 `sesionRespuesta`. También con contraseña temporal. */
   @Get()
   @PermiteContrasenaTemporal()
   async actual(): Promise<SesionRespuesta> {
-    return noImplementado();
+    return this.sesiones.sesionActual();
   }
 
   /** Sesiones de contraseña, PIN y soporte. 200 `sesionRespuesta`; 404 `NO_ENCONTRADO`. */
   @Put('sucursal')
+  @HttpCode(200)
   async elegirSucursal(
-    @Body(new PipeZod(elegirSucursalEntradaSchema)) _entrada: ElegirSucursalEntrada,
+    @Body(new PipeZod(elegirSucursalEntradaSchema)) entrada: ElegirSucursalEntrada,
   ): Promise<SesionRespuesta> {
-    return noImplementado();
+    return this.sesiones.elegirSucursal(entrada);
   }
 
   /**
@@ -42,9 +46,9 @@ export class SesionController {
   @PermiteContrasenaTemporal()
   @HttpCode(204)
   async cambiarContrasena(
-    @Body(new PipeZod(cambiarContrasenaEntradaSchema)) _entrada: CambiarContrasenaEntrada,
+    @Body(new PipeZod(cambiarContrasenaEntradaSchema)) entrada: CambiarContrasenaEntrada,
   ): Promise<void> {
-    return noImplementado();
+    return this.sesiones.cambiarContrasena(entrada);
   }
 
   /** 204: cierra la sesión y el token deja de valer. También con contraseña temporal. */
@@ -52,7 +56,7 @@ export class SesionController {
   @PermiteContrasenaTemporal()
   @HttpCode(204)
   async salir(): Promise<void> {
-    return noImplementado();
+    return this.sesiones.salir();
   }
 
   /** Sesión de contraseña no temporal; `X-Equipo` opcional. 201 `{ equipo, tokenEquipo }` / 200 `{ equipo }`; 403; 409. */

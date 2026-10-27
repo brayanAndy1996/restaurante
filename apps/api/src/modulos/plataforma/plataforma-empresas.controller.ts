@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post } from '@nestjs/common';
+import { Body, Controller, Get, Inject, Param, Post, Req } from '@nestjs/common';
 import {
   altaEmpresaEntradaSchema,
   emisorPlataformaEntradaSchema,
@@ -9,70 +9,132 @@ import {
   type EmpresaPlataformaDetalle,
   type EmpresaPlataformaResumen,
   type IngresoRespuesta,
-  type SucursalPlataformaRespuesta,
 } from '@restaurante/contratos';
+import type { Request } from 'express';
 import type { z } from 'zod';
-import { noImplementado } from '../../nucleo/errores';
 import { PipeUuid, PipeZod } from '../../nucleo/errores/pipes';
-import { Idempotente } from '../../nucleo/idempotencia';
-import { Superadministrador } from './superadministrador.decorator';
+import { Idempotente, leerClaveIdempotencia } from '../../nucleo/idempotencia';
+import { PlataformaEmpresasService, type SucursalCreada } from './plataforma-empresas.service';
+import { SoporteService } from './soporte.service';
+import { Superadministrador, SuperadministradorActual } from './superadministrador.decorator';
+import type { IdempotenciaPlataforma, SuperadministradorAutenticado } from './tipos';
 
 /**
  * Empresas por HTTP para el superadministrador (criterios 63 a 66). Corren sin contexto de empresa, por
- * la vía de `OperacionPlataforma`. Lógica en las tareas T15, T16 y T27.
+ * la vía de `OperacionPlataforma`, con el id del superadministrador como actor de la auditoría y de la
+ * trazabilidad.
  */
 @Controller('plataforma/empresas')
 @Superadministrador()
 export class PlataformaEmpresasController {
+  constructor(
+    @Inject(PlataformaEmpresasService) private readonly empresas: PlataformaEmpresasService,
+    @Inject(SoporteService) private readonly soporte: SoporteService,
+  ) {}
+
   /** 200: las empresas con sus sucursales y el estado de cada suscripción. */
   @Get()
   async listar(): Promise<EmpresaPlataformaResumen[]> {
-    return noImplementado();
+    return this.empresas.listarConSucursales();
   }
 
   /** 200: emisores, sucursales, suscripciones y administradores; 404. */
   @Get(':id')
-  async obtener(@Param('id', PipeUuid) _id: string): Promise<EmpresaPlataformaDetalle> {
-    return noImplementado();
+  async obtener(@Param('id', PipeUuid) id: string): Promise<EmpresaPlataformaDetalle> {
+    return this.empresas.obtenerDetalle(id);
   }
 
   /** 201 `altaEmpresaRespuesta` (con el PIN del primer Administrador); 400; 409; 422 `PLAN_INVALIDO`. */
   @Post()
   async registrar(
     @Body(new PipeZod(altaEmpresaEntradaSchema))
-    _entrada: z.output<typeof altaEmpresaEntradaSchema>,
+    entrada: z.output<typeof altaEmpresaEntradaSchema>,
+    @SuperadministradorActual() superadministrador: SuperadministradorAutenticado,
   ): Promise<AltaEmpresaRespuesta> {
-    return noImplementado();
+    const { motivo, ...datos } = entrada;
+    const resultado = await this.empresas.registrarEmpresa(datos, {
+      actor: { superadministradorId: superadministrador.id },
+      motivo,
+    });
+    // La suscripción de cada sucursal (criterio 69) llega con el grupo C1.
+    return resultado as unknown as AltaEmpresaRespuesta;
   }
 
-  /** 201; 400; 404. */
+  /** 201; 400; 404. Con `Idempotency-Key` opcional. */
   @Post(':id/emisores')
   @Idempotente()
   async agregarEmisor(
-    @Param('id', PipeUuid) _id: string,
+    @Param('id', PipeUuid) id: string,
     @Body(new PipeZod(emisorPlataformaEntradaSchema))
-    _entrada: z.output<typeof emisorPlataformaEntradaSchema>,
+    entrada: z.output<typeof emisorPlataformaEntradaSchema>,
+    @SuperadministradorActual() superadministrador: SuperadministradorAutenticado,
+    @Req() peticion: Request,
   ): Promise<EmisorRespuesta> {
-    return noImplementado();
+    const { motivo, ...emisor } = entrada;
+    return this.empresas.agregarEmisorPorHttp(
+      id,
+      emisor,
+      { actor: { superadministradorId: superadministrador.id }, motivo },
+      this.idempotencia(
+        peticion,
+        'POST /plataforma/empresas/:id/emisores',
+        id,
+        superadministrador,
+        entrada,
+      ),
+    );
   }
 
-  /** 201 (con su suscripción); 400; 404; 422. */
+  /** 201; 400; 404; 422. Con `Idempotency-Key` opcional. La suscripción de la sucursal llega con C1. */
   @Post(':id/sucursales')
   @Idempotente()
   async agregarSucursal(
-    @Param('id', PipeUuid) _id: string,
+    @Param('id', PipeUuid) id: string,
     @Body(new PipeZod(sucursalPlataformaEntradaSchema))
-    _entrada: z.output<typeof sucursalPlataformaEntradaSchema>,
-  ): Promise<SucursalPlataformaRespuesta> {
-    return noImplementado();
+    entrada: z.output<typeof sucursalPlataformaEntradaSchema>,
+    @SuperadministradorActual() superadministrador: SuperadministradorAutenticado,
+    @Req() peticion: Request,
+  ): Promise<SucursalCreada> {
+    const { motivo, ...sucursal } = entrada;
+    return this.empresas.agregarSucursalPorHttp(
+      id,
+      sucursal,
+      { actor: { superadministradorId: superadministrador.id }, motivo },
+      this.idempotencia(
+        peticion,
+        'POST /plataforma/empresas/:id/sucursales',
+        id,
+        superadministrador,
+        entrada,
+      ),
+    );
   }
 
   /** 201 `{ token, sesion }` de una sesión `SOPORTE` de esa empresa; 400; 404. */
   @Post(':id/soporte')
   async iniciarSoporte(
-    @Param('id', PipeUuid) _id: string,
-    @Body(new PipeZod(soporteEntradaSchema)) _entrada: z.output<typeof soporteEntradaSchema>,
+    @Param('id', PipeUuid) id: string,
+    @Body(new PipeZod(soporteEntradaSchema)) entrada: z.output<typeof soporteEntradaSchema>,
+    @SuperadministradorActual() superadministrador: SuperadministradorAutenticado,
   ): Promise<IngresoRespuesta> {
-    return noImplementado();
+    return this.soporte.iniciar(id.toLowerCase(), entrada, superadministrador);
+  }
+
+  /** La clave de idempotencia de la petición, si la trae (el cuerpo incluye la empresa: otra ruta, otra huella). */
+  private idempotencia(
+    peticion: Request,
+    ruta: string,
+    empresaId: string,
+    superadministrador: SuperadministradorAutenticado,
+    cuerpo: unknown,
+  ): IdempotenciaPlataforma | undefined {
+    const clave = leerClaveIdempotencia(peticion);
+    if (clave === undefined) return undefined;
+    return {
+      clave,
+      ruta,
+      actor: superadministrador.id,
+      cuerpo: { empresaId: empresaId.toLowerCase(), cuerpo },
+    };
   }
 }

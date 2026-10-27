@@ -15,6 +15,7 @@ import {
   ConexionPlataforma,
 } from '../../nucleo/base-de-datos/conexion-plataforma';
 import { textoObligatorio, validarAuditoria } from './auditoria';
+import { guardarRespuesta, reservarClave } from './idempotencia-plataforma';
 import { OperacionPlataformaAnidadaError, OperacionPlataformaCerradaError } from './errores';
 import type { ActorPlataforma, OpcionesOperacionPlataforma, TransaccionPlataforma } from './tipos';
 
@@ -59,6 +60,16 @@ export class OperacionPlataforma {
 
     return this.enTransaccion(
       async (transaccion) => {
+        // Idempotencia (criterio 85): una clave repetida con el mismo cuerpo devuelve la respuesta
+        // guardada, sin repetir el efecto ni la auditoría.
+        if (opciones.idempotencia !== undefined) {
+          const previa = await reservarClave(
+            transaccion,
+            opciones.idempotencia,
+            this.reloj.ahora(),
+          );
+          if (previa !== null) return previa.respuesta as T;
+        }
         const resultado = await fn(transaccion);
         this.exigirAbierta(transaccion);
         const datos = this.datosDeAuditoria.get(transaccion);
@@ -73,6 +84,9 @@ export class OperacionPlataforma {
           detalle: datos?.detalle ?? {},
           ocurridoEn: this.reloj.ahora(),
         });
+        if (opciones.idempotencia !== undefined) {
+          await guardarRespuesta(transaccion, opciones.idempotencia, resultado, this.reloj.ahora());
+        }
         return resultado;
       },
       { confirmar: true, actor: actorDeTransaccion(actor) },

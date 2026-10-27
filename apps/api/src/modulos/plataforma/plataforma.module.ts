@@ -13,16 +13,20 @@ import {
   ConexionPlataforma,
   crearConexionPlataforma,
 } from '../../nucleo/base-de-datos/conexion-plataforma';
+import { AuditoriaModule } from '../auditoria';
 import { MODELOS_API, MODELOS_PLATAFORMA, definirModelos } from './modelos';
 import { EmisoresController } from './emisores.controller';
+import { EmisoresService } from './emisores.service';
 import { OperacionPlataforma } from './operacion-plataforma';
 import { PlanesController } from './planes.controller';
 import { PlataformaEmpresasController } from './plataforma-empresas.controller';
 import { PlataformaEmpresasService } from './plataforma-empresas.service';
 import { PlataformaSesionesController } from './plataforma-sesiones.controller';
+import { SoporteService } from './soporte.service';
 import { SucursalService } from './sucursal.service';
 import { SucursalesController } from './sucursales.controller';
 import { SuperadministradorGuard } from './superadministrador.guard';
+import { SuperadministradoresService } from './superadministradores.service';
 import { SuscripcionService } from './suscripcion.service';
 import { SuscripcionesController } from './suscripciones.controller';
 
@@ -32,6 +36,7 @@ import { SuscripcionesController } from './suscripciones.controller';
  * RLS, solo dentro de `ContextoEmpresa`) y los de plataforma (solo dentro de `OperacionPlataforma`).
  */
 @Module({
+  imports: [AuditoriaModule],
   controllers: [
     SucursalesController,
     EmisoresController,
@@ -60,6 +65,9 @@ import { SuscripcionesController } from './suscripciones.controller';
     OperacionPlataforma,
     PlataformaEmpresasService,
     SucursalService,
+    EmisoresService,
+    SoporteService,
+    SuperadministradoresService,
     SuscripcionService,
     SuperadministradorGuard,
   ],
@@ -67,6 +75,7 @@ import { SuscripcionesController } from './suscripciones.controller';
     OperacionPlataforma,
     PlataformaEmpresasService,
     SucursalService,
+    EmisoresService,
     SuscripcionService,
     SuperadministradorGuard,
   ],

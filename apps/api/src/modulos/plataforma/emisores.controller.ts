@@ -1,30 +1,43 @@
-import { Body, Controller, Get, Post } from '@nestjs/common';
+import { Body, Controller, Get, Inject, Post } from '@nestjs/common';
 import {
   emisorCrearEntradaSchema,
   type EmisorCrearEntrada,
   type EmisorRespuesta,
 } from '@restaurante/contratos';
-import { noImplementado } from '../../nucleo/errores';
 import { PipeZod } from '../../nucleo/errores/pipes';
 import { Idempotente } from '../../nucleo/idempotencia';
+import { AuditoriaService } from '../auditoria';
 import { SoloAdministrador } from '../seguridad';
+import { EmisoresService } from './emisores.service';
 
-/** Emisores de la empresa de la sesión (criterios 9 y 70). Lógica en la tarea T14 (lectura) y T27 (alta). */
+/** Emisores de la empresa de la sesión (criterios 9 y 70). */
 @Controller('emisores')
 export class EmisoresController {
+  constructor(
+    @Inject(EmisoresService) private readonly emisores: EmisoresService,
+    @Inject(AuditoriaService) private readonly auditoria: AuditoriaService,
+  ) {}
+
   /** 200: cualquier rol con sesión en la empresa. */
   @Get()
   async listar(): Promise<EmisorRespuesta[]> {
-    return noImplementado();
+    return this.emisores.listar();
   }
 
-  /** Solo Administrador. Con `Idempotency-Key` opcional. 201; 400; 403. */
+  /** Solo Administrador (y soporte). Con `Idempotency-Key` opcional. 201; 400; 403. */
   @Post()
   @SoloAdministrador()
   @Idempotente()
   async crear(
-    @Body(new PipeZod(emisorCrearEntradaSchema)) _entrada: EmisorCrearEntrada,
+    @Body(new PipeZod(emisorCrearEntradaSchema)) entrada: EmisorCrearEntrada,
   ): Promise<EmisorRespuesta> {
-    return noImplementado();
+    const emisor = await this.emisores.crear(entrada);
+    await this.auditoria.registrar({
+      accion: 'crear_emisor',
+      entidad: 'emisor',
+      entidadId: emisor.id,
+      detalle: { ruc: emisor.ruc, razonSocial: emisor.razonSocial, regimen: emisor.regimen },
+    });
+    return emisor;
   }
 }

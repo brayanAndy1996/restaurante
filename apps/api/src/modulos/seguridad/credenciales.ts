@@ -44,6 +44,21 @@ function derivar(
   });
 }
 
+/**
+ * Hash scrypt de una contraseña con una sal nueva (formato `scrypt$15$8$1$<sal>$<hash>`). No necesita el
+ * secreto de los PIN: la usan también los scripts (`crearSuperadministrador`) y la plataforma.
+ */
+export async function hashContrasenaScrypt(contrasena: string): Promise<string> {
+  const sal = randomBytes(BYTES_SAL);
+  const hash = await derivar(contrasena, sal, BYTES_CLAVE, {
+    N: 2 ** LOG2_N,
+    r: R,
+    p: P,
+    maxmem: MAXMEM,
+  });
+  return ['scrypt', LOG2_N, R, P, sal.toString('base64'), hash.toString('base64')].join('$');
+}
+
 /** Igualdad de dos buffers en tiempo constante; `false` si el largo difiere. */
 export function iguales(a: Buffer, b: Buffer): boolean {
   return a.length === b.length && timingSafeEqual(a, b);
@@ -73,15 +88,8 @@ export class Credenciales {
   // ---- Contraseñas -------------------------------------------------------------------------------
 
   /** Hash scrypt de la contraseña, con una sal nueva. */
-  async hashContrasena(contrasena: string): Promise<string> {
-    const sal = randomBytes(BYTES_SAL);
-    const hash = await derivar(contrasena, sal, BYTES_CLAVE, {
-      N: 2 ** LOG2_N,
-      r: R,
-      p: P,
-      maxmem: MAXMEM,
-    });
-    return ['scrypt', LOG2_N, R, P, sal.toString('base64'), hash.toString('base64')].join('$');
+  hashContrasena(contrasena: string): Promise<string> {
+    return hashContrasenaScrypt(contrasena);
   }
 
   /**

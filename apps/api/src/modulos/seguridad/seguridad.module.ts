@@ -11,6 +11,7 @@ import { AccesoSucursalController } from './acceso-sucursal.controller';
 import { AutenticacionGuard, MODO_PRUEBA } from './autenticacion.guard';
 import { AutorizacionesController } from './autorizaciones.controller';
 import { AutorizacionService } from './autorizacion.service';
+import { BloqueosService } from './bloqueos.service';
 import { Credenciales } from './credenciales';
 import { EquipoController } from './equipo.controller';
 import { HorarioService } from './horario.service';
@@ -18,7 +19,9 @@ import { ResolutorEmpresaSesion } from './resolutor-empresa-sesion';
 import { SesionActual } from './sesion-actual';
 import { SesionController } from './sesion.controller';
 import { SesionesController } from './sesiones.controller';
+import { SesionesService } from './sesiones.service';
 import { UsuariosController } from './usuarios.controller';
+import { UsuariosService } from './usuarios.service';
 
 /**
  * Dueño de las tablas de acceso (`usuario`, `acceso_sucursal`, `sucursal_acceso`, `equipo`,
@@ -43,6 +46,9 @@ import { UsuariosController } from './usuarios.controller';
   providers: [
     Credenciales,
     HorarioService,
+    BloqueosService,
+    SesionesService,
+    UsuariosService,
     ResolutorEmpresaSesion,
     { provide: RESOLUTOR_EMPRESA, useExisting: ResolutorEmpresaSesion },
     {
@@ -59,6 +65,9 @@ import { UsuariosController } from './usuarios.controller';
   exports: [
     Credenciales,
     HorarioService,
+    BloqueosService,
+    SesionesService,
+    UsuariosService,
     ResolutorEmpresaSesion,
     RESOLUTOR_EMPRESA,
     AutenticacionGuard,

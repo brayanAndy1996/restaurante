@@ -147,14 +147,25 @@ describe('rutas de la sección de acceso (fase A)', () => {
     expect((await request(app.getHttpServer()).get('/health')).status).toBe(200);
   });
 
+  it('las rutas de plataforma sin sesión de superadministrador responden 401 NO_AUTENTICADO', async () => {
+    for (const caso of [
+      () => request(app.getHttpServer()).get('/plataforma/empresas'),
+      () => request(app.getHttpServer()).delete('/plataforma/sesion'),
+    ]) {
+      const res = await caso();
+      expect(res.status).toBe(401);
+      expect(res.body).toMatchObject({ codigo: 'NO_AUTENTICADO' });
+    }
+  });
+
   it('las rutas cuya lógica llega en tareas posteriores responden "No implementado" como 500 sin detalles', async () => {
     const id = '11111111-1111-1111-1111-111111111111';
     const servidor = () => request(app.getHttpServer());
     const casos = [
-      () => servidor().get('/sesion').set('x-empresa-id', id),
       () => servidor().get('/equipo'),
-      () => servidor().get('/plataforma/empresas'),
-      () => servidor().delete('/plataforma/sesion'),
+      () => servidor().get('/sesion/equipos').set('x-empresa-id', id),
+      () => servidor().get(`/usuarios/${id}/equipos`).set('x-empresa-id', id),
+      () => servidor().post('/sesiones/pin').send({ usuarioId: id, pin: '1234' }),
     ];
     for (const caso of casos) {
       const res = await caso();

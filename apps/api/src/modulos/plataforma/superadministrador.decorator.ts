@@ -1,7 +1,17 @@
-import { SetMetadata, UseGuards, applyDecorators } from '@nestjs/common';
+import {
+  ExecutionContext,
+  SetMetadata,
+  UseGuards,
+  applyDecorators,
+  createParamDecorator,
+} from '@nestjs/common';
 import { SinEmpresa } from '../../nucleo/contexto-empresa';
 import { METADATO_SUPERADMINISTRADOR } from '../../nucleo/principal';
-import { SuperadministradorGuard } from './superadministrador.guard';
+import {
+  SuperadministradorGuard,
+  type PeticionConSuperadministrador,
+} from './superadministrador.guard';
+import type { SuperadministradorAutenticado } from './tipos';
 
 export const SUPERADMINISTRADOR = METADATO_SUPERADMINISTRADOR;
 
@@ -16,3 +26,9 @@ export const Superadministrador = () =>
     SetMetadata(SUPERADMINISTRADOR, true),
     UseGuards(SuperadministradorGuard),
   );
+
+/** El superadministrador autenticado de la petición (lo deja `SuperadministradorGuard`). */
+export const SuperadministradorActual = createParamDecorator(
+  (_dato: unknown, contexto: ExecutionContext): SuperadministradorAutenticado | undefined =>
+    contexto.switchToHttp().getRequest<PeticionConSuperadministrador>().superadministrador,
+);

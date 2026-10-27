@@ -20,6 +20,7 @@
     "db:revertir": "pnpm --filter @restaurante/api db:revertir",
     "build:compartidos": "turbo run build --filter=@restaurante/api^...",
     "db:semilla": "pnpm build:compartidos && pnpm --filter @restaurante/api db:semilla",
+    "plataforma:superadmin": "pnpm build:compartidos && pnpm --filter @restaurante/api plataforma:superadmin",
     "local:preparar": "node scripts/local-preparar.mjs"
   },
   "devDependencies": {

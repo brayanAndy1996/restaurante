@@ -10,7 +10,7 @@ que enlaza `CLAUDE.md`; las historias, en `specs/NNN-nombre/`.
 
 Historia 001 (base del monorepo, multitenancy y aislamiento entre empresas) terminada, con la fase E incluida (fijación única del contexto, errores 4xx y modo sin superusuario para PostgreSQL administrado). Su especificación, plan y tareas están en [`specs/001-base-multitenancy/`](specs/001-base-multitenancy/). La sección 1 de los requerimientos, «Plataforma y acceso», tiene su especificación en borrador en [`specs/002-plataforma-y-acceso/`](specs/002-plataforma-y-acceso/), pendiente de aprobación.
 
-Hasta la historia 002 (autenticación) las rutas de empresa responden 401 `EMPRESA_NO_RESUELTA`, salvo con el resolutor por cabecera de desarrollo y pruebas (`EMPRESA_POR_HEADER=habilitado`): todavía no hay forma de saber la empresa de una petición real.
+Historia 002 (plataforma y acceso), en curso por grupos de tareas (C0 a C4). Con el grupo C0 hecho hasta T18, **toda ruta exige sesión** (`Authorization: Bearer se.<empresa>.<sesión>.<secreto>`) salvo las `@Publica()` (`GET /health`, `POST /sesiones/contrasena`, `POST /sesiones/pin`, `GET /equipo` y `POST /plataforma/sesiones`): la empresa y la persona de cada petición salen de la sesión, nunca de una cabecera. Ya funcionan el ingreso con usuario y contraseña, la sesión (`GET /sesion`, sucursal activa, cambio de contraseña, salida), los usuarios y sus accesos, los emisores y sucursales, el superadministrador (`/plataforma/*`), el soporte, la idempotencia y la trazabilidad de quién creó y cambió cada fila. Los equipos recordados y el ingreso con PIN (C2), la clave de supervisor (C3), las suscripciones (C1) y su suspensión (C4) llegan en los grupos siguientes.
 
 ## Requisitos
 
@@ -135,11 +135,10 @@ export NODE_ENV=development
 export DATABASE_ADMIN_URL=postgres://postgres:postgres@localhost:5432/postgres
 export DATABASE_URL=postgres://restaurante_api:api_local@localhost:5432/restaurante
 export DATABASE_PLATAFORMA_URL=postgres://restaurante_plataforma:plataforma_local@localhost:5432/restaurante
-export EMPRESA_POR_HEADER=habilitado   # opcional: resolutor por cabecera x-empresa-id (solo desarrollo y pruebas)
 pnpm install --frozen-lockfile
 pnpm db:preparar   # roles restaurante_migrador / _api / _plataforma, la base `restaurante` y las protecciones del catálogo (idempotente; sin superusuario ver más abajo)
 pnpm db:migrar     # aplica las migraciones pendientes (idempotente); sin DATABASE_MIGRADOR_URL la deriva del admin y de la base de DATABASE_URL
-pnpm db:semilla    # compila los paquetes compartidos y crea dos empresas de demostración, actor `semilla` (idempotente)
+pnpm db:semilla    # compila los paquetes compartidos y crea un superadministrador y dos empresas de demostración con usuarios por rol, actor `semilla` (idempotente; imprime sus PIN)
 pnpm dev           # API en http://localhost:3000
 curl http://localhost:3000/health
 ```
@@ -163,15 +162,17 @@ superusuario, `DB_PROTECCION_CATALOGO=omitir` (ver arriba).
 
 ## Comandos
 
-| Comando                  | Qué hace                                                                 |
-| ------------------------ | ------------------------------------------------------------------------ |
-| `pnpm lint`              | ESLint en todo el monorepo (incluye las reglas del criterio 37)          |
-| `pnpm typecheck`         | Verificación de tipos                                                    |
-| `pnpm build`             | Compila los paquetes y la API                                            |
-| `pnpm test`              | Todas las pruebas (la API necesita `DATABASE_ADMIN_URL`)                 |
-| `pnpm format:check`      | Comprueba el formato con Prettier (`pnpm format` lo corrige)             |
-| `pnpm dev`               | API en modo desarrollo                                                   |
-| `pnpm build:compartidos` | Compila `packages/dominio` y `packages/contratos` (`db:semilla` lo hace) |
+| Comando                      | Qué hace                                                                 |
+| ---------------------------- | ------------------------------------------------------------------------ |
+| `pnpm lint`                  | ESLint en todo el monorepo (incluye las reglas del criterio 37)          |
+| `pnpm typecheck`             | Verificación de tipos                                                    |
+| `pnpm build`                 | Compila los paquetes y la API                                            |
+| `pnpm test`                  | Todas las pruebas (la API necesita `DATABASE_ADMIN_URL`)                 |
+| `pnpm format:check`          | Comprueba el formato con Prettier (`pnpm format` lo corrige)             |
+| `pnpm dev`                   | API en modo desarrollo                                                   |
+| `pnpm build:compartidos`     | Compila `packages/dominio` y `packages/contratos` (`db:semilla` lo hace) |
+| `pnpm db:semilla`            | Superadministrador y dos empresas de demostración, con usuarios por rol  |
+| `pnpm plataforma:superadmin` | Crea o desactiva un superadministrador (ver "Superadministrador")        |
 
 ## Pruebas
 
@@ -194,18 +195,21 @@ utilidades están en `apps/api/test/README.md`. Las pruebas de `packages/*` no u
 
 ## Variables de entorno
 
-| Variable                                                            | Uso                                                                                                                              |
-| ------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
-| `DATABASE_URL`                                                      | Conexión de la API (`restaurante_api`); su base es también la que usan por defecto `db:preparar` y `db:migrar`                   |
-| `DATABASE_PLATAFORMA_URL`                                           | Conexión de plataforma (`restaurante_plataforma`)                                                                                |
-| `DATABASE_MIGRADOR_URL`                                             | Migraciones (`restaurante_migrador`); si falta se deriva del admin                                                               |
-| `DATABASE_ADMIN_URL`                                                | Solo `db:preparar` y las pruebas: administrador de PostgreSQL; su base es la de mantenimiento; `sslmode` en producción           |
-| `DB_PASSWORD_MIGRADOR`, `DB_PASSWORD_API`, `DB_PASSWORD_PLATAFORMA` | Contraseñas que `db:preparar` asigna a los roles; obligatorias salvo con `NODE_ENV` `development` o `test`                       |
-| `DB_PROTECCION_CATALOGO`                                            | Solo `db:preparar`. `omitir`: sin superusuario, omite las protecciones del catálogo y avisa (producción); otro valor es un error |
-| `DB_POOL_MAX`                                                       | Tamaño del pool de la API (por defecto 10)                                                                                       |
-| `EMPRESA_POR_HEADER`                                                | `habilitado` activa el resolutor por cabecera `x-empresa-id`; la API se niega a arrancar con él en producción                    |
-| `NODE_ENV`                                                          | Obligatoria, sin valor por defecto: `development`, `test` o `production`                                                         |
-| `PORT`                                                              | Puerto de la API (por defecto 3000)                                                                                              |
+| Variable                                                            | Uso                                                                                                                                                                                                                                                                   |
+| ------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `DATABASE_URL`                                                      | Conexión de la API (`restaurante_api`); su base es también la que usan por defecto `db:preparar` y `db:migrar`                                                                                                                                                        |
+| `DATABASE_PLATAFORMA_URL`                                           | Conexión de plataforma (`restaurante_plataforma`)                                                                                                                                                                                                                     |
+| `DATABASE_MIGRADOR_URL`                                             | Migraciones (`restaurante_migrador`); si falta se deriva del admin                                                                                                                                                                                                    |
+| `DATABASE_ADMIN_URL`                                                | Solo `db:preparar` y las pruebas: administrador de PostgreSQL; su base es la de mantenimiento; `sslmode` en producción                                                                                                                                                |
+| `DB_PASSWORD_MIGRADOR`, `DB_PASSWORD_API`, `DB_PASSWORD_PLATAFORMA` | Contraseñas que `db:preparar` asigna a los roles; obligatorias salvo con `NODE_ENV` `development` o `test`                                                                                                                                                            |
+| `DB_PROTECCION_CATALOGO`                                            | Solo `db:preparar`. `omitir`: sin superusuario, omite las protecciones del catálogo y avisa (producción); otro valor es un error                                                                                                                                      |
+| `DB_POOL_MAX`                                                       | Tamaño del pool de la API (por defecto 10)                                                                                                                                                                                                                            |
+| `EMPRESA_POR_HEADER`                                                | **Solo pruebas.** `habilitado` con `NODE_ENV=test` da un principal de prueba (Administrador, actor `prueba`) a las peticiones sin `Authorization` con `x-empresa-id`; la API se niega a arrancar con él en `development` y en `production`. No lo pongas en tu `.env` |
+| `PIN_PEPPER`                                                        | Secreto (base64, 32 bytes o más) con el que se calcula la huella de los PIN. Obligatoria en producción; con `development` o `test` hay un valor local. **Cambiarla invalida todos los PIN**; nunca va en la base ni en los respaldos                                  |
+| `ORIGENES_PERMITIDOS`                                               | Orígenes de la PWA permitidos por CORS, separados por coma, sin ruta ni barra final. Obligatoria en producción (por defecto local: `http://localhost:5173`)                                                                                                           |
+| `SUPERADMIN_CONTRASENA`                                             | Solo para automatizar `pnpm plataforma:superadmin crear` y `db:semilla`: la contraseña del superadministrador (nunca como argumento)                                                                                                                                  |
+| `NODE_ENV`                                                          | Obligatoria, sin valor por defecto: `development`, `test` o `production`                                                                                                                                                                                              |
+| `PORT`                                                              | Puerto de la API (por defecto 3000)                                                                                                                                                                                                                                   |
 
 ## Aislamiento entre empresas: reglas para quien programa
 
@@ -259,8 +263,10 @@ Una empresa nunca ve datos de otra. La garantía la da PostgreSQL (RLS) y la ref
   registran dentro y se ejecutan después de confirmar.
 - **Operaciones de plataforma** (alta de empresas, solo el superadministrador): únicamente por
   `OperacionPlataforma.ejecutar({ actor, motivo, operacion }, fn)` o `PlataformaEmpresasService`.
-  Corren con `restaurante_plataforma`, dejan una fila inmutable en `auditoria_plataforma` en la misma
-  transacción y no pueden anidarse con un contexto de empresa. Solo `src/modulos/plataforma/` puede
+  Corren con `restaurante_plataforma`, dejan una fila inmutable en `auditoria` (con `origen = 'plataforma'`; la
+  tabla `auditoria_plataforma` de la historia 001 se unió a `auditoria`) en la misma
+  transacción, fijan su actor (un texto de sistema como `semilla` o `cli:superadmin`, o
+  `{ superadministradorId }` en las rutas HTTP) y no pueden anidarse con un contexto de empresa. Solo `src/modulos/plataforma/` puede
   importar la conexión de plataforma (regla de ESLint, que también ve `import()`, `require`,
   `import x = require()` y los reexportes, en archivos `.ts`, `.tsx`, `.mts` y `.cts`). `fn` no puede
   confirmar ni revertir la transacción (`commit()`, `rollback()` o SQL `COMMIT`/`ROLLBACK`/`END`/
@@ -277,10 +283,52 @@ Una empresa nunca ve datos de otra. La garantía la da PostgreSQL (RLS) y la ref
   demás `PETICION_INVALIDA`. Los errores propios (`EMPRESA_NO_RESUELTA`, `EMISOR_INVALIDO`…), 400, 409
   y 413 siguen igual; solo lo no controlado responde 500 `ERROR_INTERNO`. Los códigos están en
   `CODIGOS_ERROR` de `packages/contratos`.
-- **Quién resuelve la empresa de la petición.** El token `RESOLUTOR_EMPRESA`: en producción es el
-  resolutor nulo (siempre 401 `EMPRESA_NO_RESUELTA`) hasta que la historia 002 instale el de sesión; en
-  desarrollo y pruebas, con `EMPRESA_POR_HEADER=habilitado`, lee `x-empresa-id`. Una ruta que no
-  pertenece a ninguna empresa se marca `@SinEmpresa()` (por ejemplo `GET /health`).
+- **Quién resuelve la empresa de la petición.** La sesión: `AutenticacionGuard` (global) valida el token
+  `se.<empresa>.<sesión>.<secreto>`, y el resolutor `ResolutorEmpresaSesion` (token `RESOLUTOR_EMPRESA`)
+  toma de ella la empresa y el actor. Una ruta sin `@Publica()` ni `@Superadministrador()` exige sesión
+  (una ruta nueva sin decorador queda cerrada). La cabecera `x-empresa-id` ya no cuenta: solo con
+  `NODE_ENV=test` y `EMPRESA_POR_HEADER=habilitado` y sin `Authorization`, para las pruebas. Una ruta que
+  no pertenece a ninguna empresa se marca `@SinEmpresa()` (por ejemplo `@Publica()` la implica).
+
+## Sesión, superadministrador y datos de demostración
+
+- **Ingreso.** `POST /sesiones/contrasena` con `{ usuario, contrasena }` devuelve `{ token, sesion }`; el
+  token va en `Authorization: Bearer …`. El nombre de usuario es único en todo el sistema (no se pide la
+  empresa). 5 fallos seguidos bloquean la cuenta 15 minutos (429 `BLOQUEO_TEMPORAL`); la sesión se cierra
+  a los 30 minutos sin peticiones y a las 12 horas. Los usuarios nuevos tienen una contraseña temporal
+  y deben cambiarla (`PUT /sesion/contrasena`) antes de usar el resto de rutas.
+- **Superadministrador** (nuestro personal; entra a todas las empresas por `/plataforma/*` y da soporte).
+  Solo se crea y se desactiva con el script, no hay ruta HTTP:
+
+  ```bash
+  pnpm plataforma:superadmin crear <usuario> "<nombre>"   # pide la contraseña por la entrada estándar
+  pnpm plataforma:superadmin desactivar <usuario>         # cierra sus sesiones y las de soporte
+  ```
+
+  La contraseña nunca va como argumento: se escribe cuando el script la pide, o se pasa por
+  `SUPERADMIN_CONTRASENA` (para automatizar). Entra con `POST /plataforma/sesiones` (token `sa.…`, 8
+  horas) y da de alta empresas con `POST /plataforma/empresas`, que crea también a su primer
+  Administrador (el PIN se muestra una sola vez). `POST /plataforma/empresas/:id/soporte` abre una sesión
+  de soporte (permisos de Administrador, 2 horas, siempre auditada).
+
+- **`pnpm db:semilla`** crea el superadministrador `superadmin` (contraseña `Superadmin-Demo-1` o la de
+  `SUPERADMIN_CONTRASENA`) y dos empresas de demostración con un usuario por rol (`fogon.admin`,
+  `fogon.supervisor`, `fogon.cajero`, `fogon.mozo`, `fogon.cocina` con un horario de ejemplo,
+  `marea.admin`, `marea.cajero`, `marea.mozo`), todos con la contraseña temporal `Temporal-Demo-1`;
+  imprime sus PIN, que solo se conocen al crearlos. Es idempotente y se niega a correr con
+  `NODE_ENV=production`: son datos y contraseñas públicas de demostración.
+  ```bash
+  curl -s -X POST localhost:3000/sesiones/contrasena -H 'content-type: application/json' \
+    -d '{"usuario":"fogon.cajero","contrasena":"Temporal-Demo-1"}'
+  curl -s localhost:3000/sesion -H "Authorization: Bearer <token>"
+  ```
+- **Secretos.** Las contraseñas se guardan con scrypt, los PIN con HMAC-SHA256 y `PIN_PEPPER`, y los
+  secretos de sesión con SHA-256: nada secreto está en claro en la base, en la auditoría ni en el registro.
+- **Idempotencia.** Las escrituras marcadas `@Idempotente()` (`POST /emisores`, `POST /sucursales`, las de
+  `/plataforma/empresas/:id/emisores` y `/sucursales`, y más adelante pagos y autorizaciones) aceptan la
+  cabecera `Idempotency-Key` (un UUID): repetir la petición con la misma clave y el mismo cuerpo devuelve la
+  misma respuesta sin repetir el efecto; la misma clave con otro cuerpo, ruta o usuario responde 422
+  `CLAVE_IDEMPOTENCIA_REUTILIZADA`. Las claves se guardan 24 horas, por empresa.
 
 ### Convención para una tabla nueva con datos de clientes
 
@@ -297,6 +345,26 @@ Cada migración que crea una tabla de empresa debe, en la misma migración:
 
 La prueba de catálogo (`apps/api/test/aislamiento/catalogo.spec.ts`) recorre las tablas de `public`
 en cada ejecución: una tabla nueva sin RLS, sin política o con privilegios de más hace fallar la suite.
+
+### Convención de trazabilidad (historia 002, criterios 113 a 120)
+
+Toda tabla con datos de clientes guarda **quién la creó y quién la cambió por última vez** (usuario y
+equipo, superadministrador o actor de sistema). Lo llena la base, nunca el cuerpo de la petición:
+
+- La migración que crea la tabla usa `sqlTablaDeEmpresaTrazable(nombre, opciones)` en lugar de
+  `sqlTablaDeEmpresa`: es lo mismo más las columnas `creado_por_*` y `actualizado_por_*`, sus `CHECK`, las
+  llaves compuestas hacia `usuario` y `equipo` y el trigger `trazabilidad`. Las únicas excepciones son
+  `auditoria`, `sesion`, `bloqueo_intentos` e `idempotencia`; la prueba de catálogo
+  (`apps/api/test/acceso/catalogo-trazabilidad.spec.ts`) falla si una tabla nueva no cumple.
+- Toda escritura corre con un **actor fijado** en la transacción (`fijar_contexto_actor`, una sola vez, como
+  la empresa): sin actor, la escritura falla con `42501` "contexto de actor ausente". En las peticiones lo
+  fija el interceptor de contexto con el actor de la sesión; en un script, la semilla o una tarea del worker
+  hay que pasarlo: `ContextoEmpresa.ejecutar(empresaId, fn, { actor: { sistema: 'worker:mi-tarea' } })` u
+  `OperacionPlataforma.ejecutar({ actor: 'cli:mi-script', … })`. Los ingresos lo fijan con
+  `ContextoEmpresa.fijarActor` después de verificar las credenciales. Una migración que escribe datos lo
+  fija con `migracion:<nombre>`.
+- Los esquemas de entrada de `packages/contratos` nunca aceptan `empresaId`, `creadoPor*` ni
+  `actualizadoPor*`.
 
 Revertir la migración `202610270002-contexto-empresa-unico.ts` (`pnpm db:revertir`) deja la RLS
 leyendo otra vez `app.empresa_id` y rompe `ContextoEmpresa`: nunca se revierte sin revertir también el

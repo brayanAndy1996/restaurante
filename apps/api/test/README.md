@@ -301,8 +301,11 @@ Desde el grupo C0 (T6 a T11) ya están **registrados** el guard global de autent
 sesión: toda ruta exige sesión (`Authorization: Bearer se.<empresa>.<sesión>.<secreto>`) salvo las
 `@Publica()`, y la cabecera `x-empresa-id` solo vale con `NODE_ENV=test` y `EMPRESA_POR_HEADER=habilitado`
 (modo de prueba: sin `Authorization`, principal de prueba con permisos de Administrador y actor `prueba`).
-Con `development` la API no arranca si la cabecera está habilitada. Siguen sin lógica las rutas de las
-tareas T12 en adelante (ingreso, usuarios, equipos, PIN, autorizaciones, plataforma por HTTP).
+Con `development` la API no arranca si la cabecera está habilitada. Desde el grupo C0 segunda parte (T12 a
+T18) funcionan el ingreso con contraseña y la sesión, los usuarios, los emisores y sucursales, el
+superadministrador, el soporte y la idempotencia (ver el final de este archivo); siguen sin lógica
+(responden 500 `ERROR_INTERNO`) las rutas de equipos recordados y PIN (T33 y T34), la clave de supervisor
+(T38), los planes y las suscripciones (T28) y el acceso de la sucursal (T34).
 
 ### Reloj de la API y `RelojManual`
 
@@ -495,3 +498,38 @@ Símbolos nuevos (desde `test/seguridad/`): `Credenciales`, `armarToken*`/`parse
 `ConexionPlataforma.fijarActor` (lo llama `OperacionPlataforma`); `PrincipalInterceptor` y `principalActual`
 (`src/nucleo/principal`); `exigirEntornoDeProduccion` (`src/config/entorno`: en producción `PIN_PEPPER` y
 `ORIGENES_PERMITIDOS` son obligatorias al crear la aplicación).
+
+## Historia 002 · grupo C0, segunda parte (T12 a T18)
+
+Lo que hay ahora además de lo anterior:
+
+- **Rutas con lógica:** `POST /sesiones/contrasena`, `GET /sesion`, `PUT /sesion/sucursal`,
+  `PUT /sesion/contrasena`, `DELETE /sesion`; `/usuarios` (lista, alta, edición, PIN, contraseña);
+  `GET /emisores`, `POST /emisores`, `POST /sucursales` y `PATCH /sucursales/:id` (con su auditoría);
+  `POST /plataforma/sesiones`, `DELETE /plataforma/sesion`, `GET /plataforma/empresas` (y `/:id`),
+  `POST /plataforma/empresas` (con el primer Administrador y su PIN), `POST /plataforma/empresas/:id/emisores`,
+  `/sucursales` y `/soporte`. La suscripción de cada sucursal (`suscripcion` en las respuestas, `PLAN_INVALIDO`,
+  vencimientos) llega con C1: hasta entonces `estadoSuscripcion` es `null` y `suscripciones` va vacío.
+- **Funciones y servicios nuevos** (desde `test/<carpeta>/`): `SesionesService`, `UsuariosService`,
+  `BloqueosService` y las funciones `insertarAdministradorInicial`, `administradoresDeEmpresa`,
+  `insertarSesionSoporte` y `cerrarSesionesDeSuperadministrador` (`src/modulos/seguridad`);
+  `SuperadministradoresService`, `SoporteService`, `EmisoresService` y `SuperadministradorActual`
+  (`src/modulos/plataforma`); `IdempotenciaInterceptor` y `leerClaveIdempotencia`
+  (`src/nucleo/idempotencia`); `crearSuperadministrador` y `desactivarSuperadministrador`
+  (`scripts/lib/superadministrador`, con el actor `cli:superadmin`, sobre `OperacionPlataforma` y la
+  conexión de plataforma del entorno).
+- **Opciones nuevas:** `OperacionPlataforma.ejecutar({ …, idempotencia: { clave, ruta, actor, cuerpo } })`
+  guarda y devuelve la respuesta de una operación idempotente de plataforma; `ErrorAplicacion` acepta
+  `reintentarEnSegundos` (el filtro lo agrega al cuerpo y a `Retry-After`).
+- **Detalles que las pruebas deben conocer:** `idempotencia` e `idempotencia_plataforma` no dan `UPDATE`,
+  así que la fila `en_curso` se reemplaza por la `completada` (DELETE + INSERT en la misma transacción);
+  la API no puede leer `superadministrador`, así que el nombre de quien da soporte en `GET /sesion` sale
+  de la fila `inicio_soporte` de la auditoría; un ingreso con contraseña fija el actor después de
+  verificarla (el usuario si es correcta, `autenticacion` si no) y la respuesta de error se lanza después
+  de confirmar la transacción, por eso los fallos y el bloqueo quedan guardados.
+- **Pruebas del desarrollador nuevas** (`test/seguridad/`): `idempotencia.spec.ts` (T17: repetición, otro
+  cuerpo, otra ruta, otro usuario, empresas A y B, errores no guardados, concurrencia, retención de 24 horas y
+  la idempotencia de plataforma) y `sesiones-y-usuarios.spec.ts` (nombre del soporte, último Administrador
+  con cambios concurrentes, desactivar y cambiar la propia contraseña).
+- **Semilla:** `pnpm db:semilla` crea el superadministrador `superadmin` y las dos empresas de demostración
+  con un usuario por rol (ver el README de la raíz).

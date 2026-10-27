@@ -1,4 +1,14 @@
-import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  HttpCode,
+  Inject,
+  Param,
+  Patch,
+  Post,
+} from '@nestjs/common';
 import {
   restablecerContrasenaEntradaSchema,
   usuarioCrearEntradaSchema,
@@ -15,53 +25,56 @@ import {
 import { noImplementado } from '../../nucleo/errores';
 import { PipeUuid, PipeZod } from '../../nucleo/errores/pipes';
 import { SoloAdministrador } from './decoradores';
+import { UsuariosService } from './usuarios.service';
 
 /** Usuarios y accesos (RF-08): solo el Administrador (criterio 25). Lógica en las tareas T13 y T33. */
 @Controller('usuarios')
 @SoloAdministrador()
 export class UsuariosController {
+  constructor(@Inject(UsuariosService) private readonly usuarios: UsuariosService) {}
+
   @Get()
   async listar(): Promise<UsuarioRespuesta[]> {
-    return noImplementado();
+    return this.usuarios.listar();
   }
 
   @Get(':id')
-  async obtener(@Param('id', PipeUuid) _id: string): Promise<UsuarioRespuesta> {
-    return noImplementado();
+  async obtener(@Param('id', PipeUuid) id: string): Promise<UsuarioRespuesta> {
+    return this.usuarios.obtener(id);
   }
 
   /** 201 con el `pin` (única vez que se muestra); 400; 409 `CONFLICTO`; 422 `SUCURSAL_INVALIDA`. */
   @Post()
   async crear(
-    @Body(new PipeZod(usuarioCrearEntradaSchema)) _entrada: UsuarioCrearEntrada,
+    @Body(new PipeZod(usuarioCrearEntradaSchema)) entrada: UsuarioCrearEntrada,
   ): Promise<UsuarioCreadoRespuesta> {
-    return noImplementado();
+    return this.usuarios.crear(entrada);
   }
 
   /** 200; trae `pin` solo si cambió su largo (criterio 21b); 409 `ULTIMO_ADMINISTRADOR`. */
   @Patch(':id')
   async modificar(
-    @Param('id', PipeUuid) _id: string,
-    @Body(new PipeZod(usuarioModificarEntradaSchema)) _cambios: UsuarioModificarEntrada,
+    @Param('id', PipeUuid) id: string,
+    @Body(new PipeZod(usuarioModificarEntradaSchema)) cambios: UsuarioModificarEntrada,
   ): Promise<UsuarioModificadoRespuesta> {
-    return noImplementado();
+    return this.usuarios.modificar(id, cambios);
   }
 
   /** 200 `{ pin }`: PIN nuevo del largo vigente. */
   @Post(':id/pin')
   @HttpCode(200)
-  async regenerarPin(@Param('id', PipeUuid) _id: string): Promise<PinRespuesta> {
-    return noImplementado();
+  async regenerarPin(@Param('id', PipeUuid) id: string): Promise<PinRespuesta> {
+    return this.usuarios.regenerarPin(id);
   }
 
   /** 204: contraseña temporal nueva; cierra sesiones y revoca equipos. */
   @Post(':id/contrasena')
   @HttpCode(204)
   async restablecerContrasena(
-    @Param('id', PipeUuid) _id: string,
-    @Body(new PipeZod(restablecerContrasenaEntradaSchema)) _entrada: RestablecerContrasenaEntrada,
+    @Param('id', PipeUuid) id: string,
+    @Body(new PipeZod(restablecerContrasenaEntradaSchema)) entrada: RestablecerContrasenaEntrada,
   ): Promise<void> {
-    return noImplementado();
+    return this.usuarios.restablecerContrasena(id, entrada.contrasenaTemporal);
   }
 
   /** 200 `equipoRecordadoRespuesta[]`; 404. */

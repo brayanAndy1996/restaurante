@@ -37,3 +37,17 @@ export { EquipoController } from './equipo.controller';
 export { SesionController } from './sesion.controller';
 export { SesionesController } from './sesiones.controller';
 export { UsuariosController } from './usuarios.controller';
+export { BloqueosService, segundosHasta } from './bloqueos.service';
+export type { AmbitoBloqueo, EstadoBloqueo, ResultadoFallo } from './bloqueos.service';
+export { SesionesService } from './sesiones.service';
+export { UsuariosService } from './usuarios.service';
+export { hashContrasenaScrypt } from './credenciales';
+export { administradoresDeEmpresa, insertarAdministradorInicial } from './usuarios-plataforma';
+export type { AdministradorDeEmpresa, DatosAdministradorInicial } from './usuarios-plataforma';
+export {
+  HORAS_MAXIMAS_SOPORTE,
+  MINUTOS_INACTIVIDAD_SOPORTE,
+  cerrarSesionesDeSuperadministrador,
+  insertarSesionSoporte,
+} from './sesion-soporte';
+export type { DatosSesionSoporte } from './sesion-soporte';
