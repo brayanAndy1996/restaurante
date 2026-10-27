@@ -54,7 +54,7 @@ async function nombreActual(): Promise<string> {
 
 async function auditorias(actor: string): Promise<number> {
   const { rows } = await admin.query<{ n: string }>(
-    'SELECT count(*)::text AS n FROM auditoria_plataforma WHERE actor = $1',
+    "SELECT count(*)::text AS n FROM auditoria WHERE origen = 'plataforma' AND actor_sistema = $1",
     [actor],
   );
   return Number(rows[0]!.n);

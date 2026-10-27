@@ -155,9 +155,10 @@ describe.each(ORIGENES)('criterio 27b · código que sobrevive a: %s', (origen) 
       ),
     );
     expect(resultado).toBe('hecho');
-    const { rows } = await admin.query('SELECT 1 FROM auditoria_plataforma WHERE actor = $1', [
-      actor,
-    ]);
+    const { rows } = await admin.query(
+      "SELECT 1 FROM auditoria WHERE origen = 'plataforma' AND actor_sistema = $1",
+      [actor],
+    );
     expect(rows).toHaveLength(1);
   });
 
@@ -210,9 +211,10 @@ describe('criterio 27b · un temporizador que sigue vivo tras ejecutar', () => {
       });
     });
     expect(await resultado).toBe('ok');
-    const { rows } = await admin.query('SELECT 1 FROM auditoria_plataforma WHERE actor = $1', [
-      actor,
-    ]);
+    const { rows } = await admin.query(
+      "SELECT 1 FROM auditoria WHERE origen = 'plataforma' AND actor_sistema = $1",
+      [actor],
+    );
     expect(rows).toHaveLength(1);
   });
 });

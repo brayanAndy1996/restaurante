@@ -33,7 +33,8 @@ Contraseñas de los roles: `DB_PASSWORD_MIGRADOR|API|PLATAFORMA`; si faltan, `mi
 2. `DROP DATABASE IF EXISTS restaurante_test WITH (FORCE)` y la crea con dueño `restaurante_migrador`.
 3. `REVOKE ALL ... FROM PUBLIC` sobre la base y `CONNECT` para `restaurante_api` y `restaurante_plataforma`.
 4. Corre las migraciones como migrador (`src/migraciones/`, umzug): `202610270001-plataforma-base.ts`
-   crea las tablas `empresa`, `emisor`, `sucursal` y `auditoria_plataforma` con su RLS forzada,
+   crea las tablas `empresa`, `emisor`, `sucursal` y `auditoria_plataforma` (que la migración
+   `202610280003-auditoria-general.ts` de la historia 002 reemplaza por `auditoria`) con su RLS forzada,
    políticas y privilegios; `202610270002-contexto-empresa-unico.ts` (criterio 22e) crea el esquema
    interno `contexto`, la tabla `contexto.sesion_empresa` y las funciones `fijar_contexto_empresa(uuid)`
    y `empresa_actual()`, que la RLS lee.
@@ -153,7 +154,13 @@ listarEmpresas(): Promise<{ id: string; nombre: string }[]>
 
 ## Crear las empresas A y B en las pruebas
 
-Las tablas son `empresa`, `emisor`, `sucursal` y `auditoria_plataforma`. Se crean así:
+Las tablas son `empresa`, `emisor`, `sucursal` y, desde la historia 002, `auditoria` (las filas de
+plataforma llevan `origen = 'plataforma'`, `accion` y `actor_sistema` en lugar de `operacion` y `actor`).
+Desde la historia 002 toda escritura por SQL en una tabla trazada necesita un actor fijado en la misma
+transacción con `SELECT fijar_contexto_actor(NULL, NULL, NULL, 'prueba')` (ver `fijarActorDePrueba`,
+`conActor` y `comenzar` más abajo); sin actor la base responde 42501 "contexto de actor ausente", el mismo
+SQLSTATE que un rechazo de RLS, así que las pruebas de aislamiento fijan el actor y comprueban que el
+mensaje del error es el de la política ("row-level security"). Se crean así:
 
 - Por la API: `await app.get(PlataformaEmpresasService).registrarEmpresa(datos, { actor: 'prueba', motivo: 'prueba' })`
   con `datos` de `RegistrarEmpresaEntrada` (nombre, al menos un emisor con RUC válido y al menos
@@ -170,13 +177,21 @@ Las tablas son `empresa`, `emisor`, `sucursal` y `auditoria_plataforma`. Se crea
 
 ### Ayudantes de `test/aislamiento/fabrica.ts`
 
-- `enTransaccion(cliente, empresaId | null, fn, { confirmar? })`: `BEGIN`, `SELECT fijar_contexto_empresa($1)`
+- `enTransaccion(cliente, empresaId | null, fn, { confirmar?, actor? })`: `BEGIN`, el actor de sistema
+  `prueba` (o el de `opciones.actor`; `false` para no fijar ninguno), `SELECT fijar_contexto_empresa($1)`
   (si `empresaId` no es `null`), `fn`, y `ROLLBACK` o `COMMIT`.
+- `ACTOR_DE_PRUEBA`, `fijarActorDePrueba(cliente, sistema?)`, `comenzar(cliente, sistema?)` (`BEGIN` más el
+  actor), `conActor(cliente, fn, { sistema?, confirmar? })` (transacción propia con actor, para escrituras
+  sueltas) y `sinEmpresaConActor(cliente, fn)` (transacción con actor que siempre se revierte, para las
+  sentencias que deben fallar por falta de contexto de empresa). El actor se fija **una sola vez por
+  transacción** y muere con ella.
+- Con `ContextoEmpresa.ejecutar` las pruebas que escriben pasan `{ actor: { sistema: 'prueba' } }`.
 - `enTransaccionConSetConfig(cliente, valor, fn, { confirmar? })`: igual pero la única "fijación" es
   `set_config('app.empresa_id', valor, true)`; no da contexto, para los intentos de los criterios 19, 21 y 22e (c).
 - `sentenciasDelCriterio19(cliente, empresaId)` y `exigirContextoAusente(cliente, empresaId, { enTransaccionAbierta? })`:
   las diez sentencias del criterio 19 y la comprobación de que todas fallan con `42501` `contexto de empresa ausente`.
-- `crearEmpresaSql`, `datosDeEmpresa`, `rucAleatorio`, `textoUnico`, `errorDe`, `fotoDeFila`.
+- `crearEmpresaSql` (corre en una transacción con el actor `prueba`), `datosDeEmpresa`, `rucAleatorio`,
+  `textoUnico`, `errorDe`, `fotoDeFila`.
 - `nombres-prohibidos.ts`: la lista de nombres de la guarda (criterio 38e) con sus variantes, compartida por
   `guarda-nombres-api.spec.ts` y `guarda-nombres-plataforma.spec.ts`.
 
@@ -418,3 +433,34 @@ diasRestantesGracia }` (`diasRestantesGracia` solo en gracia, si no `null`). Lan
   `puedeAutorizar(rol, accion)`, `alcanceReportes(rol)` (`'TURNO' | 'SUCURSAL' | 'EMPRESA' | null`),
   `permisosDeRol(rol)` (`Record<Accion, RequisitoPermiso>`), `largoPin({ esAdministrador, roles })`
   (`4 | 6`) y `dentroDeHorario(tramos | null, instante: Date)`.
+
+## Historia 002 · fase B, grupo 3: auditoría, plataforma, soporte, catálogo y trazabilidad
+
+Pruebas protegidas (`// spec: 002-plataforma-y-acceso (pruebas protegidas)`) en `test/acceso/`. Usan la API real con
+`RelojManual`, sin `EMPRESA_POR_HEADER` (salvo la prueba del principal de prueba), el superadministrador creado con
+`crearSuperadministrador`, las empresas dadas de alta con `POST /plataforma/empresas` y los usuarios creados con
+`POST /usuarios`. Los títulos llevan `[C0]` a `[C3]` según el grupo de la fase C que crea lo que se prueba (C0:
+transversal, C1: suscripciones, C2: equipos y PIN, C3: clave de supervisor).
+
+| Archivo                         | Criterios                                                                                                                                                                        |
+| ------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `auditoria.spec.ts`             | 54 a 60: inmutabilidad, aislamiento, migración de `auditoria_plataforma` (base aparte, revertir y volver), contenido de cada fila, una fila por acción, secretos, hora del reloj |
+| `plataforma-http.spec.ts`       | 61 a 65: superadministradores, rutas `/plataforma/*`, alta de empresa, emisores y sucursales, consultas                                                                          |
+| `soporte.spec.ts`               | 66 a 68 (y 61 y 62 en lo de soporte): sesión de soporte, aislamiento y mezcla de credenciales                                                                                    |
+| `catalogo-acceso.spec.ts`       | 88 a 90: privilegios y políticas de las tablas nuevas, esquemas internos, `empresa_de_usuario`, unicidad global                                                                  |
+| `rls-acceso.spec.ts`            | 91: lectura, actualización, borrado e inserción entre empresas en las 13 tablas nuevas, con actor fijado                                                                         |
+| `catalogo-trazabilidad.spec.ts` | 113, 114, 115, 116 y 118: recorrido de `pg_catalog`, `fijar_contexto_actor`, SQL con y sin actor, migración de 001                                                               |
+| `trazabilidad.spec.ts`          | 114, 115, 117, 119 y 120: actor según la vía, cuerpo de la petición, 500 sin actor, 100 escrituras concurrentes                                                                  |
+
+Ayudantes en `test/acceso/fabrica-plataforma.ts` (import `./fabrica-plataforma`):
+
+- `arrancar({ poolMax?, inicio?, controladoresExtra? })` → `{ app, reloj, http(), cerrar() }` (API real con `RelojManual`).
+- `nuevoSuperadmin(ctx)`, `altaEmpresa(ctx, sa, { emisores?, sucursalesPorEmisor?, ajustar?, conSesion? })`
+  (devuelve `{ empresaId, emisores, sucursales, suscripciones, admin: { id, usuario, contrasena, pin, token } }`),
+  `crearUsuario`, `crearUsuarioConSesion`, `ingresar`, `ingresarOk`, `cambiarContrasena`, `elegirSucursal`,
+  `recordarEquipo`, `partesDeToken`, `conEmpresa`, `bearer`, `exigirEstado`.
+- `filasDeAuditoria(admin, condicion, parametros)`, `filaPorId(admin, tabla, id)`, `checkAcepta(admin, tabla, valores)`
+  (comprueba el sentido de un `CHECK` con una copia temporal de la tabla).
+- `crearBaseNueva(etiqueta)`, `migrarHasta(base, prefijo?)`, `revertirHasta(base, prefijo)`: bases temporales para probar
+  migraciones con filas de 001 (`PREFIJO_*` de las migraciones nuevas).
+- Las sondas de las pruebas de 001 son ahora `@Publica()` (las rutas están protegidas por defecto, criterio 1).

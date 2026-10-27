@@ -38,7 +38,9 @@ afterAll(async () => {
   await plataforma?.end();
 });
 
-const dentro = <T>(fn: () => Promise<T>) => contexto.ejecutar(A.id, fn);
+// Sección 002 (P10): con el actor de sistema `prueba`, porque algunas pruebas escriben (criterio 115).
+const dentro = <T>(fn: () => Promise<T>) =>
+  contexto.ejecutar(A.id, fn, { actor: { sistema: 'prueba' } });
 
 describe('criterio 22b · literales que parecen sentencias de sesión no se rechazan', () => {
   const COMPARACIONES: { nombre: string; literal: string }[] = [

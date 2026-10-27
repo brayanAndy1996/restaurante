@@ -23,6 +23,7 @@ import { prepararBaseDeDatos } from '../../scripts/lib/preparar-bd';
 import { exigirUrlAdmin } from '../../scripts/lib/roles';
 import { NOMBRES_DE_ROLES, abrirCliente, urlDeRol } from '../utilidades';
 import {
+  comenzar,
   crearEmpresaSql,
   errorDe,
   exigirContextoAusente,
@@ -320,7 +321,7 @@ describe('criterio 38e (c, e) · administrador sin superusuario con DB_PROTECCIO
 
     it('con fijar_contexto_empresa(A) solo se ven filas de A en empresa, emisor y sucursal', async () => {
       const c = clienteApi!;
-      await c.query('BEGIN');
+      await comenzar(c);
       try {
         await c.query('SELECT fijar_contexto_empresa($1)', [A.id]);
         expect(ids((await c.query('SELECT id FROM empresa')).rows)).toEqual([A.id]);
@@ -333,7 +334,7 @@ describe('criterio 38e (c, e) · administrador sin superusuario con DB_PROTECCIO
 
     it('UPDATE y DELETE de filas de B por id afectan 0 filas e INSERT con empresa_id de B falla', async () => {
       const c = clienteApi!;
-      await c.query('BEGIN');
+      await comenzar(c);
       try {
         await c.query('SELECT fijar_contexto_empresa($1)', [A.id]);
         const actualizadas = await c.query('UPDATE sucursal SET direccion = $1 WHERE id = $2', [
@@ -352,6 +353,8 @@ describe('criterio 38e (c, e) · administrador sin superusuario con DB_PROTECCIO
           ),
         );
         expect(emisor.code, emisor.message).toBe('42501');
+        // Con el actor fijado, el rechazo es el de la política RLS (criterio 115).
+        expect(emisor.message).toMatch(/row-level security/);
         await c.query('ROLLBACK TO SAVEPOINT insercion');
         const sucursal = await errorDe(
           c.query(
@@ -361,6 +364,7 @@ describe('criterio 38e (c, e) · administrador sin superusuario con DB_PROTECCIO
           ),
         );
         expect(sucursal.code, sucursal.message).toBe('42501');
+        expect(sucursal.message).toMatch(/row-level security/);
       } finally {
         await c.query('ROLLBACK');
       }
@@ -374,7 +378,7 @@ describe('criterio 38e (c, e) · administrador sin superusuario con DB_PROTECCIO
     it('sin contexto, las sentencias del criterio 19 fallan con "contexto de empresa ausente"', async () => {
       const c = clienteApi!;
       await exigirContextoAusente(c, A.id);
-      await c.query('BEGIN');
+      await comenzar(c);
       try {
         await exigirContextoAusente(c, A.id, { enTransaccionAbierta: true });
       } finally {
@@ -384,7 +388,7 @@ describe('criterio 38e (c, e) · administrador sin superusuario con DB_PROTECCIO
 
     it('set_config("app.empresa_id", B) no cambia empresa_actual() y una segunda fijación falla con "contexto de empresa ya fijado"', async () => {
       const c = clienteApi!;
-      await c.query('BEGIN');
+      await comenzar(c);
       try {
         await c.query('SELECT fijar_contexto_empresa($1)', [A.id]);
         await c.query(`SELECT set_config('app.empresa_id', $1, true)`, [B.id]);
@@ -405,11 +409,11 @@ describe('criterio 38e (c, e) · administrador sin superusuario con DB_PROTECCIO
 
     it('la fijación muere con la transacción: otra transacción de la misma conexión fija B y solo ve B', async () => {
       const c = clienteApi!;
-      await c.query('BEGIN');
+      await comenzar(c);
       await c.query('SELECT fijar_contexto_empresa($1)', [A.id]);
       await c.query('COMMIT');
       await exigirContextoAusente(c, A.id);
-      await c.query('BEGIN');
+      await comenzar(c);
       try {
         await c.query('SELECT fijar_contexto_empresa($1)', [B.id]);
         expect(ids((await c.query('SELECT id FROM sucursal')).rows)).toEqual(ids(B.sucursales));

@@ -5,11 +5,17 @@
 // (criterio 22e), independientes de la implementación de la API. En 19, 20 y 21 se conservan los intentos
 // con `set_config('app.empresa_id', …)` como intentos que no dan contexto y deben fallar.
 // Las empresas A y B se crean por SQL con `restaurante_plataforma`; cada prueba usa las suyas.
+//
+// Actualizado por la sección 002 (P10, criterios 115 y 116): toda escritura por SQL corre con el actor de
+// sistema `prueba` ya fijado (`enTransaccion`, `conActor` y `sinEmpresaConActor` de la fábrica), y las
+// pruebas de rechazo comprueban que el error es el de la política RLS ("row-level security") o el de
+// "contexto de empresa ausente", nunca el de "contexto de actor ausente" (que también es 42501).
 import { randomUUID } from 'node:crypto';
 import type { Client } from 'pg';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { abrirCliente } from '../utilidades';
 import {
+  conActor,
   crearEmpresaSql,
   enTransaccion,
   enTransaccionConSetConfig,
@@ -17,6 +23,7 @@ import {
   fotoDeFila,
   rucAleatorio,
   sentenciasDelCriterio19,
+  sinEmpresaConActor,
   textoUnico,
   type EmpresaSql,
 } from './fabrica';
@@ -126,6 +133,7 @@ describe('criterio 14 · cambio de dueño', () => {
       ),
     );
     expect(error.code, error.message).toBe('42501');
+    expect(error.message).toMatch(/row-level security/);
     expect(await fotoDeFila(plataforma, 'sucursal', A.sucursales[0]!.id)).toEqual(antes);
   });
 
@@ -137,6 +145,7 @@ describe('criterio 14 · cambio de dueño', () => {
       ),
     );
     expect(error.code, error.message).toBe('42501');
+    expect(error.message).toMatch(/row-level security/);
     expect(await fotoDeFila(plataforma, 'emisor', A.emisores[0]!.id)).toEqual(antes);
   });
 });
@@ -182,6 +191,7 @@ describe('criterio 16 · inserción ajena', () => {
       ),
     );
     expect(error.code, error.message).toBe('42501');
+    expect(error.message).toMatch(/row-level security/);
     const { rows } = await plataforma.query('SELECT id FROM sucursal WHERE nombre = $1', [nombre]);
     expect(rows).toEqual([]);
   });
@@ -198,6 +208,7 @@ describe('criterio 16 · inserción ajena', () => {
       ),
     );
     expect(error.code, error.message).toBe('42501');
+    expect(error.message).toMatch(/row-level security/);
     const { rows } = await plataforma.query('SELECT id FROM emisor WHERE ruc = $1', [ruc]);
     expect(rows).toEqual([]);
   });
@@ -275,9 +286,11 @@ describe('criterio 17 · referencia cruzada', () => {
     const sucursalId = A.sucursales[0]!.id;
     // Código de establecimiento distinto del de las sucursales de B: así la unicidad no se
     // adelanta a la llave foránea (que se verifica al final de la sentencia).
-    await plataforma.query("UPDATE sucursal SET codigo_establecimiento = '0088' WHERE id = $1", [
-      sucursalId,
-    ]);
+    await conActor(plataforma, () =>
+      plataforma.query("UPDATE sucursal SET codigo_establecimiento = '0088' WHERE id = $1", [
+        sucursalId,
+      ]),
+    );
     const antes = await fotoDeFila(plataforma, 'sucursal', sucursalId);
     const cruzada = await errorDe(
       enTransaccion(api, A.id, () => actualizarEmisor(sucursalId, B.emisores[0]!.id)),
@@ -294,7 +307,8 @@ describe('criterio 17 · referencia cruzada', () => {
 
 async function verificarSinContexto(cliente: Client, empresaId: string): Promise<void> {
   for (const [nombre, ejecutar] of sentenciasDelCriterio19(cliente, empresaId)) {
-    const error = await errorDe(ejecutar());
+    // Con el actor fijado: un INSERT sin actor fallaría antes que la política, con otro mensaje.
+    const error = await errorDe(sinEmpresaConActor(cliente, ejecutar));
     expect(error.code, `${nombre}: ${error.message}`).toBe('42501');
     expect(error.message, nombre).toMatch(/^contexto de empresa ausente/);
   }

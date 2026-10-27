@@ -35,6 +35,7 @@ import request from 'supertest';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { crearAplicacion } from '../../src/aplicacion';
 import { SinEmpresa } from '../../src/nucleo/contexto-empresa';
+import { Publica } from '../../src/modulos/seguridad';
 import { abrirCliente, fijarEntornoDePrueba } from '../utilidades';
 import { crearEmpresaSql, fotoDeFila, type EmpresaSql } from './fabrica';
 
@@ -77,6 +78,8 @@ class InterceptorGone implements NestInterceptor {
 class Sonda4xxController {
   /** Lanza una `HttpException` con el estado de la ruta y un mensaje que no debe aparecer en la respuesta. */
   @Get('lanzar/:estado')
+  // Sección 002 (P10): las rutas están protegidas por defecto; la sonda sigue siendo pública y sin empresa.
+  @Publica()
   @SinEmpresa()
   lanzar(@Param('estado') estado: string): never {
     llamadas.controlador += 1;
@@ -85,6 +88,7 @@ class Sonda4xxController {
 
   /** `HttpException` cuyo cuerpo es un objeto con detalles que no deben filtrarse. */
   @Get('objeto')
+  @Publica()
   @SinEmpresa()
   objeto(): never {
     llamadas.controlador += 1;
@@ -95,6 +99,7 @@ class Sonda4xxController {
   }
 
   @Get('guarda-prohibida')
+  @Publica()
   @SinEmpresa()
   @UseGuards(GuardaProhibida)
   guardaProhibida() {
@@ -103,6 +108,7 @@ class Sonda4xxController {
   }
 
   @Get('guarda-no-autenticada')
+  @Publica()
   @SinEmpresa()
   @UseGuards(GuardaNoAutenticada)
   guardaNoAutenticada() {
@@ -111,6 +117,7 @@ class Sonda4xxController {
   }
 
   @Get('pipe')
+  @Publica()
   @SinEmpresa()
   pipe(@Query('x', PipeNoAceptable) _x: string) {
     llamadas.controlador += 1;
@@ -118,6 +125,7 @@ class Sonda4xxController {
   }
 
   @Get('interceptor')
+  @Publica()
   @SinEmpresa()
   @UseInterceptors(InterceptorGone)
   interceptor() {
@@ -127,6 +135,7 @@ class Sonda4xxController {
 
   /** Error no controlado: no es un 4xx. */
   @Get('no-controlado')
+  @Publica()
   @SinEmpresa()
   noControlado(): never {
     llamadas.controlador += 1;

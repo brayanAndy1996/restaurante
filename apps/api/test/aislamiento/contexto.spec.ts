@@ -24,6 +24,13 @@ import { crearEmpresaSql, textoUnico, type EmpresaSql } from './fabrica';
 
 let app: INestApplication;
 let contexto: ContextoEmpresa;
+
+/**
+ * Sección 002 (P10): `ContextoEmpresa.ejecutar` con el actor de sistema `prueba`, para las pruebas que
+ * escriben (criterio 115: sin actor, una transacción no escribe en tablas trazadas).
+ */
+const ejecutarConActor = <T>(empresaId: string, fn: () => Promise<T>): Promise<T> =>
+  contexto.ejecutar(empresaId, fn, { actor: { sistema: 'prueba' } });
 let sucursales: SucursalService;
 let operacion: OperacionPlataforma;
 let plataforma: Client;
@@ -113,7 +120,7 @@ describe('criterio 24 · pool de una conexión: el contexto no se filtra tras co
   it('una escritura confirmada con el contexto de A no la ve B', async () => {
     const id = A.sucursales[0]!.id;
     const direccion = textoUnico('Dirección confirmada');
-    await contexto.ejecutar(A.id, () => sucursales.configurar(id, { direccion }));
+    await ejecutarConActor(A.id, () => sucursales.configurar(id, { direccion }));
     expect(await contexto.ejecutar(A.id, () => sucursales.obtener(id))).toMatchObject({
       direccion,
     });
@@ -129,7 +136,7 @@ describe('criterio 25 · pool de una conexión: el contexto no se filtra tras re
 
     const fallo = new Error(`fallo-${randomUUID()}`);
     await expect(
-      contexto.ejecutar(A.id, async () => {
+      ejecutarConActor(A.id, async () => {
         const lista = await sucursales.listar();
         expect(ids(lista)).toEqual(ids(A.sucursales));
         await sucursales.configurar(id, { direccion: 'No debe persistir' });
@@ -168,7 +175,7 @@ describe('criterio 27 · anidamiento de ContextoEmpresa.ejecutar', () => {
     const id = A.sucursales[0]!.id;
     const direccion = textoUnico('Visible solo dentro');
     const vistaAnidada = await conLimite(
-      contexto.ejecutar(A.id, async () => {
+      ejecutarConActor(A.id, async () => {
         await sucursales.configurar(id, { direccion });
         // Con un pool de 1 conexión, una transacción distinta quedaría esperando; y además no vería lo no confirmado.
         return contexto.ejecutar(A.id, () => sucursales.obtener(id));
@@ -214,7 +221,7 @@ describe('criterio 28 · el contexto de empresa y la operación de plataforma no
     });
     expect(corrio).toBe(false);
     const { rows } = await plataforma.query(
-      'SELECT 1 FROM auditoria_plataforma WHERE operacion = $1',
+      "SELECT 1 FROM auditoria WHERE origen = 'plataforma' AND accion = $1",
       [datos.operacion],
     );
     expect(rows).toEqual([]);
@@ -229,7 +236,7 @@ describe('criterio 28 · el contexto de empresa y la operación de plataforma no
       }),
     ).rejects.toBeInstanceOf(ContextoEmpresaAusenteError);
     const { rows } = await plataforma.query(
-      'SELECT 1 FROM auditoria_plataforma WHERE operacion = $1',
+      "SELECT 1 FROM auditoria WHERE origen = 'plataforma' AND accion = $1",
       [datos.operacion],
     );
     expect(rows).toEqual([]);

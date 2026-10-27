@@ -108,8 +108,12 @@ describe('criterio 34 · las operaciones de plataforma rechazan NUL y no dejan n
   }
 
   const auditoriasDe = async (actor: string) =>
-    (await plataforma.query('SELECT 1 FROM auditoria_plataforma WHERE actor = $1', [actor])).rows
-      .length;
+    (
+      await plataforma.query(
+        "SELECT 1 FROM auditoria WHERE origen = 'plataforma' AND actor_sistema = $1",
+        [actor],
+      )
+    ).rows.length;
 
   const contar = async (tabla: 'emisor' | 'sucursal', empresaId: string) =>
     (

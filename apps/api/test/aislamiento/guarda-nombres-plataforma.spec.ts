@@ -15,7 +15,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { crearAplicacion } from '../../src/aplicacion';
 import { OperacionPlataforma, PlataformaEmpresasService } from '../../src/modulos/plataforma';
 import { abrirCliente, fijarEntornoDePrueba } from '../utilidades';
-import { datosDeEmpresa, textoUnico } from './fabrica';
+import { conActor, datosDeEmpresa, textoUnico } from './fabrica';
 import { CONTROLES_ALIAS, ENTRADAS, ESCAPES_UNICODE, variantes } from './nombres-prohibidos';
 
 let app: INestApplication;
@@ -56,7 +56,7 @@ async function nombreActual(): Promise<string> {
 
 async function auditorias(actor: string): Promise<number> {
   const { rows } = await admin.query<{ n: string }>(
-    'SELECT count(*)::text AS n FROM auditoria_plataforma WHERE actor = $1',
+    "SELECT count(*)::text AS n FROM auditoria WHERE origen = 'plataforma' AND actor_sistema = $1",
     [actor],
   );
   return Number(rows[0]!.n);
@@ -212,10 +212,9 @@ describe('criterio 38e (e) · controles de la guarda de plataforma', () => {
       expect(await auditorias(actor)).toBe(1);
       expect(await nombreActual()).toBe(esperado);
       // Se restablece el nombre para no afectar a las demás pruebas.
-      await admin.query('UPDATE empresa SET nombre = $1 WHERE id = $2', [
-        nombreOriginal,
-        empresaId,
-      ]);
+      await conActor(admin, () =>
+        admin.query('UPDATE empresa SET nombre = $1 WHERE id = $2', [nombreOriginal, empresaId]),
+      );
     },
   );
 

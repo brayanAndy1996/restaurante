@@ -75,7 +75,7 @@ async function errorLanzado(promesa: Promise<unknown>): Promise<unknown> {
 
 const auditoriasDe = (empresaId: string, operacionNombre: string) =>
   plataforma.query(
-    'SELECT actor, operacion, motivo, empresa_id, detalle FROM auditoria_plataforma WHERE empresa_id = $1 AND operacion = $2',
+    "SELECT actor_sistema AS actor, accion AS operacion, motivo, empresa_id, detalle FROM auditoria WHERE origen = 'plataforma' AND empresa_id = $1 AND accion = $2",
     [empresaId, operacionNombre],
   );
 
@@ -172,7 +172,7 @@ describe('criterio 33 · actor o motivo vacíos', () => {
 
   async function nadaAuditado(actor: string, motivo: string) {
     const { rows } = await plataforma.query(
-      'SELECT 1 FROM auditoria_plataforma WHERE actor = $1 AND motivo = $2',
+      "SELECT 1 FROM auditoria WHERE origen = 'plataforma' AND actor_sistema = $1 AND motivo = $2",
       [actor, motivo],
     );
     expect(rows, 'no debe quedar fila de auditoría').toEqual([]);
@@ -383,7 +383,7 @@ describe('criterio 34 · registrarEmpresa con datos inválidos', () => {
       );
       expect(filas.rows, 'no debe quedar ninguna sucursal').toEqual([]);
       const auditorias = await plataforma.query(
-        'SELECT 1 FROM auditoria_plataforma WHERE actor = $1',
+        "SELECT 1 FROM auditoria WHERE origen = 'plataforma' AND actor_sistema = $1",
         [auditoria.actor],
       );
       expect(auditorias.rows, 'no debe quedar fila de auditoría').toEqual([]);
@@ -421,7 +421,7 @@ describe('criterio 35 · agregarEmisor y agregarSucursal', () => {
     ]);
 
     const auditorias = await plataforma.query(
-      'SELECT actor, motivo, empresa_id FROM auditoria_plataforma WHERE operacion = $1 AND actor = $2',
+      "SELECT actor_sistema AS actor, motivo, empresa_id FROM auditoria WHERE origen = 'plataforma' AND accion = $1 AND actor_sistema = $2",
       ['agregar_emisor', auditoria.actor],
     );
     expect(auditorias.rows).toEqual([
@@ -463,7 +463,7 @@ describe('criterio 35 · agregarEmisor y agregarSucursal', () => {
     ]);
 
     const auditorias = await plataforma.query(
-      'SELECT actor, motivo, empresa_id FROM auditoria_plataforma WHERE operacion = $1 AND actor = $2',
+      "SELECT actor_sistema AS actor, motivo, empresa_id FROM auditoria WHERE origen = 'plataforma' AND accion = $1 AND actor_sistema = $2",
       ['agregar_sucursal', auditoria.actor],
     );
     expect(auditorias.rows).toEqual([

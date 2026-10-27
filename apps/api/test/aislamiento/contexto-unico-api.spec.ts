@@ -25,6 +25,14 @@ import { crearEmpresaSql, fotoDeFila, textoUnico, type EmpresaSql } from './fabr
 let app: INestApplication;
 let sequelize: Sequelize;
 let contexto: ContextoEmpresa;
+
+/**
+ * Sección 002 (P10): `ContextoEmpresa.ejecutar` con el actor de sistema `prueba`. Toda escritura de una
+ * transacción necesita actor (criterio 115); estas pruebas siguen verificando lo mismo que antes.
+ */
+const ejecutarConActor = <T>(empresaId: string, fn: () => Promise<T>): Promise<T> =>
+  contexto.ejecutar(empresaId, fn, { actor: { sistema: 'prueba' } });
+
 let admin: Client;
 let plataforma: Client;
 let A: EmpresaSql;
@@ -95,7 +103,7 @@ describe('criterio 22e (f) · los ataques de la ronda 4 y de la revisión final 
       const sucursalDeB = B.sucursales[0]!.id;
       const antes = await fotoDeSucursalesDeB();
 
-      const visto = await contexto.ejecutar(A.id, async () => {
+      const visto = await ejecutarConActor(A.id, async () => {
         const ataque = await intentar(() => sequelize.query(sqlDe(B.id)));
         const lectura = await intentar(consulta);
         const escritura = await intentar(() =>
@@ -117,6 +125,13 @@ describe('criterio 22e (f) · los ataques de la ronda 4 y de la revisión final 
       if (visto.lectura.ok) expect(ordenados(visto.lectura.valor)).toEqual(idsDe(A));
       if (visto.escritura.ok) expect(visto.escritura.valor).toEqual([]);
       expect(visto.insercion.ok, 'se creó una sucursal de B desde el contexto de A').toBe(false);
+      // Con el actor fijado (sección 002, criterio 115) el rechazo no puede ser por falta de actor.
+      const errorDeInsercion = (visto.insercion as { error: { parent?: { message?: string } } })
+        .error;
+      expect(
+        errorDeInsercion.parent?.message ?? describir(errorDeInsercion),
+        'la inserción ajena debía rechazarla la política RLS, no la falta de actor',
+      ).not.toMatch(/contexto de actor ausente/);
       expect(await fotoDeSucursalesDeB()).toEqual(antes);
     },
   );
@@ -205,7 +220,7 @@ describe('criterio 22e (f) · la guarda rechaza fijar_contexto_empresa fuera de 
     '%s se rechaza antes de la base (error que no es DatabaseError) y la transacción sigue sana con el contexto de A',
     async (_nombre, sqlDe) => {
       const antes = await fotoDeSucursalesDeB();
-      const visto = await contexto.ejecutar(A.id, async () => {
+      const visto = await ejecutarConActor(A.id, async () => {
         const ataque = await intentar(() => sequelize.query(sqlDe(B.id)));
         const lectura = await intentar(consulta);
         return { ataque, lectura };
@@ -222,7 +237,7 @@ describe('criterio 22e (f) · la guarda rechaza fijar_contexto_empresa fuera de 
   );
 
   it('con el texto como parámetro enlazado ($1) también se rechaza antes de la base', async () => {
-    const visto = await contexto.ejecutar(A.id, async () => {
+    const visto = await ejecutarConActor(A.id, async () => {
       const ataque = await intentar(() =>
         sequelize.query(`SELECT ${F}($1)`, { bind: [B.id], type: QueryTypes.SELECT }),
       );
@@ -235,7 +250,7 @@ describe('criterio 22e (f) · la guarda rechaza fijar_contexto_empresa fuera de 
   });
 
   it('un identificador con escapes Unicode (U&"…") que podría escribir el nombre se rechaza antes de la base', async () => {
-    const visto = await contexto.ejecutar(A.id, async () => {
+    const visto = await ejecutarConActor(A.id, async () => {
       const ataque = await intentar(() =>
         sequelize.query(`SELECT U&"\\0066ijar_contexto_empresa"('${B.id}')`),
       );
@@ -256,7 +271,7 @@ describe('criterio 22e (f) · la guarda rechaza fijar_contexto_empresa fuera de 
     ])(
       'un literal con el texto (%s) se compara tal cual: la consulta se ejecuta y solo ve filas de A',
       async (_nombre, literal) => {
-        const filas = await contexto.ejecutar(A.id, () =>
+        const filas = await ejecutarConActor(A.id, () =>
           sequelize.query<{ id: string }>(`SELECT id FROM sucursal WHERE nombre <> ${literal}`, {
             type: QueryTypes.SELECT,
           }),
@@ -267,7 +282,7 @@ describe('criterio 22e (f) · la guarda rechaza fijar_contexto_empresa fuera de 
 
     it('un valor con el texto se guarda tal cual en una sucursal de A', async () => {
       const id = A.sucursales[0]!.id;
-      await contexto.ejecutar(A.id, () =>
+      await ejecutarConActor(A.id, () =>
         sequelize.query(
           `UPDATE sucursal SET direccion = '${F}(x); SELECT ${F}(y)' WHERE id = '${id}'`,
         ),
@@ -282,10 +297,10 @@ describe('criterio 22e (f) · la guarda rechaza fijar_contexto_empresa fuera de 
     it('un nombre de sucursal con el texto se guarda y se encuentra por ese valor', async () => {
       const id = A.sucursales[1]!.id;
       const nombre = `Sede ${F} ${Date.now()}`;
-      await contexto.ejecutar(A.id, () =>
+      await ejecutarConActor(A.id, () =>
         sequelize.query('UPDATE sucursal SET nombre = $1 WHERE id = $2', { bind: [nombre, id] }),
       );
-      const filas = await contexto.ejecutar(A.id, () =>
+      const filas = await ejecutarConActor(A.id, () =>
         sequelize.query<{ id: string }>('SELECT id FROM sucursal WHERE nombre = $1', {
           bind: [nombre],
           type: QueryTypes.SELECT,
@@ -300,7 +315,7 @@ describe('criterio 22e (f) · la guarda rechaza fijar_contexto_empresa fuera de 
         `-- ${F}\nSELECT id FROM sucursal`,
         `SELECT id FROM sucursal /* public.${F} */`,
       ]) {
-        const filas = await contexto.ejecutar(A.id, () =>
+        const filas = await ejecutarConActor(A.id, () =>
           sequelize.query<{ id: string }>(sql, { type: QueryTypes.SELECT }),
         );
         expect(filas, sql).toHaveLength(A.sucursales.length);
@@ -308,7 +323,7 @@ describe('criterio 22e (f) · la guarda rechaza fijar_contexto_empresa fuera de 
     });
 
     it('un alias que contiene el texto como parte de otro identificador (mi_fijar_contexto_empresa_x) no es la función y pasa', async () => {
-      const filas = await contexto.ejecutar(A.id, () =>
+      const filas = await ejecutarConActor(A.id, () =>
         sequelize.query<{ x: number }>(`SELECT 1 AS mi_${F}_x`, { type: QueryTypes.SELECT }),
       );
       expect(filas).toHaveLength(1);
@@ -321,15 +336,16 @@ describe('criterio 22e (f) · la guarda rechaza fijar_contexto_empresa fuera de 
 // --------------------------------------------------------------------------------------------------
 describe('criterio 22e · ContextoEmpresa.ejecutar fija con fijar_contexto_empresa como primera sentencia', () => {
   it('ejecutar(A) y ejecutar(B) en la misma app ven cada uno solo su empresa', async () => {
-    const deA = await contexto.ejecutar(A.id, consulta);
-    const deB = await contexto.ejecutar(B.id, consulta);
+    const deA = await ejecutarConActor(A.id, consulta);
+    const deB = await ejecutarConActor(B.id, consulta);
     expect(ordenados(deA)).toEqual(idsDe(A));
     expect(ordenados(deB)).toEqual(idsDe(B));
   });
 
   it('la llamada anidada con la misma empresa corre en la misma transacción y no vuelve a fijar (no falla con "ya fijado")', async () => {
-    const resultado = await contexto.ejecutar(A.id, async () => {
+    const resultado = await ejecutarConActor(A.id, async () => {
       const externa = await consulta();
+      // La llamada anidada no vuelve a fijar ni el contexto ni el actor.
       const interna = await contexto.ejecutar(A.id, consulta);
       const despues = await consulta();
       return { externa, interna, despues };
@@ -340,7 +356,7 @@ describe('criterio 22e · ContextoEmpresa.ejecutar fija con fijar_contexto_empre
   });
 
   it('con cualquier consulta cruda, la base ve la empresa fijada por ejecutar (empresa_actual() = A)', async () => {
-    const filas = await contexto.ejecutar(A.id, () =>
+    const filas = await ejecutarConActor(A.id, () =>
       sequelize.query<{ id: string }>('SELECT empresa_actual()::text AS id', {
         type: QueryTypes.SELECT,
       }),

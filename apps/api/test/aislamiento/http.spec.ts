@@ -4,6 +4,11 @@
 // resolutor por cabecera (aislamiento, 404 y 422 indistinguibles, PATCH válido e inválido), ruta sin
 // empresa resuelta, 100 peticiones concurrentes con pool de 2 y un controlador sonda propio, y el
 // comportamiento según NODE_ENV / EMPRESA_POR_HEADER. Cada describe crea su propia app.
+//
+// Actualizado por la sección 002 (P10): criterio 30 (producción sin sesión: NO_AUTENTICADO en lugar de
+// EMPRESA_NO_RESUELTA), criterio 31 (con development la API no arranca si la cabecera está habilitada, y
+// sin la opción la cabecera se ignora) y la sonda `sonda-libre`, que además de @SinEmpresa() es @Publica()
+// porque las rutas están protegidas por defecto (criterio 1).
 import { Controller, Get, type INestApplication } from '@nestjs/common';
 import { sucursalRespuestaSchema } from '@restaurante/contratos';
 import { randomUUID } from 'node:crypto';
@@ -12,6 +17,7 @@ import request from 'supertest';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { crearAplicacion } from '../../src/aplicacion';
 import { ContextoEmpresa, SinEmpresa } from '../../src/nucleo/contexto-empresa';
+import { Publica } from '../../src/modulos/seguridad';
 import { SucursalService } from '../../src/modulos/plataforma';
 import { abrirCliente, fijarEntornoDePrueba } from '../utilidades';
 import { crearEmpresaSql, fotoDeFila, textoUnico, type EmpresaSql } from './fabrica';
@@ -57,10 +63,11 @@ class SondaContextoController {
   }
 }
 
-/** Ruta marcada con @SinEmpresa(): no necesita empresa. */
+/** Ruta marcada con @SinEmpresa(): no necesita empresa. Sección 002: además es pública (rutas protegidas por defecto). */
 @Controller('sonda-libre')
 class SondaLibreController {
   @Get()
+  @Publica()
   @SinEmpresa()
   ver() {
     return { libre: true };
@@ -438,31 +445,46 @@ describe('resolutor por cabecera (NODE_ENV=test, EMPRESA_POR_HEADER=habilitado)'
 });
 
 describe('criterio 31 · cabecera x-empresa-id con NODE_ENV=development', () => {
-  let app: INestApplication;
-  let A: EmpresaSql;
-
-  beforeAll(async () => {
-    fijarEntornoDePrueba({ nodeEnv: 'development' });
-    app = await crearAplicacion({ controladoresExtra: SONDAS, logger: false });
-    A = await crearEmpresaSql(plataforma);
-  });
-  afterAll(async () => {
-    await app?.close();
-  });
-
-  it('con un UUID válido la petición corre con ese contexto; sin la cabecera o con un valor inválido responde 401', async () => {
-    const server = app.getHttpServer();
-    const conCabecera = await request(server).get('/sucursales').set('x-empresa-id', A.id);
-    expect(conCabecera.status).toBe(200);
-    expect(ids(conCabecera.body)).toEqual(ids(A.sucursales));
-
-    for (const res of [
-      await request(server).get('/sucursales'),
-      await request(server).get('/sucursales').set('x-empresa-id', 'no-es-un-uuid'),
-    ]) {
-      expect(res.status).toBe(401);
-      expect(res.body).toMatchObject({ codigo: 'EMPRESA_NO_RESUELTA' });
+  // Sección 002 (criterio 7): la cabecera deja de valer con development. Con la opción habilitada la
+  // API no arranca y explica que solo vale con NODE_ENV=test; sin la opción, la cabecera se ignora.
+  it('con EMPRESA_POR_HEADER=habilitado la API no arranca y el error explica que solo vale con NODE_ENV=test', async () => {
+    fijarEntornoDePrueba({ nodeEnv: 'development', empresaPorHeader: true });
+    let app: INestApplication | null = null;
+    try {
+      app = await crearAplicacion({ logger: false }).catch((error: unknown) => {
+        expect(String(error instanceof Error ? error.message : error)).toMatch(/NODE_ENV=test/);
+        return null;
+      });
+      expect(app, 'la API arrancó en development con EMPRESA_POR_HEADER=habilitado').toBeNull();
+    } finally {
+      await app?.close();
+      fijarEntornoDePrueba();
     }
+  });
+
+  describe('sin EMPRESA_POR_HEADER la cabecera se ignora', () => {
+    let app: INestApplication;
+    let A: EmpresaSql;
+
+    beforeAll(async () => {
+      fijarEntornoDePrueba({ nodeEnv: 'development', empresaPorHeader: false });
+      app = await crearAplicacion({ controladoresExtra: SONDAS, logger: false });
+      A = await crearEmpresaSql(plataforma);
+    });
+    afterAll(async () => {
+      await app?.close();
+      fijarEntornoDePrueba();
+    });
+
+    it('x-empresa-id de una empresa real no da acceso: 401 NO_AUTENTICADO', async () => {
+      const server = app.getHttpServer();
+      const conCabecera = await request(server).get('/sucursales').set('x-empresa-id', A.id);
+      expect(conCabecera.status).toBe(401);
+      expect(conCabecera.body).toMatchObject({ codigo: 'NO_AUTENTICADO' });
+      const sinCabecera = await request(server).get('/sucursales');
+      expect(sinCabecera.status).toBe(401);
+      expect(sinCabecera.body).toMatchObject({ codigo: 'NO_AUTENTICADO' });
+    });
   });
 });
 
@@ -479,12 +501,13 @@ describe('criterio 30 · NODE_ENV=production sin EMPRESA_POR_HEADER', () => {
     await app?.close();
   });
 
-  it('la cabecera x-empresa-id de una empresa real se ignora: 401 EMPRESA_NO_RESUELTA', async () => {
+  it('la cabecera x-empresa-id de una empresa real se ignora: 401 NO_AUTENTICADO', async () => {
+    // Sección 002 (criterio 8): sin sesión el código pasa de EMPRESA_NO_RESUELTA a NO_AUTENTICADO.
     const server = app.getHttpServer();
     for (const ruta of ['/sucursales', `/sucursales/${A.sucursales[0]!.id}`, '/sonda-contexto']) {
       const res = await request(server).get(ruta).set('x-empresa-id', A.id);
       expect(res.status, ruta).toBe(401);
-      expect(res.body, ruta).toMatchObject({ codigo: 'EMPRESA_NO_RESUELTA' });
+      expect(res.body, ruta).toMatchObject({ codigo: 'NO_AUTENTICADO' });
     }
     const modificacion = await request(server)
       .patch(`/sucursales/${A.sucursales[0]!.id}`)

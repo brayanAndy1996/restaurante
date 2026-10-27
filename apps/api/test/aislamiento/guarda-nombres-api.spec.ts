@@ -141,8 +141,12 @@ describe('criterio 38e (e) · controles: lo que no es uno de los nombres funcion
     async (_nombre, literal) => {
       const sucursal = A.sucursales[0]!;
       const esperado = (await admin.query<{ v: string }>(`SELECT ${literal} AS v`)).rows[0]!.v;
-      await contexto.ejecutar(A.id, () =>
-        sequelize.query(`UPDATE sucursal SET direccion = ${literal} WHERE id = '${sucursal.id}'`),
+      await contexto.ejecutar(
+        A.id,
+        () =>
+          sequelize.query(`UPDATE sucursal SET direccion = ${literal} WHERE id = '${sucursal.id}'`),
+        // Sección 002 (P10): toda escritura corre con actor (criterio 115).
+        { actor: { sistema: 'prueba' } },
       );
       const { rows } = await admin.query<{ direccion: string }>(
         'SELECT direccion FROM sucursal WHERE id = $1',
@@ -155,10 +159,13 @@ describe('criterio 38e (e) · controles: lo que no es uno de los nombres funcion
   it('un valor con esos nombres se encuentra por comparación', async () => {
     const sucursal = A.sucursales[1]!;
     const nombre = `Sede lo_get pg_stat_activity ${Date.now()}`;
-    await contexto.ejecutar(A.id, () =>
-      sequelize.query('UPDATE sucursal SET nombre = $1 WHERE id = $2', {
-        bind: [nombre, sucursal.id],
-      }),
+    await contexto.ejecutar(
+      A.id,
+      () =>
+        sequelize.query('UPDATE sucursal SET nombre = $1 WHERE id = $2', {
+          bind: [nombre, sucursal.id],
+        }),
+      { actor: { sistema: 'prueba' } },
     );
     const filas = await contexto.ejecutar(A.id, () =>
       sequelize.query<Fila>(`SELECT id FROM sucursal WHERE nombre = '${nombre}'`, {

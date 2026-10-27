@@ -4,6 +4,11 @@
 // crean empresas a nivel SQL con un cliente `restaurante_plataforma` (política `acceso_plataforma`) y
 // ejecutan sentencias como `restaurante_api` fijando el contexto por su cuenta con
 // `SELECT fijar_contexto_empresa($1)` (criterio 22e).
+//
+// Actualizado por la sección 002 (P10, criterios 113 a 116): toda escritura corre con un actor de
+// sistema fijado con `SELECT fijar_contexto_actor(NULL, NULL, NULL, 'prueba')`; sin actor, la base
+// rechaza la escritura con 42501 "contexto de actor ausente", igual que un rechazo de RLS tiene 42501.
+// Por eso las pruebas de rechazo por RLS fijan el actor y comprueban el mensaje de la política.
 import { randomInt, randomUUID } from 'node:crypto';
 import { validarRuc } from '@restaurante/dominio';
 import type { RegistrarEmpresaEntrada } from '@restaurante/contratos';
@@ -50,6 +55,54 @@ export function datosDeEmpresa(
   return { nombre: textoUnico('Empresa'), emisores, sucursales };
 }
 
+/** Actor de sistema con el que las pruebas de 001 escriben por SQL (criterio 117: `prueba`). */
+export const ACTOR_DE_PRUEBA = 'prueba';
+
+/** Fija el actor de sistema de la transacción en curso (hay que estar dentro de un `BEGIN`). */
+export async function fijarActorDePrueba(
+  cliente: Client,
+  sistema: string = ACTOR_DE_PRUEBA,
+): Promise<void> {
+  await cliente.query('SELECT fijar_contexto_actor(NULL, NULL, NULL, $1)', [sistema]);
+}
+
+/**
+ * Corre `fn` en una transacción propia con el actor de sistema ya fijado y la confirma (o la revierte
+ * si `confirmar` es `false`). Para escrituras sueltas por SQL de una prueba: un `INSERT` o `UPDATE`
+ * en autocommit fallaría por falta de actor (criterio 115).
+ */
+export async function conActor<T>(
+  cliente: Client,
+  fn: () => Promise<T>,
+  opciones: { sistema?: string; confirmar?: boolean } = {},
+): Promise<T> {
+  await cliente.query('BEGIN');
+  try {
+    await fijarActorDePrueba(cliente, opciones.sistema);
+    const resultado = await fn();
+    await cliente.query(opciones.confirmar === false ? 'ROLLBACK' : 'COMMIT');
+    return resultado;
+  } catch (error) {
+    await cliente.query('ROLLBACK');
+    throw error;
+  }
+}
+
+/** `BEGIN` seguido de la fijación del actor de sistema de las pruebas (una sola vez por transacción). */
+export async function comenzar(cliente: Client, sistema: string = ACTOR_DE_PRUEBA): Promise<void> {
+  await cliente.query('BEGIN');
+  await fijarActorDePrueba(cliente, sistema);
+}
+
+/**
+ * Corre `fn` (normalmente una sentencia que debe fallar por falta de contexto de empresa) en una
+ * transacción que ya tiene actor, y siempre la revierte. Con actor fijado, el único motivo de rechazo
+ * posible es el de la política RLS, no el de "contexto de actor ausente".
+ */
+export async function sinEmpresaConActor<T>(cliente: Client, fn: () => Promise<T>): Promise<T> {
+  return conActor(cliente, fn, { confirmar: false });
+}
+
 export interface SucursalSql {
   id: string;
   nombre: string;
@@ -65,12 +118,20 @@ export interface EmpresaSql {
 }
 
 /**
- * Crea una empresa completa por SQL con un cliente `restaurante_plataforma` (autocommit).
- * Por defecto: un emisor y dos sucursales. Las sucursales se reparten entre los emisores.
+ * Crea una empresa completa por SQL con un cliente `restaurante_plataforma`, en una transacción con el
+ * actor de sistema `prueba` fijado (criterios 115 y 117). Por defecto: un emisor y dos sucursales. Las
+ * sucursales se reparten entre los emisores.
  */
 export async function crearEmpresaSql(
   plataforma: Client,
   opciones: { emisores?: number; sucursales?: number } = {},
+): Promise<EmpresaSql> {
+  return conActor(plataforma, () => crearEmpresaSqlConActor(plataforma, opciones));
+}
+
+async function crearEmpresaSqlConActor(
+  plataforma: Client,
+  opciones: { emisores?: number; sucursales?: number },
 ): Promise<EmpresaSql> {
   const cantidadEmisores = opciones.emisores ?? 1;
   const cantidadSucursales = opciones.sucursales ?? 2;
@@ -113,18 +174,20 @@ export async function crearEmpresaSql(
 }
 
 /**
- * Corre `fn` dentro de una transacción de `cliente`. Si `empresaId` no es `null`, la primera
- * sentencia es `SELECT fijar_contexto_empresa($1)` (criterio 22e). Termina con ROLLBACK salvo que se
- * pida `confirmar`; si `fn` lanza, revierte y relanza.
+ * Corre `fn` dentro de una transacción de `cliente`. Fija el actor de sistema `prueba` (o el de
+ * `opciones.actor`; `false` para no fijar ninguno) y, si `empresaId` no es `null`, el contexto con
+ * `SELECT fijar_contexto_empresa($1)` (criterio 22e). Termina con ROLLBACK salvo que se pida
+ * `confirmar`; si `fn` lanza, revierte y relanza.
  */
 export async function enTransaccion<T>(
   cliente: Client,
   empresaId: string | null,
   fn: () => Promise<T>,
-  opciones: { confirmar?: boolean } = {},
+  opciones: { confirmar?: boolean; actor?: string | false } = {},
 ): Promise<T> {
   await cliente.query('BEGIN');
   try {
+    if (opciones.actor !== false) await fijarActorDePrueba(cliente, opciones.actor);
     if (empresaId !== null) {
       await cliente.query('SELECT fijar_contexto_empresa($1)', [empresaId]);
     }
@@ -150,6 +213,7 @@ export async function enTransaccionConSetConfig<T>(
 ): Promise<T> {
   await cliente.query('BEGIN');
   try {
+    await fijarActorDePrueba(cliente);
     await cliente.query("SELECT set_config('app.empresa_id', $1, true)", [valor]);
     const resultado = await fn();
     await cliente.query(opciones.confirmar ? 'COMMIT' : 'ROLLBACK');
@@ -229,7 +293,10 @@ export async function exigirContextoAusente(
 ): Promise<void> {
   for (const [nombre, ejecutar] of sentenciasDelCriterio19(cliente, empresaId)) {
     if (opciones.enTransaccionAbierta) await cliente.query('SAVEPOINT sin_contexto');
-    const error = await errorDe(ejecutar());
+    // Con el actor fijado: un INSERT sin actor fallaría antes de llegar a la política con otro mensaje.
+    const error = await errorDe(
+      opciones.enTransaccionAbierta ? ejecutar() : sinEmpresaConActor(cliente, ejecutar),
+    );
     if (opciones.enTransaccionAbierta) await cliente.query('ROLLBACK TO SAVEPOINT sin_contexto');
     if (error.code !== '42501' || !/^contexto de empresa ausente/.test(error.message)) {
       throw new Error(

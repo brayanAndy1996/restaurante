@@ -16,11 +16,19 @@ import { crearAplicacion } from '../../src/aplicacion';
 import { CONEXION_API } from '../../src/nucleo/base-de-datos';
 import { ContextoEmpresa } from '../../src/nucleo/contexto-empresa';
 import { abrirCliente, fijarEntornoDePrueba } from '../utilidades';
-import { crearEmpresaSql, type EmpresaSql } from './fabrica';
+import { conActor, crearEmpresaSql, type EmpresaSql } from './fabrica';
 
 let app: INestApplication;
 let sequelize: Sequelize;
 let contexto: ContextoEmpresa;
+
+/**
+ * Sección 002 (P10): `ContextoEmpresa.ejecutar` con el actor de sistema `prueba`. Toda escritura de una
+ * transacción necesita actor (criterio 115); estas pruebas siguen verificando lo mismo que antes.
+ */
+const ejecutarConActor = <T>(empresaId: string, fn: () => Promise<T>): Promise<T> =>
+  contexto.ejecutar(empresaId, fn, { actor: { sistema: 'prueba' } });
+
 let admin: Client;
 let plataforma: Client;
 let A: EmpresaSql;
@@ -71,10 +79,9 @@ async function direccionPersistida(): Promise<string> {
 
 async function restablecerDireccion(): Promise<string> {
   const original = `Calle original ${randomUUID().slice(0, 8)}`;
-  await plataforma.query('UPDATE sucursal SET direccion = $1 WHERE id = $2', [
-    original,
-    SUCURSAL(),
-  ]);
+  await conActor(plataforma, () =>
+    plataforma.query('UPDATE sucursal SET direccion = $1 WHERE id = $2', [original, SUCURSAL()]),
+  );
   return original;
 }
 
@@ -131,7 +138,7 @@ describe('criterio 22b · fn no puede cerrar ni subdividir la transacción de Co
       const original = await restablecerDireccion();
       const marcador = marcadorNuevo();
       await expect(
-        contexto.ejecutar(A.id, async () => {
+        ejecutarConActor(A.id, async () => {
           if (!antesDelUpdate) await sequelize.query(actualizar(marcador));
           await sequelize.query(armar(sql, marcador)).catch(() => undefined);
           throw new FinDePrueba('fin');
@@ -149,7 +156,7 @@ describe('criterio 22b · fn no puede cerrar ni subdividir la transacción de Co
     ])('$nombre', async ({ sql }) => {
       await restablecerDireccion();
       const marcador = marcadorNuevo();
-      await contexto.ejecutar(A.id, async () => {
+      await ejecutarConActor(A.id, async () => {
         await sequelize.query(actualizar(marcador));
         await sequelize.query(sql).catch(() => undefined);
       });
@@ -159,14 +166,14 @@ describe('criterio 22b · fn no puede cerrar ni subdividir la transacción de Co
 
   describe('controles: un literal con el texto de la sentencia en un valor funciona dentro del contexto', () => {
     it("SELECT 'COMMIT' AS x devuelve el literal", async () => {
-      const filas = await contexto.ejecutar(A.id, () =>
+      const filas = await ejecutarConActor(A.id, () =>
         sequelize.query<{ x: string }>("SELECT 'COMMIT' AS x", { type: QueryTypes.SELECT }),
       );
       expect(filas).toEqual([{ x: 'COMMIT' }]);
     });
 
     it("un literal con ';' y varias palabras de control de transacción funciona", async () => {
-      const filas = await contexto.ejecutar(A.id, () =>
+      const filas = await ejecutarConActor(A.id, () =>
         sequelize.query<{ x: string }>("SELECT 'a; ROLLBACK; COMMIT -- /* y */' AS x", {
           type: QueryTypes.SELECT,
         }),
@@ -176,7 +183,7 @@ describe('criterio 22b · fn no puede cerrar ni subdividir la transacción de Co
 
     it("un UPDATE con el literal 'COMMIT' como valor se confirma al terminar bien fn", async () => {
       await restablecerDireccion();
-      await contexto.ejecutar(A.id, () =>
+      await ejecutarConActor(A.id, () =>
         sequelize.query(`UPDATE sucursal SET direccion = 'COMMIT' WHERE id = '${SUCURSAL()}'`),
       );
       expect(await direccionPersistida()).toBe('COMMIT');
@@ -185,11 +192,11 @@ describe('criterio 22b · fn no puede cerrar ni subdividir la transacción de Co
     it('el cierre normal de ejecutar sigue confirmando si fn termina bien y revirtiendo si lanza', async () => {
       const original = await restablecerDireccion();
       const confirmado = marcadorNuevo();
-      await contexto.ejecutar(A.id, () => sequelize.query(actualizar(confirmado)));
+      await ejecutarConActor(A.id, () => sequelize.query(actualizar(confirmado)));
       expect(await direccionPersistida()).toBe(confirmado);
 
       await expect(
-        contexto.ejecutar(A.id, async () => {
+        ejecutarConActor(A.id, async () => {
           await sequelize.query(actualizar(marcadorNuevo()));
           throw new FinDePrueba('fin');
         }),

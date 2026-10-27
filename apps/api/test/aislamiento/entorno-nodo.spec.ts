@@ -83,7 +83,8 @@ describe('criterio 29b · crearAplicacion exige NODE_ENV', () => {
   it.each(['development', 'test', 'production'] as const)(
     'control · NODE_ENV=%s explícito arranca',
     async (nodeEnv) => {
-      fijarEntornoDePrueba({ nodeEnv, empresaPorHeader: nodeEnv !== 'production' });
+      // Sección 002 (criterio 7): la cabecera de empresa solo vale con NODE_ENV=test.
+      fijarEntornoDePrueba({ nodeEnv, empresaPorHeader: nodeEnv === 'test' });
       const resultado = await intentarArrancar();
       expect(resultado).toEqual({ arranco: true });
     },

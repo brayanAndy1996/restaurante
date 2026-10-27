@@ -36,6 +36,14 @@ import {
 let app: INestApplication;
 let sequelize: Sequelize;
 let contexto: ContextoEmpresa;
+
+/**
+ * Sección 002 (P10): `ContextoEmpresa.ejecutar` con el actor de sistema `prueba`. Toda escritura de una
+ * transacción necesita actor (criterio 115); estas pruebas siguen verificando lo mismo que antes.
+ */
+const ejecutarConActor = <T>(empresaId: string, fn: () => Promise<T>): Promise<T> =>
+  contexto.ejecutar(empresaId, fn, { actor: { sistema: 'prueba' } });
+
 let admin: Client;
 let plataforma: Client;
 let clienteApi: Client;
@@ -142,7 +150,7 @@ describe.each([
         const sucursalDeB = B.sucursales[0]!.id;
         const antes = await fotoDeFila(admin, 'sucursal', sucursalDeB);
 
-        const visto = await contexto.ejecutar(A.id, async () => {
+        const visto = await ejecutarConActor(A.id, async () => {
           const ataque = await intentar(() => sequelize.query(sqlDe(B.id)));
           const lectura = await intentar(() =>
             sequelize.query<Fila>('SELECT nombre FROM sucursal', { type: QueryTypes.SELECT }),
@@ -213,7 +221,7 @@ describe('criterio 22d · lista blanca de la guarda dentro de ejecutar(A)', () =
     '%s se rechaza antes de la base (error que no es DatabaseError de Sequelize)',
     async (_nombre, sqlDe) => {
       const resultado = await intentar(() =>
-        contexto.ejecutar(A.id, async () => {
+        ejecutarConActor(A.id, async () => {
           await sequelize.query(sqlDe(B.id));
         }),
       );
@@ -228,7 +236,7 @@ describe('criterio 22d · lista blanca de la guarda dentro de ejecutar(A)', () =
 
   describe('controles · sentencias permitidas', () => {
     it('SELECT, WITH, VALUES y TABLE funcionan y solo ven filas de A', async () => {
-      await contexto.ejecutar(A.id, async () => {
+      await ejecutarConActor(A.id, async () => {
         const uno = await sequelize.query<{ uno: number }>('SELECT 1 AS uno', {
           type: QueryTypes.SELECT,
         });
@@ -256,7 +264,7 @@ describe('criterio 22d · lista blanca de la guarda dentro de ejecutar(A)', () =
     });
 
     it('un SELECT precedido de comentarios funciona', async () => {
-      await contexto.ejecutar(A.id, async () => {
+      await ejecutarConActor(A.id, async () => {
         const filas = await sequelize.query<{ uno: number }>(
           '/* comentario */ -- otro comentario\nSELECT 1 AS uno',
           { type: QueryTypes.SELECT },
@@ -267,7 +275,7 @@ describe('criterio 22d · lista blanca de la guarda dentro de ejecutar(A)', () =
 
     it('INSERT, UPDATE y DELETE sobre filas de A funcionan', async () => {
       const nombre = textoUnico('Sucursal-control');
-      await contexto.ejecutar(A.id, async () => {
+      await ejecutarConActor(A.id, async () => {
         const insertadas = await sequelize.query<{ id: string }>(
           `INSERT INTO sucursal (empresa_id, emisor_id, nombre, codigo_establecimiento, direccion, creado_en, actualizado_en)
            VALUES ('${A.id}', '${A.emisores[0]!.id}', '${nombre}', '0777', 'Calle control 1, Lima', now(), now())

@@ -371,18 +371,22 @@ describe('criterio 22 · dentro de ContextoEmpresa.ejecutar la consulta cruda fu
   it('un INSERT crudo con la empresa propia funciona dentro del contexto y uno ajeno falla en la base', async () => {
     const nombre = textoUnico('Propia');
     const insertar = (empresa: EmpresaSql, otra: EmpresaSql, nombreSucursal: string) =>
-      contexto.ejecutar(empresa.id, () =>
-        sequelize.query(
-          `INSERT INTO sucursal (empresa_id, emisor_id, nombre, codigo_establecimiento, direccion)
+      contexto.ejecutar(
+        empresa.id,
+        () =>
+          sequelize.query(
+            `INSERT INTO sucursal (empresa_id, emisor_id, nombre, codigo_establecimiento, direccion)
            VALUES (:empresa, :emisor, :nombre, '0077', 'Calle 3')`,
-          {
-            replacements: {
-              empresa: otra.id,
-              emisor: otra.emisores[0]!.id,
-              nombre: nombreSucursal,
+            {
+              replacements: {
+                empresa: otra.id,
+                emisor: otra.emisores[0]!.id,
+                nombre: nombreSucursal,
+              },
             },
-          },
-        ),
+          ),
+        // Sección 002 (P10): toda escritura corre con actor (criterio 115).
+        { actor: { sistema: 'prueba' } },
       );
 
     await insertar(A, A, nombre);
@@ -399,6 +403,9 @@ describe('criterio 22 · dentro de ContextoEmpresa.ejecutar la consulta cruda fu
     );
     expect(error).not.toBeNull();
     expect(error).not.toBeInstanceOf(ContextoEmpresaAusenteError);
+    // Con el actor fijado, el rechazo es el de la política RLS y no el de "contexto de actor ausente".
+    const mensaje = (error as { parent?: { message?: string }; message?: string }).parent?.message;
+    expect(mensaje ?? String(error)).toMatch(/row-level security/);
     const { rows: huerfanas } = await admin.query('SELECT 1 FROM sucursal WHERE nombre = $1', [
       ajeno,
     ]);

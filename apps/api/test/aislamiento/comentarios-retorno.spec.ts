@@ -18,11 +18,18 @@ import { OperacionPlataforma } from '../../src/modulos/plataforma';
 import { CONEXION_API } from '../../src/nucleo/base-de-datos';
 import { ContextoEmpresa } from '../../src/nucleo/contexto-empresa';
 import { abrirCliente, fijarEntornoDePrueba } from '../utilidades';
-import { crearEmpresaSql, textoUnico, type EmpresaSql } from './fabrica';
+import { conActor, crearEmpresaSql, textoUnico, type EmpresaSql } from './fabrica';
 
 let app: INestApplication;
 let sequelize: Sequelize;
 let contexto: ContextoEmpresa;
+
+/**
+ * Sección 002 (P10): `ContextoEmpresa.ejecutar` con el actor de sistema `prueba`; varias pruebas escriben
+ * y sin actor una escritura falla (criterio 115).
+ */
+const ejecutarConActor = <T>(empresaId: string, fn: () => Promise<T>): Promise<T> =>
+  contexto.ejecutar(empresaId, fn, { actor: { sistema: 'prueba' } });
 let operacion: OperacionPlataforma;
 let admin: Client;
 let plataforma: Client;
@@ -85,10 +92,9 @@ async function direccionPersistida(sucursalId: string): Promise<string> {
 
 async function restablecerDireccion(sucursalId: string): Promise<string> {
   const original = `Calle original ${randomUUID().slice(0, 8)}`;
-  await plataforma.query('UPDATE sucursal SET direccion = $1 WHERE id = $2', [
-    original,
-    sucursalId,
-  ]);
+  await conActor(plataforma, () =>
+    plataforma.query('UPDATE sucursal SET direccion = $1 WHERE id = $2', [original, sucursalId]),
+  );
   return original;
 }
 
@@ -120,7 +126,7 @@ describe('criterio 22b/22d · set_config tras un comentario `--` terminado en \\
     let afectadasEnB: Fila[] = [];
     let empresaActual: string | undefined;
 
-    await contexto.ejecutar(A.id, async () => {
+    await ejecutarConActor(A.id, async () => {
       capturado = await capturar(sequelize.query(sql));
       // Tras capturar el error, el contexto no pudo cambiar: solo se ven filas de A…
       filas = await consulta();
@@ -200,7 +206,7 @@ describe('criterio 22b · atomicidad: `--x\\rCOMMIT` y `--x\\rROLLBACK` no cierr
     const original = await restablecerDireccion(sucursal);
     const marcador = marcadorNuevo();
     await expect(
-      contexto.ejecutar(A.id, async () => {
+      ejecutarConActor(A.id, async () => {
         await sequelize.query(actualizar(sucursal, marcador));
         await sequelize.query('SELECT 1; --x\rCOMMIT').catch(() => undefined);
         throw new FinDePrueba('fin');
@@ -214,7 +220,7 @@ describe('criterio 22b · atomicidad: `--x\\rCOMMIT` y `--x\\rROLLBACK` no cierr
     const original = await restablecerDireccion(sucursal);
     const marcador = marcadorNuevo();
     await expect(
-      contexto.ejecutar(A.id, async () => {
+      ejecutarConActor(A.id, async () => {
         await sequelize
           .query(`${actualizar(sucursal, marcador)}; --x\rCOMMIT`)
           .catch(() => undefined);
@@ -228,7 +234,7 @@ describe('criterio 22b · atomicidad: `--x\\rCOMMIT` y `--x\\rROLLBACK` no cierr
     const sucursal = A.sucursales[1]!.id;
     await restablecerDireccion(sucursal);
     const marcador = marcadorNuevo();
-    await contexto.ejecutar(A.id, async () => {
+    await ejecutarConActor(A.id, async () => {
       await sequelize.query(actualizar(sucursal, marcador));
       await sequelize.query('SELECT 1; --x\rROLLBACK').catch(() => undefined);
     });
@@ -238,35 +244,35 @@ describe('criterio 22b · atomicidad: `--x\\rCOMMIT` y `--x\\rROLLBACK` no cierr
 
 describe('controles · sentencias permitidas con comentarios `--` terminados en \\r o \\r\\n funcionan', () => {
   it('`SELECT 1 AS x --comentario\\r` (el comentario llega hasta el final) funciona', async () => {
-    const filas = await contexto.ejecutar(A.id, () =>
+    const filas = await ejecutarConActor(A.id, () =>
       sequelize.query<{ x: number }>('SELECT 1 AS x --comentario\r', { type: QueryTypes.SELECT }),
     );
     expect(filas).toEqual([{ x: 1 }]);
   });
 
   it('`SELECT 1; --x\\r\\nSELECT 2` (sentencia permitida tras el comentario) funciona', async () => {
-    const resultado = await contexto.ejecutar(A.id, () =>
+    const resultado = await ejecutarConActor(A.id, () =>
       sequelize.query('SELECT 1 AS a; --x\r\nSELECT 2 AS b'),
     );
     expect(resultado).toBeDefined();
   });
 
   it('`SELECT 1; --x\\rSELECT 2` (sentencia permitida tras `\\r`) funciona', async () => {
-    const resultado = await contexto.ejecutar(A.id, () =>
+    const resultado = await ejecutarConActor(A.id, () =>
       sequelize.query('SELECT 1 AS a; --x\rSELECT 2 AS b'),
     );
     expect(resultado).toBeDefined();
   });
 
   it("un literal con `--` y `\\r` dentro no se toma por comentario: `SELECT 'a --x\\rCOMMIT'` funciona", async () => {
-    const filas = await contexto.ejecutar(A.id, () =>
+    const filas = await ejecutarConActor(A.id, () =>
       sequelize.query<{ x: string }>("SELECT 'a --x\rCOMMIT' AS x", { type: QueryTypes.SELECT }),
     );
     expect(filas).toEqual([{ x: 'a --x\rCOMMIT' }]);
   });
 
   it('el contexto sigue siendo A y solo ve sucursales de A tras los controles', async () => {
-    const filas = await contexto.ejecutar(A.id, async () => {
+    const filas = await ejecutarConActor(A.id, async () => {
       await sequelize.query('SELECT 1 AS a; --x\r\nSELECT 2 AS b');
       return consulta();
     });
@@ -287,7 +293,7 @@ describe('criterio 32b · la conexión de plataforma interpreta `\\r` como fin d
 
   async function auditorias(actor: string): Promise<number> {
     const { rows } = await admin.query<{ n: string }>(
-      'SELECT count(*)::text AS n FROM auditoria_plataforma WHERE actor = $1',
+      "SELECT count(*)::text AS n FROM auditoria WHERE origen = 'plataforma' AND actor_sistema = $1",
       [actor],
     );
     return Number(rows[0]!.n);

@@ -15,10 +15,15 @@
 // - (e) catálogo: esquema `contexto`, tabla `contexto.sesion_empresa` UNLOGGED sin privilegios para los
 //   roles de la aplicación, `EXECUTE` solo de `restaurante_api`, funciones SECURITY DEFINER de
 //   `restaurante_migrador` con `search_path` fijado.
+//
+// Actualizado por la sección 002 (P10): cada transacción fija además el actor de sistema `prueba`
+// (`comenzar`), para que un INSERT rechazado lo sea por la política RLS (se comprueba el mensaje) y no
+// por falta de actor (criterios 115 y 116).
 import type { Client } from 'pg';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { abrirCliente } from '../utilidades';
 import {
+  comenzar,
   crearEmpresaSql,
   enTransaccionConSetConfig,
   errorDe,
@@ -116,6 +121,8 @@ async function exigirNoPuedeTocar(api: Client, ajena: EmpresaSql): Promise<void>
     ),
   );
   expect(sucursal.code, sucursal.message).toBe('42501');
+  // Con el actor fijado, el rechazo es el de la política RLS y no el de "contexto de actor ausente".
+  expect(sucursal.message).toMatch(/row-level security/);
   await api.query('ROLLBACK TO SAVEPOINT insercion');
   const emisor = await errorDe(
     api.query(
@@ -125,6 +132,7 @@ async function exigirNoPuedeTocar(api: Client, ajena: EmpresaSql): Promise<void>
     ),
   );
   expect(emisor.code, emisor.message).toBe('42501');
+  expect(emisor.message).toMatch(/row-level security/);
   await api.query('ROLLBACK TO SAVEPOINT insercion');
 }
 
@@ -149,7 +157,7 @@ describe('criterio 22e (a) · set_config("app.empresa_id") no cambia el contexto
     async (_nombre, sqlDe) => {
       const antesB = await fotoDeEmpresa(B);
       await conApi(async (api) => {
-        await api.query('BEGIN');
+        await comenzar(api);
         await api.query('SELECT fijar_contexto_empresa($1)', [A.id]);
         await api.query(sqlDe(B.id));
 
@@ -193,7 +201,7 @@ describe('criterio 22e (b) · la empresa se fija una sola vez por transacción',
     'la segunda fijación %s falla con 42501 "contexto de empresa ya fijado" y el contexto sigue siendo A',
     async (_nombre, sqlDe, cual) => {
       await conApi(async (api) => {
-        await api.query('BEGIN');
+        await comenzar(api);
         await api.query('SELECT fijar_contexto_empresa($1)', [A.id]);
         await api.query('SAVEPOINT intento');
         const error = await errorDe(api.query(sqlDe(cual === 'A' ? A.id : B.id)));
@@ -208,7 +216,7 @@ describe('criterio 22e (b) · la empresa se fija una sola vez por transacción',
 
   it('fijar_contexto_empresa(NULL) falla con 22004 "contexto de empresa inválido" y no fija nada: sin contexto previo sigue ausente', async () => {
     await conApi(async (api) => {
-      await api.query('BEGIN');
+      await comenzar(api);
       await api.query('SAVEPOINT intento');
       const error = await errorDe(api.query('SELECT fijar_contexto_empresa(NULL)'));
       expect(error.code, error.message).toBe('22004');
@@ -221,7 +229,7 @@ describe('criterio 22e (b) · la empresa se fija una sola vez por transacción',
 
   it('fijar_contexto_empresa(NULL) con A ya fijado falla con 22004 y el contexto sigue siendo A', async () => {
     await conApi(async (api) => {
-      await api.query('BEGIN');
+      await comenzar(api);
       await api.query('SELECT fijar_contexto_empresa($1)', [A.id]);
       await api.query('SAVEPOINT intento');
       const error = await errorDe(api.query('SELECT fijar_contexto_empresa(NULL)'));
@@ -235,7 +243,7 @@ describe('criterio 22e (b) · la empresa se fija una sola vez por transacción',
 
   it('caso límite · revertir a un SAVEPOINT anterior a la fijación la deshace: queda sin contexto y puede fijar otra empresa, sin ver dos a la vez', async () => {
     await conApi(async (api) => {
-      await api.query('BEGIN');
+      await comenzar(api);
       await api.query('SAVEPOINT antes');
       await api.query('SELECT fijar_contexto_empresa($1)', [A.id]);
       expect(await empresaActual(api)).toBe(A.id);
@@ -262,7 +270,7 @@ describe('criterio 22e (c) · solo set_config("app.empresa_id", A, true), sin fi
 
   it('empresa_actual() falla con 42501 "contexto de empresa ausente" aunque el parámetro tenga a A', async () => {
     await conApi(async (api) => {
-      await api.query('BEGIN');
+      await comenzar(api);
       await api.query(`SELECT set_config('app.empresa_id', $1, true)`, [A.id]);
       const error = await errorDe(api.query('SELECT empresa_actual()'));
       expect(error.code, error.message).toBe('42501');
@@ -283,7 +291,7 @@ describe('criterio 22e (d) · la fijación muere con su transacción', () => {
     'tras una transacción %s, la misma conexión falla sin contexto (en autocommit y en una transacción nueva)',
     async (_nombre, cierre) => {
       await conApi(async (api) => {
-        await api.query('BEGIN');
+        await comenzar(api);
         await api.query('SELECT fijar_contexto_empresa($1)', [A.id]);
         await exigirSoloVe(api, A);
         await api.query(cierre);
@@ -291,7 +299,7 @@ describe('criterio 22e (d) · la fijación muere con su transacción', () => {
         // Modo autocommit.
         await exigirContextoAusente(api, A.id);
         // Transacción nueva sin volver a fijar.
-        await api.query('BEGIN');
+        await comenzar(api);
         await exigirContextoAusente(api, A.id, { enTransaccionAbierta: true });
         await api.query('ROLLBACK');
       });
@@ -302,11 +310,11 @@ describe('criterio 22e (d) · la fijación muere con su transacción', () => {
     'tras %s, una transacción nueva de la misma conexión puede fijar B y solo ve filas de B',
     async (cierre) => {
       await conApi(async (api) => {
-        await api.query('BEGIN');
+        await comenzar(api);
         await api.query('SELECT fijar_contexto_empresa($1)', [A.id]);
         await api.query(cierre);
 
-        await api.query('BEGIN');
+        await comenzar(api);
         await api.query('SELECT fijar_contexto_empresa($1)', [B.id]);
         await exigirSoloVe(api, B);
         await api.query('COMMIT');
@@ -320,8 +328,8 @@ describe('criterio 22e (d) · la fijación muere con su transacción', () => {
   it('dos conexiones abiertas a la vez, cada una con su empresa fijada, ven cada una solo la suya', async () => {
     const [apiA, apiB] = await Promise.all([abrirCliente('api'), abrirCliente('api')]);
     try {
-      await apiA.query('BEGIN');
-      await apiB.query('BEGIN');
+      await comenzar(apiA);
+      await comenzar(apiB);
       await apiA.query('SELECT fijar_contexto_empresa($1)', [A.id]);
       await apiB.query('SELECT fijar_contexto_empresa($1)', [B.id]);
       // Consultas intercaladas.
@@ -425,7 +433,7 @@ describe('criterio 22e (e) · catálogo del esquema contexto y de las funciones'
 
   it('restaurante_api con A fijado tampoco puede leer ni escribir contexto.sesion_empresa (42501)', async () => {
     await conApi(async (api) => {
-      await api.query('BEGIN');
+      await comenzar(api);
       await api.query('SELECT fijar_contexto_empresa($1)', [A.id]);
       for (const sql of [
         'SELECT * FROM contexto.sesion_empresa',
