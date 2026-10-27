@@ -634,6 +634,8 @@ describe('criterio 63 · POST /plataforma/empresas', () => {
 
   it('sin sesión de superadministrador responde 401 y no crea nada', async () => {
     const cuerpo = cuerpoDeAlta();
+    // Marcador único: el motivo por defecto lo comparten las altas legítimas de otras pruebas.
+    cuerpo.motivo = textoUnico('motivo-sin-sesion');
     const res = await ctx.http().post('/plataforma/empresas').send(cuerpo);
     expect(res.status).toBe(401);
     await exigirNadaCreado(cuerpo);

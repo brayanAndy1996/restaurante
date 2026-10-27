@@ -816,16 +816,23 @@ describe('criterio 58 · cada acción de la lista deja exactamente una fila', ()
     });
     const { token } = await ingresarOk(ctx, usuario.usuario, usuario.contrasenaTemporal);
     await cambiarContrasena(ctx, token, usuario.contrasenaTemporal, contrasenaUnica());
+    // `altaEmpresa` ya cambió la contraseña del primer Administrador: esa fila es de él, no de la persona.
     const filas = await filasDeAuditoria(
       admin,
-      "empresa_id = $1 AND accion = 'cambiar_contrasena'",
-      [empresa.empresaId],
+      "empresa_id = $1 AND accion = 'cambiar_contrasena' AND actor_usuario_id = $2",
+      [empresa.empresaId, usuario.id],
     );
     expect(filas).toHaveLength(1);
     expect(filas[0]).toMatchObject({
       actor_usuario_id: usuario.id,
       sesion_id: partesDeToken(token).sesionId,
     });
+    const delAdministrador = await filasDeAuditoria(
+      admin,
+      "empresa_id = $1 AND accion = 'cambiar_contrasena' AND actor_usuario_id = $2",
+      [empresa.empresaId, empresa.admin.id],
+    );
+    expect(delAdministrador).toHaveLength(1);
   });
 
   it('recordar_equipo y olvidar_equipo dejan una fila cada una con el equipo y la persona', async () => {
