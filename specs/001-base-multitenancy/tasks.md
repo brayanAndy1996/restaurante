@@ -55,6 +55,15 @@ El ataque encontró seis fallas (F1 a F6). No cambian reglas de negocio; quedan 
 - [x] T24 · backend · Rechazo de NUL en los esquemas de texto (`packages/contratos` y entradas de plataforma, incluidos `actor` y `motivo`), límite de cuerpo de 100 KB con 413 `CUERPO_DEMASIADO_GRANDE` y el código nuevo en `CODIGOS_ERROR`. (criterio 40b)
 - [ ] T25 · tester · Suite completa, lint, verificación de tipos y `pnpm build`; luego vuelve el adversarial (ronda 2).
 
+## Fase D · Ronda 2 del adversarial
+
+La segunda ronda dejó dos comportamientos sin cubrir. No cambian reglas de negocio; quedan descritos en los criterios 22b y 38c de `spec.md`. Las pruebas nuevas siguen las reglas de la fase B (cabecera de pruebas protegidas, en `apps/api/test/aislamiento/`, sin mirar la implementación de la corrección).
+
+- [ ] P11 · test-writer · Pruebas de 22b y 38c. Para 22b: dentro de `ContextoEmpresa.ejecutar`, cada sentencia de control de transacción del criterio (`COMMIT`, `ROLLBACK`, `END`, `ABORT`, `SAVEPOINT`, `RELEASE`, `ROLLBACK TO`, `BEGIN`, `START TRANSACTION`, `PREPARE TRANSACTION`, `COMMIT PREPARED`, `ROLLBACK PREPARED`, con variantes de mayúsculas, `WORK`/`TRANSACTION`/`AND CHAIN`, tras otra sentencia en el mismo texto y tras comentarios) lanza un error; un cambio hecho antes del rechazo no queda en la base si `fn` deja propagar el error, y si `fn` atrapa el rechazo y termina bien, sus cambios se confirman recién cuando `ejecutar` cierra la transacción (no antes, por ejemplo vistos desde otra conexión mientras `fn` sigue); un valor con el texto `COMMIT; END` (comillas simples, `E'…'` y `$$…$$`) se guarda tal cual. Para 38c: con dos sesiones del mismo rol (`restaurante_api` y también `restaurante_plataforma`), `pg_cancel_backend` y `pg_terminate_backend` sobre el pid de la otra fallan por permisos y la otra sesión termina su consulta; las funciones `pg_stat_get_backend_*` fallan por permisos; en el catálogo no hay `EXECUTE` sobre ninguna de ellas ni membresía en `pg_signal_backend`; y `db:preparar` ejecutado dos veces no falla. (criterios 22b, 38c)
+- [ ] T26 · backend · Guarda de la API (`apps/api/src/nucleo/base-de-datos/guarda-api.ts` y afines): rechazar antes de enviarla a la base toda sentencia de control de transacción que mande el código dentro de `ContextoEmpresa.ejecutar`, también dentro de varias sentencias o tras comentarios, sin rechazar literales con ese texto y sin afectar la apertura y el cierre que hace el propio `ContextoEmpresa`. (criterio 22b)
+- [ ] T27 · backend · `db:preparar`: quitar a `restaurante_api` y `restaurante_plataforma` el `EXECUTE` sobre `pg_cancel_backend`, `pg_terminate_backend` (todas sus firmas) y las funciones `pg_stat_get_backend_*`, junto con lo del criterio 38b, en las mismas bases, de forma repetible y fallando con un mensaje claro si el administrador no puede aplicarlo. (criterio 38c)
+- [ ] T28 · tester · Suite completa, lint, verificación de tipos y `pnpm build`. (criterios 1, 22b, 38c)
+
 ## Solo ruta crítica
 
 - [ ] Pruebas escritas por test-writer y confirmadas en rojo
