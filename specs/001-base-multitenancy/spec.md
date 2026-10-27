@@ -38,6 +38,8 @@ Salvo que se diga otra cosa, los escenarios de aislamiento parten de dos empresa
 9. Dado `restaurante_api` conectado con contexto de la empresa A, cuando ejecuta `SET row_security = off` y luego `SELECT * FROM sucursal`, entonces la consulta falla (no devuelve filas de ninguna empresa).
 10. Dada una `DATABASE_URL` (o `DATABASE_PLATAFORMA_URL`) cuyo rol es superusuario, tiene `BYPASSRLS` o es dueño de alguna tabla de `public`, cuando arranca la API, entonces no arranca y el registro indica qué rol y qué atributo lo impiden.
 
+10b. **Membresías al arrancar.** Dada una `DATABASE_URL` (o `DATABASE_PLATAFORMA_URL`) cuyo rol es miembro, directo o transitivo (a través de cualquier cadena de `GRANT rol TO rol`) y sea la membresía con `INHERIT` o con `NOINHERIT`, de `restaurante_migrador`, del dueño de alguna tabla de `public`, o de un rol superusuario o con `BYPASSRLS`, cuando arranca la API, entonces no arranca y el registro indica el rol conectado y la membresía que lo impide (el rol del que es miembro y el motivo). Esto hace verificable al arrancar lo que el criterio 7 exige a los roles creados por `db:preparar`. Los roles que deja `db:preparar` (criterio 7) arrancan sin problema.
+
 ### Aislamiento entre empresas
 
 11. **Lectura por id.** Dado el contexto de A, cuando se lee la sucursal o el emisor de B por su id (SQL directo como `restaurante_api` y `SucursalService.obtener`), entonces no se obtiene ninguna fila; el servicio responde lo mismo que para un id inexistente.
@@ -79,6 +81,8 @@ Salvo que se diga otra cosa, los escenarios de aislamiento parten de dos empresa
 ### Operaciones de plataforma y auditoría
 
 32. Dado que no hay contexto de empresa, cuando se llama `PlataformaEmpresasService.registrarEmpresa(datos, { actor, motivo })` con datos válidos, entonces se crean en una sola transacción la empresa, sus emisores y sus sucursales, y una fila en `auditoria_plataforma` con el actor, la operación `registrar_empresa`, el motivo, el `empresa_id` creado y el detalle de lo creado.
+
+32b. **La operación no cierra su propia transacción.** Dada una llamada a `OperacionPlataforma.ejecutar` cuya `fn` intenta confirmar o revertir la transacción por su cuenta (`commit()` o `rollback()` sobre la transacción recibida, sentencias SQL `COMMIT`, `ROLLBACK`, `END` o `ABORT` enviadas por la transacción, o cualquier otra vía que confirme datos fuera del cierre que hace `ejecutar`), cuando se ejecuta, entonces la operación falla con un error y, al terminar, no queda en la base ningún cambio hecho por `fn` sin su fila en `auditoria_plataforma` (lo normal es que no quede nada). Lo mismo vale para `OperacionPlataforma.consultar` (lectura de plataforma sin auditoría): su `fn` no puede confirmar ninguna escritura; si lo intenta, la llamada falla y la escritura no queda en la base.
 33. Dado `actor` o `motivo` vacíos o solo con espacios, cuando se llama cualquier operación de plataforma, entonces lanza un error de validación y no se crea nada, tampoco la fila de auditoría.
 34. Dados datos inválidos (RUC con dígito verificador incorrecto, RUC repetido en la entrada, RUC ya registrado, sucursal que referencia un RUC que no está en la entrada, código de establecimiento que no tiene 4 dígitos, dos sucursales del mismo emisor con el mismo código, hora de corte o WhatsApp mal formados), cuando se llama `registrarEmpresa`, entonces lanza un error de validación que indica el campo, y no queda nada creado ni auditado.
 35. Dada una empresa existente, cuando se llaman `PlataformaEmpresasService.agregarEmisor` o `agregarSucursal`, entonces se crea el registro en esa empresa y se audita con la operación `agregar_emisor` o `agregar_sucursal`.
@@ -87,6 +91,8 @@ Salvo que se diga otra cosa, los escenarios de aislamiento parten de dos empresa
 
 36. Dados los roles, cuando `restaurante_plataforma` intenta `UPDATE`, `DELETE` o `TRUNCATE` sobre `auditoria_plataforma`, entonces falla; y cuando `restaurante_api` intenta leer o escribir `auditoria_plataforma`, también falla.
 37. Dado el código de la API, cuando un archivo fuera de `apps/api/src/modulos/plataforma/` importa la conexión de plataforma, o un archivo distinto del servicio de contexto escribe el texto `app.empresa_id`, entonces `pnpm lint` falla.
+
+37b. **Alcance de la regla de lint.** Las dos reglas del criterio 37 se aplican a todo archivo TypeScript de `apps/api/src` con extensión `.ts`, `.tsx`, `.mts` o `.cts` (y `pnpm lint` los incluye a todos). La regla de la conexión de plataforma detecta, fuera de `apps/api/src/modulos/plataforma/`, además del `import` estático: el `import()` dinámico, `require(...)` (también `import x = require(...)`) y los reexportes (`export * from`, `export { … } from`, `export * as … from`) del módulo de la conexión de plataforma. En cada uno de esos casos `pnpm lint` falla.
 
 ### Catálogo: la regla vale para las tablas futuras
 
@@ -99,10 +105,14 @@ Salvo que se diga otra cosa, los escenarios de aislamiento parten de dos empresa
 
     Esta prueba recorre el catálogo, así que una tabla nueva sin RLS hace fallar la suite.
 
+38b. **Texto de consultas ajenas.** Todas las conexiones de la API comparten el rol `restaurante_api` (y las de plataforma, `restaurante_plataforma`), y el texto de una consulta puede llevar valores de otra empresa. Dadas dos sesiones abiertas con el mismo rol (por ejemplo, una con contexto de A ejecutando una consulta y otra con contexto de B), cuando una consulta `pg_stat_activity`, `pg_stat_get_activity(...)` o `pg_stat_get_backend_activity(...)`, entonces no obtiene el texto de la consulta de la otra sesión (la llamada falla por permisos o el campo no trae el texto). Además, ni `restaurante_api` ni `restaurante_plataforma` son miembros de `pg_read_all_stats` ni de `pg_monitor`. Lo deja preparado `db:preparar` (o la migración) en la base `restaurante` y en la de pruebas, y volver a ejecutarlo no falla; si el usuario de `DATABASE_ADMIN_URL` no tiene permisos para aplicarlo, `db:preparar` falla con un mensaje que lo dice, en vez de dejar la base sin esta protección.
+
 ### Sucursal: configuración (RF-02) y reglas puras
 
 39. Dado el contexto de A, cuando se llama `PATCH /sucursales/{id}` con cambios válidos de emisor, código de establecimiento, nombre, dirección, horario, WhatsApp u hora de corte, entonces responde 200 con la sucursal actualizada y `actualizadoEn` cambia; los campos no enviados no cambian.
 40. Dado el contexto de A, cuando el `PATCH` trae datos mal formados, entonces responde 400 `DATOS_INVALIDOS` con la lista de campos; si el código de establecimiento ya lo usa otra sucursal del mismo emisor, o el nombre ya lo usa otra sucursal de la empresa, responde 409 `CONFLICTO`.
+
+40b. **Carácter NUL y cuerpos grandes.** Dado un texto con el carácter NUL (U+0000) en cualquier campo de texto, cuando llega en `PATCH /sucursales/:id`, entonces responde 400 `DATOS_INVALIDOS` indicando el campo, y la sucursal no cambia; cuando llega en la entrada de `registrarEmpresa`, `agregarEmisor` o `agregarSucursal` (incluidos `actor` y `motivo`), entonces lanza el error de validación del criterio 34 indicando el campo, y no queda nada creado ni auditado. En ningún caso el texto se guarda alterado (sin el NUL, truncado o reemplazado) ni la respuesta es 500. Dado un cuerpo de petición mayor a 100 KB, cuando llega a cualquier ruta, entonces responde 413 con `{ "codigo": "CUERPO_DEMASIADO_GRANDE", "mensaje" }`, nunca 500, y no se ejecuta el controlador.
 41. `validarRuc` (en `packages/dominio`) acepta RUC de 11 dígitos con prefijo 10, 15, 16, 17 o 20 y dígito verificador correcto (por ejemplo `20100000009`, `20600000005`, `10456789019`) y rechaza el resto (por ejemplo `20100000000`, `2010000000`, `30100000001`, `2010000000a`).
 42. `diaOperativo(instante, horaCorte)` (en `packages/dominio`) devuelve la fecha `AAAA-MM-DD` del día operativo en hora de Lima: con corte `05:00`, `2026-03-10T03:00-05:00` da `2026-03-09`, `2026-03-10T05:00-05:00` da `2026-03-10` y `2026-01-01T02:00-05:00` da `2025-12-31`; con corte `00:00`, siempre da la fecha calendario de Lima.
 
@@ -152,6 +162,7 @@ Salvo que se diga otra cosa, los escenarios de aislamiento parten de dos empresa
   - `sucursalConfigurarEntradaSchema`: parcial de `{ emisorId (uuid), nombre, codigoEstablecimiento, direccion, horario, whatsapp (o null para quitarlo), horaCorte }`, con al menos un campo.
   - `sucursalRespuestaSchema`: `{ id, empresaId, emisorId, nombre, codigoEstablecimiento, direccion, horario, whatsapp | null, horaCorte (HH:MM), creadoEn, actualizadoEn (ISO 8601) }`.
   - `saludRespuestaSchema` y `errorRespuestaSchema`: `{ codigo, mensaje, campos? }`.
+  - Códigos de error (`CODIGOS_ERROR`): `DATOS_INVALIDOS`, `EMPRESA_NO_RESUELTA`, `NO_ENCONTRADO`, `CONFLICTO`, `EMISOR_INVALIDO`, `CUERPO_DEMASIADO_GRANDE` y `ERROR_INTERNO`.
 
 ### Endpoints
 
@@ -160,8 +171,9 @@ Salvo que se diga otra cosa, los escenarios de aislamiento parten de dos empresa
 | `GET /health` | `@SinEmpresa()` | — | 200 `saludRespuesta`; 503 si la base no responde |
 | `GET /sucursales` | empresa | — | 200 `sucursalRespuesta[]`; 401 `EMPRESA_NO_RESUELTA` |
 | `GET /sucursales/:id` | empresa | `id` UUID | 200 `sucursalRespuesta`; 400 `DATOS_INVALIDOS` si `id` no es UUID; 404 `NO_ENCONTRADO`; 401 |
-| `PATCH /sucursales/:id` | empresa | `sucursalConfigurarEntrada` | 200 `sucursalRespuesta`; 400 `DATOS_INVALIDOS`; 404 `NO_ENCONTRADO`; 409 `CONFLICTO`; 422 `EMISOR_INVALIDO`; 401 |
+| `PATCH /sucursales/:id` | empresa | `sucursalConfigurarEntrada` | 200 `sucursalRespuesta`; 400 `DATOS_INVALIDOS`; 404 `NO_ENCONTRADO`; 409 `CONFLICTO`; 413 `CUERPO_DEMASIADO_GRANDE`; 422 `EMISOR_INVALIDO`; 401 |
 
+- Cualquier ruta responde 413 `CUERPO_DEMASIADO_GRANDE` si el cuerpo supera 100 KB (criterio 40b).
 - `PATCH` asigna valores absolutos, así que repetirlo da el mismo resultado; no necesita clave de idempotencia.
 - En esta historia no hay endpoints HTTP de plataforma: crear empresas exige identificar al superadministrador, y eso llega con la historia 002. La vía de plataforma se usa desde la semilla y las pruebas.
 
@@ -173,7 +185,7 @@ Salvo que se diga otra cosa, los escenarios de aislamiento parten de dos empresa
   - Errores: `ContextoEmpresaAusenteError`, `ContextoEmpresaConflictoError`.
 - `RESOLUTOR_EMPRESA` (token de Nest) con la interfaz `ResolutorEmpresa { resolver(peticion): Promise<string | null> }`. En esta historia hay dos implementaciones: `ResolutorEmpresaNulo` (siempre `null`; es la de producción) y `ResolutorEmpresaPorCabecera` (lee `x-empresa-id`; solo si `NODE_ENV` es `development` o `test` y `EMPRESA_POR_HEADER=habilitado`). La historia 002 agrega la suya, que tomará la empresa del usuario autenticado, y la registra en el mismo token.
 - `ContextoEmpresaInterceptor` (global): si la ruta no tiene `@SinEmpresa()`, pide la empresa al resolutor, responde 401 si es `null`, y corre el controlador dentro de `ContextoEmpresa.ejecutar`. Los guards de Nest corren antes que los interceptores, así que el guard de autenticación de 002 podrá dejar la empresa en la petición para que su resolutor la lea.
-- `OperacionPlataforma` (`apps/api/src/modulos/plataforma/`): `ejecutar<T>({ actor, motivo, operacion, empresaId? }, fn: (tx) => Promise<T>): Promise<T>`. Usa la conexión de `restaurante_plataforma`, abre una transacción, corre `fn` con la transacción explícita e inserta la fila de auditoría en esa misma transacción antes de confirmar: o quedan el cambio y su auditoría, o no queda nada. Error: `OperacionPlataformaAnidadaError`.
+- `OperacionPlataforma` (`apps/api/src/modulos/plataforma/`): `ejecutar<T>({ actor, motivo, operacion, empresaId? }, fn: (tx) => Promise<T>): Promise<T>`. Usa la conexión de `restaurante_plataforma`, abre una transacción, corre `fn` con la transacción explícita e inserta la fila de auditoría en esa misma transacción antes de confirmar: o quedan el cambio y su auditoría, o no queda nada. `fn` no puede confirmar ni revertir la transacción por su cuenta (criterio 32b). `consultar<T>(fn: (tx) => Promise<T>): Promise<T>`: lectura de plataforma sin auditoría; la transacción siempre se revierte y `fn` tampoco puede confirmarla (criterio 32b). Error: `OperacionPlataformaAnidadaError`.
 - `PlataformaEmpresasService`: `registrarEmpresa(datos, auditoria)`, `agregarEmisor(empresaId, datos, auditoria)`, `agregarSucursal(empresaId, datos, auditoria)`, `listarEmpresas()`. `auditoria` es `{ actor: string, motivo: string }`. `registrarEmpresa` devuelve `{ empresaId, emisores: { id, ruc }[], sucursales: { id, nombre }[] }`.
 - `SucursalService` (contexto de empresa): `listar()`, `obtener(id)` (devuelve `null` si no existe o es de otra empresa) y `configurar(id, cambios)`.
 
@@ -249,6 +261,7 @@ Todas las tablas usan UUID (`gen_random_uuid()` por defecto) y `creado_en`, `act
   - `ResolutorEmpresaPorCabecera` queda solo para las pruebas automáticas: permitirlo únicamente con `NODE_ENV=test` (deja de valer `development`).
 - **Historia de facturación:** bloquear el cambio de emisor (RUC) de una sucursal que ya emitió comprobantes; aplicar la restricción de comprobantes por régimen (RF-65).
 - **Historia de suscripciones (RF-03):** el alta de empresa y de sucursal debe crear la suscripción.
+- **Historias de tiempo real (Socket.IO con adaptador PostgreSQL) y de colas (pg-boss):** hoy `restaurante_api` puede usar `LISTEN`/`NOTIFY` y advisory locks (`pg_advisory_lock` y similares) sin restricción, y esos canales y bloqueos son globales a la base, no a la empresa. Al introducir Socket.IO y pg-boss, revisar que los nombres de canal, las cargas de `NOTIFY` y las llaves de los bloqueos no sirvan de canal lateral entre empresas (por ejemplo, que una empresa no pueda escuchar el canal de otra ni deducir actividad ajena por un bloqueo), y decidir si se restringen o se separan por empresa. No se corrige en esta historia porque aún no hay ningún uso.
 
 ## Decisiones del usuario
 
