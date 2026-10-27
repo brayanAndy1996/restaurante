@@ -74,6 +74,11 @@ export interface Persona {
 }
 
 export interface Escenario {
+  /** Token del superadministrador (para ajustar la suscripción de la sucursal). */
+  superadmin: string;
+  suscripcionId: string;
+  cajero: Persona;
+  supervisor: Persona;
   empresaId: string;
   empresaNombre: string;
   sucursalId: string;
@@ -111,7 +116,7 @@ export async function crearEscenario(request: APIRequestContext): Promise<Escena
   const sucursalNombre = `E2E Sucursal ${sufijo}`;
   const alta = await llamarApi<{
     empresaId: string;
-    sucursales: { id: string }[];
+    sucursales: { id: string; suscripcion: { id: string } }[];
     administrador: { pin: string };
   }>(request, '/plataforma/empresas', {
     metodo: 'POST',
@@ -177,8 +182,58 @@ export async function crearEscenario(request: APIRequestContext): Promise<Escena
   expect(SOLO_DIGITOS(administrador.pin) && administrador.pin.length === 6).toBe(true);
   expect(SOLO_DIGITOS(mozo.pin) && mozo.pin.length === 4).toBe(true);
 
+  // Un Cajero y un Supervisor (PIN de 6 dígitos), con la contraseña ya cambiada: se usan para la ventana
+  // de clave de supervisor. El Cajero pide la clave; el Supervisor la da.
+  async function crearConRol(
+    rol: 'CAJERO' | 'SUPERVISOR',
+    nombre: string,
+    primerNombre: string,
+  ): Promise<Persona> {
+    const persona: Persona = {
+      nombre,
+      primerNombre,
+      usuario: `e2e.${rol.toLowerCase()}.${sufijo}`,
+      temporal: 'Temporal-E2E-3',
+      contrasena: `Clave-${primerNombre}-E2E-3`,
+      pin: '',
+    };
+    const nuevo = await llamarApi<{ pin: string }>(request, '/usuarios', {
+      metodo: 'POST',
+      token: entrada.cuerpo.token,
+      cuerpo: {
+        nombre,
+        nombreUsuario: persona.usuario,
+        esAdministrador: false,
+        accesos: [{ sucursalId, rol }],
+        contrasenaTemporal: persona.temporal,
+      },
+    });
+    expect(nuevo.estado, `alta de ${rol}`).toBe(201);
+    persona.pin = nuevo.cuerpo.pin;
+    expect(persona.pin).toMatch(/^\d{6}$/);
+    const sesion = await llamarApi<{ token: string }>(request, '/sesiones/contrasena', {
+      metodo: 'POST',
+      cuerpo: { usuario: persona.usuario, contrasena: persona.temporal },
+    });
+    expect(sesion.estado).toBe(201);
+    const cambioDePersona = await llamarApi(request, '/sesion/contrasena', {
+      metodo: 'PUT',
+      token: sesion.cuerpo.token,
+      cuerpo: { actual: persona.temporal, nueva: persona.contrasena },
+    });
+    expect(cambioDePersona.estado).toBe(204);
+    await llamarApi(request, '/sesion', { metodo: 'DELETE', token: sesion.cuerpo.token });
+    return persona;
+  }
+  const cajero = await crearConRol('CAJERO', 'Carlos Caja', 'Carlos');
+  const supervisor = await crearConRol('SUPERVISOR', 'Rosa Supervisora', 'Rosa');
+
   await llamarApi(request, '/sesion', { metodo: 'DELETE', token: entrada.cuerpo.token });
   return {
+    superadmin,
+    suscripcionId: alta.cuerpo.sucursales[0]!.suscripcion.id,
+    cajero,
+    supervisor,
     empresaId: alta.cuerpo.empresaId,
     empresaNombre,
     sucursalId,
@@ -233,4 +288,29 @@ export async function tokenDeSesion(page: Page): Promise<string> {
       (JSON.parse(sessionStorage.getItem('restaurante.sesion') ?? '{}') as { token?: string })
         .token ?? '',
   );
+}
+
+/** Fecha de hoy en Lima (`AAAA-MM-DD`), desplazada `dias` días. */
+export function fechaDeLima(dias = 0): string {
+  const base = new Date(Date.now() + dias * 24 * 60 * 60 * 1000);
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Lima',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(base);
+}
+
+/** Fija el vencimiento de la suscripción de la sucursal (como lo haría el superadministrador). */
+export async function ajustarVencimiento(
+  request: APIRequestContext,
+  escenario: Escenario,
+  vencimiento: string,
+): Promise<void> {
+  const r = await llamarApi(request, `/plataforma/suscripciones/${escenario.suscripcionId}`, {
+    metodo: 'PATCH',
+    token: escenario.superadmin,
+    cuerpo: { vencimiento, motivo: 'Prueba E2E del aviso de suscripción' },
+  });
+  expect(r.estado, 'ajuste del vencimiento').toBe(200);
 }

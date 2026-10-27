@@ -34,6 +34,14 @@ const AccesoSucursalPagina = lazy(() =>
     default: m.AccesoSucursalPagina,
   })),
 );
+// Solo en desarrollo: la ruta y su código no llegan al paquete de producción.
+const ClaveSupervisorDemo = import.meta.env.DEV
+  ? lazy(() =>
+      import('./modulos/demostracion/ClaveSupervisorDemo').then((m) => ({
+        default: m.ClaveSupervisorDemo,
+      })),
+    )
+  : null;
 const EmpresasPagina = lazy(() =>
   import('./modulos/plataforma/EmpresasPagina').then((m) => ({ default: m.EmpresasPagina })),
 );
@@ -161,6 +169,9 @@ export function App() {
             <Route element={<AppLayout />}>
               <Route index element={<InicioPagina />} />
               <Route path="/mis-equipos" element={<MisEquiposPagina />} />
+              {ClaveSupervisorDemo ? (
+                <Route path="/demo/clave-supervisor" element={<ClaveSupervisorDemo />} />
+              ) : null}
               <Route element={<RutaDeAdministrador />}>
                 <Route path="/administracion/usuarios" element={<UsuariosPagina />} />
                 <Route path="/administracion/usuarios/nuevo" element={<UsuarioNuevoPagina />} />

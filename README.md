@@ -192,7 +192,10 @@ código fuente), `packages/contratos` para hablar con la API y `packages/dominio
 - **E2E (Playwright, viewport de celular de 360 px):** `pnpm --filter @restaurante/app e2e` recorre el
   acceso con equipos recordados contra la API real: ingreso con contraseña y equipo recordado, ingreso
   con PIN, segunda persona en el mismo celular y cambio de usuario, cierre por inactividad (espera
-  1 minuto de verdad) y revocación desde la administración. Necesita la base preparada, migrada y con la
+  1 minuto de verdad) y revocación desde la administración. Otro archivo (`clave-supervisor.spec.ts`)
+  ejercita la ventana de clave de supervisor con una pantalla de demostración que solo existe en el
+  servidor de desarrollo (por eso la E2E usa `vite dev`, no el `build`) y los avisos de gracia y
+  suspensión del Administrador. Necesita la base preparada, migrada y con la
   semilla (el superadministrador de demostración; cambia `E2E_SUPERADMIN_USUARIO` y
   `E2E_SUPERADMIN_CONTRASENA` si usas otro) y las variables de la API. Si ya corren la API (3000) y la PWA
   (5173) con `pnpm dev`, las reutiliza; si no, las levanta. Cada corrida crea su propia empresa con

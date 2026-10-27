@@ -336,6 +336,14 @@ Baldosa con borde de tinta de 2 px, el PIN en cifras de 44 px con espacio entre 
 
 Sin sesión, la app pregunta a la API qué personas recuerda cada equipo guardado. Con varias, primero la lista de nombres (baldosas de persona y cupos "N de 5"); con una sola, va directo al teclado. En el teclado: título, la persona elegida en una baldosa informativa, los puntos y el mensaje (su sitio está reservado para que el teclado no salte), el muro de teclas (64 px; 56 px bajo los 740 px de alto; 48 px bajo los 680) y las salidas abajo ("Cambiar de persona" y "Ingresar con usuario y contraseña", esta última pasa a principal cuando el PIN está bloqueado o el equipo olvidó a la persona). Desde 768 px el bloque se centra en la pantalla. Se puede escribir también con un teclado físico.
 
+### Ventana de clave de supervisor
+
+Hoja inferior (diálogo desde 768 px). Arriba, en una baldosa informativa, qué se autoriza; luego los atajos de motivo (Segmentos) y el campo de motivo; después los 6 puntos, el mensaje (con su sitio reservado) y el teclado compacto (52 px); "Autorizar" (principal) y "Cancelar" (texto). Envía solo al completar el sexto dígito si el motivo ya está escrito; si falta, lo pide y el PIN queda escrito hasta que se elija el motivo. Una clave rechazada dice siempre lo mismo ("La clave no es válida"), sea cual sea la causa; el bloqueo muestra el aviso rocoto con candado y la cuenta regresiva de 40 px, y apaga el teclado. El PIN solo vive en la ventana abierta.
+
+### Avisos de suscripción del Administrador
+
+Se apoyan en la cenefa y el banner: suspendida (rocoto, "No se puede abrir caja. Puedes consultar y exportar tus datos.") y en gracia (ají, con los días y la fecha de suspensión y "La suspensión solo impide abrir caja."). Uno por estado, con las sucursales nombradas; persistentes y sin botón de cierre.
+
 ### Segmentos (filtros de una sola opción)
 
 Cuadrícula de baldosas de 48 px que pasa a otra fila en vez de desplazarse de lado; la elegida lleva marca (check), fondo cobalto suave y borde cobalto, y se anuncia como presionada. Se usa en la lista de suscripciones del panel de plataforma (Todas, Activas, En gracia, Suspendidas).

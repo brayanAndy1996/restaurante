@@ -42,6 +42,11 @@ export function InicioPagina() {
           ? 'La atención de mesas, la cocina y la caja llegan en las siguientes versiones. Por ahora puedes administrar a tu personal.'
           : 'La atención de mesas, la cocina y la caja llegan en las siguientes versiones.'}
       </EstadoVacio>
+      {import.meta.env.DEV ? (
+        <Link to="/demo/clave-supervisor" className="enlace-texto">
+          Demostración de la clave de supervisor (solo desarrollo)
+        </Link>
+      ) : null}
     </Pagina>
   );
 }

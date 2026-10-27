@@ -9,7 +9,12 @@ import {
 import { NavLink, Outlet } from 'react-router-dom';
 import { VigilanteDeInactividad } from '../modulos/acceso/inactividad';
 import { useSesion } from '../modulos/acceso/sesion';
-import { BannerDeConexion, BannerDeSoporte, useEstadoDeCenefa } from './AvisosGlobales';
+import {
+  BannerDeConexion,
+  BannerDeSoporte,
+  BannerDeSuscripcion,
+  useEstadoDeCenefa,
+} from './AvisosGlobales';
 
 /**
  * Marco de la app de empresa: cenefa y banners de estado arriba (siempre en el mismo lugar), el
@@ -36,6 +41,7 @@ export function AppLayout() {
       <div className="app__avisos">
         <BannerDeConexion />
         <BannerDeSoporte />
+        <BannerDeSuscripcion />
         <VigilanteDeInactividad />
       </div>
       <div className="app__marco">

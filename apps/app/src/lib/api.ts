@@ -32,6 +32,11 @@ export interface OpcionesApi<T> {
   ambito?: Ambito;
   /** Token de equipo (`eq.…`) para `X-Equipo`. */
   equipo?: string;
+  /**
+   * `autorizacionId` de una clave de supervisor (`POST /autorizaciones`) para repetir con ella una
+   * acción protegida: va en `X-Autorizacion`. Vale para una sola acción y vence a los 2 minutos.
+   */
+  autorizacion?: string;
   /** Consulta automática: la API la valida pero no renueva la inactividad. */
   segundoPlano?: boolean;
   /**
@@ -140,6 +145,7 @@ export async function llamar<T = void>(ruta: string, opciones: OpcionesApi<T> = 
   // Una sesión PIN trae el equipo en cada petición (criterio 37); `equipo` explícito manda sobre ella.
   const equipo = opciones.equipo ?? (token && ambito === 'empresa' ? equipoDeSesion() : null);
   if (equipo) cabeceras['X-Equipo'] = equipo;
+  if (opciones.autorizacion) cabeceras['X-Autorizacion'] = opciones.autorizacion;
   if (opciones.segundoPlano) cabeceras['X-Actividad'] = 'segundo-plano';
   if (metodo !== 'GET' && opciones.idempotente) {
     cabeceras['Idempotency-Key'] =

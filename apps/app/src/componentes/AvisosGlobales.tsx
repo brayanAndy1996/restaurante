@@ -1,20 +1,29 @@
 import {
   BannerDeEstado,
   Boton,
+  IconoCandado,
   IconoEscudo,
+  IconoReloj,
   IconoSinRed,
   type EstadoCenefa,
 } from '@restaurante/ui';
 import { useConexion } from '../lib/conexion';
-import { horaDeLima } from '../lib/formato';
+import { fechaLarga, horaDeLima } from '../lib/formato';
 import { useSesion } from '../modulos/acceso/sesion';
 
-/** Estado de la cenefa según la prioridad: sin conexión, soporte, y normal (T42 suma suspendida y gracia). */
+/**
+ * Estado de la cenefa según la prioridad del diseño: sin conexión, modo soporte, sucursal suspendida,
+ * suscripción en gracia y normal. Suspendida y gracia salen de `avisoSuscripcion` (solo lo recibe el
+ * Administrador y el soporte).
+ */
 export function useEstadoDeCenefa(): EstadoCenefa {
   const { sinConexion } = useConexion();
-  const { soporte } = useSesion();
+  const { soporte, sesion } = useSesion();
   if (sinConexion) return 'sin-conexion';
   if (soporte) return 'soporte';
+  const sucursales = sesion?.avisoSuscripcion?.sucursales ?? [];
+  if (sucursales.some((s) => s.estado === 'SUSPENDIDA')) return 'suspendida';
+  if (sucursales.some((s) => s.estado === 'EN_GRACIA')) return 'gracia';
   return 'normal';
 }
 
@@ -66,5 +75,65 @@ export function BannerDeSoporte() {
     >
       {`${quien} · hasta las ${hasta}`}
     </BannerDeEstado>
+  );
+}
+
+const nombres = (lista: { nombre: string }[]) => lista.map((s) => s.nombre).join(', ');
+
+/** "Quedan 5 días" / "Queda 1 día" / "Hoy es el último día". */
+export function textoDeDiasDeGracia(dias: number | null): string {
+  if (dias === null) return 'Queda poco tiempo';
+  return dias === 1 ? 'Queda 1 día' : `Quedan ${dias} días`;
+}
+
+/**
+ * Avisos de suscripción del Administrador (criterio 99): uno por sucursal suspendida y otro por las que
+ * están en gracia. Son persistentes: no se pueden cerrar, y siempre aclaran que la suspensión solo
+ * impide abrir caja (consultar, exportar y los turnos abiertos siguen funcionando).
+ */
+export function BannerDeSuscripcion() {
+  const { sesion } = useSesion();
+  const sucursales = sesion?.avisoSuscripcion?.sucursales ?? [];
+  const suspendidas = sucursales.filter((s) => s.estado === 'SUSPENDIDA');
+  const enGracia = sucursales.filter((s) => s.estado === 'EN_GRACIA');
+  return (
+    <>
+      {suspendidas.length > 0 ? (
+        <BannerDeEstado
+          tono="rocoto"
+          icono={IconoCandado}
+          titulo={
+            suspendidas.length === 1
+              ? `${suspendidas[0]?.nombre}: sucursal suspendida`
+              : `${suspendidas.length} sucursales suspendidas`
+          }
+        >
+          {suspendidas.length > 1 ? `${nombres(suspendidas)}. ` : ''}
+          No se puede abrir caja. Puedes consultar y exportar tus datos. Se reactiva al registrarse
+          tu pago.
+        </BannerDeEstado>
+      ) : null}
+      {enGracia.length > 0 ? (
+        <BannerDeEstado
+          tono="aji"
+          icono={IconoReloj}
+          titulo={
+            enGracia.length === 1
+              ? `${enGracia[0]?.nombre}: ${textoDeDiasDeGracia(enGracia[0]?.diasRestantesGracia ?? null).toLowerCase()} de gracia`
+              : `${enGracia.length} sucursales en gracia`
+          }
+        >
+          {enGracia.map((s) => (
+            <span key={s.sucursalId} className="banner__linea">
+              {enGracia.length > 1
+                ? `${s.nombre}: ${textoDeDiasDeGracia(s.diasRestantesGracia).toLowerCase()}. `
+                : ''}
+              {`Se suspenderá el ${fechaLarga(s.suspensionDesde)}.`}
+            </span>
+          ))}
+          <span className="banner__linea">La suspensión solo impide abrir caja.</span>
+        </BannerDeEstado>
+      ) : null}
+    </>
   );
 }

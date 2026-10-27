@@ -46,11 +46,10 @@ export default defineConfig({
       env: { NODE_ENV: process.env.NODE_ENV ?? 'development' },
     },
     {
-      // En la CI la PWA ya está compilada (`pnpm build`) y se sirve tal cual; en local, el servidor de
-      // desarrollo. Con `pnpm dev` ya corriendo se reutiliza.
-      command: process.env.CI
-        ? 'pnpm --filter @restaurante/app preview'
-        : 'pnpm --filter @restaurante/app dev',
+      // Servidor de desarrollo también en la CI: la ventana de clave de supervisor se ejercita con una pantalla
+      // de demostración que solo existe en desarrollo (todavía no hay acciones protegidas reales). Con
+      // `pnpm dev` ya corriendo se reutiliza.
+      command: 'pnpm --filter @restaurante/app dev',
       url: APP,
       reuseExistingServer: true,
       timeout: 120_000,
