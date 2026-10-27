@@ -16,6 +16,7 @@ import {
   errorDe,
   fotoDeFila,
   rucAleatorio,
+  sentenciasDelCriterio19,
   textoUnico,
   type EmpresaSql,
 } from './fabrica';
@@ -291,39 +292,8 @@ describe('criterio 17 · referencia cruzada', () => {
   });
 });
 
-/** Sentencias del criterio 19: todas deben fallar sin contexto de empresa. */
-function sentenciasSinContexto(
-  cliente: Client,
-  empresaId: string,
-): [string, () => Promise<unknown>][] {
-  const insertarEmisor = () =>
-    cliente.query(
-      `INSERT INTO emisor (empresa_id, ruc, razon_social, regimen, creado_en, actualizado_en)
-       VALUES ($1, $2, 'Sin contexto SAC', 'GENERAL', now(), now())`,
-      [empresaId, rucAleatorio()],
-    );
-  const insertarSucursal = () =>
-    cliente.query(
-      `INSERT INTO sucursal (empresa_id, emisor_id, nombre, codigo_establecimiento, direccion, creado_en, actualizado_en)
-       VALUES ($1, $2, $3, '0077', 'Calle 7', now(), now())`,
-      [empresaId, randomUUID(), textoUnico('SinContexto')],
-    );
-  return [
-    ['SELECT empresa', () => cliente.query('SELECT * FROM empresa')],
-    ['SELECT emisor', () => cliente.query('SELECT * FROM emisor')],
-    ['SELECT sucursal', () => cliente.query('SELECT * FROM sucursal')],
-    ['UPDATE empresa', () => cliente.query('UPDATE empresa SET nombre = nombre')],
-    ['UPDATE emisor', () => cliente.query('UPDATE emisor SET razon_social = razon_social')],
-    ['UPDATE sucursal', () => cliente.query('UPDATE sucursal SET direccion = direccion')],
-    ['DELETE emisor', () => cliente.query('DELETE FROM emisor')],
-    ['DELETE sucursal', () => cliente.query('DELETE FROM sucursal')],
-    ['INSERT emisor', insertarEmisor],
-    ['INSERT sucursal', insertarSucursal],
-  ];
-}
-
 async function verificarSinContexto(cliente: Client, empresaId: string): Promise<void> {
-  for (const [nombre, ejecutar] of sentenciasSinContexto(cliente, empresaId)) {
+  for (const [nombre, ejecutar] of sentenciasDelCriterio19(cliente, empresaId)) {
     const error = await errorDe(ejecutar());
     expect(error.code, `${nombre}: ${error.message}`).toBe('42501');
     expect(error.message, nombre).toMatch(/^contexto de empresa ausente/);
@@ -343,7 +313,7 @@ describe('criterio 19 · sin contexto de empresa', () => {
   it('las mismas sentencias dentro de una transacción sin fijar el contexto también fallan', async () => {
     const nueva = await abrirCliente('api');
     try {
-      for (const [nombre, ejecutar] of sentenciasSinContexto(nueva, A.id)) {
+      for (const [nombre, ejecutar] of sentenciasDelCriterio19(nueva, A.id)) {
         const error = await errorDe(enTransaccion(nueva, null, ejecutar));
         expect(error.code, `${nombre}: ${error.message}`).toBe('42501');
         expect(error.message, nombre).toMatch(/^contexto de empresa ausente/);
@@ -358,7 +328,7 @@ describe('criterio 19 · set_config("app.empresa_id") solo no da contexto (inten
   it('con set_config(A) y sin fijar_contexto_empresa, toda sentencia falla con 42501 "contexto de empresa ausente"', async () => {
     const nueva = await abrirCliente('api');
     try {
-      for (const [nombre, ejecutar] of sentenciasSinContexto(nueva, A.id)) {
+      for (const [nombre, ejecutar] of sentenciasDelCriterio19(nueva, A.id)) {
         const error = await errorDe(enTransaccionConSetConfig(nueva, A.id, ejecutar));
         expect(error.code, `${nombre}: ${error.message}`).toBe('42501');
         expect(error.message, nombre).toMatch(/^contexto de empresa ausente/);

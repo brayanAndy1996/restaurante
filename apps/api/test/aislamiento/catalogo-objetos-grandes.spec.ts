@@ -9,7 +9,7 @@
 // `pg_largeobject_metadata`.
 import type { INestApplication } from '@nestjs/common';
 import type { Client } from 'pg';
-import type { Sequelize } from 'sequelize';
+import { DatabaseError, type Sequelize } from 'sequelize';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { crearAplicacion } from '../../src/aplicacion';
 import { CONEXION_API } from '../../src/nucleo/base-de-datos';
@@ -177,12 +177,27 @@ describe('criterio 38d · por la conexión de la API (ContextoEmpresa.ejecutar)'
     return e.original?.code ?? e.parent?.code ?? e.code;
   };
 
+  /**
+   * Desde el criterio 38e (d), la guarda de la API rechaza estos nombres antes de llegar a la base con un
+   * error que no es `DatabaseError` (`ConsultaProhibidaError`); si la consulta llegara a la base, esta debe
+   * negarla con 42501. Nunca puede tener éxito.
+   */
+  const exigirRechazo = (error: unknown, sql: string): void => {
+    const detalle = `${sql}: ${error instanceof Error ? error.message : String(error)}`;
+    expect(error, `${sql} no debía funcionar`).toBeDefined();
+    expect(error, detalle).toBeInstanceOf(Error);
+    if (error instanceof DatabaseError) {
+      expect(codigoDe(error), detalle).toBe(PERMISO_DENEGADO);
+    }
+    // Si no es `DatabaseError`, la rechazó la guarda de la API antes de la base.
+  };
+
   it.each([
     ['lo_get', (oid: number) => `SELECT lo_get(${oid})`],
     ['lo_put', (oid: number) => `SELECT lo_put(${oid}, 0, '\\x41'::bytea)`],
     ['lo_unlink', (oid: number) => `SELECT lo_unlink(${oid})`],
     ['lo_open', (oid: number) => `SELECT lo_open(${oid}, 262144)`],
-  ])('%s sobre un objeto de su propiedad falla con permiso denegado', async (_n, sqlDe) => {
+  ])('%s sobre un objeto de su propiedad se rechaza (guarda o 42501)', async (_n, sqlDe) => {
     const oid = await crearObjeto('api');
     const sequelize = app.get<Sequelize>(CONEXION_API);
     const error = await app
@@ -192,12 +207,11 @@ describe('criterio 38d · por la conexión de la API (ContextoEmpresa.ejecutar)'
         () => undefined,
         (e: unknown) => e ?? new Error('error vacío'),
       );
-    expect(error, `${sqlDe(oid)} no debía funcionar`).toBeDefined();
-    expect(codigoDe(error), String((error as Error).message)).toBe(PERMISO_DENEGADO);
+    exigirRechazo(error, sqlDe(oid));
     expect(await existe(oid)).toBe(true);
   });
 
-  it('lo_from_bytea(0, …) y SELECT sobre pg_largeobject_metadata fallan con permiso denegado', async () => {
+  it('lo_from_bytea(0, …) y SELECT sobre pg_largeobject_metadata se rechazan (guarda o 42501)', async () => {
     const sequelize = app.get<Sequelize>(CONEXION_API);
     for (const sql of [
       `SELECT lo_from_bytea(0, convert_to('${SECRETO}','UTF8'))`,
@@ -210,9 +224,7 @@ describe('criterio 38d · por la conexión de la API (ContextoEmpresa.ejecutar)'
           () => undefined,
           (e: unknown) => e ?? new Error('error vacío'),
         );
-      expect(codigoDe(error), `${sql}: ${String((error as Error | undefined)?.message)}`).toBe(
-        PERMISO_DENEGADO,
-      );
+      exigirRechazo(error, sql);
     }
   });
 });
