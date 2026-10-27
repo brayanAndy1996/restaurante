@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="es-PE">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Alternativa · Fotocheck · App del restaurante</title>
+<!-- Boceto estático de la alternativa "Fotocheck" (tarjeta del trabajador con franja de color por área). Datos sintéticos. No es código de producción. -->
+<link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible+Next:wght@400..700&display=swap" rel="stylesheet">
+<style>
+:root{--fondo:#EEF1F4;--tarjeta:#fff;--tinta:#14222E;--suave:#475965;--borde:#6F808C;--junta:#D3DBE1;
+ --mozo:#C2410C;--cajero:#1D4A9E;--cocina:#0F766E;--super:#6D28D9;--admin:#14222E}
+*{box-sizing:border-box;margin:0}
+body{font-family:"Atkinson Hyperlegible Next",system-ui,sans-serif;background:#E3E8EC;color:var(--tinta);font-size:16px;line-height:24px;font-variant-numeric:tabular-nums;padding:24px}
+h1{font-size:22px;margin-bottom:4px} p.n{max-width:70ch;color:var(--suave);margin-bottom:16px}
+.fila{display:flex;gap:24px;flex-wrap:wrap}
+.tel{width:360px;min-height:720px;background:var(--fondo);border:1px solid var(--borde);border-radius:20px;overflow:hidden;display:flex;flex-direction:column}
+.barra{height:56px;display:flex;align-items:center;padding:0 16px;background:#fff;border-bottom:1px solid var(--junta);font-weight:700;font-size:18px}
+.cuerpo{padding:24px 16px 16px;display:flex;flex-direction:column;gap:16px;flex:1}
+h2{font-size:24px;line-height:30px}
+.sub{color:var(--suave);margin-top:-8px}
+.foto{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.fc{background:var(--tarjeta);border:1px solid var(--borde);border-radius:12px;overflow:hidden;text-align:center;min-height:176px;display:flex;flex-direction:column}
+.fc .banda{height:28px;color:#fff;font-weight:700;font-size:13px;line-height:28px;letter-spacing:.02em}
+.fc .ini{width:64px;height:64px;border-radius:8px;background:#E4ECFA;color:var(--cajero);display:grid;place-items:center;font-size:28px;font-weight:700;margin:16px auto 8px}
+.fc b{display:block;font-size:17px;line-height:22px} .fc span{font-size:13px;color:var(--suave)}
+.fc.k{background:#E6ECF0;border-color:var(--junta)}
+.fc .ojal{width:28px;height:6px;border-radius:3px;background:#fff;margin:-18px auto 12px;position:relative;box-shadow:inset 0 0 0 1.5px var(--borde)}
+.btn{min-height:56px;border:1px solid var(--borde);border-radius:8px;background:#fff;font:inherit;font-weight:600;width:100%;margin-top:auto}
+.tec{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:auto}
+.tec button{min-height:64px;border:1px solid var(--borde);border-radius:8px;background:#fff;font:inherit;font-size:28px;font-weight:600}
+.pt{display:flex;gap:16px;justify-content:center}.pt i{width:20px;height:20px;border-radius:50%;border:2px solid var(--borde)}.pt i.l{background:var(--tinta);border-color:var(--tinta)}
+.cab{display:flex;gap:12px;align-items:center;background:#fff;border:1px solid var(--borde);border-radius:12px;overflow:hidden}
+.cab .banda{width:12px;align-self:stretch;background:var(--mozo)}
+.cab .ini{width:48px;height:48px;border-radius:8px;background:#E4ECFA;color:var(--cajero);display:grid;place-items:center;font-weight:700;font-size:20px;margin:12px 0}
+.leyenda{display:flex;flex-wrap:wrap;gap:8px;font-size:13px}
+.leyenda span{display:inline-flex;align-items:center;gap:6px;background:#fff;border:1px solid var(--junta);border-radius:6px;padding:4px 8px}
+.leyenda i{width:12px;height:12px;border-radius:2px}
+</style>
+</head>
+<body>
+<h1>Alternativa: Fotocheck</h1>
+<p class="n">Cada persona se presenta como su fotocheck de trabajo: franja de color por área, inicial grande y nombre. El color de rol acompañaría a la persona en toda la sesión (barra superior). Riesgo honesto: cinco colores de rol compiten con los cuatro colores de estado (aviso, bloqueo, éxito, soporte) y obligan a que el rol siempre lleve texto.</p>
+<div class="fila">
+  <div class="tel"><div class="barra">Restaurante</div>
+    <div class="cuerpo"><h2>¿Quién eres?</h2><p class="sub">Toca tu fotocheck.</p>
+      <div class="foto">
+        <div class="fc"><div class="banda" style="background:var(--mozo)">MOZO</div><div class="ini">R</div><b>Rosa Quispe</b><span>PIN de 4 dígitos</span></div>
+        <div class="fc"><div class="banda" style="background:var(--cajero)">CAJERO</div><div class="ini">L</div><b>Luis Paredes</b><span>PIN de 6 dígitos</span></div>
+        <div class="fc"><div class="banda" style="background:var(--cocina)">COCINA</div><div class="ini">C</div><b>Carlos Gil</b><span>PIN de 4 dígitos</span></div>
+        <div class="fc k"><div class="banda" style="background:#8796A1">MOZO</div><div class="ini" style="background:#D3DBE1;color:#5E6F7B">J</div><b>Jorge Ríos</b><span style="color:#B3261E;font-weight:700">Bloqueado: 4:32</span></div>
+      </div>
+      <div class="leyenda"><span><i style="background:var(--mozo)"></i>Mozo</span><span><i style="background:var(--cajero)"></i>Cajero</span><span><i style="background:var(--cocina)"></i>Cocina/Barra</span><span><i style="background:var(--super)"></i>Supervisor</span><span><i style="background:var(--admin)"></i>Administrador</span></div>
+      <button class="btn">Ingresar con usuario y contraseña</button></div></div>
+  <div class="tel"><div class="barra">Restaurante</div>
+    <div class="cuerpo"><div class="cab"><div class="banda"></div><div class="ini">R</div><div><b style="font-size:18px">Rosa Quispe</b><br><span style="font-size:14px;color:var(--suave)">Mozo · PIN de 4 dígitos</span></div></div>
+      <div class="pt"><i class="l"></i><i class="l"></i><i></i><i></i></div>
+      <div class="tec"><button>1</button><button>2</button><button>3</button><button>4</button><button>5</button><button>6</button><button>7</button><button>8</button><button>9</button><span></span><button>0</button><button style="font-size:16px">Borrar</button></div></div></div>
+</div>
+</body>
+</html>
