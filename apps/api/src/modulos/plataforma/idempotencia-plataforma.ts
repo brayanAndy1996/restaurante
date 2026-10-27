@@ -20,11 +20,17 @@ const ESTADO_HTTP_ALTA = 201;
  */
 export async function reservarClave(
   transaccion: Transaction,
+  claveHuella: Buffer,
   idempotencia: IdempotenciaPlataforma,
   ahora: Date,
 ): Promise<{ respuesta: unknown } | null> {
   const sequelize = sequelizeDe(transaccion);
-  const huella = huellaDeEntrada(idempotencia.ruta, idempotencia.actor, idempotencia.cuerpo);
+  const huella = huellaDeEntrada(
+    claveHuella,
+    idempotencia.ruta,
+    idempotencia.actor,
+    idempotencia.cuerpo,
+  );
   await sequelize.query('DELETE FROM idempotencia_plataforma WHERE creado_en < $1', {
     transaction: transaccion,
     bind: [new Date(ahora.getTime() - RETENCION_IDEMPOTENCIA_MS)],
@@ -77,6 +83,7 @@ export async function reservarClave(
  */
 export async function guardarRespuesta(
   transaccion: Transaction,
+  claveHuella: Buffer,
   idempotencia: IdempotenciaPlataforma,
   respuesta: unknown,
   ahora: Date,
@@ -96,7 +103,7 @@ export async function guardarRespuesta(
         idempotencia.clave,
         idempotencia.ruta,
         idempotencia.actor,
-        huellaDeEntrada(idempotencia.ruta, idempotencia.actor, idempotencia.cuerpo),
+        huellaDeEntrada(claveHuella, idempotencia.ruta, idempotencia.actor, idempotencia.cuerpo),
         ESTADO_HTTP_ALTA,
         JSON.stringify(respuesta ?? null),
         ahora,

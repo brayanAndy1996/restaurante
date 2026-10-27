@@ -57,7 +57,7 @@ export function textoSchema(max: number) {
 export const horaSchema = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'Debe tener formato HH:MM');
 
 /** Día de la semana: 1 = lunes … 7 = domingo (ISO). */
-export const tramoHorarioSchema = z.object({
+export const tramoHorarioSchema = z.strictObject({
   dia: z.number().int().min(1).max(7),
   desde: horaSchema,
   hasta: horaSchema,

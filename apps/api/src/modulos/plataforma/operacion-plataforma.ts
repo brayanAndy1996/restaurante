@@ -1,6 +1,7 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, Optional } from '@nestjs/common';
 import type { Transaction } from 'sequelize';
 import type { ActorTransaccion } from '../../nucleo/contexto-empresa';
+import { CLAVE_HUELLA } from '../../nucleo/idempotencia/huella';
 import { RELOJ, type Reloj } from '../../nucleo/reloj';
 import { insertarAuditoriaPlataforma } from '../auditoria';
 import type { TransaccionInterna } from '../../nucleo/base-de-datos/transaccion-interna';
@@ -48,6 +49,8 @@ export class OperacionPlataforma {
   constructor(
     @Inject(CONEXION_PLATAFORMA) private readonly conexion: ConexionPlataforma,
     @Inject(RELOJ) private readonly reloj: Reloj,
+    /** Clave secreta de la huella de idempotencia; solo hace falta si la operación trae `idempotencia`. */
+    @Optional() @Inject(CLAVE_HUELLA) private readonly claveHuella?: Buffer,
   ) {}
 
   async ejecutar<T>(
@@ -65,6 +68,7 @@ export class OperacionPlataforma {
         if (opciones.idempotencia !== undefined) {
           const previa = await reservarClave(
             transaccion,
+            this.claveDeHuella(),
             opciones.idempotencia,
             this.reloj.ahora(),
           );
@@ -85,7 +89,13 @@ export class OperacionPlataforma {
           ocurridoEn: this.reloj.ahora(),
         });
         if (opciones.idempotencia !== undefined) {
-          await guardarRespuesta(transaccion, opciones.idempotencia, resultado, this.reloj.ahora());
+          await guardarRespuesta(
+            transaccion,
+            this.claveDeHuella(),
+            opciones.idempotencia,
+            resultado,
+            this.reloj.ahora(),
+          );
         }
         return resultado;
       },
@@ -108,6 +118,13 @@ export class OperacionPlataforma {
   async consultar<T>(fn: (transaccion: TransaccionPlataforma) => Promise<T>): Promise<T> {
     this.exigirSinContexto();
     return this.enTransaccion(fn, { confirmar: false });
+  }
+
+  private claveDeHuella(): Buffer {
+    if (this.claveHuella === undefined) {
+      throw new Error('OperacionPlataforma se creó sin la clave de huella: no admite idempotencia');
+    }
+    return this.claveHuella;
   }
 
   /** `fn` no puede haber cerrado la transacción (la guarda ya lo impide; esto cubre un error tragado). */

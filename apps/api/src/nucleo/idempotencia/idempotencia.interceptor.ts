@@ -10,7 +10,7 @@ import { ErrorAplicacion } from '../errores/error-aplicacion';
 import { principalActual } from '../principal';
 import { RELOJ, type Reloj } from '../reloj';
 import { leerClaveIdempotencia } from './clave';
-import { RETENCION_IDEMPOTENCIA_MS, huellaDeEntrada } from './huella';
+import { CLAVE_HUELLA, RETENCION_IDEMPOTENCIA_MS, huellaDeEntrada } from './huella';
 
 /**
  * Idempotencia de las escrituras de empresa que llevan `@Idempotente()` (RNF-10, criterios 85 y 86). Corre
@@ -18,7 +18,7 @@ import { RETENCION_IDEMPOTENCIA_MS, huellaDeEntrada } from './huella';
  * `INSERT … ON CONFLICT DO NOTHING`; si la reservó, deja correr el controlador y guarda su respuesta en
  * la misma transacción; si no, espera a la otra transacción (el `INSERT` se bloquea sobre la fila sin
  * confirmar), lee la fila y devuelve la respuesta guardada si la huella de la entrada (ruta, actor y
- * cuerpo canónico) coincide, o responde 422 `CLAVE_IDEMPOTENCIA_REUTILIZADA` si no. Las respuestas de
+ * cuerpo canónico, con HMAC y un secreto del entorno) coincide, o responde 422 `CLAVE_IDEMPOTENCIA_REUTILIZADA` si no. Las respuestas de
  * error no se guardan: la transacción se revierte y la clave queda libre.
  *
  * Sin `Idempotency-Key` la petición sigue como siempre; sin contexto de empresa (rutas `@SinEmpresa()`,
@@ -31,6 +31,7 @@ export class IdempotenciaInterceptor implements NestInterceptor {
     @Inject(CONEXION_API) private readonly conexion: Sequelize,
     @Inject(ContextoEmpresa) private readonly contexto: ContextoEmpresa,
     @Inject(RELOJ) private readonly reloj: Reloj,
+    @Inject(CLAVE_HUELLA) private readonly claveHuella: Buffer,
   ) {}
 
   async intercept(
@@ -51,7 +52,7 @@ export class IdempotenciaInterceptor implements NestInterceptor {
           ? `superadministrador:${principal.superadministradorId}`
           : 'prueba';
     const ruta = `${peticion.method} ${peticion.route?.path ?? peticion.path}`;
-    const huella = huellaDeEntrada(ruta, actor, peticion.body);
+    const huella = huellaDeEntrada(this.claveHuella, ruta, actor, peticion.body);
     const empresaId = this.contexto.empresaActual();
     const ahora = this.reloj.ahora();
 

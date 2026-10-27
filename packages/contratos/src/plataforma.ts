@@ -20,6 +20,11 @@ import {
   suscripcionRespuestaSchema,
 } from './suscripciones';
 
+/**
+ * Base del alta de 001: no es estricta a propósito, porque `PlataformaEmpresasService` vuelve a validar con
+ * ella el objeto completo de la operación (con `motivo`, `administrador`…). Las rutas HTTP usan sus variantes
+ * estrictas (`emisorCrearEntradaSchema`, `altaEmpresaEntradaSchema`…).
+ */
 export const emisorEntradaSchema = z.object({
   ruc: rucSchema,
   razonSocial: textoSchema(200),
@@ -99,10 +104,11 @@ export const registrarEmpresaEntradaSchema = z
 
 /**
  * Cambios parciales de una sucursal. Asigna valores absolutos: al menos un campo, `whatsapp` en
- * `null` lo quita y `horaCorte` no tiene valor por defecto (si no viene, no cambia).
+ * `null` lo quita y `horaCorte` no tiene valor por defecto (si no viene, no cambia). Estricto: un campo
+ * desconocido (`empresaId`, `creadoPorUsuarioId`, `__proto__`…) es un 400, no se ignora (criterio 114).
  */
 export const sucursalConfigurarEntradaSchema = z
-  .object({
+  .strictObject({
     emisorId: uuidSchema,
     nombre: textoSchema(100),
     codigoEstablecimiento: codigoEstablecimientoSchema,

@@ -5,7 +5,11 @@ import { QueryTypes, type Sequelize } from 'sequelize';
 import { CONEXION_API } from '../../nucleo/base-de-datos';
 import { ContextoEmpresa } from '../../nucleo/contexto-empresa';
 import { ErrorAplicacion } from '../../nucleo/errores/error-aplicacion';
-import { RETENCION_IDEMPOTENCIA_MS, huellaDeEntrada } from '../../nucleo/idempotencia';
+import {
+  CLAVE_HUELLA,
+  RETENCION_IDEMPOTENCIA_MS,
+  huellaDeEntrada,
+} from '../../nucleo/idempotencia';
 import type { Principal } from '../../nucleo/principal';
 import { RELOJ, type Reloj } from '../../nucleo/reloj';
 import { AuditoriaService } from '../auditoria';
@@ -90,6 +94,7 @@ export class ClaveSupervisorService {
     @Inject(BloqueosService) private readonly bloqueos: BloqueosService,
     @Inject(AuditoriaService) private readonly auditoria: AuditoriaService,
     @Inject(SesionActual) private readonly sesion: SesionActual,
+    @Inject(CLAVE_HUELLA) private readonly claveHuella: Buffer,
   ) {}
 
   /** `claveIdempotencia`: valor ya validado de `Idempotency-Key`, si la petición la trae. */
@@ -144,7 +149,12 @@ export class ClaveSupervisorService {
     // Idempotencia (criterio 85): la clave se reserva en esta misma transacción.
     let huellaIdempotencia = '';
     if (claveIdempotencia !== undefined) {
-      huellaIdempotencia = huellaDeEntrada(RUTA, `usuario:${solicitanteId}`, entrada);
+      huellaIdempotencia = huellaDeEntrada(
+        this.claveHuella,
+        RUTA,
+        `usuario:${solicitanteId}`,
+        entrada,
+      );
       const repetida = await this.reservarClave(
         empresaId,
         claveIdempotencia,
