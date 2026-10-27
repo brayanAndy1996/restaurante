@@ -1,7 +1,9 @@
 // spec: 001-base-multitenancy (pruebas protegidas)
 //
 // P2 · Criterios 11 (parte SQL), 12 a 16, 16b, 17, 19, 20 y 21, más los casos límite de la base:
-// clientes `pg` como `restaurante_api` con `set_config`, independientes de la implementación de la API.
+// clientes `pg` como `restaurante_api` que fijan el contexto con `SELECT fijar_contexto_empresa($1)`
+// (criterio 22e), independientes de la implementación de la API. En 19, 20 y 21 se conservan los intentos
+// con `set_config('app.empresa_id', …)` como intentos que no dan contexto y deben fallar.
 // Las empresas A y B se crean por SQL con `restaurante_plataforma`; cada prueba usa las suyas.
 import { randomUUID } from 'node:crypto';
 import type { Client } from 'pg';
@@ -10,6 +12,7 @@ import { abrirCliente } from '../utilidades';
 import {
   crearEmpresaSql,
   enTransaccion,
+  enTransaccionConSetConfig,
   errorDe,
   fotoDeFila,
   rucAleatorio,
@@ -328,7 +331,7 @@ async function verificarSinContexto(cliente: Client, empresaId: string): Promise
 }
 
 describe('criterio 19 · sin contexto de empresa', () => {
-  it('en una conexión nueva que nunca fijó app.empresa_id, toda sentencia falla con 42501 "contexto de empresa ausente"', async () => {
+  it('en una conexión nueva que nunca fijó el contexto con fijar_contexto_empresa, toda sentencia falla con 42501 "contexto de empresa ausente"', async () => {
     const nueva = await abrirCliente('api');
     try {
       await verificarSinContexto(nueva, A.id);
@@ -337,11 +340,26 @@ describe('criterio 19 · sin contexto de empresa', () => {
     }
   });
 
-  it('las mismas sentencias dentro de una transacción sin set_config también fallan', async () => {
+  it('las mismas sentencias dentro de una transacción sin fijar el contexto también fallan', async () => {
     const nueva = await abrirCliente('api');
     try {
       for (const [nombre, ejecutar] of sentenciasSinContexto(nueva, A.id)) {
         const error = await errorDe(enTransaccion(nueva, null, ejecutar));
+        expect(error.code, `${nombre}: ${error.message}`).toBe('42501');
+        expect(error.message, nombre).toMatch(/^contexto de empresa ausente/);
+      }
+    } finally {
+      await nueva.end();
+    }
+  });
+});
+
+describe('criterio 19 · set_config("app.empresa_id") solo no da contexto (intento que debe fallar)', () => {
+  it('con set_config(A) y sin fijar_contexto_empresa, toda sentencia falla con 42501 "contexto de empresa ausente"', async () => {
+    const nueva = await abrirCliente('api');
+    try {
+      for (const [nombre, ejecutar] of sentenciasSinContexto(nueva, A.id)) {
+        const error = await errorDe(enTransaccionConSetConfig(nueva, A.id, ejecutar));
         expect(error.code, `${nombre}: ${error.message}`).toBe('42501');
         expect(error.message, nombre).toMatch(/^contexto de empresa ausente/);
       }
@@ -382,27 +400,53 @@ describe('criterio 20 · el contexto no sobrevive a su transacción', () => {
   });
 });
 
-describe('criterio 21 · app.empresa_id inválido', () => {
-  it.each(['no-es-un-uuid', '12345', "' OR '1'='1"])(
-    'con el valor %j como contexto, consultar una tabla de empresa falla',
+describe('criterio 21 · contexto inválido', () => {
+  const INVALIDOS = ['no-es-un-uuid', '12345', "' OR '1'='1", ''];
+
+  it.each(INVALIDOS)(
+    'fijar_contexto_empresa(%j) falla por la conversión a uuid, no fija nada y las tablas de empresa siguen fallando',
     async (valor) => {
-      for (const tabla of ['empresa', 'emisor', 'sucursal']) {
-        const error = await errorDe(
-          enTransaccion(api, valor, () => api.query(`SELECT * FROM ${tabla}`)),
-        );
-        expect(error.code, `${tabla}: ${error.message}`).toBe('22P02');
+      const nueva = await abrirCliente('api');
+      try {
+        await nueva.query('BEGIN');
+        try {
+          await nueva.query('SAVEPOINT intento');
+          const fijar = await errorDe(nueva.query('SELECT fijar_contexto_empresa($1)', [valor]));
+          expect(fijar.code, fijar.message).toBe('22P02');
+          await nueva.query('ROLLBACK TO SAVEPOINT intento');
+          for (const tabla of ['empresa', 'emisor', 'sucursal']) {
+            await nueva.query('SAVEPOINT consulta');
+            const error = await errorDe(nueva.query(`SELECT * FROM ${tabla}`));
+            expect(error.code, `${tabla}: ${error.message}`).toBe('42501');
+            expect(error.message, tabla).toMatch(/^contexto de empresa ausente/);
+            await nueva.query('ROLLBACK TO SAVEPOINT consulta');
+          }
+        } finally {
+          await nueva.query('ROLLBACK');
+        }
+      } finally {
+        await nueva.end();
       }
     },
   );
 
-  it('con el valor vacío como contexto, consultar una tabla de empresa falla como "contexto ausente"', async () => {
-    for (const tabla of ['empresa', 'emisor', 'sucursal']) {
-      const error = await errorDe(
-        enTransaccion(api, '', () => api.query(`SELECT * FROM ${tabla}`)),
-      );
-      expect(error.code, `${tabla}: ${error.message}`).toBe('42501');
-      expect(error.message).toMatch(/^contexto de empresa ausente/);
-    }
+  it.each(INVALIDOS)(
+    'solo set_config(%j), sin fijar_contexto_empresa, consultar una tabla de empresa falla',
+    async (valor) => {
+      for (const tabla of ['empresa', 'emisor', 'sucursal']) {
+        const error = await errorDe(
+          enTransaccionConSetConfig(api, valor, () => api.query(`SELECT * FROM ${tabla}`)),
+        );
+        // La RLS no lee `app.empresa_id`: sin fijación, el contexto está ausente.
+        expect(error.code, `${tabla}: ${error.message}`).toBe('42501');
+        expect(error.message, tabla).toMatch(/^contexto de empresa ausente/);
+      }
+    },
+  );
+
+  it('con fijar_contexto_empresa, un texto que no es UUID falla en la propia llamada (enTransaccion)', async () => {
+    const error = await errorDe(enTransaccion(api, 'no-es-un-uuid', () => api.query('SELECT 1')));
+    expect(error.code, error.message).toBe('22P02');
   });
 });
 

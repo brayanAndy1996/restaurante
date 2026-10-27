@@ -2,7 +2,8 @@
 //
 // Ayudantes compartidos por las pruebas de aislamiento. No dependen de la implementación de la API:
 // crean empresas a nivel SQL con un cliente `restaurante_plataforma` (política `acceso_plataforma`) y
-// ejecutan sentencias como `restaurante_api` fijando `app.empresa_id` por su cuenta.
+// ejecutan sentencias como `restaurante_api` fijando el contexto por su cuenta con
+// `SELECT fijar_contexto_empresa($1)` (criterio 22e).
 import { randomInt, randomUUID } from 'node:crypto';
 import { validarRuc } from '@restaurante/dominio';
 import type { RegistrarEmpresaEntrada } from '@restaurante/contratos';
@@ -113,7 +114,7 @@ export async function crearEmpresaSql(
 
 /**
  * Corre `fn` dentro de una transacción de `cliente`. Si `empresaId` no es `null`, la primera
- * sentencia es `set_config('app.empresa_id', empresaId, true)`. Termina con ROLLBACK salvo que se
+ * sentencia es `SELECT fijar_contexto_empresa($1)` (criterio 22e). Termina con ROLLBACK salvo que se
  * pida `confirmar`; si `fn` lanza, revierte y relanza.
  */
 export async function enTransaccion<T>(
@@ -125,8 +126,31 @@ export async function enTransaccion<T>(
   await cliente.query('BEGIN');
   try {
     if (empresaId !== null) {
-      await cliente.query("SELECT set_config('app.empresa_id', $1, true)", [empresaId]);
+      await cliente.query('SELECT fijar_contexto_empresa($1)', [empresaId]);
     }
+    const resultado = await fn();
+    await cliente.query(opciones.confirmar ? 'COMMIT' : 'ROLLBACK');
+    return resultado;
+  } catch (error) {
+    await cliente.query('ROLLBACK');
+    throw error;
+  }
+}
+
+/**
+ * Como `enTransaccion`, pero la única "fijación" es `set_config('app.empresa_id', valor, true)`, sin
+ * `fijar_contexto_empresa`. Desde el criterio 22e eso NO da contexto (la RLS no lee el parámetro): sirve
+ * para los intentos que deben fallar (criterios 19, 21 y 22e inciso c).
+ */
+export async function enTransaccionConSetConfig<T>(
+  cliente: Client,
+  valor: string,
+  fn: () => Promise<T>,
+  opciones: { confirmar?: boolean } = {},
+): Promise<T> {
+  await cliente.query('BEGIN');
+  try {
+    await cliente.query("SELECT set_config('app.empresa_id', $1, true)", [valor]);
     const resultado = await fn();
     await cliente.query(opciones.confirmar ? 'COMMIT' : 'ROLLBACK');
     return resultado;
@@ -156,4 +180,61 @@ export async function fotoDeFila(
     id,
   ]);
   return rows[0]?.fila ?? null;
+}
+
+/**
+ * Sentencias del criterio 19: sobre `empresa`, `emisor` y `sucursal` (con filas existentes), `SELECT` y
+ * `UPDATE`, `DELETE` sobre `emisor` y `sucursal`, e `INSERT` en `emisor` y `sucursal`. Sin contexto de
+ * empresa, todas deben fallar con SQLSTATE `42501` y un mensaje `contexto de empresa ausente…`.
+ */
+export function sentenciasDelCriterio19(
+  cliente: Client,
+  empresaId: string,
+): [string, () => Promise<unknown>][] {
+  const insertarEmisor = () =>
+    cliente.query(
+      `INSERT INTO emisor (empresa_id, ruc, razon_social, regimen, creado_en, actualizado_en)
+       VALUES ($1, $2, 'Sin contexto SAC', 'GENERAL', now(), now())`,
+      [empresaId, rucAleatorio()],
+    );
+  const insertarSucursal = () =>
+    cliente.query(
+      `INSERT INTO sucursal (empresa_id, emisor_id, nombre, codigo_establecimiento, direccion, creado_en, actualizado_en)
+       VALUES ($1, $2, $3, '0077', 'Calle 7', now(), now())`,
+      [empresaId, randomUUID(), textoUnico('SinContexto')],
+    );
+  return [
+    ['SELECT empresa', () => cliente.query('SELECT * FROM empresa')],
+    ['SELECT emisor', () => cliente.query('SELECT * FROM emisor')],
+    ['SELECT sucursal', () => cliente.query('SELECT * FROM sucursal')],
+    ['UPDATE empresa', () => cliente.query('UPDATE empresa SET nombre = nombre')],
+    ['UPDATE emisor', () => cliente.query('UPDATE emisor SET razon_social = razon_social')],
+    ['UPDATE sucursal', () => cliente.query('UPDATE sucursal SET direccion = direccion')],
+    ['DELETE emisor', () => cliente.query('DELETE FROM emisor')],
+    ['DELETE sucursal', () => cliente.query('DELETE FROM sucursal')],
+    ['INSERT emisor', insertarEmisor],
+    ['INSERT sucursal', insertarSucursal],
+  ];
+}
+
+/**
+ * Ejecuta cada sentencia del criterio 19 y comprueba que falla con `42501` y `contexto de empresa
+ * ausente`. Cada sentencia va dentro de un `SAVEPOINT` si `cliente` está en una transacción
+ * (`enTransaccionAbierta`), para que una no aborte a las siguientes.
+ */
+export async function exigirContextoAusente(
+  cliente: Client,
+  empresaId: string,
+  opciones: { enTransaccionAbierta?: boolean } = {},
+): Promise<void> {
+  for (const [nombre, ejecutar] of sentenciasDelCriterio19(cliente, empresaId)) {
+    if (opciones.enTransaccionAbierta) await cliente.query('SAVEPOINT sin_contexto');
+    const error = await errorDe(ejecutar());
+    if (opciones.enTransaccionAbierta) await cliente.query('ROLLBACK TO SAVEPOINT sin_contexto');
+    if (error.code !== '42501' || !/^contexto de empresa ausente/.test(error.message)) {
+      throw new Error(
+        `${nombre}: se esperaba 42501 "contexto de empresa ausente…" y fue ${error.code} "${error.message}"`,
+      );
+    }
+  }
 }

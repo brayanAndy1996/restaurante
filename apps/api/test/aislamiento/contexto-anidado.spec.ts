@@ -7,6 +7,9 @@
 // autoriza esa transacción: toda consulta que le mande lanza un error antes de llegar a la base
 // (nunca un `DatabaseError`) y no devuelve filas de otra empresa. Lo mismo con una transacción
 // abierta fuera de todo contexto. La transacción de A sigue funcionando.
+// Desde el criterio 22e `ContextoEmpresa` fija la empresa con `SELECT fijar_contexto_empresa($1)`: las
+// variantes con `set_config('app.empresa_id', …)` se conservan (siguen sin autorizar nada) y se agregan las
+// de `fijar_contexto_empresa`, con el mismo resultado.
 // La segunda parte (lint) comprueba que el texto SQL que fija el contexto no se puede importar desde
 // fuera de `apps/api/src/nucleo/` y que la regla del texto `app.empresa_id` detecta también la
 // concatenación de literales.
@@ -45,8 +48,10 @@ afterAll(async () => {
   await plataforma?.end();
 });
 
-/** SQL con el que `ContextoEmpresa` fija la empresa (la prueba lo escribe por su cuenta). */
+/** SQL con el que `ContextoEmpresa` fijaba la empresa antes del criterio 22e (la prueba lo escribe por su cuenta). */
 const SQL_FIJAR = "SELECT set_config('app.empresa_id', $1, true)";
+/** SQL con el que `ContextoEmpresa` fija la empresa desde el criterio 22e (la prueba lo escribe por su cuenta). */
+const SQL_FIJAR_FUNCION = 'SELECT fijar_contexto_empresa($1)';
 /** Variantes de texto: ninguna debe autorizar la transacción ajena. */
 const VARIANTES_FIJAR: { nombre: string; sql: string }[] = [
   { nombre: 'el texto exacto de ContextoEmpresa', sql: SQL_FIJAR },
@@ -58,6 +63,29 @@ const VARIANTES_FIJAR: { nombre: string; sql: string }[] = [
   { nombre: 'con comentario previo', sql: `/* ajeno */ ${SQL_FIJAR}` },
   { nombre: 'como SELECT … AS columna', sql: `SELECT set_config('app.empresa_id', $1, true) AS x` },
   { nombre: 'is_local = false', sql: `SELECT set_config('app.empresa_id', $1, false)` },
+  { nombre: 'fijar_contexto_empresa (el texto exacto de ContextoEmpresa)', sql: SQL_FIJAR_FUNCION },
+  {
+    nombre: 'fijar_contexto_empresa en minúsculas y con espacios de más',
+    sql: 'select   fijar_contexto_empresa( $1 )',
+  },
+  { nombre: 'FIJAR_CONTEXTO_EMPRESA en mayúsculas', sql: 'SELECT FIJAR_CONTEXTO_EMPRESA($1)' },
+  {
+    nombre: 'fijar_contexto_empresa con esquema public',
+    sql: 'SELECT public.fijar_contexto_empresa($1)',
+  },
+  {
+    nombre: 'fijar_contexto_empresa entre comillas dobles',
+    sql: 'SELECT "fijar_contexto_empresa"($1)',
+  },
+  { nombre: 'fijar_contexto_empresa con punto y coma final', sql: `${SQL_FIJAR_FUNCION};` },
+  {
+    nombre: 'fijar_contexto_empresa con comentario previo',
+    sql: `/* ajeno */ ${SQL_FIJAR_FUNCION}`,
+  },
+  {
+    nombre: 'fijar_contexto_empresa como SELECT … AS columna',
+    sql: 'SELECT fijar_contexto_empresa($1) AS x',
+  },
 ];
 
 const SQL_SUCURSALES = 'SELECT id, nombre FROM sucursal';
@@ -167,6 +195,28 @@ describe('criterio 22c · una transacción abierta dentro de ejecutar(A) no se a
     });
   });
 
+  it('fijar B con SELECT fijar_contexto_empresa($1) en la segunda transacción no la autoriza: toda consulta lanza y no devuelve filas de B', async () => {
+    await contexto.ejecutar(A.id, async () => {
+      await conTransaccionAjena(async (t2) => {
+        await exigirTransaccionNoAutorizada(t2, SQL_FIJAR_FUNCION, B.id, B);
+      });
+    });
+  });
+
+  it('fijar la propia A con SELECT fijar_contexto_empresa($1) en la segunda transacción tampoco la autoriza', async () => {
+    await contexto.ejecutar(A.id, async () => {
+      await conTransaccionAjena(async (t2) => {
+        await exigirTransaccionNoAutorizada(t2, SQL_FIJAR_FUNCION, A.id, B);
+        const leer = await capturar(() =>
+          sequelize.query<Fila>(SQL_SUCURSALES, { type: QueryTypes.SELECT, transaction: t2 }),
+        );
+        expect(leer.error, 'la transacción ajena con A fijada no debía poder leer').toBeInstanceOf(
+          Error,
+        );
+      });
+    });
+  });
+
   it.each(VARIANTES_FIJAR)(
     'fijar B con $nombre no autoriza la segunda transacción',
     async ({ sql }) => {
@@ -218,6 +268,22 @@ describe('criterio 22c · una transacción abierta con sequelize.transaction() f
   it('fijar A en ella tampoco la autoriza', async () => {
     await conTransaccionAjena(async (t2) => {
       await exigirTransaccionNoAutorizada(t2, SQL_FIJAR, A.id, B);
+      const leer = await capturar(() =>
+        sequelize.query<Fila>(SQL_SUCURSALES, { type: QueryTypes.SELECT, transaction: t2 }),
+      );
+      expect(leer.error).toBeInstanceOf(Error);
+    });
+  });
+
+  it('fijar B con SELECT fijar_contexto_empresa($1) en ella no la autoriza', async () => {
+    await conTransaccionAjena(async (t2) => {
+      await exigirTransaccionNoAutorizada(t2, SQL_FIJAR_FUNCION, B.id, B);
+    });
+  });
+
+  it('fijar A con SELECT fijar_contexto_empresa($1) en ella tampoco la autoriza', async () => {
+    await conTransaccionAjena(async (t2) => {
+      await exigirTransaccionNoAutorizada(t2, SQL_FIJAR_FUNCION, A.id, B);
       const leer = await capturar(() =>
         sequelize.query<Fila>(SQL_SUCURSALES, { type: QueryTypes.SELECT, transaction: t2 }),
       );

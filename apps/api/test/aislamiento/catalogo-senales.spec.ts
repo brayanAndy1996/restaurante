@@ -49,7 +49,7 @@ async function abrirVictima(rol: 'api' | 'plataforma', empresaId: string | null)
   const marcador = `senal_${randomUUID().replace(/-/g, '')}`;
   if (empresaId !== null) {
     await cliente.query('BEGIN');
-    await cliente.query("SELECT set_config('app.empresa_id', $1, true)", [empresaId]);
+    await cliente.query('SELECT fijar_contexto_empresa($1)', [empresaId]);
   }
   // Sin esperar el resultado: la consulta queda en curso unos segundos.
   const enCurso = cliente
@@ -118,7 +118,7 @@ async function abrirAtacante(rol: RolDePrueba, conContexto: boolean): Promise<Cl
   const atacante = await abrirCliente(rol);
   if (conContexto) {
     await atacante.query('BEGIN');
-    await atacante.query("SELECT set_config('app.empresa_id', $1, true)", [A.id]);
+    await atacante.query('SELECT fijar_contexto_empresa($1)', [A.id]);
   }
   return atacante;
 }
@@ -154,7 +154,7 @@ describe('criterio 38c · una sesión no puede señalar (terminar ni cancelar) a
         await atacante.query('ROLLBACK');
         if (escenario.atacanteConContexto) {
           await atacante.query('BEGIN');
-          await atacante.query("SELECT set_config('app.empresa_id', $1, true)", [A.id]);
+          await atacante.query('SELECT fijar_contexto_empresa($1)', [A.id]);
         }
         const error = await errorDe(
           atacante.query('SELECT pg_terminate_backend($1)', [victima.pid]),

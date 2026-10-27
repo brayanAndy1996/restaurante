@@ -77,7 +77,7 @@ async function observar(
   let enCurso: Promise<unknown> | undefined;
   try {
     await victima.query('BEGIN');
-    await victima.query("SELECT set_config('app.empresa_id', $1, true)", [B.id]);
+    await victima.query('SELECT fijar_contexto_empresa($1)', [B.id]);
     // Sin esperar el resultado: la consulta queda en curso durante unos segundos.
     enCurso = victima
       .query(
@@ -99,7 +99,7 @@ async function observar(
     let resultado: string[] | 'prohibido' | 'inexistente';
     if (espectador.conContexto) {
       await vigia.query('BEGIN');
-      await vigia.query("SELECT set_config('app.empresa_id', $1, true)", [A.id]);
+      await vigia.query('SELECT fijar_contexto_empresa($1)', [A.id]);
       try {
         resultado = await espia(vigia);
       } finally {

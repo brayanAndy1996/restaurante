@@ -33,8 +33,10 @@ Contraseñas de los roles: `DB_PASSWORD_MIGRADOR|API|PLATAFORMA`; si faltan, `mi
 2. `DROP DATABASE IF EXISTS restaurante_test WITH (FORCE)` y la crea con dueño `restaurante_migrador`.
 3. `REVOKE ALL ... FROM PUBLIC` sobre la base y `CONNECT` para `restaurante_api` y `restaurante_plataforma`.
 4. Corre las migraciones como migrador (`src/migraciones/`, umzug): `202610270001-plataforma-base.ts`
-   crea `empresa_actual()` y las tablas `empresa`, `emisor`, `sucursal` y `auditoria_plataforma`
-   con su RLS forzada, políticas y privilegios.
+   crea las tablas `empresa`, `emisor`, `sucursal` y `auditoria_plataforma` con su RLS forzada,
+   políticas y privilegios; `202610270002-contexto-empresa-unico.ts` (criterio 22e) crea el esquema
+   interno `contexto`, la tabla `contexto.sesion_empresa` y las funciones `fijar_contexto_empresa(uuid)`
+   y `empresa_actual()`, que la RLS lee.
 
 Cada archivo de prueba corre en su propio proceso; no hay que limpiar tablas porque cada prueba
 crea sus propias empresas con UUID aleatorios.
@@ -135,7 +137,7 @@ listarEmpresas(): Promise<{ id: string; nombre: string }[]>
   `apps/api/src/nucleo/base-de-datos/conexion-plataforma.ts` (exporta el token `CONEXION_PLATAFORMA`).
   Un archivo que lo importe, por ejemplo `import { CONEXION_PLATAFORMA } from '../../nucleo/base-de-datos/conexion-plataforma'`,
   debe fallar el lint fuera de `modulos/plataforma/` (y no fallar dentro).
-- El único archivo autorizado a escribir el texto `app.empresa_id`:
+- El único archivo autorizado a escribir los textos `app.empresa_id` y `fijar_contexto_empresa` (junto con las migraciones, criterios 37 y 22e):
   `apps/api/src/nucleo/contexto-empresa/contexto-empresa.ts` (clase `ContextoEmpresa`).
 - Prueba de lint: `new ESLint({ cwd: <apps/api> }).lintText(codigo, { filePath })` con `filePath`
   absoluto bajo `apps/api/src/...`. `apps/api/eslint.config.js` (configuración plana) extiende la base
@@ -158,8 +160,23 @@ Las tablas son `empresa`, `emisor`, `sucursal` y `auditoria_plataforma`. Se crea
   el RUC es único en todo el sistema y las pruebas comparten la base).
 - A nivel SQL: un cliente `abrirCliente('plataforma')` (rol `restaurante_plataforma`, con INSERT en
   las cuatro tablas y política `acceso_plataforma`) y `INSERT INTO empresa ... RETURNING id`, luego
-  `emisor` y `sucursal`. Para fijar el contexto de una empresa en una conexión de `restaurante_api`:
-  `BEGIN; SELECT set_config('app.empresa_id', $1, true); ...; COMMIT`.
+  `emisor` y `sucursal`. Para fijar el contexto de una empresa en una conexión de `restaurante_api`
+  (criterio 22e): `BEGIN; SELECT fijar_contexto_empresa($1); ...; COMMIT`. La empresa se fija **una sola
+  vez por transacción**: una segunda llamada falla con `42501` `contexto de empresa ya fijado`.
+  `set_config('app.empresa_id', ...)` ya no da contexto (la RLS lee `empresa_actual()`, no el parámetro):
+  solo sirve para los intentos que deben fallar.
+
+### Ayudantes de `test/aislamiento/fabrica.ts`
+
+- `enTransaccion(cliente, empresaId | null, fn, { confirmar? })`: `BEGIN`, `SELECT fijar_contexto_empresa($1)`
+  (si `empresaId` no es `null`), `fn`, y `ROLLBACK` o `COMMIT`.
+- `enTransaccionConSetConfig(cliente, valor, fn, { confirmar? })`: igual pero la única "fijación" es
+  `set_config('app.empresa_id', valor, true)`; no da contexto, para los intentos de los criterios 19, 21 y 22e (c).
+- `sentenciasDelCriterio19(cliente, empresaId)` y `exigirContextoAusente(cliente, empresaId, { enTransaccionAbierta? })`:
+  las diez sentencias del criterio 19 y la comprobación de que todas fallan con `42501` `contexto de empresa ausente`.
+- `crearEmpresaSql`, `datosDeEmpresa`, `rucAleatorio`, `textoUnico`, `errorDe`, `fotoDeFila`.
+- `nombres-prohibidos.ts`: la lista de nombres de la guarda (criterio 38e) con sus variantes, compartida por
+  `guarda-nombres-api.spec.ts` y `guarda-nombres-plataforma.spec.ts`.
 
 ## Pruebas existentes (no protegidas)
 
@@ -171,12 +188,31 @@ Las tablas son `empresa`, `emisor`, `sucursal` y `auditoria_plataforma`. Se crea
 - `guarda.spec.ts`: la guarda de consultas de la API (ver abajo): consultas crudas fuera y dentro de
   `ContextoEmpresa.ejecutar`, la marca `sinEmpresa` y los intentos de cambiar el contexto con SQL.
 
+## Pruebas protegidas de la fase E (criterios 22e, 38e y 40d)
+
+En `test/aislamiento/`, con la cabecera `// spec: 001-base-multitenancy (pruebas protegidas)`:
+
+- `contexto-unico.spec.ts` (22e a-e): `restaurante_api` directo por SQL, sin la guarda: `set_config` no cambia el
+  contexto, segunda fijación rechazada, `fijar_contexto_empresa(NULL)`, `set_config` sin fijación, la fijación
+  muere con la transacción, dos conexiones simultáneas y el catálogo del esquema `contexto`.
+- `contexto-unico-api.spec.ts` (22e f): ataques de las rondas 4 y final por la API, guarda de
+  `fijar_contexto_empresa` y fijación propia de `ContextoEmpresa.ejecutar`.
+- `lint-fijar-contexto.spec.ts` (22e f, lint): el texto `fijar_contexto_empresa` fuera del servicio de contexto y de las migraciones.
+- `errores-4xx.spec.ts` (40d): sonda propia con `HttpException`, guard, pipe e interceptor, ruta inexistente y 415 del analizador.
+- `guarda-nombres-api.spec.ts` y `guarda-nombres-plataforma.spec.ts` (38e d, e): guarda por nombre.
+- `sin-superusuario.spec.ts` (38e a, b, c, e): `prepararBaseDeDatos` con un administrador `CREATEROLE CREATEDB NOSUPERUSER`
+  (rol y bases temporales de nombre aleatorio; los roles `restaurante_*` no se borran) y con superusuario más `omitir`.
+  La opción `avisar` de `prepararBaseDeDatos` recibe el aviso de protecciones omitidas.
+
 ## Formato de los errores HTTP
 
 `{ codigo, mensaje, campos? }`; `campos` es una lista de `{ campo, mensaje }` (`campo` con puntos para
 anidar, por ejemplo `sucursales.0.rucEmisor`). Códigos: `DATOS_INVALIDOS`, `EMPRESA_NO_RESUELTA`,
-`NO_ENCONTRADO`, `CONFLICTO`, `EMISOR_INVALIDO`, `ERROR_INTERNO`. Los errores no previstos responden
-500 `ERROR_INTERNO` sin detalles.
+`NO_ENCONTRADO`, `CONFLICTO`, `EMISOR_INVALIDO`, `CUERPO_DEMASIADO_GRANDE`, `ERROR_INTERNO` y, desde el
+criterio 40d, `NO_AUTENTICADO` (401), `PROHIBIDO` (403), `METODO_NO_PERMITIDO` (405), `TIPO_NO_SOPORTADO` (415),
+`DEMASIADAS_PETICIONES` (429) y `PETICION_INVALIDA` (cualquier otro 4xx). Todo 4xx conserva su estado con un
+mensaje genérico fijo por código (también la ruta inexistente y el 415 del analizador de cuerpos); solo los
+errores no previstos responden 500 `ERROR_INTERNO` sin detalles.
 
 ## `CONEXION_API` y el bloqueo de consultas sin contexto (criterio 22)
 
@@ -205,9 +241,15 @@ consultas (modelos, `queryInterface`, consultas crudas y las sentencias de trans
   `WITH`, `VALUES` o `TABLE`; todo lo demás (`LISTEN`, `COPY`, `DECLARE`, `EXPLAIN`, `SHOW`, `CREATE`…)
   lanza `ConsultaProhibidaError` antes de la base (`contieneSentenciaNoPermitida`, en
   `control-transaccion.ts`). Las sentencias internas (abrir y cerrar la transacción de Sequelize y
-  la fijación de `ContextoEmpresa`) pasan por su origen. También se rechazan `ts_rewrite`, `ts_stat`,
-  `query_to_xml*` y `cursor_to_xml*` fuera de literales; la barrera de fondo es el `REVOKE` de
-  `db:preparar` (`preparar-bd.ts`, `protegerEjecucionDeSql`).
+  la fijación de `ContextoEmpresa`, `SELECT fijar_contexto_empresa($1)`) pasan por su origen. También se
+  rechazan, fuera de literales y comentarios, `set_config`, `pg_settings`, `ts_rewrite`, `ts_stat`,
+  `query_to_xml*`, `cursor_to_xml*`, `fijar_contexto_empresa` (salvo la fijación propia) y, desde el criterio
+  38e, `pg_stat_activity`, `pg_stat_get_activity`, `pg_cancel_backend`, `pg_terminate_backend`,
+  `pg_signal_backend`, `pg_largeobject*`, `loread`, `lowrite`, `table_to_xml*`, `schema_to_xml*`,
+  `database_to_xml*` y los prefijos `pg_stat_get_backend_` y `lo_` (con los límites de identificador del
+  criterio). La guarda de plataforma aplica la misma lista. Ya no son la única barrera: la RLS lee la
+  empresa de `contexto.sesion_empresa` (criterio 22e) y las revocaciones de `db:preparar`
+  (`protegerEjecucionDeSql` y las de 38b, 38c y 38d) son una defensa adicional donde hay superusuario.
 
 ### La excepción `sinEmpresa: 'salud' | 'verificacion-roles'`
 

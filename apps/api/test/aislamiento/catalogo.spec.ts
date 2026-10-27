@@ -222,7 +222,7 @@ describe('criterio 36 · permisos sobre auditoria_plataforma', () => {
     expect(sinContexto.code, sinContexto.message).toBe('42501');
     await apiCliente.query('BEGIN');
     try {
-      await apiCliente.query("SELECT set_config('app.empresa_id', $1, true)", [empresa.id]);
+      await apiCliente.query('SELECT fijar_contexto_empresa($1)', [empresa.id]);
       const conContexto = await errorDe(apiCliente.query(sql));
       expect(conContexto.code, conContexto.message).toBe('42501');
     } finally {

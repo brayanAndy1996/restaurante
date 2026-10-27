@@ -13,8 +13,9 @@
 // 2. La guarda solo admite sentencias que empiezan por SELECT, INSERT, UPDATE, DELETE, WITH, VALUES o
 //    TABLE (lista blanca): lo demás se rechaza antes de llegar a la base.
 // 3. La base de datos, sin la guarda: `restaurante_api` y `restaurante_plataforma` no tienen EXECUTE
-//    sobre esas funciones ni UPDATE sobre `pg_settings` (42501), pero `restaurante_api` sí conserva
-//    `set_config` (lo necesita `ContextoEmpresa`).
+//    sobre esas funciones ni UPDATE sobre `pg_settings` (42501); `restaurante_api` sí conserva
+//    `set_config` (es de PUBLIC), pero desde el criterio 22e ya no lo necesita para fijar el contexto
+//    (lo fija `fijar_contexto_empresa`) ni le sirve para cambiarlo (la RLS no lee `app.empresa_id`).
 import type { INestApplication } from '@nestjs/common';
 import type { Client, DatabaseError } from 'pg';
 import { DatabaseError as ErrorDeBaseSequelize, QueryTypes, type Sequelize } from 'sequelize';
@@ -360,6 +361,11 @@ describe.each(ATAQUES_EN_LA_BASE)('criterio 22d · en la base · %s', (nombre, s
       expect(error.code, error.message).toBe('42501');
       await clienteApi.query('ROLLBACK TO SAVEPOINT intento');
 
+      // Tras revertir al SAVEPOINT, en la misma transacción, el contexto sigue siendo A.
+      const actual = await clienteApi.query<{ actual: string; copia: string }>(
+        `SELECT empresa_actual()::text AS actual, current_setting('app.empresa_id') AS copia`,
+      );
+      expect(actual.rows[0]).toEqual({ actual: A.id, copia: A.id });
       const { rows } = await clienteApi.query<Fila>('SELECT nombre FROM sucursal');
       expect(ordenados(rows)).toEqual(nombresDe(A));
     });
@@ -430,7 +436,7 @@ describe('criterio 22d · en la base · catálogo de privilegios', () => {
       expect(rows[0]!.api).toBe(true);
     });
 
-    it('restaurante_api puede fijar el contexto con set_config en una transacción nueva', async () => {
+    it('restaurante_api puede fijar el contexto con fijar_contexto_empresa en una transacción nueva', async () => {
       await enTransaccion(clienteApi, A.id, async () => {
         const { rows } = await clienteApi.query<Fila>('SELECT nombre FROM sucursal');
         expect(ordenados(rows)).toEqual(nombresDe(A));
