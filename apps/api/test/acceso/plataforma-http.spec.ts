@@ -777,13 +777,16 @@ describe('criterio 64 · emisores y sucursales por plataforma', () => {
 // ------------------------------------------------------------------------------------------------
 describe('criterio 65 · GET /plataforma/empresas y GET /plataforma/empresas/:id', () => {
   it('[C1] la lista incluye las empresas con sus sucursales y el estado de cada suscripción', async () => {
-    const { sa, A } = await sembrado();
+    // Empresa propia de esta prueba: las de otros criterios agregan emisores y sucursales a A.
+    const { sa } = await sembrado();
+    const A = await altaEmpresa(ctx, sa, { conSesion: false, emisores: 2, sucursalesPorEmisor: 2 });
     const res = await ctx.http().get('/plataforma/empresas').set(bearer(sa.token));
     exigirEstado(res, 200, 'lista');
     const lista = empresaPlataformaResumenSchema.array().parse(res.body);
     const empresa = lista.find((e) => e.id === A.empresaId);
     expect(empresa, 'la empresa A está en la lista').toBeDefined();
     expect(empresa!.nombre).toBe(A.nombre);
+    expect(empresa!.sucursales).toHaveLength(4);
     expect(empresa!.sucursales.map((s) => s.id).sort()).toEqual(
       A.sucursales.map((s) => s.id).sort(),
     );
@@ -817,7 +820,9 @@ describe('criterio 65 · GET /plataforma/empresas y GET /plataforma/empresas/:id
   });
 
   it('[C1] el detalle devuelve emisores, sucursales, suscripciones y administradores (sin hashes ni PIN)', async () => {
-    const { sa, A } = await sembrado();
+    // Empresa propia de esta prueba: las de otros criterios agregan emisores y sucursales a A.
+    const { sa } = await sembrado();
+    const A = await altaEmpresa(ctx, sa, { conSesion: false, emisores: 2, sucursalesPorEmisor: 2 });
     const res = await ctx.http().get(`/plataforma/empresas/${A.empresaId}`).set(bearer(sa.token));
     exigirEstado(res, 200, 'detalle');
     const detalle = empresaPlataformaDetalleSchema.parse(res.body);
@@ -826,7 +831,9 @@ describe('criterio 65 · GET /plataforma/empresas y GET /plataforma/empresas/:id
     expect(detalle.sucursales.map((s) => s.id).sort()).toEqual(
       A.sucursales.map((s) => s.id).sort(),
     );
-    expect(detalle.suscripciones).toHaveLength(A.sucursales.length);
+    expect(detalle.emisores).toHaveLength(2);
+    expect(detalle.sucursales).toHaveLength(4);
+    expect(detalle.suscripciones).toHaveLength(4);
     expect(detalle.administradores).toContainEqual({
       id: A.admin.id,
       nombre: expect.any(String),
