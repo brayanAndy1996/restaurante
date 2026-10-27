@@ -35,6 +35,12 @@ export async function crearAplicacion(
       abortOnError: false,
     },
   );
-  await app.init();
+  try {
+    await app.init();
+  } catch (error) {
+    // Arranque rechazado (por ejemplo, un rol privilegiado): se cierran los pools que ya se crearon.
+    await app.close().catch(() => undefined);
+    throw error;
+  }
   return app;
 }

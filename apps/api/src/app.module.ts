@@ -1,5 +1,6 @@
 import { DynamicModule, Module, Type } from '@nestjs/common';
 import { ConfigModule } from './config/config.module';
+import { BaseDeDatosModule } from './nucleo/base-de-datos';
 import { ContextoEmpresaModule } from './nucleo/contexto-empresa';
 import { ErroresModule } from './nucleo/errores';
 import { PlataformaModule } from './modulos/plataforma';
@@ -11,7 +12,14 @@ export interface OpcionesAppModule {
 }
 
 @Module({
-  imports: [ConfigModule, ErroresModule, ContextoEmpresaModule, PlataformaModule, SaludModule],
+  imports: [
+    ConfigModule,
+    ErroresModule,
+    BaseDeDatosModule,
+    ContextoEmpresaModule,
+    PlataformaModule,
+    SaludModule,
+  ],
 })
 export class AppModule {
   /** `AppModule` más controladores extra, que pueden inyectar `ContextoEmpresa` y los servicios. */

@@ -13,7 +13,8 @@
     "test": "vitest run",
     "db:preparar": "tsx scripts/preparar-bd.ts",
     "db:migrar": "tsx scripts/migrar.ts",
-    "db:revertir": "tsx scripts/migrar.ts revertir"
+    "db:revertir": "tsx scripts/migrar.ts revertir",
+    "db:semilla": "tsx scripts/semilla.ts"
   },
   "dependencies": {
     "@nestjs/common": "^11.2.8",

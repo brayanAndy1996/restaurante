@@ -1,5 +1,9 @@
 export { ContextoEmpresa } from './contexto-empresa';
-export { ContextoEmpresaAusenteError, ContextoEmpresaConflictoError } from './errores';
+export {
+  ContextoEmpresaAusenteError,
+  ContextoEmpresaConflictoError,
+  EmpresaIdInvalidoError,
+} from './errores';
 export { RESOLUTOR_EMPRESA } from './resolutor-empresa';
 export type { ResolutorEmpresa } from './resolutor-empresa';
 export { ResolutorEmpresaNulo } from './resolutor-empresa-nulo';

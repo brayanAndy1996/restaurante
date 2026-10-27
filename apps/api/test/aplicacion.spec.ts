@@ -51,27 +51,28 @@ describe('crearAplicacion', () => {
     expect(res.body).toMatchObject({ codigo: 'NO_ENCONTRADO' });
   });
 
-  it('las rutas existen y, en fase A, fallan con el error genérico sin filtrar detalles', async () => {
-    fijarEntornoDePrueba();
+  it('las rutas existen: sin empresa resuelta las de empresa responden 401 y /health responde', async () => {
+    fijarEntornoDePrueba({ empresaPorHeader: false });
     const app = await crear();
     for (const [metodo, ruta] of [
-      ['get', '/health'],
       ['get', '/sucursales'],
       ['get', '/sucursales/11111111-1111-1111-1111-111111111111'],
       ['patch', '/sucursales/11111111-1111-1111-1111-111111111111'],
     ] as const) {
       const res = await request(app.getHttpServer())[metodo](ruta);
-      expect(res.status, `${metodo} ${ruta}`).toBe(500);
-      expect(res.body).toEqual({ codigo: 'ERROR_INTERNO', mensaje: 'Error interno del servidor' });
+      expect(res.status, `${metodo} ${ruta}`).toBe(401);
+      expect(res.body).toMatchObject({ codigo: 'EMPRESA_NO_RESUELTA' });
     }
+    const salud = await request(app.getHttpServer()).get('/health');
+    expect(salud.status).toBe(200);
   });
 
   it('permite registrar controladores extra que inyectan ContextoEmpresa', async () => {
     fijarEntornoDePrueba();
     const app = await crear({ controladoresExtra: [SondaHumoController] });
     expect(app.get(ContextoEmpresa)).toBeInstanceOf(ContextoEmpresa);
-    // El interceptor global (fase A) responde 500 antes de llegar al controlador; basta con que la ruta exista.
+    // Sin cabecera de empresa, el interceptor global responde 401 antes de llegar al controlador.
     const res = await request(app.getHttpServer()).get('/sonda-humo');
-    expect(res.status).toBe(500);
+    expect(res.status).toBe(401);
   });
 });

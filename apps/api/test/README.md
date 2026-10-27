@@ -29,10 +29,9 @@ Contraseñas de los roles: `DB_PASSWORD_MIGRADOR|API|PLATAFORMA`; si faltan, `mi
    (`scripts/lib/preparar-bd.ts`).
 2. `DROP DATABASE IF EXISTS restaurante_test WITH (FORCE)` y la crea con dueño `restaurante_migrador`.
 3. `REVOKE ALL ... FROM PUBLIC` sobre la base y `CONNECT` para `restaurante_api` y `restaurante_plataforma`.
-4. Corre las migraciones como migrador (`src/migraciones/`, umzug). **En la fase A no hay ninguna:
-   la base `restaurante_test` está vacía** (solo la tabla `migraciones`). Las tablas `empresa`,
-   `emisor`, `sucursal` y `auditoria_plataforma` las crea la migración de la tarea T10 (fase C), así
-   que las pruebas de aislamiento fallarán hasta entonces.
+4. Corre las migraciones como migrador (`src/migraciones/`, umzug): `202610270001-plataforma-base.ts`
+   crea `empresa_actual()` y las tablas `empresa`, `emisor`, `sucursal` y `auditoria_plataforma`
+   con su RLS forzada, políticas y privilegios.
 
 Cada archivo de prueba corre en su propio proceso; no hay que limpiar tablas porque cada prueba
 crea sus propias empresas con UUID aleatorios.
@@ -86,13 +85,13 @@ await app.close(); // siempre, en afterAll
   `NODE_ENV=production`. Incluye el filtro global de errores y el interceptor global. Los
   controladores extra se registran en `AppModule` (`AppModule.registrar({ controladoresExtra })`,
   `src/app.module.ts`) y pueden inyectar por constructor `ContextoEmpresa`, `OperacionPlataforma`,
-  `PlataformaEmpresasService` y `SucursalService` (los modelos Sequelize llegan en la fase C).
+  `PlataformaEmpresasService` y `SucursalService`.
 - Los módulos exportan esos cuatro servicios y `ContextoEmpresaModule` es global.
 - `NODE_ENV=test` silencia el registro de Nest.
 - Para el criterio 29 basta `fijarEntornoDePrueba({ nodeEnv: 'production' })` +
   `await expect(crearAplicacion()).rejects.toThrow(/prohibido en producción/)`.
 
-## Símbolos públicos y rutas de import (fase A: todo lanza `Error('No implementado')`)
+## Símbolos públicos y rutas de import
 
 Desde `apps/api/test/aislamiento/` (carpeta `src/` = `../../src/`). Cada carpeta tiene `index.ts`.
 
@@ -108,6 +107,8 @@ Desde `apps/api/test/aislamiento/` (carpeta `src/` = `../../src/`). Cada carpeta
 | `SucursalService` (`listar`, `obtener`, `configurar`), `SucursalesController`, `PlataformaModule`               | `src/modulos/plataforma`           |
 | tipos `AuditoriaPlataformaEntrada`, `ResultadoRegistroEmpresa`, `EmpresaResumen`, `OpcionesOperacionPlataforma` | `src/modulos/plataforma`           |
 | `SaludController`, `SaludModule`                                                                                | `src/modulos/salud`                |
+| `CONEXION_API`, `ConsultaProhibidaError`, `RolPrivilegiadoError`, `comprobarConexion`                           | `src/nucleo/base-de-datos`         |
+| `OperacionPlataforma.consultar(fn)`, `OperacionPlataforma.registrarDatosDeAuditoria(tx, datos)`                 | `src/modulos/plataforma`           |
 | `ErrorAplicacion`, `FiltroGlobalErrores`, `PipeUuid`, `PipeZod`                                                 | `src/nucleo/errores`               |
 | `cargarEntorno`, `EntornoInvalidoError`, `ENTORNO`, tipo `Entorno`                                              | `src/config/entorno`               |
 | `crearAplicacion`, `AppModule`                                                                                  | `src/aplicacion`, `src/app.module` |
@@ -135,13 +136,13 @@ listarEmpresas(): Promise<{ id: string; nombre: string }[]>
   `apps/api/src/nucleo/contexto-empresa/contexto-empresa.ts` (clase `ContextoEmpresa`).
 - Prueba de lint: `new ESLint({ cwd: <apps/api> }).lintText(codigo, { filePath })` con `filePath`
   absoluto bajo `apps/api/src/...`. `apps/api/eslint.config.js` (configuración plana) extiende la base
-  de `packages/config`; las dos reglas del criterio 37 **todavía no existen** (tarea T16): hoy
-  `lintText` sobre esos fragmentos no devuelve errores, y esa es la razón del rojo.
+  de `packages/config` y agrega las dos reglas del criterio 37, que solo se aplican a `src/**/*.ts`
+  (las migraciones quedan fuera de la segunda porque su SQL nombra el parámetro; las pruebas y los
+  scripts no son código de la API).
 
 ## Crear las empresas A y B en las pruebas
 
-En la fase A todavía **no existen las tablas** (`empresa`, `emisor`, `sucursal`,
-`auditoria_plataforma`: tarea T10). Cuando existan, se crean así:
+Las tablas son `empresa`, `emisor`, `sucursal` y `auditoria_plataforma`. Se crean así:
 
 - Por la API: `await app.get(PlataformaEmpresasService).registrarEmpresa(datos, { actor: 'prueba', motivo: 'prueba' })`
   con `datos` de `RegistrarEmpresaEntrada` (nombre, al menos un emisor con RUC válido y al menos
@@ -157,7 +158,11 @@ En la fase A todavía **no existen las tablas** (`empresa`, `emisor`, `sucursal`
 
 - `infraestructura.spec.ts`: roles, base, permisos de la base, idempotencia de `prepararBaseDeDatos`, umzug con la carpeta vacía y con una migración de ejemplo (`fixtures/migraciones/`).
 - `entorno.spec.ts`: validación de entorno (criterio 29).
-- `aplicacion.spec.ts`: la fábrica `crearAplicacion`, controladores extra y que las rutas existen (en fase A responden 500 `ERROR_INTERNO`).
+- `aplicacion.spec.ts`: la fábrica `crearAplicacion`, controladores extra y que las rutas existen.
+- `salud.spec.ts`: `GET /health` (criterios 5 y 6): 200 con la base disponible; 503 sin detalles en
+  menos de 3 s con la base inaccesible (rol sin acceso, credenciales inválidas, puerto cerrado).
+- `guarda.spec.ts`: la guarda de consultas de la API (ver abajo): consultas crudas fuera y dentro de
+  `ContextoEmpresa.ejecutar`, la marca `sinEmpresa` y los intentos de cambiar el contexto con SQL.
 
 ## Formato de los errores HTTP
 
@@ -165,3 +170,36 @@ En la fase A todavía **no existen las tablas** (`empresa`, `emisor`, `sucursal`
 anidar, por ejemplo `sucursales.0.rucEmisor`). Códigos: `DATOS_INVALIDOS`, `EMPRESA_NO_RESUELTA`,
 `NO_ENCONTRADO`, `CONFLICTO`, `EMISOR_INVALIDO`, `ERROR_INTERNO`. Los errores no previstos responden
 500 `ERROR_INTERNO` sin detalles.
+
+## `CONEXION_API` y el bloqueo de consultas sin contexto (criterio 22)
+
+`CONEXION_API` (`src/nucleo/base-de-datos`, también en `index.ts`) es el token de Nest de la instancia
+de Sequelize de la API (`restaurante_api`). Las pruebas la obtienen con `app.get<Sequelize>(CONEXION_API)`.
+Esa instancia tiene instalada una guarda sobre `sequelize.query`, por donde pasan todas las
+consultas (modelos, `queryInterface`, consultas crudas y las sentencias de transacción):
+
+- **Fuera de `ContextoEmpresa.ejecutar`** cualquier `sequelize.query(...)` lanza
+  `ContextoEmpresaAusenteError` **antes** de pedir una conexión al pool, así que no llega a la base.
+  Tampoco sirve una transacción abierta a mano con `sequelize.transaction()`.
+- **Dentro de `ContextoEmpresa.ejecutar`** una consulta cruda funciona: la guarda le inyecta la
+  transacción de la petición (no hace falta pasar `transaction`) y la RLS limita las filas a la empresa.
+- Dentro del contexto se rechazan (`ConsultaProhibidaError`) las sentencias que cambian la sesión o el
+  contexto: `set_config`, cualquier mención del parámetro de contexto, `SET`, `RESET`, `DISCARD` y `DO`.
+  Fijar el contexto otra vez en la misma transacción lanza `ContextoEmpresaConflictoError`.
+
+### La excepción `sinEmpresa: 'salud' | 'verificacion-roles'`
+
+Solo hay dos consultas que pueden correr sin contexto, y se marcan con la opción
+`{ sinEmpresa: 'salud' }` (`SELECT 1 AS ok`, del `GET /health`) o `{ sinEmpresa: 'verificacion-roles' }`
+(la consulta de roles del arranque). La marca **no es un permiso general**: cada motivo acepta
+únicamente su texto SQL exacto (constantes en `consultas-sin-empresa.ts`), sin `bind` ni
+`replacements`, sin transacción y fuera de cualquier contexto de empresa u operación de plataforma.
+Cualquier otro SQL marcado `sinEmpresa` lanza `ContextoEmpresaAusenteError`, igual que sin marca.
+Aun así las dos consultas son inofensivas: leen el catálogo de PostgreSQL o devuelven una constante.
+La conexión de plataforma solo acepta `verificacion-roles`.
+
+Qué no garantiza la guarda: es una barrera de la API, no de la base. Código dentro del mismo proceso
+que replique a mano el SQL exacto de `ContextoEmpresa` sobre una transacción propia obtiene el mismo
+contexto que `ContextoEmpresa.ejecutar(empresa, …)`; para eso hay que escribir el parámetro de
+contexto, que la regla de ESLint del criterio 37 prohíbe fuera de `contexto-empresa.ts`. La garantía de
+fondo sigue siendo la RLS, que ningún rol de la aplicación puede apagar (criterios 7 a 9).

@@ -1,5 +1,4 @@
-// Deja el entorno local listo con Docker: PostgreSQL 16, roles y base migrada.
-// (La semilla de demostración se agrega en la tarea T17.)
+// Deja el entorno local listo con Docker: PostgreSQL 16, roles, base migrada y datos de demostración.
 import { execSync } from 'node:child_process';
 import { copyFileSync, existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -16,3 +15,4 @@ if (!existsSync(join(raiz, '.env'))) {
 ejecutar('docker compose up -d --wait');
 ejecutar('pnpm db:preparar');
 ejecutar('pnpm db:migrar');
+ejecutar('pnpm db:semilla');

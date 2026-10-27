@@ -6,6 +6,6 @@ import type { ResolutorEmpresa } from './resolutor-empresa';
 @Injectable()
 export class ResolutorEmpresaNulo implements ResolutorEmpresa {
   async resolver(_peticion: Request): Promise<string | null> {
-    throw new Error('No implementado');
+    return null;
   }
 }

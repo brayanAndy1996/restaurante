@@ -15,3 +15,11 @@ export class ContextoEmpresaConflictoError extends Error {
     this.name = 'ContextoEmpresaConflictoError';
   }
 }
+
+/** `ContextoEmpresa.ejecutar` recibió un identificador de empresa que no es un UUID. */
+export class EmpresaIdInvalidoError extends Error {
+  constructor(mensaje = 'El identificador de la empresa no es un UUID válido') {
+    super(mensaje);
+    this.name = 'EmpresaIdInvalidoError';
+  }
+}
