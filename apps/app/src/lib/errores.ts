@@ -107,6 +107,12 @@ export function mensajeDeError(error: unknown, porCodigo: Record<string, string>
       return 'Revisa los datos marcados e inténtalo de nuevo.';
     case 'DEMASIADAS_PETICIONES':
       return 'Hiciste muchas solicitudes seguidas. Espera un momento e inténtalo de nuevo.';
+    case 'EQUIPO_NO_RECONOCIDO':
+      return 'Este equipo ya no está registrado. Ingresa con tu usuario y contraseña.';
+    case 'PLAN_INVALIDO':
+      return 'El plan elegido no existe o está desactivado. Elige otro.';
+    case 'CLAVE_IDEMPOTENCIA_REUTILIZADA':
+      return 'Esta operación ya se había enviado con otros datos. Vuelve a abrir la pantalla e inténtalo de nuevo.';
     case 'CONFLICTO':
       return 'Esto choca con algo que ya existe. Revisa los datos e inténtalo de nuevo.';
     default:
@@ -122,4 +128,17 @@ export function erroresPorCampo(error: unknown): Record<string, string> {
   const mapa: Record<string, string> = {};
   for (const c of error.campos) mapa[c.campo] = c.mensaje;
   return mapa;
+}
+
+/** Mensajes de campo de zod que llegan en inglés: se reemplazan por uno en español que dice qué hacer. */
+const PREFIJOS_EN_INGLES =
+  /^(Too (small|big)|Invalid|Unrecognized|Expected|Required|String must|Number must)/i;
+
+/**
+ * Mensaje de un campo devuelto por la API (`DATOS_INVALIDOS`). Los que ya vienen en español se muestran
+ * tal cual; los de las validaciones genéricas (en inglés) se cambian por un texto neutro, porque la
+ * pantalla ya valida cada campo con su propio mensaje antes de enviar.
+ */
+export function mensajeDeCampo(mensaje: string): string {
+  return PREFIJOS_EN_INGLES.test(mensaje.trim()) ? 'Revisa este dato' : mensaje;
 }

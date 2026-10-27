@@ -10,15 +10,25 @@ interface Props {
   /** Contraseña temporal que se acaba de poner, para que quien la entrega la tenga a la vista. */
   contrasenaTemporal?: string;
   onListo: () => void;
+  /** Dentro del panel de plataforma: barra de tinta oscura. */
+  plataforma?: boolean;
 }
 
 /**
  * El PIN se muestra una sola vez (al crear, al regenerar o al cambiar de largo). Vive solo en el
  * estado de esta pantalla: no se guarda en la caché de consultas ni en ningún almacenamiento.
  */
-export function PinCreadoVista({ titulo, nombre, pin, aviso, contrasenaTemporal, onListo }: Props) {
+export function PinCreadoVista({
+  titulo,
+  nombre,
+  pin,
+  aviso,
+  contrasenaTemporal,
+  onListo,
+  plataforma,
+}: Props) {
   return (
-    <Pagina titulo={titulo}>
+    <Pagina titulo={titulo} {...(plataforma ? { plataforma: true } : {})}>
       <Aviso tipo="ok" titulo={aviso.titulo}>
         {aviso.texto}
       </Aviso>

@@ -15,7 +15,40 @@ export const ID = {
   sucursalB: '44444444-4444-4444-8444-444444444444',
   otro: '55555555-5555-4555-8555-555555555555',
   superadmin: '66666666-6666-4666-8666-666666666666',
+  equipo: '77777777-7777-4777-8777-777777777777',
+  equipoRecordado: '88888888-8888-4888-8888-888888888888',
+  empresaB: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+  usuarioB: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+  equipoB: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
 } as const;
+
+/** Token de equipo (`eq.…`) de la empresa de prueba. */
+export const TOKEN_EQUIPO = `eq.${'11111111-1111-4111-8111-111111111111'}.${'77777777-7777-4777-8777-777777777777'}.secreto-equipo`;
+/** Token de equipo de otra empresa (un celular con personas de dos empresas guarda un token por empresa). */
+export const TOKEN_EQUIPO_B = `eq.${'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'}.${'cccccccc-cccc-4ccc-8ccc-cccccccccccc'}.secreto-equipo-b`;
+export const TOKEN_SESION =
+  'se.11111111-1111-4111-8111-111111111111.22222222-2222-4222-8222-222222222222.secreto';
+
+/** Respuesta de `GET /equipo` con las personas dadas. */
+export function equipoCon(
+  personas: {
+    usuarioId?: string;
+    nombre: string;
+    largoPin?: 4 | 6;
+    bloqueadoHastaEn?: string | null;
+  }[],
+  ids: { id?: string; nombre?: string } = {},
+) {
+  return {
+    equipo: { id: ids.id ?? ID.equipo, nombre: ids.nombre ?? 'Chrome · Android' },
+    personas: personas.map((p) => ({
+      usuarioId: p.usuarioId ?? ID.usuario,
+      nombre: p.nombre,
+      largoPin: p.largoPin ?? 4,
+      bloqueadoHastaEn: p.bloqueadoHastaEn ?? null,
+    })),
+  };
+}
 
 /** Sesión de empresa válida según `sesionRespuestaSchema`; cada prueba cambia lo que necesita. */
 export function sesionDe(parcial: Partial<SesionRespuesta> = {}): SesionRespuesta {
@@ -31,7 +64,8 @@ export function sesionDe(parcial: Partial<SesionRespuesta> = {}): SesionRespuest
       { id: ID.sucursalA, nombre: 'Miraflores', rol: 'ADMINISTRADOR' },
       { id: ID.sucursalB, nombre: 'Surco', rol: 'ADMINISTRADOR' },
     ],
-    equipo: null,
+    // Por defecto la persona ya fue recordada por este equipo (la prueba del recordatorio pone `null`).
+    equipo: { id: ID.equipo, nombre: 'Chrome · Android', equipoRecordadoId: ID.equipoRecordado },
     permisos: null,
     modulos: [],
     avisoSuscripcion: null,

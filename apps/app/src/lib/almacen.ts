@@ -76,8 +76,17 @@ export function tokenDeSesion(): string | null {
   return leerJson<{ token: string }>(sesion(), CLAVE_SESION)?.token ?? null;
 }
 
-export function guardarTokenDeSesion(token: string): void {
-  guardarJson(sesion(), CLAVE_SESION, { token });
+/**
+ * Token del equipo con el que se abrió una sesión PIN. La API exige `X-Equipo` en cada petición de una
+ * sesión PIN (criterio 37): el cliente lo manda solo mientras esa sesión esté guardada.
+ */
+export function equipoDeSesion(): string | null {
+  const equipo = leerJson<{ equipo?: unknown }>(sesion(), CLAVE_SESION)?.equipo;
+  return typeof equipo === 'string' && equipo.startsWith('eq.') ? equipo : null;
+}
+
+export function guardarTokenDeSesion(token: string, equipo?: string): void {
+  guardarJson(sesion(), CLAVE_SESION, equipo ? { token, equipo } : { token });
 }
 
 export function borrarTokenDeSesion(): void {

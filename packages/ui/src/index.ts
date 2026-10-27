@@ -13,3 +13,4 @@ export * from './EditorDeHorario';
 export * from './PinUnaVez';
 export * from './Estados';
 export * from './Barra';
+export * from './Segmentos';

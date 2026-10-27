@@ -40,6 +40,8 @@ export interface AccionDeSesion {
   onSeleccionar: () => void;
   /** Acción que cierra o destruye: contorno rocoto y separada del resto. */
   peligro?: boolean;
+  /** La acción más frecuente de la hoja ("Cambiar usuario"): botón principal, la primera de la lista. */
+  principal?: boolean;
 }
 
 export interface SucursalElegible {
@@ -110,13 +112,29 @@ export function BarraDeSesion({
           </div>
         </div>
         <div className="ui-acciones">
+          {acciones
+            .filter((a) => a.principal && !a.peligro)
+            .map((a) => (
+              <Boton
+                key={a.id}
+                bloque
+                variante="principal"
+                icono={a.icono}
+                onClick={() => {
+                  setHoja(null);
+                  a.onSeleccionar();
+                }}
+              >
+                {a.etiqueta}
+              </Boton>
+            ))}
           {puedeCambiar ? (
             <Boton bloque icono={IconoTienda} onClick={() => setHoja('sucursal')}>
               Cambiar de sucursal
             </Boton>
           ) : null}
           {acciones
-            .filter((a) => !a.peligro)
+            .filter((a) => !a.peligro && !a.principal)
             .map((a) => (
               <Boton
                 key={a.id}
@@ -130,22 +148,26 @@ export function BarraDeSesion({
                 {a.etiqueta}
               </Boton>
             ))}
-          {acciones
-            .filter((a) => a.peligro)
-            .map((a) => (
-              <Boton
-                key={a.id}
-                bloque
-                variante="peligro"
-                icono={a.icono}
-                onClick={() => {
-                  setHoja(null);
-                  a.onSeleccionar();
-                }}
-              >
-                {a.etiqueta}
-              </Boton>
-            ))}
+          {acciones.some((a) => a.peligro) ? (
+            <div className="ui-acciones ui-acciones__separada">
+              {acciones
+                .filter((a) => a.peligro)
+                .map((a) => (
+                  <Boton
+                    key={a.id}
+                    bloque
+                    variante="peligro"
+                    icono={a.icono}
+                    onClick={() => {
+                      setHoja(null);
+                      a.onSeleccionar();
+                    }}
+                  >
+                    {a.etiqueta}
+                  </Boton>
+                ))}
+            </div>
+          ) : null}
         </div>
       </Hoja>
 

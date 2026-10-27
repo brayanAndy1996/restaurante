@@ -314,7 +314,7 @@ Celular: barra inferior de 64 px con 3 a 5 destinos, icono de 24 px y etiqueta d
 
 ### Barra de la sesión
 
-Muestra persona, rol y sucursal, y abre una hoja con "Cambiar de usuario", "Cambiar de sucursal", "Mis celulares", "Olvidar este celular" (con confirmación) y "Salir". "Cambiar de usuario" es la acción de un toque más cercana al pulgar.
+Muestra persona, rol y sucursal, y abre una hoja con "Cambiar usuario" (botón principal, la primera de la lista), "Cambiar de sucursal", "Mis equipos", y, separadas por una junta, las acciones con contorno rocoto: "Olvidar este equipo" (con confirmación) y "Salir". En la interfaz se dice "equipo" (como en la especificación 002), no "celular". "Cambiar usuario" y "Olvidar este equipo" solo aparecen si el equipo recuerda a la persona (no en soporte).
 
 ### Cenefa de estado (firma de marca)
 
@@ -331,6 +331,18 @@ Filas de 72 px (inicial, nombre en 17 px, ayuda en 14 px, etiqueta de estado a l
 ### PIN mostrado una vez
 
 Baldosa con borde de tinta de 2 px, el PIN en cifras de 44 px con espacio entre dígitos, la frase "Se muestra una sola vez", un aviso de advertencia, "Copiar PIN" y el botón principal "Ya lo anoté". No se puede volver a ver; la pantalla se vacía al salir.
+
+### Pantalla de PIN (arranque de la app)
+
+Sin sesión, la app pregunta a la API qué personas recuerda cada equipo guardado. Con varias, primero la lista de nombres (baldosas de persona y cupos "N de 5"); con una sola, va directo al teclado. En el teclado: título, la persona elegida en una baldosa informativa, los puntos y el mensaje (su sitio está reservado para que el teclado no salte), el muro de teclas (64 px; 56 px bajo los 740 px de alto; 48 px bajo los 680) y las salidas abajo ("Cambiar de persona" y "Ingresar con usuario y contraseña", esta última pasa a principal cuando el PIN está bloqueado o el equipo olvidó a la persona). Desde 768 px el bloque se centra en la pantalla. Se puede escribir también con un teclado físico.
+
+### Segmentos (filtros de una sola opción)
+
+Cuadrícula de baldosas de 48 px que pasa a otra fila en vez de desplazarse de lado; la elegida lleva marca (check), fondo cobalto suave y borde cobalto, y se anuncia como presionada. Se usa en la lista de suscripciones del panel de plataforma (Todas, Activas, En gracia, Suspendidas).
+
+### Panel de plataforma
+
+Barra y cenefa de tinta. Navegación de tres destinos (Empresas, Suscripciones, Planes) abajo en celular y en un riel de 96 px (no 72: "Suscripciones" no cabe) desde 768 px. Las acciones que dejan rastro piden un motivo (queda en la auditoría); el registro de pago anticipa con las reglas de `packages/dominio` cómo quedará la sucursal con el vencimiento elegido.
 
 ### Estados de carga, vacío y error
 

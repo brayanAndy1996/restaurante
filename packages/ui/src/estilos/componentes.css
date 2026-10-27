@@ -963,6 +963,9 @@ button.ui-fila:active {
   color: var(--color-sobre-plataforma);
   border-bottom: 0;
 }
+.ui-barra--plataforma .ui-boton--texto {
+  color: var(--color-sobre-plataforma);
+}
 .ui-barra__espacio {
   flex: 1;
 }
@@ -1059,6 +1062,10 @@ button.ui-fila:active {
 }
 @media (max-width: 479px) {
   .ui-barra__quien > span {
+    display: none;
+  }
+  /* Con el botón de volver no queda sitio para el nombre: se corta a "Supe…", sin decir nada */
+  .ui-barra__espacio ~ .ui-barra__quien {
     display: none;
   }
 }
@@ -1172,4 +1179,35 @@ button.ui-fila:active {
   background: var(--color-baldosa);
   border: 1px solid var(--color-junta);
   border-radius: var(--radio-baldosa);
+}
+
+/* ---------- Segmentos (filtro de una sola opción) ---------- */
+.ui-segmentos {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(7rem, 1fr));
+  gap: var(--espacio-sm);
+}
+.ui-segmento {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--espacio-xs);
+  min-height: var(--alto-control);
+  padding: 0 var(--espacio-md);
+  border: 1px solid var(--color-borde-control);
+  border-radius: var(--radio-baldosa);
+  background: var(--color-baldosa);
+  font-size: 1rem;
+  font-weight: 600;
+  line-height: 1.5rem;
+  transition: background-color var(--duracion-corta) var(--ease);
+}
+.ui-segmento:active {
+  background: var(--color-accion-suave);
+}
+.ui-segmento--elegido {
+  background: var(--color-accion-suave);
+  border-color: var(--color-accion);
+  color: var(--color-accion-oscuro);
+  font-weight: 700;
 }

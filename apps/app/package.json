@@ -9,9 +9,10 @@
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
     "lint": "eslint .",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p e2e/tsconfig.json",
     "test": "vitest run",
-    "presupuesto": "node scripts/presupuesto.mjs"
+    "presupuesto": "node scripts/presupuesto.mjs",
+    "e2e": "playwright test"
   },
   "dependencies": {
     "@restaurante/contratos": "workspace:*",
@@ -23,6 +24,7 @@
     "react-router-dom": "^7.18.4"
   },
   "devDependencies": {
+    "@playwright/test": "1.63.0",
     "@restaurante/config": "workspace:*",
     "@testing-library/jest-dom": "^7.0.1",
     "@testing-library/react": "^16.3.3",

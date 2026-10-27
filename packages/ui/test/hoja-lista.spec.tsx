@@ -14,6 +14,7 @@ import {
   Hoja,
   IconoSalir,
   IconoUsuarios,
+  Segmentos,
   TablaResponsiva,
 } from '../src';
 
@@ -228,6 +229,60 @@ describe('BarraDeSesion', () => {
     expect(salir).toHaveBeenCalledTimes(1);
   });
 
+  it('pone primero la acción principal y separa las que cierran o destruyen', async () => {
+    render(
+      <BarraDeSesion
+        persona={{ nombre: 'Rosa Quispe', detalle: 'Mozo' }}
+        sucursal={{ id: 's1', nombre: 'Miraflores' }}
+        sucursales={[{ id: 's1', nombre: 'Miraflores' }]}
+        onElegirSucursal={() => undefined}
+        acciones={[
+          {
+            id: 'mis',
+            etiqueta: 'Mis equipos',
+            icono: IconoUsuarios,
+            onSeleccionar: () => undefined,
+          },
+          {
+            id: 'cambiar',
+            etiqueta: 'Cambiar usuario',
+            icono: IconoUsuarios,
+            principal: true,
+            onSeleccionar: () => undefined,
+          },
+          {
+            id: 'olvidar',
+            etiqueta: 'Olvidar este equipo',
+            icono: IconoSalir,
+            peligro: true,
+            onSeleccionar: () => undefined,
+          },
+          {
+            id: 'salir',
+            etiqueta: 'Salir',
+            icono: IconoSalir,
+            peligro: true,
+            onSeleccionar: () => undefined,
+          },
+        ]}
+      />,
+    );
+    await userEvent.click(screen.getByRole('button', { name: 'Sesión de Rosa Quispe' }));
+    const botones = screen.getAllByRole('button').map((b) => b.textContent);
+    expect(botones.indexOf('Cambiar usuario')).toBeLessThan(botones.indexOf('Mis equipos'));
+    expect(botones.indexOf('Mis equipos')).toBeLessThan(botones.indexOf('Olvidar este equipo'));
+    expect(screen.getByRole('button', { name: 'Cambiar usuario' })).toHaveClass(
+      'ui-boton--principal',
+    );
+    expect(screen.getByRole('button', { name: 'Salir' })).toHaveClass('ui-boton--peligro');
+    expect(
+      screen.getByRole('button', { name: 'Salir' }).closest('.ui-acciones__separada'),
+    ).not.toBeNull();
+    expect(
+      screen.getByRole('button', { name: 'Mis equipos' }).closest('.ui-acciones__separada'),
+    ).toBeNull();
+  });
+
   it('con varias sucursales permite cambiar y no repite la activa', async () => {
     const elegir = vi.fn();
     render(
@@ -245,5 +300,32 @@ describe('BarraDeSesion', () => {
     await userEvent.click(screen.getByRole('button', { name: /Miraflores/ }));
     await userEvent.click(screen.getByRole('button', { name: /Surco/ }));
     expect(elegir).toHaveBeenCalledWith('s2');
+  });
+});
+
+describe('Segmentos', () => {
+  const opciones = [
+    { valor: 'todas', etiqueta: 'Todas' },
+    { valor: 'activas', etiqueta: 'Activas' },
+  ] as const;
+
+  it('marca la opción elegida y avisa al elegir otra', async () => {
+    const alCambiar = vi.fn();
+    render(<Segmentos etiqueta="Filtrar" opciones={opciones} valor="todas" onCambio={alCambiar} />);
+    expect(screen.getByRole('group', { name: 'Filtrar' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Todas' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', { name: 'Activas' })).toHaveAttribute(
+      'aria-pressed',
+      'false',
+    );
+    await userEvent.click(screen.getByRole('button', { name: 'Activas' }));
+    expect(alCambiar).toHaveBeenCalledWith('activas');
+  });
+
+  it('no repite el aviso al tocar la opción que ya está elegida', async () => {
+    const alCambiar = vi.fn();
+    render(<Segmentos etiqueta="Filtrar" opciones={opciones} valor="todas" onCambio={alCambiar} />);
+    await userEvent.click(screen.getByRole('button', { name: 'Todas' }));
+    expect(alCambiar).not.toHaveBeenCalled();
   });
 });

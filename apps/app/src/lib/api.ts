@@ -1,4 +1,4 @@
-import { type Ambito, tokenDe } from './almacen';
+import { type Ambito, equipoDeSesion, tokenDe } from './almacen';
 import { API_URL } from './config';
 import { conexion } from './conexion';
 import { ErrorApi, errorDeRespuesta } from './errores';
@@ -137,7 +137,9 @@ export async function llamar<T = void>(ruta: string, opciones: OpcionesApi<T> = 
 
   const cabeceras: Record<string, string> = { Accept: 'application/json' };
   if (token) cabeceras.Authorization = `Bearer ${token}`;
-  if (opciones.equipo) cabeceras['X-Equipo'] = opciones.equipo;
+  // Una sesión PIN trae el equipo en cada petición (criterio 37); `equipo` explícito manda sobre ella.
+  const equipo = opciones.equipo ?? (token && ambito === 'empresa' ? equipoDeSesion() : null);
+  if (equipo) cabeceras['X-Equipo'] = equipo;
   if (opciones.segundoPlano) cabeceras['X-Actividad'] = 'segundo-plano';
   if (metodo !== 'GET' && opciones.idempotente) {
     cabeceras['Idempotency-Key'] =

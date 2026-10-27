@@ -189,9 +189,9 @@ describe('avisoSuscripcion en GET /sesion (criterio 80)', () => {
       .set('X-Equipo', equipo.tokenEquipo!)
       .send({ usuarioId: A.admin.id, pin: A.admin.pin });
     exigirEstado(pin, 201, 'ingreso con PIN del Administrador');
-    expect(
-      sesionRespuestaSchema.parse(pin.body.sesion).avisoSuscripcion?.sucursales,
-    ).toHaveLength(2);
+    expect(sesionRespuestaSchema.parse(pin.body.sesion).avisoSuscripcion?.sucursales).toHaveLength(
+      2,
+    );
   });
 
   it('el soporte lo recibe al entrar (con y sin sucursal) y en GET /sesion', async () => {
@@ -333,10 +333,7 @@ describe('exigirAperturaDeCaja y las rutas con la sucursal suspendida (criterios
       });
     exigirEstado(nuevo, 201, 'crear usuario');
     exigirEstado(
-      await ctx
-        .http()
-        .delete(`/usuarios/${cajero.id}/equipos`)
-        .set(bearer(admin)),
+      await ctx.http().delete(`/usuarios/${cajero.id}/equipos`).set(bearer(admin)),
       204,
       'revocar los equipos de una persona',
     );
@@ -421,7 +418,9 @@ describe('reactivación con un pago (criterio 83)', () => {
 
   it('un pago con vencimientoNuevo igual a hoy la deja ACTIVA desde la siguiente petición', async () => {
     expect(
-      porId((await sesion(E.admin.token)).avisoSuscripcion).map((s) => s.sucursalId).sort(),
+      porId((await sesion(E.admin.token)).avisoSuscripcion)
+        .map((s) => s.sucursalId)
+        .sort(),
     ).toEqual([sucursal, otraSucursal].sort());
     exigirEstado(await pagar(E, sucursal, '2030-05-23'), 201, 'pago hasta hoy');
     exigirEstado(await abrirCaja(E.admin.token, sucursal), 200, 'abrir caja reactivada');

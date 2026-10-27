@@ -73,3 +73,28 @@ export function fechaDeLima(instante: string): string {
     year: 'numeric',
   }).format(new Date(instante));
 }
+
+/** Fecha (AAAA-MM-DD) de un instante, en hora de Lima. */
+function diaDeLima(instante: Date): string {
+  const partes = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Lima',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(instante);
+  return partes;
+}
+
+/**
+ * "hoy 15:40", "ayer 18:02" o "25/10/2026 18:02", en hora de Lima. `ahora` se pasa para poder probarlo.
+ */
+export function fechaHoraDeLima(instante: string, ahora: Date = new Date()): string {
+  const momento = new Date(instante);
+  const dia = diaDeLima(momento);
+  const hoy = diaDeLima(ahora);
+  const ayer = diaDeLima(new Date(ahora.getTime() - 24 * 60 * 60 * 1000));
+  const hora = horaDeLima(momento);
+  if (dia === hoy) return `hoy ${hora}`;
+  if (dia === ayer) return `ayer ${hora}`;
+  return `${fechaDeLima(instante)} ${hora}`;
+}

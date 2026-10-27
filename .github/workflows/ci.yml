@@ -52,3 +52,64 @@ jobs:
       - run: pnpm test
         env:
           NODE_ENV: test # obligatoria (criterio 29b); las contraseñas de los roles las da el job
+
+  # Pruebas E2E de la PWA (Playwright, viewport de celular) contra la API real y PostgreSQL: acceso con
+  # equipos recordados e ingreso con PIN (tarea T35 de la sección 002).
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+
+    env:
+      NODE_ENV: development
+      DATABASE_ADMIN_URL: postgres://postgres:postgres@localhost:5432/postgres
+      DB_PASSWORD_MIGRADOR: migrador_ci
+      DB_PASSWORD_API: api_ci
+      DB_PASSWORD_PLATAFORMA: plataforma_ci
+      DATABASE_URL: postgres://restaurante_api:api_ci@localhost:5432/restaurante
+      DATABASE_PLATAFORMA_URL: postgres://restaurante_plataforma:plataforma_ci@localhost:5432/restaurante
+      DATABASE_MIGRADOR_URL: postgres://restaurante_migrador:migrador_ci@localhost:5432/restaurante
+      # Valores solo para CI (no son secretos de producción).
+      PIN_PEPPER: Y2ktcGluLXBlcHBlci1zb2xvLXBhcmEtcHJ1ZWJhcyEh
+      ORIGENES_PERMITIDOS: http://localhost:5173
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4 # toma la versión de "packageManager"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      - run: pnpm --filter @restaurante/app exec playwright install --with-deps chromium
+      - run: pnpm db:preparar
+      - run: pnpm db:migrar
+      # La prueba usa al superadministrador de la semilla y crea su propia empresa en cada corrida.
+      - run: pnpm db:semilla
+      - run: pnpm --filter @restaurante/app e2e
+
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: resultados-e2e
+          path: |
+            apps/app/e2e/resultados
+            apps/app/playwright-report
+          retention-days: 7

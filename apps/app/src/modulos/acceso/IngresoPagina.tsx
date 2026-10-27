@@ -8,9 +8,11 @@ import {
   IconoCandado,
   claseBoton,
 } from '@restaurante/ui';
+import { useQuery } from '@tanstack/react-query';
 import { useEffect, useState, type FormEvent } from 'react';
 import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { api } from '../../lib/api';
+import { CLAVE_EQUIPOS, consultarEquiposRecordados } from '../../lib/equipo';
 import { ErrorApi, mensajeDeError } from '../../lib/errores';
 import { relojDeCuenta } from '../../lib/formato';
 import { destinoTrasIngreso, useSesion, type EstadoDeIngreso, type MotivoDeCierre } from './sesion';
@@ -53,6 +55,15 @@ export function IngresoPagina() {
   const [cargando, setCargando] = useState(false);
   const [bloqueadoHasta, setBloqueadoHasta] = useState<number | null>(null);
   const [faltan, setFaltan] = useState(0);
+  // Si este equipo ya recuerda a alguien, se ofrece volver al PIN (criterio 94).
+  const equipos = useQuery({
+    queryKey: CLAVE_EQUIPOS,
+    queryFn: ({ signal }) => consultarEquiposRecordados(signal),
+    enabled: !sesion,
+    staleTime: 0,
+    gcTime: 0,
+  });
+  const conPin = (equipos.data?.personas.length ?? 0) > 0;
 
   // Cuenta regresiva del bloqueo: al llegar a cero se puede volver a intentar.
   useEffect(() => {
@@ -187,6 +198,16 @@ export function IngresoPagina() {
             Ingresar
           </Boton>
         </form>
+
+        {conPin ? (
+          <Link
+            to="/pin"
+            state={{ desde: estado.desde }}
+            className={claseBoton('secundario', true)}
+          >
+            Ingresar con PIN
+          </Link>
+        ) : null}
 
         <div className="entrada__pie">
           <p className="texto-ayuda">¿Eres del equipo de la plataforma?</p>

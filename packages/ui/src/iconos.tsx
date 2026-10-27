@@ -4,6 +4,7 @@ import { clases } from './utilidades';
 /** Vocabulario único de iconos de la app: Lucide, contorno, trazo de 1.75 px. */
 export {
   ArrowLeft as IconoVolver,
+  ArrowLeftRight as IconoCambiar,
   Ban as IconoBloqueo,
   Check as IconoOk,
   ChevronDown as IconoAbajo,
@@ -31,6 +32,7 @@ export {
   Smartphone as IconoCelular,
   Store as IconoTienda,
   TriangleAlert as IconoAlerta,
+  Unlink as IconoOlvidar,
   User as IconoPersona,
   UserCheck as IconoReactivar,
   Users as IconoUsuarios,
@@ -38,6 +40,9 @@ export {
   WifiOff as IconoSinRed,
   X as IconoCerrar,
   Building2 as IconoEmpresa,
+  CalendarClock as IconoSuscripcion,
+  Package as IconoPlan,
+  Banknote as IconoPago,
 } from 'lucide-react';
 
 interface PropsIcono {

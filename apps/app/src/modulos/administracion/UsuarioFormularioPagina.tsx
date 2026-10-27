@@ -21,6 +21,7 @@ import { ErrorApi, erroresPorCampo, mensajeDeError } from '../../lib/errores';
 import { etiquetaDeRol } from '../../lib/formato';
 import { useSesionActiva } from '../acceso/sesion';
 import { AccionesDeUsuario } from './AccionesDeUsuario';
+import { EquiposDeUsuario } from './EquiposDeUsuario';
 import { PinCreadoVista } from './PinCreadoVista';
 import {
   CLAVE_USUARIOS,
@@ -403,6 +404,8 @@ function FormularioDeUsuario({ modo, original }: PropsFormulario) {
               }`}
         </Aviso>
       </form>
+
+      {modo === 'editar' && usuarioGuardado ? <EquiposDeUsuario usuario={usuarioGuardado} /> : null}
 
       {modo === 'editar' && usuarioGuardado ? (
         <AccionesDeUsuario

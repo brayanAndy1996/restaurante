@@ -6,6 +6,8 @@ import { CambiarContrasenaPagina } from './modulos/acceso/CambiarContrasenaPagin
 import { ElegirSucursalPagina } from './modulos/acceso/ElegirSucursalPagina';
 import { IngresoPagina } from './modulos/acceso/IngresoPagina';
 import { InicioPagina } from './modulos/acceso/InicioPagina';
+import { PinPagina } from './modulos/acceso/PinPagina';
+import { RecordarEquipoAutomatico } from './modulos/acceso/RecordarEquipo';
 import { useSesion } from './modulos/acceso/sesion';
 import { PlataformaIngresoPagina } from './modulos/plataforma/PlataformaIngresoPagina';
 import { PlataformaLayout } from './modulos/plataforma/PlataformaLayout';
@@ -24,8 +26,55 @@ const UsuarioEditarPagina = lazy(() =>
     default: m.UsuarioEditarPagina,
   })),
 );
+const MisEquiposPagina = lazy(() =>
+  import('./modulos/acceso/MisEquiposPagina').then((m) => ({ default: m.MisEquiposPagina })),
+);
+const AccesoSucursalPagina = lazy(() =>
+  import('./modulos/administracion/AccesoSucursalPagina').then((m) => ({
+    default: m.AccesoSucursalPagina,
+  })),
+);
 const EmpresasPagina = lazy(() =>
   import('./modulos/plataforma/EmpresasPagina').then((m) => ({ default: m.EmpresasPagina })),
+);
+const EmpresaNuevaPagina = lazy(() =>
+  import('./modulos/plataforma/EmpresaNuevaPagina').then((m) => ({
+    default: m.EmpresaNuevaPagina,
+  })),
+);
+const EmpresaDetallePagina = lazy(() =>
+  import('./modulos/plataforma/EmpresaDetallePagina').then((m) => ({
+    default: m.EmpresaDetallePagina,
+  })),
+);
+const EmisorNuevoPagina = lazy(() =>
+  import('./modulos/plataforma/EmisorNuevoPagina').then((m) => ({ default: m.EmisorNuevoPagina })),
+);
+const SucursalNuevaPagina = lazy(() =>
+  import('./modulos/plataforma/SucursalNuevaPagina').then((m) => ({
+    default: m.SucursalNuevaPagina,
+  })),
+);
+const SuscripcionesPagina = lazy(() =>
+  import('./modulos/plataforma/SuscripcionesPagina').then((m) => ({
+    default: m.SuscripcionesPagina,
+  })),
+);
+const SuscripcionDetallePagina = lazy(() =>
+  import('./modulos/plataforma/SuscripcionDetallePagina').then((m) => ({
+    default: m.SuscripcionDetallePagina,
+  })),
+);
+const PlanesPagina = lazy(() =>
+  import('./modulos/plataforma/PlanesPagina').then((m) => ({ default: m.PlanesPagina })),
+);
+const PlanNuevoPagina = lazy(() =>
+  import('./modulos/plataforma/PlanFormularioPagina').then((m) => ({ default: m.PlanNuevoPagina })),
+);
+const PlanEditarPagina = lazy(() =>
+  import('./modulos/plataforma/PlanFormularioPagina').then((m) => ({
+    default: m.PlanEditarPagina,
+  })),
 );
 
 /** Rutas que exigen una sesión de empresa válida, con las reglas de contraseña temporal y sucursal. */
@@ -34,10 +83,12 @@ function RutaDeEmpresa() {
   const ubicacion = useLocation();
   if (!hayToken) {
     // Si la sesión se cerró (salida, inactividad, 401), la redirección lleva el aviso a donde corresponde.
+    // Sin sesión se pasa por la pantalla de PIN, que decide: PIN si el equipo recuerda a alguien y, si
+    // no, el ingreso con usuario y contraseña (criterio 92).
     return salida ? (
       <Navigate to={salida.a} replace state={salida.estado} />
     ) : (
-      <Navigate to="/ingreso" replace state={{ desde: ubicacion.pathname }} />
+      <Navigate to="/pin" replace state={{ desde: ubicacion.pathname }} />
     );
   }
   if (cargando) return <PantallaDeCarga />;
@@ -49,7 +100,7 @@ function RutaDeEmpresa() {
         onSalir={() => void salir()}
       />
     );
-  if (!sesion) return <Navigate to="/ingreso" replace />;
+  if (!sesion) return <Navigate to="/pin" replace />;
 
   const enCambio = ubicacion.pathname === '/cambiar-contrasena';
   if (sesion.debeCambiarContrasena && !enCambio)
@@ -64,7 +115,12 @@ function RutaDeEmpresa() {
   ) {
     return <Navigate to="/sucursal" replace />;
   }
-  return <Outlet />;
+  return (
+    <>
+      <RecordarEquipoAutomatico />
+      <Outlet />
+    </>
+  );
 }
 
 /** Solo el Administrador entra a la administración; los demás roles ni la ven en la navegación. */
@@ -83,10 +139,20 @@ export function App() {
     <>
       <Suspense fallback={<Cargando />}>
         <Routes>
+          <Route path="/pin" element={<PinPagina />} />
           <Route path="/ingreso" element={<IngresoPagina />} />
           <Route path="/plataforma/ingreso" element={<PlataformaIngresoPagina />} />
           <Route path="/plataforma" element={<PlataformaLayout />}>
             <Route index element={<EmpresasPagina />} />
+            <Route path="empresas/nueva" element={<EmpresaNuevaPagina />} />
+            <Route path="empresas/:id" element={<EmpresaDetallePagina />} />
+            <Route path="empresas/:id/emisores/nuevo" element={<EmisorNuevoPagina />} />
+            <Route path="empresas/:id/sucursales/nueva" element={<SucursalNuevaPagina />} />
+            <Route path="suscripciones" element={<SuscripcionesPagina />} />
+            <Route path="suscripciones/:id" element={<SuscripcionDetallePagina />} />
+            <Route path="planes" element={<PlanesPagina />} />
+            <Route path="planes/nuevo" element={<PlanNuevoPagina />} />
+            <Route path="planes/:id" element={<PlanEditarPagina />} />
           </Route>
 
           <Route element={<RutaDeEmpresa />}>
@@ -94,10 +160,12 @@ export function App() {
             <Route path="/sucursal" element={<ElegirSucursalPagina />} />
             <Route element={<AppLayout />}>
               <Route index element={<InicioPagina />} />
+              <Route path="/mis-equipos" element={<MisEquiposPagina />} />
               <Route element={<RutaDeAdministrador />}>
                 <Route path="/administracion/usuarios" element={<UsuariosPagina />} />
                 <Route path="/administracion/usuarios/nuevo" element={<UsuarioNuevoPagina />} />
                 <Route path="/administracion/usuarios/:id" element={<UsuarioEditarPagina />} />
+                <Route path="/administracion/acceso" element={<AccesoSucursalPagina />} />
               </Route>
             </Route>
           </Route>

@@ -28,3 +28,8 @@ coverage/
 .env
 .env.*
 !.env.example
+
+# Playwright (pruebas E2E de apps/app): resultados locales
+playwright-report/
+test-results/
+apps/app/e2e/resultados/

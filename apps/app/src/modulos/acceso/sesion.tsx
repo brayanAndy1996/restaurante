@@ -53,14 +53,24 @@ interface ContextoSesion {
   errorDeCarga: ErrorApi | null;
   reintentarCarga: () => void;
   hayToken: boolean;
-  /** Guarda el token del ingreso y deja la sesión lista, sin otra consulta. */
-  ingresar: (respuesta: IngresoRespuesta) => void;
+  /**
+   * Guarda el token del ingreso y deja la sesión lista, sin otra consulta. Con `equipo` (ingreso con
+   * PIN), la sesión manda ese token de equipo en cada petición.
+   */
+  ingresar: (respuesta: IngresoRespuesta, equipo?: string) => void;
   /** Reemplaza la sesión en caché (después de cambiar de sucursal o de contraseña). */
   actualizarSesion: (sesion: SesionRespuesta) => void;
   /** Vuelve a leer la sesión del servidor. Sin `segundoPlano`, renueva la inactividad. */
   releer: (opciones?: { segundoPlano?: boolean }) => Promise<SesionRespuesta | null>;
-  /** Cierra la sesión: avisa a la API sin esperar y borra el token. */
+  /**
+   * Cierra la sesión: avisa a la API sin esperar y borra el token. Una salida pedida por la persona
+   * lleva al ingreso con contraseña; un cierre por inactividad o revocación, a la pantalla de PIN.
+   */
   salir: (motivo?: MotivoDeCierre) => Promise<void>;
+  /** "Cambiar usuario": cierra la sesión y vuelve a la pantalla de PIN del equipo (criterio 95). */
+  cambiarUsuario: () => Promise<void>;
+  /** Borra la sesión de este navegador sin avisar a la API (ya la cerró ella, por ejemplo al olvidar el equipo). */
+  soltarSesion: (a: string, estado?: EstadoDeIngreso) => void;
   soporte: SoporteEnCurso | null;
   /** Entra a la cuenta de una empresa con la sesión de soporte que abrió el panel. */
   iniciarSoporte: (respuesta: IngresoRespuesta, empresa: { id: string; nombre: string }) => void;
@@ -149,17 +159,18 @@ export function SesionProvider({ children }: { children: ReactNode }) {
           actual.limpiarEmpresa();
           return;
         }
-        // Un soporte que vence devuelve al panel: la sesión del superadministrador sigue viva.
-        setSalida({ a: actual.soporte ? '/plataforma' : '/ingreso', estado: { aviso: motivo } });
+        // Un soporte que vence devuelve al panel: la sesión del superadministrador sigue viva. Una sesión
+        // de empresa vuelve a la pantalla de PIN (que pasa al ingreso si el equipo no recuerda a nadie).
+        setSalida({ a: actual.soporte ? '/plataforma' : '/pin', estado: { aviso: motivo } });
         actual.limpiarEmpresa();
       },
     });
   }, []);
 
   const ingresar = useCallback(
-    (respuesta: IngresoRespuesta) => {
+    (respuesta: IngresoRespuesta, equipo?: string) => {
       setSalida(null);
-      guardarTokenDeSesion(respuesta.token);
+      guardarTokenDeSesion(respuesta.token, equipo);
       clientes.setQueryData(CLAVE_SESION, respuesta.sesion);
       setHayToken(true);
     },
@@ -192,9 +203,23 @@ export function SesionProvider({ children }: { children: ReactNode }) {
       // Se avisa a la API sin esperar: la persona no debe quedarse mirando una rueda para salir.
       void api.delete('/sesion', { reintentos: 1 }).catch(() => undefined);
       setSalida({
-        a: enSoporte ? '/plataforma' : '/ingreso',
+        a: enSoporte ? '/plataforma' : motivo ? '/pin' : '/ingreso',
         estado: motivo ? { aviso: motivo } : {},
       });
+      limpiarEmpresa();
+    },
+    [limpiarEmpresa],
+  );
+
+  const cambiarUsuario = useCallback(async () => {
+    void api.delete('/sesion', { reintentos: 1 }).catch(() => undefined);
+    setSalida({ a: '/pin', estado: {} });
+    limpiarEmpresa();
+  }, [limpiarEmpresa]);
+
+  const soltarSesion = useCallback(
+    (a: string, estado: EstadoDeIngreso = {}) => {
+      setSalida({ a, estado });
       limpiarEmpresa();
     },
     [limpiarEmpresa],
@@ -265,6 +290,8 @@ export function SesionProvider({ children }: { children: ReactNode }) {
       actualizarSesion,
       releer,
       salir,
+      cambiarUsuario,
+      soltarSesion,
       soporte,
       iniciarSoporte,
       terminarSoporte,
@@ -280,6 +307,8 @@ export function SesionProvider({ children }: { children: ReactNode }) {
       actualizarSesion,
       releer,
       salir,
+      cambiarUsuario,
+      soltarSesion,
       soporte,
       iniciarSoporte,
       terminarSoporte,

@@ -1,6 +1,7 @@
 import {
   Cenefa,
   ContenidoDeDestino,
+  IconoCandado,
   IconoInicio,
   IconoUsuarios,
   Navegacion,
@@ -20,7 +21,10 @@ export function AppLayout() {
   const destinos = [
     { a: '/', etiqueta: 'Inicio', icono: IconoInicio, fin: true },
     ...(sesion?.esAdministrador
-      ? [{ a: '/administracion/usuarios', etiqueta: 'Usuarios', icono: IconoUsuarios, fin: false }]
+      ? [
+          { a: '/administracion/usuarios', etiqueta: 'Usuarios', icono: IconoUsuarios, fin: false },
+          { a: '/administracion/acceso', etiqueta: 'Acceso', icono: IconoCandado, fin: false },
+        ]
       : []),
   ];
   return (

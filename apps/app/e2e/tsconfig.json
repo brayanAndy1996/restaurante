@@ -1,0 +1,8 @@
+{
+  "extends": "@restaurante/config/tsconfig.react.json",
+  "compilerOptions": {
+    "types": ["node"],
+    "noEmit": true
+  },
+  "include": ["./*.ts", "../playwright.config.ts"]
+}

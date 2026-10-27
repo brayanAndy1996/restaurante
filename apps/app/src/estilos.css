@@ -269,3 +269,151 @@ body,
 .campo-busqueda {
   max-width: 360px;
 }
+
+/* Pantalla de PIN: título y persona arriba; puntos, teclado y salidas abajo, al alcance del pulgar */
+.pin {
+  gap: var(--espacio-lg);
+}
+
+.pin__zona {
+  margin-top: auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--espacio-sm);
+}
+
+/* Reserva el sitio del mensaje para que el teclado no salte cuando aparece un error */
+.pin__mensaje {
+  min-height: 5rem;
+}
+
+.pin__salidas {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espacio-sm);
+}
+
+/* Celulares bajos (o con la barra del navegador): teclas de 56 px para que todo quepa sin desplazar */
+@media (max-height: 740px) {
+  .pin {
+    gap: var(--espacio-md);
+    padding-top: var(--espacio-lg);
+  }
+  .pin .ui-tecla {
+    min-height: 56px;
+  }
+  .pin__mensaje {
+    min-height: 4.25rem;
+  }
+}
+
+/* Celulares muy bajos (640 px o menos): teclas de 48 px, el mínimo táctil, para que la salida con contraseña quepa */
+@media (max-height: 680px) {
+  .pin {
+    gap: var(--espacio-sm);
+    padding-top: var(--espacio-md);
+  }
+  .pin .ui-tecla {
+    min-height: 48px;
+  }
+  .pin__mensaje {
+    min-height: 3.5rem;
+  }
+}
+
+/* Tablet y escritorio: el bloque del PIN va centrado en la pantalla, no pegado al borde de abajo */
+@media (min-width: 768px) {
+  .pin {
+    justify-content: center;
+    padding-bottom: var(--espacio-xxxl);
+  }
+  .pin__zona {
+    margin-top: 0;
+  }
+}
+
+/* Fila con una acción propia debajo (la fila entera lleva al detalle, la acción es otro control) */
+.fila-con-accion {
+  background: var(--color-baldosa);
+  border-bottom: 1px solid var(--color-junta);
+}
+
+.fila-con-accion > .ui-fila {
+  border-bottom: 0;
+}
+
+.fila-con-accion__accion {
+  padding: 0 var(--espacio-lg) var(--espacio-md);
+}
+
+.ui-lista > li:last-child > .fila-con-accion {
+  border-bottom: 0;
+}
+
+/* Datos de una sola línea ("Plan", "Vence") en un detalle */
+.datos {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: var(--espacio-xs) var(--espacio-lg);
+}
+
+.datos dt {
+  color: var(--color-tinta-suave);
+}
+
+.datos dd {
+  margin: 0;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.seccion {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espacio-md);
+}
+
+.seccion + .seccion {
+  padding-top: var(--espacio-xl);
+  border-top: 1px solid var(--color-junta);
+}
+
+.formulario--secciones {
+  gap: var(--espacio-xl);
+}
+
+.encabezado-de-detalle {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espacio-md);
+  align-items: flex-start;
+}
+
+.acciones-de-detalle {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espacio-sm);
+}
+
+@media (min-width: 768px) {
+  .acciones-de-detalle {
+    flex-direction: row;
+  }
+  .acciones-de-detalle > * {
+    flex: 0 0 auto;
+    width: auto;
+  }
+}
+
+/* El riel del panel de plataforma es más ancho: "Suscripciones" no cabe en 72 px */
+.app--plataforma {
+  --ancho-riel: 96px;
+}
+
+/* Fila con un botón de acción: en celular el botón va debajo, en tablet y escritorio a la derecha */
+@media (min-width: 768px) {
+  .fila--con-boton > .ui-boton--bloque {
+    width: auto;
+    margin-left: auto;
+  }
+}
