@@ -57,7 +57,7 @@ Fuera de la ruta crítica, por ejemplo: pantallas de reportes, mantenimiento sim
 - **Monorepo** con pnpm y Turborepo: `apps/api` (NestJS + Sequelize + PostgreSQL, con el worker), `apps/app` (React + Vite, PWA), `apps/web` (Next.js: carta web y web comercial), `apps/puente-android` (Kotlin), y los paquetes `packages/dominio` (reglas puras compartidas), `packages/contratos` (esquemas zod), `packages/ui` y `packages/config`.
 - **Monolito modular.** Cada módulo de `apps/api/src/modulos/` es dueño de sus tablas; los demás lo usan por su servicio, nunca consultando sus tablas.
 - **Solo PostgreSQL:** datos, colas (pg-boss) y adaptador de Socket.IO. Nada de Redis salvo que se decida explícitamente.
-- **Multitenancy con RLS:** cada tabla con datos de clientes lleva `empresa_id` y una política RLS. Cada petición corre en una transacción con `set_config('app.empresa_id', …, true)`. La API se conecta con un usuario sin permiso para saltarse RLS.
+- **Multitenancy con RLS:** cada tabla con datos de clientes lleva `empresa_id` y una política RLS. Cada petición corre en una transacción que fija la empresa con `SELECT fijar_contexto_empresa(…)`, una sola vez por transacción (la base rechaza un segundo intento); la RLS la lee con `empresa_actual()` y no depende de `app.empresa_id`. La API se conecta con un usuario sin permiso para saltarse RLS. PostgreSQL de producción es administrado, sin superusuario.
 - **Reglas de negocio puras** (montos, división, estados, stock) en `packages/dominio`, usadas por la PWA y la API.
 - **Montos** con `decimal.js` y columnas `NUMERIC`; nunca números de coma flotante.
 - **Efectos secundarios** (imprimir, enviar al PSE, avisos en tiempo real) se registran dentro de la transacción y se ejecutan después de confirmarla.
