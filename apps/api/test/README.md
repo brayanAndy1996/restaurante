@@ -44,7 +44,9 @@ Contraseñas de los roles: `DB_PASSWORD_MIGRADOR|API|PLATAFORMA`; si faltan, `mi
    trigger en `empresa`, `emisor`, `sucursal`, `usuario` y `acceso_sucursal`) y
    `202610280003-auditoria-general.ts` (`auditoria`, que copia y reemplaza a `auditoria_plataforma`). Las
    del grupo C1: `202610280004-suscripciones.ts` (`plan` con `BASE`, `suscripcion`, `pago_suscripcion` y
-   `consumo_comprobantes`, y una suscripción `BASE` para cada sucursal existente).
+   `consumo_comprobantes`, y una suscripción `BASE` para cada sucursal existente). Las del grupo C2:
+   `202610280005-equipos.ts` (`equipo`, `equipo_recordado`, `sucursal_acceso` y las llaves hacia `equipo` de
+   `sesion`, `auditoria` y de `creado_por_equipo_id` / `actualizado_por_equipo_id` de toda tabla trazada).
 
 Cada archivo de prueba corre en su propio proceso; no hay que limpiar tablas porque cada prueba
 crea sus propias empresas con UUID aleatorios.
@@ -305,9 +307,10 @@ sesión: toda ruta exige sesión (`Authorization: Bearer se.<empresa>.<sesión>.
 (modo de prueba: sin `Authorization`, principal de prueba con permisos de Administrador y actor `prueba`).
 Con `development` la API no arranca si la cabecera está habilitada. Desde el grupo C0 segunda parte (T12 a
 T18) funcionan el ingreso con contraseña y la sesión, los usuarios, los emisores y sucursales, el
-superadministrador, el soporte y la idempotencia (ver el final de este archivo); siguen sin lógica
-(responden 500 `ERROR_INTERNO`) las rutas de equipos recordados y PIN (T33 y T34), la clave de supervisor
-(T38) y el acceso de la sucursal (T34). Los planes y las suscripciones (T28) funcionan desde el grupo C1.
+superadministrador, el soporte y la idempotencia (ver el final de este archivo); sigue sin lógica
+(responde 500 `ERROR_INTERNO`) la clave de supervisor (T38). Los planes y las suscripciones (T28) funcionan
+desde el grupo C1; los equipos recordados, el ingreso con PIN y el acceso de la sucursal (T33 y T34), desde
+el grupo C2.
 
 ### Reloj de la API y `RelojManual`
 
@@ -573,3 +576,37 @@ Lo que hay ahora además de lo anterior:
 | `modulos.spec.ts`                  | T29 · criterio 77: controlador sonda con `@RequiereModulo`, cambio de plan desde la siguiente petición, `modulos` en `GET /sesion`, el ingreso y el soporte                              |
 
 Las pruebas que cambian el plan por defecto lo dejan siempre en `BASE` (la base de pruebas la comparten los demás archivos).
+
+## Historia 002 · grupo C2 (T32 a T34): equipos recordados, ingreso con PIN e inactividad
+
+- **Migración** `202610280005-equipos.ts`: `equipo` (nombre y huella SHA-256 del secreto del token `eq.…`),
+  `equipo_recordado` (equipo, persona, último uso, última sucursal elegida y, si se revocó, `revocado_en` con su
+  motivo: `REVOCADO`, `OLVIDADO`, `REEMPLAZADO`, `BLOQUEO`, `DESACTIVADO` o `CONTRASENA_RESTABLECIDA`; un
+  índice único parcial deja una sola fila activa por equipo y persona) y `sucursal_acceso` (minutos de
+  inactividad PIN de la sucursal), las tres con `sqlTablaDeEmpresaTrazable` y sin privilegios para
+  `restaurante_plataforma`. Agrega las llaves compuestas hacia `equipo` de `sesion.equipo_id`,
+  `sesion.equipo_recordado_id` (junto con el equipo y la persona), `auditoria.equipo_id` (`NOT VALID`: la
+  auditoría es inmutable) y `creado_por_equipo_id` / `actualizado_por_equipo_id` de toda tabla trazada que
+  exista. Una tabla trazada nueva debe pedir `llaveDeEquipo: true` a `sqlTablaDeEmpresaTrazable` /
+  `sqlTrazabilidad`. `db:revertir` borra las sesiones PIN, deja sin equipo las demás referencias y borra las
+  tres tablas.
+- **Servicios** (`src/modulos/seguridad`): `EquiposService` (recordar, consultar, listar, revocar y olvidar),
+  `IngresoPinService` (`POST /sesiones/pin`), `AccesoSucursalService` (`GET`/`PATCH /sucursales/:id/acceso`) y
+  `constantes-acceso.ts` (5 minutos de inactividad PIN, 12 horas, bloqueo cada 5 fallos y olvido al 15.º).
+  `BloqueosService.registrarFalloAcumulado` cuenta los fallos del PIN sin reiniciarlos al vencer un bloqueo.
+  `UsuariosService` revoca los equipos al desactivar y al restablecer la contraseña.
+- **Qué hace cada ruta** (`POST /sesiones/pin` devuelve el error después de confirmar su transacción, así los
+  fallos, el bloqueo y el olvido quedan guardados): `POST /sesion/equipo` y `POST /sesiones/pin` son `@SinEmpresa()` (el
+  servicio abre su `ContextoEmpresa.ejecutar` porque el actor lleva el equipo, que puede ser nuevo); `GET /equipo`
+  es pública; `POST /sesiones/pin` bloquea la fila del equipo (`FOR UPDATE`) para atender de uno en uno los
+  intentos del mismo equipo (nunca dos sesiones PIN abiertas, ningún intento evade el bloqueo ni el 15.º fallo).
+- **El guard** valida cada petición de una sesión PIN con el `X-Equipo` del mismo equipo (secreto incluido) y
+  el equipo recordado activo; su inactividad es la de la sucursal activa (5 minutos por defecto y sin sucursal);
+  toda sesión asociada a un equipo recordado revocado se cierra (`EQUIPO_REVOCADO`).
+- **`GET /sesion`** devuelve `equipo` y, con la matriz de `packages/dominio` (`permisosDeRol`), `permisos`: la
+  matriz de la tarea T37 se implementó junto con C2 porque `pin.spec.ts` (criterio 42) la exige.
+- **Pruebas del desarrollador** (`test/seguridad/`): `equipos-pin.spec.ts` (concurrencia del ingreso con PIN y
+  del olvido, auditoría de recordar sin repetirse, actor del equipo nuevo, llave compuesta de la sesión y
+  migración de equipos subiendo, bajando con datos y volviendo a subir). `sembrado.ts` gana `insertarEquipo`
+  (las llaves exigen que el equipo exista). Las pruebas de la raíz `rutas-acceso.spec.ts` y
+  `sql-tabla-trazable.spec.ts` se actualizaron para C2.

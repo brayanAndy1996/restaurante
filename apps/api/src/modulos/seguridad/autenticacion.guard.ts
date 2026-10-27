@@ -11,6 +11,7 @@ import {
   type Principal,
 } from '../../nucleo/principal';
 import { RELOJ, type Reloj } from '../../nucleo/reloj';
+import { MINUTOS_INACTIVIDAD_PIN_POR_DEFECTO } from './constantes-acceso';
 import { Credenciales } from './credenciales';
 import {
   PERMITE_CONTRASENA_TEMPORAL,
@@ -18,7 +19,7 @@ import {
   REQUIERE_SUCURSAL,
   SOLO_ADMINISTRADOR,
 } from './decoradores';
-import { parsearTokenSesion, type TokenSesion } from './tokens';
+import { parsearTokenEquipo, parsearTokenSesion, type TokenSesion } from './tokens';
 
 /** Token de Nest del resolutor por cabecera del modo de prueba (`null` si el entorno no lo habilita). */
 export const MODO_PRUEBA = Symbol('MODO_PRUEBA');
@@ -44,6 +45,13 @@ interface FilaSesion {
   usuario_activo: boolean | null;
   es_administrador: boolean | null;
   contrasena_temporal: boolean | null;
+  /** Huella del secreto del equipo de la sesión (nula sin equipo). */
+  equipo_huella: Buffer | null;
+  /** El equipo recordado de la sesión: existe (`recordado_id`) y si fue revocado (`recordado_revocado_en`). */
+  recordado_id: string | null;
+  recordado_revocado_en: Date | null;
+  /** Minutos de inactividad configurados en la sucursal activa (nulo si no se configuraron). */
+  minutos_sucursal: number | null;
 }
 
 const MENSAJE_NO_AUTENTICADO = 'Se requiere autenticación para esta operación';
@@ -152,10 +160,11 @@ export class AutenticacionGuard implements CanActivate {
     if (partes === null) throw noAutenticado();
 
     const alSegundoPlano = peticion.headers['x-actividad'] === ACTIVIDAD_SEGUNDO_PLANO;
+    const cabeceraEquipo = peticion.headers['x-equipo'];
     // Transacción propia que siempre se confirma: el cierre por expiración y la renovación quedan
     // guardados aunque el controlador falle. El error se lanza después, ya confirmada.
     const resultado = await this.contexto.ejecutar(partes.empresaId, () =>
-      this.validarYRenovar(partes, alSegundoPlano),
+      this.validarYRenovar(partes, alSegundoPlano, cabeceraEquipo),
     );
     if ('error' in resultado) throw resultado.error;
     return resultado.principal;
@@ -167,14 +176,29 @@ export class AutenticacionGuard implements CanActivate {
    * e inactividad, con el reloj de la API) y, según el tipo, que la persona siga activa y con acceso a la
    * sucursal activa (criterio 6; si no, cierra la sesión). **No** comprueba el horario (criterio 108).
    * Si la petición no trae `X-Actividad: segundo-plano`, renueva la actividad. Calcula el rol.
+   *
+   * Sesión PIN (criterio 37 y 39): exige el `X-Equipo` del mismo equipo (con el secreto correcto) y que el
+   * equipo recordado (equipo, persona) siga activo; su inactividad es la de la sucursal activa (5 minutos por
+   * defecto, también sin sucursal activa). Toda sesión asociada a un equipo recordado se cierra cuando ese
+   * equipo recordado se revoca (criterio 30).
    */
-  private async validarYRenovar(partes: TokenSesion, alSegundoPlano: boolean): Promise<Resultado> {
+  private async validarYRenovar(
+    partes: TokenSesion,
+    alSegundoPlano: boolean,
+    cabeceraEquipo: unknown,
+  ): Promise<Resultado> {
     const filas = await this.conexion.query<FilaSesion>(
       `SELECT s.id, s.tipo, s.usuario_id, s.superadministrador_id, s.equipo_id, s.equipo_recordado_id,
               s.sucursal_id, s.huella_secreto, s.ultima_actividad_en, s.expira_en, s.minutos_inactividad,
-              s.cerrada_en, u.activo AS usuario_activo, u.es_administrador, u.contrasena_temporal
+              s.cerrada_en, u.activo AS usuario_activo, u.es_administrador, u.contrasena_temporal,
+              e.huella_secreto AS equipo_huella, er.id AS recordado_id,
+              er.revocado_en AS recordado_revocado_en, sa.minutos_inactividad AS minutos_sucursal
          FROM sesion s
          LEFT JOIN usuario u ON u.id = s.usuario_id AND u.empresa_id = s.empresa_id
+         LEFT JOIN equipo e ON e.id = s.equipo_id AND e.empresa_id = s.empresa_id
+         LEFT JOIN equipo_recordado er
+           ON er.id = s.equipo_recordado_id AND er.empresa_id = s.empresa_id
+         LEFT JOIN sucursal_acceso sa ON sa.sucursal_id = s.sucursal_id AND sa.empresa_id = s.empresa_id
         WHERE s.id = $1`,
       { bind: [partes.sesionId], type: QueryTypes.SELECT },
     );
@@ -188,14 +212,36 @@ export class AutenticacionGuard implements CanActivate {
     }
     if (sesion.cerrada_en !== null) return { error: noAutenticado() };
 
+    // La sesión PIN va atada a su equipo: sin la cabecera, con la de otro equipo o con un secreto que no es,
+    // responde igual que una sesión inexistente y sin tocar nada.
+    if (
+      sesion.tipo === 'PIN' &&
+      !this.equipoDeLaCabeceraEsDeLaSesion(sesion, partes, cabeceraEquipo)
+    ) {
+      return { error: noAutenticado() };
+    }
+
     const ahora = this.reloj.ahora();
-    const venceInactividad =
-      sesion.ultima_actividad_en.getTime() + sesion.minutos_inactividad * MINUTO_MS;
+    const minutosInactividad =
+      sesion.tipo === 'PIN'
+        ? (sesion.minutos_sucursal ?? MINUTOS_INACTIVIDAD_PIN_POR_DEFECTO)
+        : sesion.minutos_inactividad;
+    const venceInactividad = sesion.ultima_actividad_en.getTime() + minutosInactividad * MINUTO_MS;
     if (ahora.getTime() >= sesion.expira_en.getTime() || ahora.getTime() >= venceInactividad) {
       await this.cerrar(sesion.id, ahora, 'EXPIRADA');
       return {
         error: new ErrorAplicacion(401, 'SESION_EXPIRADA', 'La sesión expiró; vuelve a ingresar'),
       };
+    }
+
+    // (equipo, persona) debe seguir activo: las sesiones PIN lo exigen siempre, y las de contraseña que
+    // quedaron asociadas a un equipo se cierran cuando se revoca (criterio 30).
+    if (
+      (sesion.tipo === 'PIN' || sesion.equipo_recordado_id !== null) &&
+      (sesion.recordado_id === null || sesion.recordado_revocado_en !== null)
+    ) {
+      await this.cerrar(sesion.id, ahora, 'EQUIPO_REVOCADO');
+      return { error: noAutenticado() };
     }
 
     let principal: Principal;
@@ -214,7 +260,8 @@ export class AutenticacionGuard implements CanActivate {
         equipoRecordadoId: null,
         debeCambiarContrasena: false,
       };
-    } else if (sesion.tipo === 'CONTRASENA') {
+    } else {
+      // Contraseña o PIN: la persona sigue activa y con acceso a la sucursal activa.
       if (sesion.usuario_id === null || sesion.usuario_activo !== true) {
         await this.cerrar(sesion.id, ahora, 'USUARIO_INACTIVO');
         return { error: noAutenticado() };
@@ -234,7 +281,7 @@ export class AutenticacionGuard implements CanActivate {
         rol = accesos[0].rol;
       }
       principal = {
-        tipo: 'CONTRASENA',
+        tipo: sesion.tipo,
         empresaId: partes.empresaId,
         sesionId: sesion.id,
         usuarioId: sesion.usuario_id,
@@ -246,11 +293,6 @@ export class AutenticacionGuard implements CanActivate {
         equipoRecordadoId: sesion.equipo_recordado_id,
         debeCambiarContrasena: sesion.contrasena_temporal === true,
       };
-    } else {
-      // Las sesiones PIN (atadas al equipo recordado, con la inactividad de la sucursal activa) las
-      // valida la tarea T34, cuando existan los equipos recordados y el ingreso con PIN. Mientras no
-      // existan, ninguna sesión PIN es válida (falla cerrada).
-      return { error: noAutenticado() };
     }
 
     if (!alSegundoPlano) {
@@ -260,6 +302,23 @@ export class AutenticacionGuard implements CanActivate {
       );
     }
     return { principal };
+  }
+
+  /** El `X-Equipo` es el equipo de la sesión de la misma empresa y su secreto coincide (criterio 37). */
+  private equipoDeLaCabeceraEsDeLaSesion(
+    sesion: FilaSesion,
+    partes: TokenSesion,
+    cabeceraEquipo: unknown,
+  ): boolean {
+    const token = typeof cabeceraEquipo === 'string' ? parsearTokenEquipo(cabeceraEquipo) : null;
+    return (
+      token !== null &&
+      sesion.equipo_id !== null &&
+      sesion.equipo_huella !== null &&
+      token.empresaId === partes.empresaId &&
+      token.equipoId === sesion.equipo_id &&
+      this.credenciales.secretoCoincide(token.secreto, sesion.equipo_huella)
+    );
   }
 
   private async cerrar(sesionId: string, ahora: Date, motivo: string): Promise<void> {

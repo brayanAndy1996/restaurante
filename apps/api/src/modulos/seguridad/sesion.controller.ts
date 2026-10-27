@@ -1,4 +1,16 @@
-import { Body, Controller, Delete, Get, HttpCode, Inject, Param, Post, Put } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Headers,
+  HttpCode,
+  Inject,
+  Param,
+  Post,
+  Put,
+  Res,
+} from '@nestjs/common';
 import {
   cambiarContrasenaEntradaSchema,
   elegirSucursalEntradaSchema,
@@ -10,16 +22,20 @@ import {
   type RecordarEquipoRespuesta,
   type SesionRespuesta,
 } from '@restaurante/contratos';
+import type { Response } from 'express';
 import { SinEmpresa } from '../../nucleo/contexto-empresa';
-import { noImplementado } from '../../nucleo/errores';
 import { PipeUuid, PipeZod } from '../../nucleo/errores/pipes';
 import { PermiteContrasenaTemporal } from './decoradores';
+import { EquiposService } from './equipos.service';
 import { SesionesService } from './sesiones.service';
 
-/** Sesión actual de quien llama y sus equipos recordados. Lógica en las tareas T12 y T33. */
+/** Sesión actual de quien llama y sus equipos recordados. */
 @Controller('sesion')
 export class SesionController {
-  constructor(@Inject(SesionesService) private readonly sesiones: SesionesService) {}
+  constructor(
+    @Inject(SesionesService) private readonly sesiones: SesionesService,
+    @Inject(EquiposService) private readonly equipos: EquiposService,
+  ) {}
 
   /** 200 `sesionRespuesta`. También con contraseña temporal. */
   @Get()
@@ -59,26 +75,36 @@ export class SesionController {
     return this.sesiones.salir();
   }
 
-  /** Sesión de contraseña no temporal; `X-Equipo` opcional. 201 `{ equipo, tokenEquipo }` / 200 `{ equipo }`; 403; 409. */
+  /**
+   * Sesión de contraseña no temporal; `X-Equipo` opcional. 201 `{ equipo, tokenEquipo }` con un equipo nuevo
+   * (el token solo se muestra aquí) / 200 `{ equipo }` con un equipo ya conocido; 403 `PROHIBIDO`; 409
+   * `CONFLICTO`. Sin transacción del interceptor: el servicio abre la suya porque el actor de lo que escribe
+   * lleva el equipo, que puede ser nuevo.
+   */
   @Post('equipo')
+  @SinEmpresa()
   async recordarEquipo(
-    @Body(new PipeZod(recordarEquipoEntradaSchema)) _entrada: RecordarEquipoEntrada,
+    @Headers('x-equipo') equipo: string | undefined,
+    @Body(new PipeZod(recordarEquipoEntradaSchema)) entrada: RecordarEquipoEntrada,
+    @Res({ passthrough: true }) respuesta: Response,
   ): Promise<RecordarEquipoRespuesta> {
-    return noImplementado();
+    const resultado = await this.equipos.recordar(entrada, equipo);
+    respuesta.status(resultado.nuevo ? 201 : 200);
+    return resultado.respuesta;
   }
 
-  /** Sesiones de contraseña y PIN. 200 `equipoRecordadoRespuesta[]` con `actual`. */
+  /** Sesiones de contraseña y PIN. 200 `equipoRecordadoRespuesta[]` con `actual`; 403 en soporte. */
   @Get('equipos')
-  async equipos(): Promise<EquipoRecordadoRespuesta[]> {
-    return noImplementado();
+  async misEquipos(): Promise<EquipoRecordadoRespuesta[]> {
+    return this.equipos.listarPropios();
   }
 
-  /** Sesiones de contraseña y PIN. 204; 404. */
+  /** Sesiones de contraseña y PIN. 204; 404; 403 en soporte. Si es el equipo de la sesión, la cierra. */
   @Delete('equipos/:equipoRecordadoId')
   @HttpCode(204)
   async olvidarEquipo(
-    @Param('equipoRecordadoId', PipeUuid) _equipoRecordadoId: string,
+    @Param('equipoRecordadoId', PipeUuid) equipoRecordadoId: string,
   ): Promise<void> {
-    return noImplementado();
+    return this.equipos.olvidar(equipoRecordadoId);
   }
 }

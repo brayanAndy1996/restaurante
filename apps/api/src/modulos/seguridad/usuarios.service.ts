@@ -15,6 +15,7 @@ import { ErrorAplicacion } from '../../nucleo/errores/error-aplicacion';
 import { RELOJ, type Reloj } from '../../nucleo/reloj';
 import { AuditoriaService } from '../auditoria';
 import { Credenciales } from './credenciales';
+import { EquiposService, type EquipoRevocado } from './equipos.service';
 
 interface FilaUsuario {
   id: string;
@@ -67,6 +68,7 @@ export class UsuariosService {
     @Inject(RELOJ) private readonly reloj: Reloj,
     @Inject(Credenciales) private readonly credenciales: Credenciales,
     @Inject(AuditoriaService) private readonly auditoria: AuditoriaService,
+    @Inject(EquiposService) private readonly equipos: EquiposService,
   ) {}
 
   // ---- Consulta --------------------------------------------------------------------------------
@@ -258,16 +260,24 @@ export class UsuariosService {
     }
     if (nuevoPin !== null) await this.cerrarSesiones(id, 'PIN_REGENERADO', ahora, 'PIN');
 
-    // Revocar los equipos recordados al desactivar (criterio 32b) se conecta en T33, cuando exista la tabla.
+    // Desactivar revoca todos sus equipos recordados en la misma transacción (criterio 32b); reactivarlo no
+    // los recupera.
+    const equiposRevocados =
+      actual.activo && !activo ? await this.equipos.revocarDeUsuario(id, 'DESACTIVADO', ahora) : [];
     await this.auditoria.registrar({
       accion: 'modificar_usuario',
       entidad: 'usuario',
       entidadId: id,
-      detalle: this.detalleDeCambios(
-        { ...actual, accesos: accesosActuales },
-        { nombre, esAdministrador, activo, horario, accesos, largo },
-        nuevoPin !== null,
-      ),
+      detalle: {
+        ...this.detalleDeCambios(
+          { ...actual, accesos: accesosActuales },
+          { nombre, esAdministrador, activo, horario, accesos, largo },
+          nuevoPin !== null,
+        ),
+        ...(equiposRevocados.length > 0
+          ? { equiposRevocados: this.paraAuditoria(equiposRevocados) }
+          : {}),
+      },
     });
     if (nuevoPin !== null) {
       await this.auditoria.registrar({
@@ -309,7 +319,8 @@ export class UsuariosService {
 
   /**
    * `POST /usuarios/:id/contrasena` (criterio 23): contraseña temporal nueva; cierra todas las sesiones
-   * del usuario. Revocar sus equipos recordados (criterio 32b) se conecta en T33.
+   * del usuario y revoca todos sus equipos recordados (criterio 32b): la persona vuelve a entrar con la
+   * contraseña temporal en cada equipo.
    */
   async restablecerContrasena(id: string, contrasenaTemporal: string): Promise<void> {
     const hash = await this.credenciales.hashContrasena(contrasenaTemporal);
@@ -321,11 +332,21 @@ export class UsuariosService {
       { bind: [id, hash, ahora] },
     );
     await this.cerrarSesiones(id, 'CONTRASENA_RESTABLECIDA', ahora);
+    const equiposRevocados = await this.equipos.revocarDeUsuario(
+      id,
+      'CONTRASENA_RESTABLECIDA',
+      ahora,
+    );
     await this.auditoria.registrar({
       accion: 'restablecer_contrasena',
       entidad: 'usuario',
       entidadId: id,
-      detalle: { usuarioId: id },
+      detalle: {
+        usuarioId: id,
+        ...(equiposRevocados.length > 0
+          ? { equiposRevocados: this.paraAuditoria(equiposRevocados) }
+          : {}),
+      },
     });
   }
 
@@ -486,18 +507,18 @@ export class UsuariosService {
     return porUsuario;
   }
 
-  /**
-   * Cantidad de equipos recordados activos de cada persona. Hasta que existan los equipos recordados
-   * (T33) todas las personas tienen 0.
-   */
-  private async equiposRecordadosPorUsuario(ids: string[]): Promise<Map<string, number>> {
-    return new Map(ids.map((id) => [id, 0]));
+  /** Qué equipos dejaron de recordar a la persona, sin tokens, para el detalle de la auditoría. */
+  private paraAuditoria(revocados: EquipoRevocado[]) {
+    return revocados.map((r) => ({
+      equipoRecordadoId: r.equipoRecordadoId,
+      equipoId: r.equipoId,
+    }));
   }
 
   private async aRespuestas(filas: FilaUsuario[]): Promise<UsuarioRespuesta[]> {
     const ids = filas.map((f) => f.id);
     const accesos = await this.accesosPorUsuario(ids);
-    const equipos = await this.equiposRecordadosPorUsuario(ids);
+    const equipos = await this.equipos.contarActivosPorUsuario(ids);
     return filas.map((f) => ({
       id: f.id,
       nombre: f.nombre,

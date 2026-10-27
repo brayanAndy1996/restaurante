@@ -158,19 +158,32 @@ describe('rutas de la sección de acceso (fase A)', () => {
     }
   });
 
-  it('las rutas cuya lógica llega en tareas posteriores responden "No implementado" como 500 sin detalles', async () => {
+  it('las rutas de equipos y PIN (grupo C2) ya tienen lógica: responden sus errores propios, no "No implementado"', async () => {
     const id = '11111111-1111-1111-1111-111111111111';
     const servidor = () => request(app.getHttpServer());
-    const casos = [
-      () => servidor().get('/equipo'),
-      () => servidor().get('/sesion/equipos').set('x-empresa-id', id),
-      () => servidor().get(`/usuarios/${id}/equipos`).set('x-empresa-id', id),
-      () => servidor().post('/sesiones/pin').send({ usuarioId: id, pin: '1234' }),
+    const casos: [() => request.Test, number, string][] = [
+      [() => servidor().get('/equipo'), 401, 'EQUIPO_NO_RECONOCIDO'],
+      [
+        () => servidor().post('/sesiones/pin').send({ usuarioId: id, pin: '1234' }),
+        401,
+        'EQUIPO_NO_RECONOCIDO',
+      ],
+      // El principal de prueba no es una persona: no tiene equipos propios.
+      [() => servidor().get('/sesion/equipos').set('x-empresa-id', id), 403, 'PROHIBIDO'],
+      [
+        () => servidor().get(`/usuarios/${id}/equipos`).set('x-empresa-id', id),
+        404,
+        'NO_ENCONTRADO',
+      ],
+      [
+        () => servidor().get(`/sucursales/${id}/acceso`).set('x-empresa-id', id),
+        404,
+        'NO_ENCONTRADO',
+      ],
     ];
-    for (const caso of casos) {
+    for (const [caso, estado, codigo] of casos) {
       const res = await caso();
-      expect(res.status).toBe(500);
-      expect(res.body).toMatchObject({ codigo: 'ERROR_INTERNO' });
+      expect({ estado: res.status, codigo: res.body.codigo }).toEqual({ estado, codigo });
       expect(JSON.stringify(res.body)).not.toContain('No implementado');
     }
   });

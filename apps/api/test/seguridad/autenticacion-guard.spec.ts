@@ -17,10 +17,11 @@ import {
 import { ContextoEmpresa } from '../../src/nucleo/contexto-empresa';
 import { RelojManual } from '../../src/nucleo/reloj';
 import { abrirCliente, fijarEntornoDePrueba } from '../utilidades';
-import { conActor, crearEmpresaSql, type EmpresaSql } from '../aislamiento/fabrica';
+import { conActor, crearEmpresaSql, enTransaccion, type EmpresaSql } from '../aislamiento/fabrica';
 import { arrancar, bearer, type AppDePrueba } from '../acceso/fabrica-plataforma';
 import {
   credenciales,
+  insertarEquipo,
   insertarSesion,
   insertarSuperadministrador,
   insertarUsuario,
@@ -167,18 +168,69 @@ describe('sin sesión válida', () => {
     expect(await filaDeSesion(deB.id)).toEqual(antesB);
   });
 
-  it('una sesión PIN no vale todavía (llega con T34): falla cerrada', async () => {
+  it('una sesión PIN sin la cabecera X-Equipo, con la de otro equipo o con un secreto falso no vale', async () => {
     const u = await insertarUsuario(api, A.id, {});
+    const equipo = await insertarEquipo(api, A.id, u.id);
+    const otro = await insertarEquipo(api, A.id, u.id);
     const pin = await insertarSesion(api, A.id, {
       usuarioId: u.id,
       tipo: 'PIN',
-      equipoId: randomUUID(),
-      equipoRecordadoId: randomUUID(),
+      equipoId: equipo.equipoId,
+      equipoRecordadoId: equipo.equipoRecordadoId,
       ahora: ahora(),
     });
-    const res = await ctx.http().get('/sonda-guard/principal').set(bearer(pin.token));
+    const secretoFalso = credenciales.generarSecreto();
+    const falso = equipo.tokenEquipo.replace(/[^.]+$/, secretoFalso);
+    for (const cabecera of [undefined, otro.tokenEquipo, falso, 'basura']) {
+      const peticion = ctx.http().get('/sonda-guard/principal').set(bearer(pin.token));
+      const res = await (cabecera === undefined ? peticion : peticion.set('X-Equipo', cabecera));
+      expect(res.status, String(cabecera)).toBe(401);
+      expect(res.body).toMatchObject(NO_AUTENTICADO);
+    }
+    // La sesión no se tocó: con el equipo correcto sigue valiendo.
+    const bien = await ctx
+      .http()
+      .get('/sonda-guard/principal')
+      .set(bearer(pin.token))
+      .set('X-Equipo', equipo.tokenEquipo);
+    expect(bien.status, JSON.stringify(bien.body)).toBe(200);
+    expect(bien.body.principal).toMatchObject({
+      tipo: 'PIN',
+      usuarioId: u.id,
+      equipoId: equipo.equipoId,
+      equipoRecordadoId: equipo.equipoRecordadoId,
+    });
+  });
+
+  it('una sesión PIN cuyo equipo recordado fue revocado se cierra y responde 401', async () => {
+    const u = await insertarUsuario(api, A.id, {});
+    const equipo = await insertarEquipo(api, A.id, u.id);
+    const pin = await insertarSesion(api, A.id, {
+      usuarioId: u.id,
+      tipo: 'PIN',
+      equipoId: equipo.equipoId,
+      equipoRecordadoId: equipo.equipoRecordadoId,
+      ahora: ahora(),
+    });
+    await enTransaccion(
+      api,
+      A.id,
+      async () => {
+        await api.query(
+          `UPDATE equipo_recordado SET revocado_en = now(), motivo_revocacion = 'REVOCADO' WHERE id = $1`,
+          [equipo.equipoRecordadoId],
+        );
+      },
+      { confirmar: true },
+    );
+    const res = await ctx
+      .http()
+      .get('/sonda-guard/principal')
+      .set(bearer(pin.token))
+      .set('X-Equipo', equipo.tokenEquipo);
     expect(res.status).toBe(401);
     expect(res.body).toMatchObject(NO_AUTENTICADO);
+    expect((await filaDeSesion(pin.id)).motivo_cierre).toBe('EQUIPO_REVOCADO');
   });
 });
 
@@ -243,11 +295,41 @@ describe('sesión de contraseña válida', () => {
   });
 
   it('el equipo recordado de la sesión viaja en el principal', async () => {
-    const equipoId = randomUUID();
-    const recordadoId = randomUUID();
-    const { token } = await sesionDe(A, {}, { equipoId, equipoRecordadoId: recordadoId });
+    const u = await insertarUsuario(api, A.id, {});
+    const { equipoId, equipoRecordadoId } = await insertarEquipo(api, A.id, u.id);
+    const { token } = await insertarSesion(api, A.id, {
+      usuarioId: u.id,
+      ahora: ahora(),
+      equipoId,
+      equipoRecordadoId,
+    });
     const res = await ctx.http().get('/sonda-guard/principal').set(bearer(token));
-    expect(res.body.principal).toMatchObject({ equipoId, equipoRecordadoId: recordadoId });
+    expect(res.body.principal).toMatchObject({ equipoId, equipoRecordadoId });
+  });
+
+  it('una sesión de contraseña asociada a un equipo recordado revocado se cierra', async () => {
+    const u = await insertarUsuario(api, A.id, {});
+    const equipo = await insertarEquipo(api, A.id, u.id);
+    const { token, id } = await insertarSesion(api, A.id, {
+      usuarioId: u.id,
+      ahora: ahora(),
+      equipoId: equipo.equipoId,
+      equipoRecordadoId: equipo.equipoRecordadoId,
+    });
+    await enTransaccion(
+      api,
+      A.id,
+      async () => {
+        await api.query(
+          `UPDATE equipo_recordado SET revocado_en = now(), motivo_revocacion = 'OLVIDADO' WHERE id = $1`,
+          [equipo.equipoRecordadoId],
+        );
+      },
+      { confirmar: true },
+    );
+    const res = await ctx.http().get('/sonda-guard/principal').set(bearer(token));
+    expect(res.status).toBe(401);
+    expect((await filaDeSesion(id)).motivo_cierre).toBe('EQUIPO_REVOCADO');
   });
 });
 
@@ -475,12 +557,14 @@ describe('sesión de soporte y trazabilidad por la vía de la sesión (criterio 
   });
 
   it('una escritura con sesión de usuario queda a nombre del usuario (y de su equipo) en la base', async () => {
-    const equipoId = randomUUID();
-    const { token, usuario } = await sesionDe(
-      A,
-      { esAdministrador: true },
-      { equipoId, equipoRecordadoId: randomUUID() },
-    );
+    const usuario = await insertarUsuario(api, A.id, { esAdministrador: true });
+    const { equipoId, equipoRecordadoId } = await insertarEquipo(api, A.id, usuario.id);
+    const { token } = await insertarSesion(api, A.id, {
+      usuarioId: usuario.id,
+      ahora: ahora(),
+      equipoId,
+      equipoRecordadoId,
+    });
     const sucursalId = A.sucursales[1]!.id;
     const antes = (await admin.query('SELECT * FROM sucursal WHERE id = $1', [sucursalId])).rows[0];
     const res = await ctx
@@ -554,6 +638,8 @@ describe('CORS', () => {
     expect(ajeno.headers['access-control-allow-origin']).toBeUndefined();
     const real = await ctx.http().get('/health').set('Origin', 'http://localhost:5173');
     expect(real.headers['access-control-expose-headers']).toMatch(/Retry-After/i);
+    // La PWA mide el desfase del reloj del celular con la cabecera Date.
+    expect(real.headers['access-control-expose-headers']).toMatch(/\bDate\b/);
   });
 });
 

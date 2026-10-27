@@ -22,16 +22,19 @@ import {
   type UsuarioModificarEntrada,
   type UsuarioRespuesta,
 } from '@restaurante/contratos';
-import { noImplementado } from '../../nucleo/errores';
 import { PipeUuid, PipeZod } from '../../nucleo/errores/pipes';
 import { SoloAdministrador } from './decoradores';
+import { EquiposService } from './equipos.service';
 import { UsuariosService } from './usuarios.service';
 
-/** Usuarios y accesos (RF-08): solo el Administrador (criterio 25). Lógica en las tareas T13 y T33. */
+/** Usuarios y accesos (RF-08): solo el Administrador (criterio 25).  */
 @Controller('usuarios')
 @SoloAdministrador()
 export class UsuariosController {
-  constructor(@Inject(UsuariosService) private readonly usuarios: UsuariosService) {}
+  constructor(
+    @Inject(UsuariosService) private readonly usuarios: UsuariosService,
+    @Inject(EquiposService) private readonly equipos: EquiposService,
+  ) {}
 
   @Get()
   async listar(): Promise<UsuarioRespuesta[]> {
@@ -79,24 +82,24 @@ export class UsuariosController {
 
   /** 200 `equipoRecordadoRespuesta[]`; 404. */
   @Get(':id/equipos')
-  async equipos(@Param('id', PipeUuid) _id: string): Promise<EquipoRecordadoRespuesta[]> {
-    return noImplementado();
+  async equiposDe(@Param('id', PipeUuid) id: string): Promise<EquipoRecordadoRespuesta[]> {
+    return this.equipos.listarDeUsuario(id);
   }
 
-  /** 204; 404. */
+  /** 204; 404. Repetirlo responde 204 sin otro efecto ni otra auditoría. */
   @Delete(':id/equipos/:equipoRecordadoId')
   @HttpCode(204)
   async revocarEquipo(
-    @Param('id', PipeUuid) _id: string,
-    @Param('equipoRecordadoId', PipeUuid) _equipoRecordadoId: string,
+    @Param('id', PipeUuid) id: string,
+    @Param('equipoRecordadoId', PipeUuid) equipoRecordadoId: string,
   ): Promise<void> {
-    return noImplementado();
+    return this.equipos.revocarUno(id, equipoRecordadoId);
   }
 
   /** 204: revoca todos los equipos del usuario; 404. */
   @Delete(':id/equipos')
   @HttpCode(204)
-  async revocarEquipos(@Param('id', PipeUuid) _id: string): Promise<void> {
-    return noImplementado();
+  async revocarEquipos(@Param('id', PipeUuid) id: string): Promise<void> {
+    return this.equipos.revocarTodos(id);
   }
 }

@@ -5,7 +5,7 @@ import { randomBytes, randomUUID } from 'node:crypto';
 import type { Client } from 'pg';
 import { PIN_PEPPER_LOCAL, type Entorno } from '../../src/config/entorno';
 import { Credenciales } from '../../src/modulos/seguridad/credenciales';
-import { armarTokenSesion } from '../../src/modulos/seguridad/tokens';
+import { armarTokenEquipo, armarTokenSesion } from '../../src/modulos/seguridad/tokens';
 import { enTransaccion } from '../aislamiento/fabrica';
 
 export const credenciales = new Credenciales({ PIN_PEPPER: PIN_PEPPER_LOCAL } as Entorno);
@@ -115,6 +115,50 @@ export async function insertarSesion(
     { confirmar: true },
   );
   return { id, token: armarTokenSesion(empresaId, id, secreto), secreto };
+}
+
+export interface EquipoSembrado {
+  equipoId: string;
+  equipoRecordadoId: string;
+  /** Token del equipo (`eq.<empresa>.<equipo>.<secreto>`), para la cabecera `X-Equipo`. */
+  tokenEquipo: string;
+}
+
+/**
+ * Inserta un equipo de la empresa que recuerda a `usuarioId` (las llaves de `sesion` y de la trazabilidad
+ * exigen que el equipo exista). Con el actor de sistema `prueba`.
+ */
+export async function insertarEquipo(
+  api: Client,
+  empresaId: string,
+  usuarioId: string,
+): Promise<EquipoSembrado> {
+  const secreto = credenciales.generarSecreto();
+  const equipoId = randomUUID();
+  const equipoRecordadoId = await enTransaccion(
+    api,
+    empresaId,
+    async () => {
+      await api.query(
+        `INSERT INTO equipo (id, empresa_id, nombre, huella_secreto, ultimo_uso_en, creado_en, actualizado_en)
+         VALUES ($1, $2, 'Equipo de prueba', $3, now(), now(), now())`,
+        [equipoId, empresaId, credenciales.huellaSecreto(secreto)],
+      );
+      const { rows } = await api.query<{ id: string }>(
+        `INSERT INTO equipo_recordado (empresa_id, equipo_id, usuario_id, recordado_en, ultimo_uso_en,
+                                       creado_en, actualizado_en)
+         VALUES ($1, $2, $3, now(), now(), now(), now()) RETURNING id`,
+        [empresaId, equipoId, usuarioId],
+      );
+      return rows[0]!.id;
+    },
+    { confirmar: true },
+  );
+  return {
+    equipoId,
+    equipoRecordadoId,
+    tokenEquipo: armarTokenEquipo(empresaId, equipoId, secreto),
+  };
 }
 
 /** Inserta un superadministrador como `restaurante_plataforma` (la tabla no es de empresa ni lleva actor). */

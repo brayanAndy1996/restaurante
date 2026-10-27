@@ -18,7 +18,12 @@ import {
   textoUnico,
   type EmpresaSql,
 } from '../aislamiento/fabrica';
-import { insertarSesion, insertarSuperadministrador, insertarUsuario } from './sembrado';
+import {
+  insertarEquipo,
+  insertarSesion,
+  insertarSuperadministrador,
+  insertarUsuario,
+} from './sembrado';
 
 const INICIO = '2031-05-12T09:30:00-05:00';
 
@@ -71,13 +76,13 @@ const filas = async (condicion: string, parametros: unknown[]) =>
 
 describe('AuditoriaService.registrar (sesión de usuario)', () => {
   it('deja una fila con la empresa, la sesión, la sucursal activa, el equipo y el actor de la sesión, con la hora del reloj', async () => {
-    const equipoId = randomUUID();
     const usuario = await insertarUsuario(api, A.id, { esAdministrador: true });
+    const { equipoId, equipoRecordadoId } = await insertarEquipo(api, A.id, usuario.id);
     const sesion = await insertarSesion(api, A.id, {
       usuarioId: usuario.id,
       sucursalId: A.sucursales[0]!.id,
       equipoId,
-      equipoRecordadoId: randomUUID(),
+      equipoRecordadoId,
       ahora: ctx.reloj.ahora(),
     });
     ctx.reloj.avanzar(3 * 60_000);

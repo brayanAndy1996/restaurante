@@ -8,13 +8,16 @@ import {
 } from '../../nucleo/contexto-empresa/resolutor-empresa-por-cabecera';
 import { AuditoriaModule } from '../auditoria';
 import { AccesoSucursalController } from './acceso-sucursal.controller';
+import { AccesoSucursalService } from './acceso-sucursal.service';
 import { AutenticacionGuard, MODO_PRUEBA } from './autenticacion.guard';
 import { AutorizacionesController } from './autorizaciones.controller';
 import { AutorizacionService } from './autorizacion.service';
 import { BloqueosService } from './bloqueos.service';
 import { Credenciales } from './credenciales';
 import { EquipoController } from './equipo.controller';
+import { EquiposService } from './equipos.service';
 import { HorarioService } from './horario.service';
+import { IngresoPinService } from './ingreso-pin.service';
 import { ResolutorEmpresaSesion } from './resolutor-empresa-sesion';
 import { SesionActual } from './sesion-actual';
 import { SesionController } from './sesion.controller';
@@ -48,6 +51,9 @@ import { UsuariosService } from './usuarios.service';
     HorarioService,
     BloqueosService,
     SesionesService,
+    EquiposService,
+    IngresoPinService,
+    AccesoSucursalService,
     UsuariosService,
     ResolutorEmpresaSesion,
     { provide: RESOLUTOR_EMPRESA, useExisting: ResolutorEmpresaSesion },
@@ -67,6 +73,9 @@ import { UsuariosService } from './usuarios.service';
     HorarioService,
     BloqueosService,
     SesionesService,
+    EquiposService,
+    IngresoPinService,
+    AccesoSucursalService,
     UsuariosService,
     ResolutorEmpresaSesion,
     RESOLUTOR_EMPRESA,

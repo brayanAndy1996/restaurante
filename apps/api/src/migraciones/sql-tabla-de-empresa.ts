@@ -115,6 +115,13 @@ export interface OpcionesTrazabilidad {
    * migrador (dueño) queda sujeto a la RLS forzada y sin política no vería ninguna fila.
    */
   rellenarFilasExistentesCon?: string;
+  /**
+   * Agrega también las llaves compuestas `creado_por_equipo_id` / `actualizado_por_equipo_id` hacia
+   * `equipo (id, empresa_id)`. Obligatorio en toda tabla trazada que se cree después de la migración de
+   * equipos (`202610280005-equipos`); las anteriores las recibieron en esa migración y no pueden pedirla
+   * porque `equipo` todavía no existía cuando corrieron.
+   */
+  llaveDeEquipo?: boolean;
 }
 
 /** Los dos grupos de columnas de trazabilidad. */
@@ -131,9 +138,9 @@ function literal(valor: string): string {
  * sistema; equipo solo con usuario), las llaves foráneas compuestas con la empresa hacia `usuario` y
  * simples hacia `superadministrador`, y el trigger `trazabilidad` (criterios 113 a 115).
  *
- * Las llaves hacia `equipo` no se agregan aquí: la tabla `equipo` llega con la migración de la historia
- * HU-02 (C2), que las agrega a todas las tablas trazadas que existan; hasta entonces `*_equipo_id`
- * queda sin llave (siempre nulo). Requiere que existan `usuario`, `superadministrador` y la función
+ * Las llaves hacia `equipo` no se agregan por defecto: la tabla `equipo` llega con la migración de la
+ * historia HU-02 (C2), que las agrega a todas las tablas trazadas que existían; las tablas trazadas que se
+ * creen después deben pasar `llaveDeEquipo: true`. Requiere que existan `usuario`, `superadministrador` y la función
  * `public.trazabilidad()` (migraciones `acceso-base` y `trazabilidad`).
  *
  * `sqlTablaDeEmpresa` no cambia: la usan las migraciones de 001, y si su salida cambiara una base nueva
@@ -176,6 +183,13 @@ export function sqlTrazabilidad(tabla: string, opciones: OpcionesTrazabilidad = 
          ADD CONSTRAINT ${t}_${grupo}_superadministrador_fk
            FOREIGN KEY (${grupo}_superadministrador_id) REFERENCES superadministrador (id);`,
     );
+    if (opciones.llaveDeEquipo === true) {
+      partes.push(
+        `ALTER TABLE ${t}
+           ADD CONSTRAINT ${t}_${grupo}_equipo_fk
+           FOREIGN KEY (${grupo}_equipo_id, ${columnaEmpresa}) REFERENCES equipo (id, empresa_id);`,
+      );
+    }
   }
 
   partes.push(
@@ -207,9 +221,15 @@ export function sqlQuitarTrazabilidad(tabla: string): string {
  * función, salvo las excepciones de la lista cerrada (`auditoria`, `sesion`, `bloqueo_intentos` e
  * `idempotencia`), que usan `sqlTablaDeEmpresa` a secas. La tabla ya debe existir, vacía.
  */
-export function sqlTablaDeEmpresaTrazable(tabla: string, opciones: OpcionesTablaDeEmpresa): string {
+export function sqlTablaDeEmpresaTrazable(
+  tabla: string,
+  opciones: OpcionesTablaDeEmpresa & { llaveDeEquipo?: boolean },
+): string {
   return [
     sqlTablaDeEmpresa(tabla, opciones),
-    sqlTrazabilidad(tabla, { columnaEmpresa: opciones.columnaEmpresa }),
+    sqlTrazabilidad(tabla, {
+      columnaEmpresa: opciones.columnaEmpresa,
+      llaveDeEquipo: opciones.llaveDeEquipo,
+    }),
   ].join('\n');
 }

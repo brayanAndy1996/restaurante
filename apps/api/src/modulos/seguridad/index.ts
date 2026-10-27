@@ -38,8 +38,18 @@ export { SesionController } from './sesion.controller';
 export { SesionesController } from './sesiones.controller';
 export { UsuariosController } from './usuarios.controller';
 export { BloqueosService, segundosHasta } from './bloqueos.service';
-export type { AmbitoBloqueo, EstadoBloqueo, ResultadoFallo } from './bloqueos.service';
+export type {
+  AmbitoBloqueo,
+  EstadoBloqueo,
+  ResultadoFallo,
+  ResultadoFalloAcumulado,
+} from './bloqueos.service';
 export { SesionesService } from './sesiones.service';
+export { EquiposService, equipoNoReconocido, tokenEquipoDeCabecera } from './equipos.service';
+export type { EquipoRevocado } from './equipos.service';
+export { IngresoPinService } from './ingreso-pin.service';
+export { AccesoSucursalService } from './acceso-sucursal.service';
+export * from './constantes-acceso';
 export { UsuariosService } from './usuarios.service';
 export { hashContrasenaScrypt } from './credenciales';
 export { administradoresDeEmpresa, insertarAdministradorInicial } from './usuarios-plataforma';

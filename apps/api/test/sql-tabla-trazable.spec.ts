@@ -142,6 +142,39 @@ describe('sqlTablaDeEmpresaTrazable', () => {
     });
   });
 
+  it('con llaveDeEquipo agrega las llaves compuestas hacia equipo (las tablas creadas después de la migración de equipos)', async () => {
+    await enTransaccionDescartable(async () => {
+      await migrador.query(TABLA);
+      await migrador.query(
+        sqlTablaDeEmpresaTrazable('tabla_de_prueba', {
+          privilegiosApi: ['SELECT'],
+          llaveDeEquipo: true,
+        }),
+      );
+      const llaves = await migrador.query<{ conname: string; columnas: string[]; destino: string }>(
+        `SELECT con.conname::text,
+                (SELECT array_agg(a.attname::text ORDER BY k.ord) FROM unnest(con.conkey) WITH ORDINALITY k(n, ord)
+                   JOIN pg_attribute a ON a.attrelid = con.conrelid AND a.attnum = k.n) AS columnas,
+                con.confrelid::regclass::text AS destino
+           FROM pg_constraint con
+          WHERE con.conrelid = 'tabla_de_prueba'::regclass AND con.conname LIKE '%\\_equipo\\_fk'
+          ORDER BY con.conname`,
+      );
+      expect(llaves.rows).toEqual([
+        {
+          conname: 'tabla_de_prueba_actualizado_por_equipo_fk',
+          columnas: ['actualizado_por_equipo_id', 'empresa_id'],
+          destino: 'equipo',
+        },
+        {
+          conname: 'tabla_de_prueba_creado_por_equipo_fk',
+          columnas: ['creado_por_equipo_id', 'empresa_id'],
+          destino: 'equipo',
+        },
+      ]);
+    });
+  });
+
   it('rechaza identificadores que no son nombres de tabla simples', () => {
     for (const malo of ['tabla; DROP TABLE x', 'Tabla', 'a-b', '', 'esquema.tabla']) {
       expect(() => sqlTrazabilidad(malo), malo).toThrow(/Identificador/);

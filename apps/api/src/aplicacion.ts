@@ -61,7 +61,7 @@ export async function crearAplicacion(
       'X-Autorizacion',
       'Idempotency-Key',
     ],
-    exposedHeaders: ['Retry-After'],
+    exposedHeaders: ['Retry-After', 'Date'],
     maxAge: 600,
   });
   // Un cuerpo mayor a 100 KB responde 413 CUERPO_DEMASIADO_GRANDE (lo traduce el filtro global).

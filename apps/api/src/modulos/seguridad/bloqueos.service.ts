@@ -20,6 +20,14 @@ export interface ResultadoFallo {
   bloqueoNuevo: boolean;
 }
 
+export interface ResultadoFalloAcumulado {
+  fallosSeguidos: number;
+  /** Fin del bloqueo que este fallo dejó (cada `cada` fallos), o `null` si no dejó ninguno. */
+  bloqueadoHasta: Date | null;
+  /** `true` si la cuenta llegó a `maximo` fallos seguidos (no se bloquea: se corta el acceso). */
+  agotado: boolean;
+}
+
 /**
  * Cuenta de fallos seguidos y bloqueo temporal (criterios 12, 36 y 47), en la transacción de la empresa
  * en curso. Quien llama lo hace dentro de su propio `ContextoEmpresa.ejecutar` y lanza el error después
@@ -100,6 +108,47 @@ export class BloqueosService {
     );
     const nuevo = bloqueadas[0] !== undefined;
     return { fallosSeguidos, bloqueadoHasta: nuevo ? hasta : null, bloqueoNuevo: nuevo };
+  }
+
+  /**
+   * Cuenta un fallo más **sin reiniciar la cuenta cuando vence un bloqueo** (criterio 36: los fallos del
+   * PIN de una persona en un equipo solo se reinician con un PIN correcto). Cada `cada` fallos seguidos
+   * (5.º, 10.º…) deja un bloqueo de `duracionMs`; al llegar a `maximo` (15.º) no bloquea: avisa con
+   * `agotado` para que quien llama corte el acceso. La primera sentencia bloquea la fila, así que los
+   * fallos concurrentes de la misma cuenta se cuentan uno detrás de otro.
+   */
+  async registrarFalloAcumulado(
+    ambito: AmbitoBloqueo,
+    objetivoId: string,
+    ahora: Date,
+    opciones: { cada: number; maximo: number; duracionMs: number },
+  ): Promise<ResultadoFalloAcumulado> {
+    const empresaId = this.contexto.empresaActual();
+    const contados = await this.conexion.query<{ fallos_seguidos: number }>(
+      `INSERT INTO bloqueo_intentos AS b
+         (empresa_id, ambito, objetivo_id, fallos_seguidos, ultimo_fallo_en, creado_en, actualizado_en)
+       VALUES ($1, $2, $3, 1, $4, $4, $4)
+       ON CONFLICT (empresa_id, ambito, objetivo_id) DO UPDATE SET
+         fallos_seguidos = b.fallos_seguidos + 1,
+         ultimo_fallo_en = $4,
+         actualizado_en = $4
+       RETURNING fallos_seguidos`,
+      { bind: [empresaId, ambito, objetivoId, ahora], type: QueryTypes.SELECT },
+    );
+    const fallosSeguidos = contados[0]!.fallos_seguidos;
+    if (fallosSeguidos >= opciones.maximo) {
+      return { fallosSeguidos, bloqueadoHasta: null, agotado: true };
+    }
+    if (fallosSeguidos % opciones.cada !== 0) {
+      return { fallosSeguidos, bloqueadoHasta: null, agotado: false };
+    }
+    const hasta = new Date(ahora.getTime() + opciones.duracionMs);
+    await this.conexion.query(
+      `UPDATE bloqueo_intentos SET bloqueado_hasta = $3, actualizado_en = $4
+        WHERE ambito = $1 AND objetivo_id = $2`,
+      { bind: [ambito, objetivoId, hasta, ahora] },
+    );
+    return { fallosSeguidos, bloqueadoHasta: hasta, agotado: false };
   }
 
   /** Reinicia la cuenta (ingreso correcto o rechazo por horario, que implica credenciales correctas). */

@@ -1,8 +1,7 @@
 /**
  * Roles, acciones y matriz de permisos (HU-03, RF-12; tabla "Roles y permisos" del documento de
- * diseño). Las funciones de este archivo son parte de la ruta crítica: sus firmas están fijadas. `largoPin`
- * está implementada (tarea T9); la matriz de permisos llega con la tarea T37 (hasta entonces
- * `requisitoPermiso`, `puedeAutorizar`, `alcanceReportes` y `permisosDeRol` lanzan `Error('No implementado')`).
+ * diseño). Las funciones de este archivo son parte de la ruta crítica: sus firmas están fijadas. Son reglas
+ * puras: las usan la API y la PWA.
  */
 
 /** Roles de una persona dentro de una sucursal. `ADMINISTRADOR` es de toda la empresa. */
@@ -43,8 +42,6 @@ export type AlcanceReportes = 'TURNO' | 'SUCURSAL' | 'EMPRESA';
 /** Largo del PIN: 4 dígitos (Mozo, Cocina/Barra) o 6 (Cajero, Supervisor, Administrador). */
 export type LargoPin = 4 | 6;
 
-const NO_IMPLEMENTADO = 'No implementado';
-
 /** Roles que llevan PIN de 6 dígitos: autorizan acciones o cobran, así que el PIN es más difícil de adivinar. */
 const ROLES_CON_PIN_DE_SEIS: ReadonlySet<Rol> = new Set<Rol>([
   'CAJERO',
@@ -52,24 +49,71 @@ const ROLES_CON_PIN_DE_SEIS: ReadonlySet<Rol> = new Set<Rol>([
   'ADMINISTRADOR',
 ]);
 
+const P = 'permitido';
+const C = 'clave';
+const X = 'prohibido';
+
+/**
+ * Matriz de permisos, celda por celda como la tabla "Roles y permisos" del documento de diseño (criterio 43).
+ * Orden de las columnas: Mozo, Cajero, Cocina/Barra, Supervisor, Administrador.
+ */
+const MATRIZ: Readonly<Record<Accion, readonly [...RequisitoPermiso[]]>> = {
+  ATENDER_MESA: [P, P, X, P, P],
+  MOVER_UNIR_MESAS: [P, P, X, P, P],
+  ANULAR_ITEM_ENVIADO: [C, C, X, P, P],
+  APLICAR_DESCUENTO: [C, C, X, P, P],
+  APLICAR_CORTESIA: [C, C, X, P, P],
+  ANULAR_ORDEN: [C, C, X, P, P],
+  GESTIONAR_PEDIDOS_WEB: [X, P, X, P, P],
+  COBRAR: [X, P, X, P, P],
+  EMITIR_NOTA_CREDITO: [X, C, X, P, P],
+  OPERAR_CAJA: [X, P, X, P, P],
+  USAR_KDS: [X, X, P, P, P],
+  GESTIONAR_DISPONIBILIDAD: [X, X, P, P, P],
+  REGISTRAR_INGRESO_MERCADERIA: [X, P, X, P, P],
+  AJUSTAR_STOCK: [X, X, X, P, P],
+  EDITAR_CARTA: [X, X, X, X, P],
+  ADMINISTRAR: [X, X, X, X, P],
+};
+
+/** Posición de cada rol en las filas de `MATRIZ`. */
+const COLUMNA_DEL_ROL: Readonly<Record<Rol, number>> = {
+  MOZO: 0,
+  CAJERO: 1,
+  COCINA_BARRA: 2,
+  SUPERVISOR: 3,
+  ADMINISTRADOR: 4,
+};
+
+/** Alcance de los reportes de cada rol (`null`: no ve reportes). */
+const ALCANCE_DE_REPORTES: Readonly<Record<Rol, AlcanceReportes | null>> = {
+  MOZO: null,
+  CAJERO: 'TURNO',
+  COCINA_BARRA: null,
+  SUPERVISOR: 'SUCURSAL',
+  ADMINISTRADOR: 'EMPRESA',
+};
+
 /** Requisito de `accion` para `rol` (criterio 43). */
-export function requisitoPermiso(_rol: Rol, _accion: Accion): RequisitoPermiso {
-  throw new Error(NO_IMPLEMENTADO);
+export function requisitoPermiso(rol: Rol, accion: Accion): RequisitoPermiso {
+  return MATRIZ[accion][COLUMNA_DEL_ROL[rol]] as RequisitoPermiso;
 }
 
 /** `true` si un usuario con `rol` puede autorizar `accion` con su PIN (tiene la acción como `permitido`). */
-export function puedeAutorizar(_rol: Rol, _accion: Accion): boolean {
-  throw new Error(NO_IMPLEMENTADO);
+export function puedeAutorizar(rol: Rol, accion: Accion): boolean {
+  return requisitoPermiso(rol, accion) === 'permitido';
 }
 
 /** Alcance de los reportes del rol, o `null` si no ve reportes (criterio 43). */
-export function alcanceReportes(_rol: Rol): AlcanceReportes | null {
-  throw new Error(NO_IMPLEMENTADO);
+export function alcanceReportes(rol: Rol): AlcanceReportes | null {
+  return ALCANCE_DE_REPORTES[rol];
 }
 
 /** Requisito de cada acción para el rol (es el campo `permisos` de `GET /sesion`). */
-export function permisosDeRol(_rol: Rol): Record<Accion, RequisitoPermiso> {
-  throw new Error(NO_IMPLEMENTADO);
+export function permisosDeRol(rol: Rol): Record<Accion, RequisitoPermiso> {
+  return Object.fromEntries(
+    ACCIONES.map((accion) => [accion, requisitoPermiso(rol, accion)]),
+  ) as Record<Accion, RequisitoPermiso>;
 }
 
 /**

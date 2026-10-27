@@ -20,7 +20,7 @@ import {
 import { SQL_FIJAR_ACTOR } from '../../src/nucleo/fijar-contexto';
 import { abrirCliente, fijarEntornoDePrueba } from '../utilidades';
 import { crearEmpresaSql, errorDe, type EmpresaSql } from '../aislamiento/fabrica';
-import { insertarUsuario } from './sembrado';
+import { insertarEquipo, insertarUsuario } from './sembrado';
 
 let app: INestApplication;
 let contexto: ContextoEmpresa;
@@ -90,7 +90,7 @@ describe('ContextoEmpresa.ejecutar con actor', () => {
   it('con un usuario (y equipo) de la empresa de actor, la fila lleva usuario y equipo', async () => {
     const sucursalId = A.sucursales[1]!.id;
     const usuario = await insertarUsuario(api, A.id, { esAdministrador: true });
-    const equipoId = randomUUID();
+    const { equipoId } = await insertarEquipo(api, A.id, usuario.id);
     await contexto.ejecutar(A.id, () => cambiarDireccion(sucursalId, 'con usuario'), {
       actor: { usuarioId: usuario.id, equipoId },
     });

@@ -8,7 +8,7 @@ import {
   type SesionRespuesta,
   type TipoSesion,
 } from '@restaurante/contratos';
-import type { Rol } from '@restaurante/dominio';
+import { permisosDeRol, type Rol } from '@restaurante/dominio';
 import { QueryTypes, type Sequelize } from 'sequelize';
 import { CONEXION_API } from '../../nucleo/base-de-datos';
 import { buscarEmpresaDeUsuario } from '../../nucleo/base-de-datos/consultas-sin-empresa';
@@ -19,6 +19,7 @@ import { RELOJ, type Reloj } from '../../nucleo/reloj';
 import { AuditoriaService } from '../auditoria';
 import { SuscripcionService } from '../plataforma/suscripcion.service';
 import { BloqueosService, segundosHasta } from './bloqueos.service';
+import { MINUTOS_INACTIVIDAD_PIN_POR_DEFECTO } from './constantes-acceso';
 import { Credenciales } from './credenciales';
 import { HorarioService } from './horario.service';
 import { SesionActual } from './sesion-actual';
@@ -252,10 +253,19 @@ export class SesionesService {
       sucursal_id: string | null;
       ultima_actividad_en: Date;
       minutos_inactividad: number;
-    }>('SELECT sucursal_id, ultima_actividad_en, minutos_inactividad FROM sesion WHERE id = $1', {
-      bind: [principal.sesionId],
-      type: QueryTypes.SELECT,
-    });
+      equipo_id: string | null;
+      equipo_recordado_id: string | null;
+      equipo_nombre: string | null;
+      minutos_sucursal: number | null;
+    }>(
+      `SELECT s.sucursal_id, s.ultima_actividad_en, s.minutos_inactividad, s.equipo_id,
+              s.equipo_recordado_id, e.nombre AS equipo_nombre, sa.minutos_inactividad AS minutos_sucursal
+         FROM sesion s
+         LEFT JOIN equipo e ON e.id = s.equipo_id AND e.empresa_id = s.empresa_id
+         LEFT JOIN sucursal_acceso sa ON sa.sucursal_id = s.sucursal_id AND sa.empresa_id = s.empresa_id
+        WHERE s.id = $1`,
+      { bind: [principal.sesionId], type: QueryTypes.SELECT },
+    );
     const sesion = sesiones[0];
     if (sesion === undefined)
       throw new ErrorAplicacion(
@@ -263,9 +273,20 @@ export class SesionesService {
         'NO_AUTENTICADO',
         'Se requiere autenticación para esta operación',
       );
-    const expira = new Date(
-      sesion.ultima_actividad_en.getTime() + sesion.minutos_inactividad * MINUTO_MS,
-    );
+    // La inactividad de una sesión PIN es la de su sucursal activa (criterio 39); las demás, la guardada.
+    const minutos =
+      principal.tipo === 'PIN'
+        ? (sesion.minutos_sucursal ?? MINUTOS_INACTIVIDAD_PIN_POR_DEFECTO)
+        : sesion.minutos_inactividad;
+    const expira = new Date(sesion.ultima_actividad_en.getTime() + minutos * MINUTO_MS);
+    const equipo =
+      sesion.equipo_id !== null && sesion.equipo_recordado_id !== null
+        ? {
+            id: sesion.equipo_id,
+            nombre: sesion.equipo_nombre ?? '',
+            equipoRecordadoId: sesion.equipo_recordado_id,
+          }
+        : null;
 
     if (principal.tipo === 'SOPORTE') {
       return this.armarRespuesta({
@@ -304,6 +325,7 @@ export class SesionesService {
       elegibles: await this.sucursalesElegibles(usuario.id, usuario.es_administrador),
       debeCambiarContrasena: usuario.contrasena_temporal,
       expiraPorInactividadEn: expira,
+      equipo,
     });
   }
 
@@ -340,10 +362,18 @@ export class SesionesService {
       throw new ErrorAplicacion(404, 'NO_ENCONTRADO', 'La sucursal no existe');
     }
     const ahora = this.reloj.ahora();
+    const sucursalId = entrada.sucursalId.toLowerCase();
     await this.conexion.query(
       'UPDATE sesion SET sucursal_id = $2, actualizado_en = $3 WHERE id = $1',
-      { bind: [principal.sesionId, entrada.sucursalId.toLowerCase(), ahora] },
+      { bind: [principal.sesionId, sucursalId, ahora] },
     );
+    if (principal.tipo === 'PIN' && principal.equipoRecordadoId !== null) {
+      // Queda como la última sucursal de esa persona en ese equipo (criterios 17 y 33).
+      await this.conexion.query(
+        'UPDATE equipo_recordado SET ultima_sucursal_id = $2, actualizado_en = $3 WHERE id = $1',
+        { bind: [principal.equipoRecordadoId, sucursalId, ahora] },
+      );
+    }
     return this.sesionActual();
   }
 
@@ -479,8 +509,9 @@ export class SesionesService {
 
   /**
    * Arma `sesionRespuesta`. `modulos` son los del plan de la sucursal activa (criterio 77; vacío sin
-   * sucursal activa). `permisos` queda en `null` hasta la matriz de permisos (T37), `avisoSuscripcion` en
-   * `null` hasta la suspensión (T41) y `equipo` en `null` hasta los equipos recordados (T33).
+   * sucursal activa). `equipo` es el equipo recordado de la sesión, si lo tiene. `permisos` es la matriz del
+   * rol en la sucursal activa (criterio 43; `null` sin rol) y `avisoSuscripcion` queda en `null` hasta la
+   * suspensión (T41).
    */
   async armarRespuesta(datos: {
     tipo: TipoSesion;
@@ -492,19 +523,22 @@ export class SesionesService {
     elegibles: SucursalElegible[];
     debeCambiarContrasena: boolean;
     expiraPorInactividadEn: Date | null;
+    equipo?: { id: string; nombre: string; equipoRecordadoId: string } | null;
   }): Promise<SesionRespuesta> {
     const activa = datos.elegibles.find((s) => s.id === datos.sucursalId) ?? null;
+    const rol: Rol | null = datos.esAdministrador ? 'ADMINISTRADOR' : (activa?.rol ?? null);
     return {
       tipo: datos.tipo,
       empresaId: datos.empresaId,
       usuario: datos.usuario,
       superadministrador: datos.superadministrador,
-      rol: datos.esAdministrador ? 'ADMINISTRADOR' : (activa?.rol ?? null),
+      rol,
       esAdministrador: datos.esAdministrador,
       sucursal: activa === null ? null : { id: activa.id, nombre: activa.nombre },
       sucursales: datos.elegibles.map((s) => ({ id: s.id, nombre: s.nombre, rol: s.rol })),
-      equipo: null,
-      permisos: null,
+      equipo: datos.equipo ?? null,
+      // Sin rol todavía (sin sucursal elegida y sin ser Administrador) no hay permisos que mostrar.
+      permisos: rol === null ? null : permisosDeRol(rol),
       modulos: activa === null ? [] : await this.suscripciones.modulosDeSucursal(activa.id),
       avisoSuscripcion: null,
       debeCambiarContrasena: datos.debeCambiarContrasena,
