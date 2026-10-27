@@ -1,12 +1,15 @@
-import { SetMetadata, applyDecorators } from '@nestjs/common';
+import { SetMetadata, UseInterceptors, applyDecorators } from '@nestjs/common';
 import type { Accion, Modulo } from '@restaurante/dominio';
 import { SinEmpresa } from '../../nucleo/contexto-empresa';
+import { ModuloInterceptor, REQUIERE_MODULO } from './modulo.interceptor';
+
+export { REQUIERE_MODULO };
 
 /**
  * Decoradores de metadatos de las rutas (historia 002). `@Publica`, `@SoloAdministrador`,
  * `@RequiereSucursal` y `@PermiteContrasenaTemporal` los lee el guard global de autenticación
  * (`AutenticacionGuard`); `@Permiso` y `@RequiereModulo` los leerán sus interceptores (tareas T38 y T29,
- * hasta entonces solo dejan la marca). `@Idempotente()` vive en `nucleo/idempotencia` y se reexporta
+ * `@Permiso` hasta entonces solo deja la marca). `@Idempotente()` vive en `nucleo/idempotencia` y se reexporta
  * desde el índice de este módulo. `@Superadministrador()` vive en `modulos/plataforma`.
  */
 
@@ -14,7 +17,6 @@ export const PUBLICA = 'publica';
 export const SOLO_ADMINISTRADOR = 'solo-administrador';
 export const REQUIERE_SUCURSAL = 'requiere-sucursal';
 export const PERMISO = 'permiso';
-export const REQUIERE_MODULO = 'requiere-modulo';
 export const PERMITE_CONTRASENA_TEMPORAL = 'permite-contrasena-temporal';
 
 /**
@@ -42,5 +44,14 @@ export const PermiteContrasenaTemporal = () => SetMetadata(PERMITE_CONTRASENA_TE
  */
 export const Permiso = (accion: Accion) => SetMetadata(PERMISO, accion);
 
-/** Ruta de un módulo del plan: 403 `MODULO_NO_INCLUIDO` si la sucursal activa no lo tiene (criterio 77). */
-export const RequiereModulo = (modulo: Modulo) => SetMetadata(REQUIERE_MODULO, modulo);
+/**
+ * Ruta de un módulo del plan: 403 `MODULO_NO_INCLUIDO` si la sucursal activa no lo tiene (criterio 77).
+ * Implica `@RequiereSucursal()` (sin sucursal activa no hay plan que mirar) y aplica `ModuloInterceptor`,
+ * que lee el plan vigente dentro de la transacción de empresa del controlador.
+ */
+export const RequiereModulo = (modulo: Modulo) =>
+  applyDecorators(
+    SetMetadata(REQUIERE_MODULO, modulo),
+    SetMetadata(REQUIERE_SUCURSAL, true),
+    UseInterceptors(ModuloInterceptor),
+  );

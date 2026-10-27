@@ -40,7 +40,7 @@ export class SucursalesController {
 
   /**
    * Solo Administrador. Crea la sucursal (criterio 70). Con `Idempotency-Key` opcional. 201; 400; 403;
-   * 409; 422 `EMISOR_INVALIDO`. La suscripción en el plan por defecto llega con el grupo C1.
+   * 409; 422 `EMISOR_INVALIDO`. Nace con su suscripción en el plan por defecto, con vencimiento hoy.
    */
   @Post()
   @SoloAdministrador()
@@ -48,7 +48,7 @@ export class SucursalesController {
   async crear(
     @Body(new PipeZod(sucursalCrearEntradaSchema)) entrada: SucursalCrearEntrada,
   ): Promise<SucursalRespuesta> {
-    const sucursal = await this.sucursales.crear(entrada);
+    const { sucursal, suscripcion } = await this.sucursales.crear(entrada);
     await this.auditoria.registrar({
       accion: 'crear_sucursal',
       sucursalId: sucursal.id,
@@ -58,6 +58,7 @@ export class SucursalesController {
         nombre: sucursal.nombre,
         emisorId: sucursal.emisorId,
         codigoEstablecimiento: sucursal.codigoEstablecimiento,
+        suscripcion,
       },
     });
     return sucursal;

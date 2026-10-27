@@ -11,6 +11,7 @@ import {
   insertarSesionSoporte,
 } from '../seguridad';
 import { OperacionPlataforma } from './operacion-plataforma';
+import { SuscripcionService } from './suscripcion.service';
 import type { SuperadministradorAutenticado } from './tipos';
 
 const sequelizeDe = (transaccion: Transaction) =>
@@ -31,6 +32,7 @@ export class SoporteService {
     @Inject(OperacionPlataforma) private readonly operacion: OperacionPlataforma,
     @Inject(RELOJ) private readonly reloj: Reloj,
     @Inject(Credenciales) private readonly credenciales: Credenciales,
+    @Inject(SuscripcionService) private readonly suscripciones: SuscripcionService,
   ) {}
 
   async iniciar(
@@ -111,7 +113,10 @@ export class SoporteService {
             })),
             equipo: null,
             permisos: null,
-            modulos: [],
+            modulos:
+              activa === null || activa === undefined
+                ? []
+                : await this.suscripciones.modulosPlataforma(transaccion, activa.id),
             avisoSuscripcion: null,
             debeCambiarContrasena: false,
             expiraPorInactividadEn: new Date(

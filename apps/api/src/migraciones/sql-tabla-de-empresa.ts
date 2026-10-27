@@ -35,7 +35,11 @@ function privilegios(lista: readonly PrivilegioDml[]): string {
 }
 
 export interface OpcionesTablaDeEmpresa {
-  /** Privilegios de `restaurante_api` (se aplican bajo la política `aislamiento_empresa`). */
+  /**
+   * Privilegios de `restaurante_api` (se aplican bajo la política `aislamiento_empresa`). Con una lista
+   * vacía la API no recibe ningún privilegio (tabla que solo toca la plataforma, como `pago_suscripcion`),
+   * pero la tabla lleva igual su política `aislamiento_empresa` (criterio 88).
+   */
   privilegiosApi: readonly PrivilegioDml[];
   /**
    * Privilegios de `restaurante_plataforma`, si la tabla también se toca por esa vía. Con una lista vacía
@@ -61,8 +65,10 @@ export function sqlTablaDeEmpresa(tabla: string, opciones: OpcionesTablaDeEmpres
     `CREATE POLICY aislamiento_empresa ON ${t} AS PERMISSIVE FOR ALL TO restaurante_api
        USING (${columna} = (SELECT empresa_actual()))
        WITH CHECK (${columna} = (SELECT empresa_actual()));`,
-    `GRANT ${privilegios(opciones.privilegiosApi)} ON ${t} TO restaurante_api;`,
   ];
+  if (opciones.privilegiosApi.length > 0) {
+    partes.push(`GRANT ${privilegios(opciones.privilegiosApi)} ON ${t} TO restaurante_api;`);
+  }
   if (opciones.privilegiosPlataforma && opciones.privilegiosPlataforma.length > 0) {
     partes.push(sqlTablaDePlataforma(t, opciones.privilegiosPlataforma, { activarRls: false }));
   } else if (opciones.privilegiosPlataforma) {

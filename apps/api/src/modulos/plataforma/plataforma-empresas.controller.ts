@@ -44,7 +44,7 @@ export class PlataformaEmpresasController {
     return this.empresas.obtenerDetalle(id);
   }
 
-  /** 201 `altaEmpresaRespuesta` (con el PIN del primer Administrador); 400; 409; 422 `PLAN_INVALIDO`. */
+  /** 201 `altaEmpresaRespuesta` (con la suscripción de cada sucursal y el PIN del primer Administrador); 400; 409; 422 `PLAN_INVALIDO`. */
   @Post()
   async registrar(
     @Body(new PipeZod(altaEmpresaEntradaSchema))
@@ -52,12 +52,12 @@ export class PlataformaEmpresasController {
     @SuperadministradorActual() superadministrador: SuperadministradorAutenticado,
   ): Promise<AltaEmpresaRespuesta> {
     const { motivo, ...datos } = entrada;
-    const resultado = await this.empresas.registrarEmpresa(datos, {
+    const resultado = await this.empresas.registrarEmpresaConSuscripciones(datos, {
       actor: { superadministradorId: superadministrador.id },
       motivo,
     });
-    // La suscripción de cada sucursal (criterio 69) llega con el grupo C1.
-    return resultado as unknown as AltaEmpresaRespuesta;
+    // `administrador` siempre viene: el esquema de entrada lo exige.
+    return resultado as AltaEmpresaRespuesta;
   }
 
   /** 201; 400; 404. Con `Idempotency-Key` opcional. */
@@ -85,7 +85,7 @@ export class PlataformaEmpresasController {
     );
   }
 
-  /** 201; 400; 404; 422. Con `Idempotency-Key` opcional. La suscripción de la sucursal llega con C1. */
+  /** 201 con la sucursal y su suscripción; 400; 404; 422. Con `Idempotency-Key` opcional. */
   @Post(':id/sucursales')
   @Idempotente()
   async agregarSucursal(

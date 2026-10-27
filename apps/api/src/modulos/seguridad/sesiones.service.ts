@@ -17,6 +17,7 @@ import { ErrorAplicacion } from '../../nucleo/errores/error-aplicacion';
 import type { Principal } from '../../nucleo/principal';
 import { RELOJ, type Reloj } from '../../nucleo/reloj';
 import { AuditoriaService } from '../auditoria';
+import { SuscripcionService } from '../plataforma/suscripcion.service';
 import { BloqueosService, segundosHasta } from './bloqueos.service';
 import { Credenciales } from './credenciales';
 import { HorarioService } from './horario.service';
@@ -84,6 +85,7 @@ export class SesionesService {
     @Inject(BloqueosService) private readonly bloqueos: BloqueosService,
     @Inject(AuditoriaService) private readonly auditoria: AuditoriaService,
     @Inject(SesionActual) private readonly actual: SesionActual,
+    @Inject(SuscripcionService) private readonly suscripciones: SuscripcionService,
   ) {}
 
   // ---- Ingreso con contraseña ------------------------------------------------------------------
@@ -190,7 +192,7 @@ export class SesionesService {
         type: QueryTypes.SELECT,
       },
     );
-    const sesion = this.armarRespuesta({
+    const sesion = await this.armarRespuesta({
       tipo: 'CONTRASENA',
       empresaId,
       usuario: { id: usuario.id, nombre: usuario.nombre, nombreUsuario: usuario.nombre_usuario },
@@ -476,11 +478,11 @@ export class SesionesService {
   }
 
   /**
-   * Arma `sesionRespuesta`. `permisos` queda en `null` hasta la matriz de permisos (T37), `modulos` en
-   * vacío hasta los planes (T29), `avisoSuscripcion` en `null` hasta la suspensión (T41) y `equipo` en
-   * `null` hasta los equipos recordados (T33).
+   * Arma `sesionRespuesta`. `modulos` son los del plan de la sucursal activa (criterio 77; vacío sin
+   * sucursal activa). `permisos` queda en `null` hasta la matriz de permisos (T37), `avisoSuscripcion` en
+   * `null` hasta la suspensión (T41) y `equipo` en `null` hasta los equipos recordados (T33).
    */
-  armarRespuesta(datos: {
+  async armarRespuesta(datos: {
     tipo: TipoSesion;
     empresaId: string;
     usuario: { id: string; nombre: string; nombreUsuario: string } | null;
@@ -490,7 +492,7 @@ export class SesionesService {
     elegibles: SucursalElegible[];
     debeCambiarContrasena: boolean;
     expiraPorInactividadEn: Date | null;
-  }): SesionRespuesta {
+  }): Promise<SesionRespuesta> {
     const activa = datos.elegibles.find((s) => s.id === datos.sucursalId) ?? null;
     return {
       tipo: datos.tipo,
@@ -503,7 +505,7 @@ export class SesionesService {
       sucursales: datos.elegibles.map((s) => ({ id: s.id, nombre: s.nombre, rol: s.rol })),
       equipo: null,
       permisos: null,
-      modulos: [],
+      modulos: activa === null ? [] : await this.suscripciones.modulosDeSucursal(activa.id),
       avisoSuscripcion: null,
       debeCambiarContrasena: datos.debeCambiarContrasena,
       expiraPorInactividadEn: datos.expiraPorInactividadEn?.toISOString() ?? null,

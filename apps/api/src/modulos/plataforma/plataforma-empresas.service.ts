@@ -13,7 +13,10 @@ import {
   type EmpresaPlataformaResumen,
   type RegistrarEmpresaEntrada,
   type SucursalEntrada,
+  type SuscripcionAltaEntrada,
+  type SuscripcionRespuesta,
 } from '@restaurante/contratos';
+import { fechaLima } from '@restaurante/dominio';
 import { z } from 'zod';
 import { SQLSTATE, restriccionDe, sqlstateDe } from '../../nucleo/base-de-datos';
 import { ErrorAplicacion, errorDatosInvalidos } from '../../nucleo/errores/error-aplicacion';
@@ -28,7 +31,9 @@ import {
   type SucursalModelo,
 } from './modelos';
 import { OperacionPlataforma } from './operacion-plataforma';
+import { PlanesService, type PlanElegido } from './planes.service';
 import { sucursalARespuesta } from './sucursal.service';
+import { SuscripcionService } from './suscripcion.service';
 import type {
   AuditoriaPlataformaEntrada,
   EmpresaResumen,
@@ -42,10 +47,16 @@ export type RegistrarEmpresaDatos = RegistrarEmpresaEntrada & {
   administrador?: AdministradorInicialEntrada;
 };
 
-/** Sucursal creada por plataforma (la `suscripcion` llega con el grupo C1). */
+/** Sucursal creada por plataforma, con su suscripción (criterio 69). */
 export interface SucursalCreada {
   id: string;
   nombre: string;
+  suscripcion: SuscripcionRespuesta;
+}
+
+/** Resultado del alta por HTTP: como `ResultadoRegistroEmpresa`, con la suscripción de cada sucursal. */
+export interface ResultadoAltaEmpresa extends Omit<ResultadoRegistroEmpresa, 'sucursales'> {
+  sucursales: SucursalCreada[];
 }
 
 const entradaDeAdministradorSchema = z.object({ administrador: administradorInicialEntradaSchema });
@@ -87,6 +98,23 @@ function empresaNoEncontrada(): ErrorAplicacion {
 }
 
 /**
+ * Un vencimiento indicado no puede ser anterior a hoy (fecha de Lima, criterio 63): 400 con el campo.
+ * `prefijo` es la ruta de la sucursal (`sucursales.2`) o vacío.
+ */
+function validarVencimiento(
+  suscripcion: SuscripcionAltaEntrada | undefined,
+  prefijo: string,
+  ahora: Date,
+): void {
+  const vencimiento = suscripcion?.vencimiento;
+  if (vencimiento === undefined || vencimiento >= fechaLima(ahora)) return;
+  const campo = `${prefijo === '' ? '' : `${prefijo}.`}suscripcion.vencimiento`;
+  throw new ErrorAplicacion(400, 'DATOS_INVALIDOS', 'El vencimiento no puede ser anterior a hoy', [
+    { campo, mensaje: 'No puede ser anterior a hoy' },
+  ]);
+}
+
+/**
  * Alta y consulta de empresas por la vía de plataforma (sin contexto de empresa). Cada operación
  * valida la auditoría y los datos antes de abrir la transacción, y deja su fila en
  * `auditoria` (origen plataforma). El actor de la auditoría es también el de trazabilidad: un texto
@@ -100,16 +128,31 @@ export class PlataformaEmpresasService {
     @Inject(MODELOS_PLATAFORMA) private readonly modelos: Modelos,
     @Inject(Credenciales) private readonly credenciales: Credenciales,
     @Inject(RELOJ) private readonly reloj: Reloj,
+    @Inject(PlanesService) private readonly planes: PlanesService,
+    @Inject(SuscripcionService) private readonly suscripciones: SuscripcionService,
   ) {}
 
   /**
    * Crea empresa, emisores y sucursales (y, si se envía `administrador`, al primer Administrador con su
-   * PIN de 6 dígitos) en una transacción y la fila de auditoría `registrar_empresa`. Todo o nada.
+   * PIN de 6 dígitos), la suscripción de cada sucursal y la fila de auditoría `registrar_empresa`, en una
+   * transacción. Todo o nada.
    */
   async registrarEmpresa(
     datos: RegistrarEmpresaDatos,
     auditoria: AuditoriaPlataformaEntrada,
   ): Promise<ResultadoRegistroEmpresa> {
+    const completo = await this.registrarEmpresaConSuscripciones(datos, auditoria);
+    return {
+      ...completo,
+      sucursales: completo.sucursales.map(({ id, nombre }) => ({ id, nombre })),
+    };
+  }
+
+  /** `POST /plataforma/empresas` (criterio 63): como `registrarEmpresa`, con la suscripción de cada sucursal. */
+  async registrarEmpresaConSuscripciones(
+    datos: RegistrarEmpresaDatos,
+    auditoria: AuditoriaPlataformaEntrada,
+  ): Promise<ResultadoAltaEmpresa> {
     const { actor, motivo } = validarAuditoria(auditoria);
     const resultado = registrarEmpresaEntradaSchema.safeParse(datos);
     if (!resultado.success) throw errorDatosInvalidos(resultado.error);
@@ -121,6 +164,10 @@ export class PlataformaEmpresasService {
       });
       if (!validado.success) throw errorDatosInvalidos(validado.error);
       administrador = validado.data.administrador;
+    }
+    const ahora = this.reloj.ahora();
+    for (const [i, sucursal] of entrada.sucursales.entries()) {
+      validarVencimiento(sucursal.suscripcion, `sucursales.${i}`, ahora);
     }
     const { Empresa, Emisor, Sucursal } = this.modelos;
 
@@ -158,7 +205,9 @@ export class PlataformaEmpresasService {
           nombre: string;
           rucEmisor: string;
           codigoEstablecimiento: string;
+          suscripcion: SuscripcionRespuesta;
         }[] = [];
+        const planes = new Map<string, PlanElegido>();
         for (const [i, sucursal] of entrada.sucursales.entries()) {
           const emisor = emisores.find((e) => e.ruc === sucursal.rucEmisor);
           if (!emisor) {
@@ -182,11 +231,22 @@ export class PlataformaEmpresasService {
               { transaction: transaccion },
             ),
           );
+          // Cada sucursal nace con exactamente una suscripción (criterio 69): un plan inexistente o inactivo
+          // responde 422 y la operación entera se revierte.
+          const suscripcion = await this.suscripciones.crear(transaccion, {
+            empresaId: empresa.id,
+            sucursalId: creada.id,
+            plan: await this.planDeSuscripcion(transaccion, planes, sucursal.suscripcion?.planId),
+            vencimiento:
+              sucursal.suscripcion?.vencimiento ?? this.suscripciones.vencimientoPorDefecto(ahora),
+            ahora,
+          });
           sucursales.push({
             id: creada.id,
             nombre: sucursal.nombre,
             rucEmisor: sucursal.rucEmisor,
             codigoEstablecimiento: sucursal.codigoEstablecimiento,
+            suscripcion,
           });
         }
 
@@ -197,7 +257,7 @@ export class PlataformaEmpresasService {
             nombre: administrador.nombre,
             nombreUsuario: minusculasAscii(administrador.nombreUsuario),
             contrasenaTemporal: administrador.contrasenaTemporal,
-            ahora: this.reloj.ahora(),
+            ahora,
           });
         }
 
@@ -206,7 +266,14 @@ export class PlataformaEmpresasService {
           detalle: {
             empresa: { id: empresa.id, nombre: entrada.nombre },
             emisores,
-            sucursales,
+            sucursales: sucursales.map(({ suscripcion, ...sucursal }) => ({
+              ...sucursal,
+              suscripcion: {
+                id: suscripcion.id,
+                planId: suscripcion.plan.id,
+                vencimiento: suscripcion.vencimiento,
+              },
+            })),
             // Sin la contraseña temporal ni el PIN: solo quién es el primer Administrador.
             ...(administrador === undefined || primerAdministrador === undefined
               ? {}
@@ -222,11 +289,29 @@ export class PlataformaEmpresasService {
         return {
           empresaId: empresa.id,
           emisores: emisores.map(({ id, ruc }) => ({ id, ruc })),
-          sucursales: sucursales.map(({ id, nombre }) => ({ id, nombre })),
+          sucursales: sucursales.map(({ id, nombre, suscripcion }) => ({
+            id,
+            nombre,
+            suscripcion,
+          })),
           ...(primerAdministrador === undefined ? {} : { administrador: primerAdministrador }),
         };
       },
     );
+  }
+
+  /** El plan de una suscripción nueva (el indicado o el por defecto), consultado una sola vez por operación. */
+  private async planDeSuscripcion(
+    transaccion: TransaccionPlataforma,
+    memoria: Map<string, PlanElegido>,
+    planId: string | undefined,
+  ): Promise<PlanElegido> {
+    const clave = planId?.toLowerCase() ?? '';
+    const conocido = memoria.get(clave);
+    if (conocido !== undefined) return conocido;
+    const plan = await this.planes.elegirParaSuscripcion(transaccion, planId);
+    memoria.set(clave, plan);
+    return plan;
   }
 
   /** Agrega un emisor a una empresa existente (auditoría `agregar_emisor`). */
@@ -313,19 +398,20 @@ export class PlataformaEmpresasService {
     const resultado = sucursalEntradaSchema.safeParse(datos);
     if (!resultado.success) throw errorDatosInvalidos(resultado.error);
     const entrada = resultado.data;
+    const ahora = this.reloj.ahora();
 
     return this.operacion.ejecutar(
       { actor, motivo, operacion: 'agregar_sucursal', empresaId: empresa },
       async (transaccion) => {
-        const creada = await this.crearSucursal(transaccion, empresa, entrada);
+        const { creada } = await this.crearSucursal(transaccion, empresa, entrada, ahora);
         return { id: creada.id, nombre: entrada.nombre };
       },
     );
   }
 
   /**
-   * `POST /plataforma/empresas/:id/sucursales` (criterio 64): como `agregarSucursal`, con la clave de
-   * idempotencia opcional. La suscripción de la sucursal llega con el grupo C1.
+   * `POST /plataforma/empresas/:id/sucursales` (criterio 64): como `agregarSucursal`, con su suscripción
+   * en la respuesta y la clave de idempotencia opcional.
    */
   async agregarSucursalPorHttp(
     empresaId: string,
@@ -338,6 +424,7 @@ export class PlataformaEmpresasService {
     const resultado = sucursalEntradaSchema.safeParse(datos);
     if (!resultado.success) throw errorDatosInvalidos(resultado.error);
     const entrada = resultado.data;
+    const ahora = this.reloj.ahora();
 
     return this.operacion.ejecutar(
       {
@@ -348,18 +435,28 @@ export class PlataformaEmpresasService {
         ...(idempotencia === undefined ? {} : { idempotencia }),
       },
       async (transaccion) => {
-        const creada = await this.crearSucursal(transaccion, empresa, entrada);
-        return { id: creada.id, nombre: entrada.nombre };
+        const { creada, suscripcion } = await this.crearSucursal(
+          transaccion,
+          empresa,
+          entrada,
+          ahora,
+        );
+        return { id: creada.id, nombre: entrada.nombre, suscripcion };
       },
     );
   }
 
+  /** Crea la sucursal con su suscripción (plan indicado o por defecto; 422 `PLAN_INVALIDO`). */
   private async crearSucursal(
     transaccion: TransaccionPlataforma,
     empresaId: string,
     entrada: z.output<typeof sucursalEntradaSchema>,
-  ): Promise<SucursalModelo> {
+    ahora: Date,
+  ): Promise<{ creada: SucursalModelo; suscripcion: SuscripcionRespuesta }> {
     await this.exigirEmpresa(empresaId, transaccion);
+    // Dentro de la operación: una repetición con la misma `Idempotency-Key` devuelve la respuesta guardada
+    // antes de llegar aquí, aunque el vencimiento ya haya quedado en el pasado.
+    validarVencimiento(entrada.suscripcion, '', ahora);
     const emisor = await this.modelos.Emisor.findOne({
       where: { empresaId, ruc: entrada.rucEmisor },
       transaction: transaccion,
@@ -386,6 +483,15 @@ export class PlataformaEmpresasService {
         { transaction: transaccion },
       ),
     );
+    const plan = await this.planes.elegirParaSuscripcion(transaccion, entrada.suscripcion?.planId);
+    const suscripcion = await this.suscripciones.crear(transaccion, {
+      empresaId,
+      sucursalId: creada.id,
+      plan,
+      vencimiento:
+        entrada.suscripcion?.vencimiento ?? this.suscripciones.vencimientoPorDefecto(ahora),
+      ahora,
+    });
     this.operacion.registrarDatosDeAuditoria(transaccion, {
       sucursalId: creada.id,
       detalle: {
@@ -395,9 +501,14 @@ export class PlataformaEmpresasService {
           rucEmisor: entrada.rucEmisor,
           codigoEstablecimiento: entrada.codigoEstablecimiento,
         },
+        suscripcion: {
+          id: suscripcion.id,
+          planId: suscripcion.plan.id,
+          vencimiento: suscripcion.vencimiento,
+        },
       },
     });
-    return creada;
+    return { creada, suscripcion };
   }
 
   /** Todas las empresas (lectura de plataforma, sin auditoría). */
@@ -413,10 +524,12 @@ export class PlataformaEmpresasService {
 
   /**
    * `GET /plataforma/empresas` (criterio 65): las empresas con sus sucursales y el estado de cada
-   * suscripción (`null` hasta que existan las suscripciones, grupo C1).
+   * suscripción, calculado con el reloj de la API (`null` si la sucursal no tiene suscripción).
    */
   async listarConSucursales(): Promise<EmpresaPlataformaResumen[]> {
+    const ahora = this.reloj.ahora();
     return this.operacion.consultar(async (transaccion) => {
+      const suscripciones = await this.suscripciones.porSucursal(transaccion, null, ahora);
       const empresas = await this.modelos.Empresa.findAll({
         order: [['nombre', 'ASC']],
         transaction: transaccion,
@@ -431,7 +544,11 @@ export class PlataformaEmpresasService {
         creadoEn: empresa.creadoEn.toISOString(),
         sucursales: sucursales
           .filter((s) => s.empresaId === empresa.id)
-          .map((s) => ({ id: s.id, nombre: s.nombre, estadoSuscripcion: null })),
+          .map((s) => ({
+            id: s.id,
+            nombre: s.nombre,
+            estadoSuscripcion: suscripciones.get(s.id)?.estado ?? null,
+          })),
       }));
     });
   }
@@ -439,9 +556,11 @@ export class PlataformaEmpresasService {
   /** `GET /plataforma/empresas/:id` (criterio 65): emisores, sucursales, suscripciones y administradores. */
   async obtenerDetalle(empresaId: string): Promise<EmpresaPlataformaDetalle> {
     const id = this.validarEmpresaId(empresaId);
+    const ahora = this.reloj.ahora();
     return this.operacion.consultar(async (transaccion) => {
       const empresa = await this.modelos.Empresa.findByPk(id, { transaction: transaccion });
       if (!empresa) throw empresaNoEncontrada();
+      const suscripciones = await this.suscripciones.porSucursal(transaccion, [id], ahora);
       const emisores = await this.modelos.Emisor.findAll({
         where: { empresaId: id },
         order: [['razonSocial', 'ASC']],
@@ -458,7 +577,7 @@ export class PlataformaEmpresasService {
         creadoEn: empresa.creadoEn.toISOString(),
         emisores: emisores.map(emisorARespuesta),
         sucursales: sucursales.map(sucursalARespuesta),
-        suscripciones: [],
+        suscripciones: sucursales.flatMap((s) => suscripciones.get(s.id) ?? []),
         administradores: await administradoresDeEmpresa(transaccion, id),
       };
     });

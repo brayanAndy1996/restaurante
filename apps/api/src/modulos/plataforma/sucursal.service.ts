@@ -9,6 +9,7 @@ import { SQLSTATE, restriccionDe, sqlstateDe } from '../../nucleo/base-de-datos'
 import { ErrorAplicacion } from '../../nucleo/errores/error-aplicacion';
 import { MODELOS_API, type Modelos, type SucursalModelo } from './modelos';
 import type { SucursalAtributos } from './modelos/definir-modelos';
+import { SuscripcionService } from './suscripcion.service';
 
 const MENSAJE_EMISOR_INVALIDO = 'El emisor no existe en la empresa';
 
@@ -46,6 +47,7 @@ export class SucursalService {
   constructor(
     @Inject(MODELOS_API) private readonly modelos: Modelos,
     @Inject(ContextoEmpresa) private readonly contexto: ContextoEmpresa,
+    @Inject(SuscripcionService) private readonly suscripciones: SuscripcionService,
   ) {}
 
   async listar(): Promise<SucursalRespuesta[]> {
@@ -62,10 +64,13 @@ export class SucursalService {
   /**
    * Crea una sucursal en la empresa del contexto (`POST /sucursales`, criterio 70). El emisor se busca
    * por RUC entre los de la empresa: uno ajeno o inexistente es 422 `EMISOR_INVALIDO` (idéntico), y un
-   * código de establecimiento o un nombre repetidos, 409 `CONFLICTO`. La suscripción de la sucursal
-   * (plan por defecto y vencimiento el día del alta) llega con el grupo C1.
+   * código de establecimiento o un nombre repetidos, 409 `CONFLICTO`. La sucursal nace con su suscripción
+   * en el plan por defecto y con vencimiento el día del alta (fecha de Lima), en la misma transacción.
    */
-  async crear(entrada: SucursalCrearEntrada): Promise<SucursalRespuesta> {
+  async crear(entrada: SucursalCrearEntrada): Promise<{
+    sucursal: SucursalRespuesta;
+    suscripcion: { id: string; planId: string; vencimiento: string };
+  }> {
     const { Sucursal, Emisor } = this.modelos;
     const emisor = await Emisor.findOne({ where: { ruc: entrada.rucEmisor } });
     if (!emisor) throw new ErrorAplicacion(422, 'EMISOR_INVALIDO', MENSAJE_EMISOR_INVALIDO);
@@ -80,7 +85,8 @@ export class SucursalService {
         whatsapp: entrada.whatsapp ?? null,
         horaCorte: entrada.horaCorte ?? '05:00',
       });
-      return sucursalARespuesta(creada);
+      const suscripcion = await this.suscripciones.crearParaSucursal(creada.id);
+      return { sucursal: sucursalARespuesta(creada), suscripcion };
     } catch (error) {
       if (sqlstateDe(error) === SQLSTATE.VIOLACION_UNICIDAD) {
         throw new ErrorAplicacion(409, 'CONFLICTO', mensajeDeUnicidad(error));

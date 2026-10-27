@@ -19,6 +19,7 @@ import { EmisoresController } from './emisores.controller';
 import { EmisoresService } from './emisores.service';
 import { OperacionPlataforma } from './operacion-plataforma';
 import { PlanesController } from './planes.controller';
+import { PlanesService } from './planes.service';
 import { PlataformaEmpresasController } from './plataforma-empresas.controller';
 import { PlataformaEmpresasService } from './plataforma-empresas.service';
 import { PlataformaSesionesController } from './plataforma-sesiones.controller';
@@ -27,8 +28,9 @@ import { SucursalService } from './sucursal.service';
 import { SucursalesController } from './sucursales.controller';
 import { SuperadministradorGuard } from './superadministrador.guard';
 import { SuperadministradoresService } from './superadministradores.service';
-import { SuscripcionService } from './suscripcion.service';
+import { SuscripcionModule } from './suscripcion.module';
 import { SuscripcionesController } from './suscripciones.controller';
+import { SuscripcionesPlataformaService } from './suscripciones-plataforma.service';
 
 /**
  * Dueño de las tablas de plataforma (empresa, emisor, sucursal; la auditoría es del módulo `auditoria`). Provee la conexión de
@@ -36,7 +38,7 @@ import { SuscripcionesController } from './suscripciones.controller';
  * RLS, solo dentro de `ContextoEmpresa`) y los de plataforma (solo dentro de `OperacionPlataforma`).
  */
 @Module({
-  imports: [AuditoriaModule],
+  imports: [AuditoriaModule, SuscripcionModule],
   controllers: [
     SucursalesController,
     EmisoresController,
@@ -68,7 +70,8 @@ import { SuscripcionesController } from './suscripciones.controller';
     EmisoresService,
     SoporteService,
     SuperadministradoresService,
-    SuscripcionService,
+    PlanesService,
+    SuscripcionesPlataformaService,
     SuperadministradorGuard,
   ],
   exports: [
@@ -76,7 +79,8 @@ import { SuscripcionesController } from './suscripciones.controller';
     PlataformaEmpresasService,
     SucursalService,
     EmisoresService,
-    SuscripcionService,
+    PlanesService,
+    SuscripcionModule,
     SuperadministradorGuard,
   ],
 })

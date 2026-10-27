@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Patch, Post } from '@nestjs/common';
+import { Body, Controller, Get, Inject, Param, Patch, Post } from '@nestjs/common';
 import {
   planCrearEntradaSchema,
   planModificarEntradaSchema,
@@ -6,33 +6,43 @@ import {
   type PlanModificarEntrada,
   type PlanRespuesta,
 } from '@restaurante/contratos';
-import { noImplementado } from '../../nucleo/errores';
 import { PipeUuid, PipeZod } from '../../nucleo/errores/pipes';
-import { Superadministrador } from './superadministrador.decorator';
+import { PlanesService } from './planes.service';
+import { Superadministrador, SuperadministradorActual } from './superadministrador.decorator';
+import type { SuperadministradorAutenticado } from './tipos';
 
-/** Planes de suscripción (criterio 75). Lógica en la tarea T28. */
+/**
+ * Planes de suscripción (criterio 75). Corren por la vía de `OperacionPlataforma`, con el id del
+ * superadministrador como actor de la auditoría (`crear_plan`, `modificar_plan`, sin empresa) y de la
+ * trazabilidad.
+ */
 @Controller('plataforma/planes')
 @Superadministrador()
 export class PlanesController {
+  constructor(@Inject(PlanesService) private readonly planes: PlanesService) {}
+
+  /** 200: el plan por defecto primero. */
   @Get()
   async listar(): Promise<PlanRespuesta[]> {
-    return noImplementado();
+    return this.planes.listar();
   }
 
-  /** 201; 400; 409 `CONFLICTO`. */
+  /** 201; 400; 409 `CONFLICTO` (código repetido o plan por defecto inactivo). */
   @Post()
   async crear(
-    @Body(new PipeZod(planCrearEntradaSchema)) _entrada: PlanCrearEntrada,
+    @Body(new PipeZod(planCrearEntradaSchema)) entrada: PlanCrearEntrada,
+    @SuperadministradorActual() superadministrador: SuperadministradorAutenticado,
   ): Promise<PlanRespuesta> {
-    return noImplementado();
+    return this.planes.crear(entrada, superadministrador.id);
   }
 
-  /** 200; 400; 404; 409 `CONFLICTO`. */
+  /** 200; 400; 404; 409 `CONFLICTO` (dejar al sistema sin plan por defecto, o inactivo). */
   @Patch(':id')
   async modificar(
-    @Param('id', PipeUuid) _id: string,
-    @Body(new PipeZod(planModificarEntradaSchema)) _cambios: PlanModificarEntrada,
+    @Param('id', PipeUuid) id: string,
+    @Body(new PipeZod(planModificarEntradaSchema)) cambios: PlanModificarEntrada,
+    @SuperadministradorActual() superadministrador: SuperadministradorAutenticado,
   ): Promise<PlanRespuesta> {
-    return noImplementado();
+    return this.planes.modificar(id, cambios, superadministrador.id);
   }
 }

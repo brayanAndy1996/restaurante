@@ -42,7 +42,9 @@ Contraseñas de los roles: `DB_PASSWORD_MIGRADOR|API|PLATAFORMA`; si faltan, `mi
    `superadministrador`, `sesion_superadministrador`, `idempotencia_plataforma` y `empresa_de_usuario`),
    `202610280002-trazabilidad.ts` (`contexto.sesion_actor`, `fijar_contexto_actor`, `trazabilidad()` y el
    trigger en `empresa`, `emisor`, `sucursal`, `usuario` y `acceso_sucursal`) y
-   `202610280003-auditoria-general.ts` (`auditoria`, que copia y reemplaza a `auditoria_plataforma`).
+   `202610280003-auditoria-general.ts` (`auditoria`, que copia y reemplaza a `auditoria_plataforma`). Las
+   del grupo C1: `202610280004-suscripciones.ts` (`plan` con `BASE`, `suscripcion`, `pago_suscripcion` y
+   `consumo_comprobantes`, y una suscripción `BASE` para cada sucursal existente).
 
 Cada archivo de prueba corre en su propio proceso; no hay que limpiar tablas porque cada prueba
 crea sus propias empresas con UUID aleatorios.
@@ -305,7 +307,7 @@ Con `development` la API no arranca si la cabecera está habilitada. Desde el gr
 T18) funcionan el ingreso con contraseña y la sesión, los usuarios, los emisores y sucursales, el
 superadministrador, el soporte y la idempotencia (ver el final de este archivo); siguen sin lógica
 (responden 500 `ERROR_INTERNO`) las rutas de equipos recordados y PIN (T33 y T34), la clave de supervisor
-(T38), los planes y las suscripciones (T28) y el acceso de la sucursal (T34).
+(T38) y el acceso de la sucursal (T34). Los planes y las suscripciones (T28) funcionan desde el grupo C1.
 
 ### Reloj de la API y `RelojManual`
 
@@ -509,7 +511,7 @@ Lo que hay ahora además de lo anterior:
   `POST /plataforma/sesiones`, `DELETE /plataforma/sesion`, `GET /plataforma/empresas` (y `/:id`),
   `POST /plataforma/empresas` (con el primer Administrador y su PIN), `POST /plataforma/empresas/:id/emisores`,
   `/sucursales` y `/soporte`. La suscripción de cada sucursal (`suscripcion` en las respuestas, `PLAN_INVALIDO`,
-  vencimientos) llega con C1: hasta entonces `estadoSuscripcion` es `null` y `suscripciones` va vacío.
+  vencimientos) llegó con C1 (ver "grupo C1" al final).
 - **Funciones y servicios nuevos** (desde `test/<carpeta>/`): `SesionesService`, `UsuariosService`,
   `BloqueosService` y las funciones `insertarAdministradorInicial`, `administradoresDeEmpresa`,
   `insertarSesionSoporte` y `cerrarSesionesDeSuperadministrador` (`src/modulos/seguridad`);
@@ -533,3 +535,41 @@ Lo que hay ahora además de lo anterior:
   con cambios concurrentes, desactivar y cambiar la propia contraseña).
 - **Semilla:** `pnpm db:semilla` crea el superadministrador `superadmin` y las dos empresas de demostración
   con un usuario por rol (ver el README de la raíz).
+
+## Historia 002 · grupo C1 (T25 a T29): suscripciones, planes, pagos, módulos y cuota
+
+- **Migración** `202610280004-suscripciones.ts`: `plan` (global, sin `empresa_id`: `restaurante_api` solo lee, con
+  la política `lectura_api`; un solo plan por defecto, siempre activo; la migración crea `BASE`), `suscripcion`,
+  `pago_suscripcion` (inmutable: un trigger por sentencia rechaza `UPDATE`, `DELETE` y `TRUNCATE`, también al
+  dueño) y `consumo_comprobantes`, las tres con `sqlTablaDeEmpresaTrazable`. Una suscripción `BASE` para cada sucursal
+  existente (vencimiento un mes después de hoy en Lima, actor `migracion:suscripciones`). `sqlTablaDeEmpresa`
+  acepta ahora `privilegiosApi: []` (tabla sin ningún privilegio para la API, como `pago_suscripcion`).
+- **Servicios** (`src/modulos/plataforma`, desde `'../../src/modulos/plataforma'`): `SuscripcionService`
+  (`estadoDeSucursal`, `registrarComprobanteEmitido`, `modulosDeSucursal` y `crearParaSucursal` con contexto de
+  empresa; los demás métodos reciben la transacción de `OperacionPlataforma`; `exigirAperturaDeCaja` llega con
+  C4), `PlanesService` (plan por defecto, 409 y auditoría), `SuscripcionesPlataformaService` y
+  `SuscripcionModule` (global, sin dependencias: lo usan la sesión y `ModuloInterceptor`).
+  `PlataformaEmpresasService.registrarEmpresa` y `agregarSucursal` siguen devolviendo `{ id, nombre }` y crean la
+  suscripción; `registrarEmpresaConSuscripciones` y `agregarSucursalPorHttp` la devuelven (alta por HTTP).
+  `SucursalService.crear` devuelve `{ sucursal, suscripcion }`.
+- **Rutas:** `GET`, `POST` y `PATCH /plataforma/planes`; `GET /plataforma/suscripciones`;
+  `PATCH /plataforma/suscripciones/:id`; `POST /plataforma/suscripciones/:id/pagos` (con `Idempotency-Key`). El alta
+  por HTTP responde con `suscripcion` en cada sucursal; `PLAN_INVALIDO` (422) con un plan inexistente o inactivo y
+  400 con un vencimiento anterior a hoy (el alta no admite vencimientos pasados: se ajustan con
+  `PATCH /plataforma/suscripciones/:id`).
+- **`@RequiereModulo(modulo)`** (`src/modulos/seguridad`): implica `@RequiereSucursal()` y aplica `ModuloInterceptor`
+  (403 `MODULO_NO_INCLUIDO` si el plan vigente de la sucursal activa no lo incluye). `GET /sesion`, el ingreso con
+  contraseña, `PUT /sesion/sucursal` y el soporte devuelven `modulos` (en el orden del catálogo; vacío sin
+  sucursal activa). `SesionesService.armarRespuesta` es ahora asíncrono.
+- **Pruebas del desarrollador** (`test/suscripciones/`, no protegidas; usan los ayudantes de
+  `test/acceso/fabrica-plataforma.ts` y la API real con `RelojManual`):
+
+| Archivo                            | Qué prueba                                                                                                                                                                               |
+| ---------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `planes.spec.ts`                   | T28 · criterio 75: lista, alta y cambios de planes, plan por defecto único y activo (409), módulos, auditoría sin empresa                                                                |
+| `suscripciones-plataforma.spec.ts` | T28 · criterios 73, 74, 76, 79 y 83: lista por estado con el reloj, consumo del mes actual y anterior, cambio de plan y de vencimiento, pagos (validaciones, idempotencia, concurrencia) |
+| `alta-con-suscripcion.spec.ts`     | T26 y T27 · criterios 63, 64, 69, 70 y 85: la suscripción en el alta por HTTP, por el servicio y por el Administrador, `PLAN_INVALIDO`, vencimientos, trazabilidad, idempotencia         |
+| `suscripcion-servicio.spec.ts`     | T26 · criterios 71, 78 y 79: estado con el reloj, consumo por mes de Lima sin perder incrementos (pool de 2), módulos del plan                                                           |
+| `modulos.spec.ts`                  | T29 · criterio 77: controlador sonda con `@RequiereModulo`, cambio de plan desde la siguiente petición, `modulos` en `GET /sesion`, el ingreso y el soporte                              |
+
+Las pruebas que cambian el plan por defecto lo dejan siempre en `BASE` (la base de pruebas la comparten los demás archivos).
