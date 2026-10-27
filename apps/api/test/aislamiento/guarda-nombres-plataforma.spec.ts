@@ -13,6 +13,7 @@ import type { Client } from 'pg';
 import { DatabaseError, QueryTypes, type Sequelize } from 'sequelize';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { crearAplicacion } from '../../src/aplicacion';
+import { ConsultaProhibidaError } from '../../src/nucleo/base-de-datos';
 import { OperacionPlataforma, PlataformaEmpresasService } from '../../src/modulos/plataforma';
 import { abrirCliente, fijarEntornoDePrueba } from '../utilidades';
 import { conActor, datosDeEmpresa, textoUnico } from './fabrica';
@@ -84,13 +85,14 @@ async function problemaEnEjecutar(sql: string): Promise<string | null> {
   }
   if (error === undefined) return 'la operación tuvo éxito (no se rechazó)';
   if (error instanceof DatabaseError) return `llegó a la base: ${describir(error)}`;
-  if (!(error instanceof Error)) return `se lanzó un valor que no es un Error: ${String(error)}`;
+  if (!(error instanceof ConsultaProhibidaError))
+    return `no es el rechazo de la guarda (ConsultaProhibidaError): ${describir(error)}`;
   if ((await nombreActual()) !== nombreOriginal) return 'quedó el cambio de fn en la base';
   if ((await auditorias(actor)) !== 0) return 'quedó una fila de auditoría';
   return null;
 }
 
-/** `sql` dentro de `consultar`: debe rechazarse antes de la base. */
+/** `sql` dentro de `consultar`: debe rechazarse antes de la base, con el error de la guarda. */
 async function problemaEnConsultar(sql: string): Promise<string | null> {
   let error: unknown;
   try {
@@ -102,7 +104,8 @@ async function problemaEnConsultar(sql: string): Promise<string | null> {
   }
   if (error === undefined) return 'la consulta tuvo éxito (no se rechazó)';
   if (error instanceof DatabaseError) return `llegó a la base: ${describir(error)}`;
-  if (!(error instanceof Error)) return `se lanzó un valor que no es un Error: ${String(error)}`;
+  if (!(error instanceof ConsultaProhibidaError))
+    return `no es el rechazo de la guarda (ConsultaProhibidaError): ${describir(error)}`;
   return null;
 }
 
