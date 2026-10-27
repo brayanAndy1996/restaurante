@@ -12,6 +12,7 @@ import {
 import { CONEXION_API } from '../base-de-datos/token-api';
 import { SQL_FIJAR_CONTEXTO } from '../fijar-contexto';
 import type { TransaccionInterna } from '../base-de-datos/transaccion-interna';
+import type { ActorTransaccion, OpcionesEjecucion } from './actor';
 import {
   ContextoEmpresaAusenteError,
   ContextoEmpresaConflictoError,
@@ -34,9 +35,14 @@ export class ContextoEmpresa {
    * 22b) ni autorizar otra transacción de la API (criterio 22c). Misma empresa dentro de un contexto
    * activo: reutiliza la transacción; otra empresa: `ContextoEmpresaConflictoError`. Dentro de una
    * operación de plataforma también falla. Al terminar, el contexto termina también para el código que
-   * siga corriendo con el almacén asíncrono (criterio 27b).
+   * siga corriendo con el almacén asíncrono (criterio 27b). `opciones.actor` es el actor de la
+   * transacción para la trazabilidad (historia 002, criterio 117); hasta la tarea T7 se ignora.
    */
-  async ejecutar<T>(empresaId: string, fn: () => Promise<T>): Promise<T> {
+  async ejecutar<T>(
+    empresaId: string,
+    fn: () => Promise<T>,
+    _opciones: OpcionesEjecucion = {},
+  ): Promise<T> {
     if (typeof empresaId !== 'string' || !uuidSchema.safeParse(empresaId).success) {
       throw new EmpresaIdInvalidoError();
     }
@@ -80,6 +86,15 @@ export class ContextoEmpresa {
       }
       throw error;
     }
+  }
+
+  /**
+   * Fija el actor de la transacción en curso, una sola vez, cuando se conoce más tarde que al abrir el
+   * contexto (los ingresos lo fijan después de verificar las credenciales). Hasta la tarea T7 se
+   * acepta y no hace nada.
+   */
+  async fijarActor(_actor: ActorTransaccion): Promise<void> {
+    this.empresaActual(); // exige un contexto activo, como el resto de la API
   }
 
   /** Empresa del contexto activo; lanza `ContextoEmpresaAusenteError` si no hay contexto. */

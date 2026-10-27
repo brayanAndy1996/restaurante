@@ -102,3 +102,15 @@ export function validarHorario(tramos: TramoHorario[]): ResultadoValidacion {
 
   return errores.length === 0 ? { valido: true } : { valido: false, errores };
 }
+
+/**
+ * `true` si `instante` cae dentro de algún tramo del horario de acceso de un trabajador (criterio
+ * 105), con la hora de Lima (UTC−5, sin horario de verano) y sin depender de la zona del proceso;
+ * `null` significa sin horario (siempre `true`). Intervalo `[desde, hasta)`; un tramo con
+ * `hasta` < `desde` cruza la medianoche y el del domingo sigue el lunes (los mismos intervalos
+ * semanales circulares de `validarHorario`). Es de la ruta crítica: su lógica llega con la tarea T11
+ * (hasta entonces lanza `Error('No implementado')`).
+ */
+export function dentroDeHorario(_tramos: TramoHorario[] | null, _instante: Date): boolean {
+  throw new Error('No implementado');
+}

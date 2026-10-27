@@ -14,10 +14,17 @@ import {
   crearConexionPlataforma,
 } from '../../nucleo/base-de-datos/conexion-plataforma';
 import { MODELOS_API, MODELOS_PLATAFORMA, definirModelos } from './modelos';
+import { EmisoresController } from './emisores.controller';
 import { OperacionPlataforma } from './operacion-plataforma';
+import { PlanesController } from './planes.controller';
+import { PlataformaEmpresasController } from './plataforma-empresas.controller';
 import { PlataformaEmpresasService } from './plataforma-empresas.service';
+import { PlataformaSesionesController } from './plataforma-sesiones.controller';
 import { SucursalService } from './sucursal.service';
 import { SucursalesController } from './sucursales.controller';
+import { SuperadministradorGuard } from './superadministrador.guard';
+import { SuscripcionService } from './suscripcion.service';
+import { SuscripcionesController } from './suscripciones.controller';
 
 /**
  * Dueño de las tablas de plataforma (empresa, emisor, sucursal, auditoría). Provee la conexión de
@@ -25,7 +32,14 @@ import { SucursalesController } from './sucursales.controller';
  * RLS, solo dentro de `ContextoEmpresa`) y los de plataforma (solo dentro de `OperacionPlataforma`).
  */
 @Module({
-  controllers: [SucursalesController],
+  controllers: [
+    SucursalesController,
+    EmisoresController,
+    PlataformaSesionesController,
+    PlataformaEmpresasController,
+    PlanesController,
+    SuscripcionesController,
+  ],
   providers: [
     {
       provide: CONEXION_PLATAFORMA,
@@ -47,8 +61,16 @@ import { SucursalesController } from './sucursales.controller';
     OperacionPlataforma,
     PlataformaEmpresasService,
     SucursalService,
+    SuscripcionService,
+    SuperadministradorGuard,
   ],
-  exports: [OperacionPlataforma, PlataformaEmpresasService, SucursalService],
+  exports: [
+    OperacionPlataforma,
+    PlataformaEmpresasService,
+    SucursalService,
+    SuscripcionService,
+    SuperadministradorGuard,
+  ],
 })
 export class PlataformaModule implements OnModuleInit, OnApplicationShutdown {
   private readonly logger = new Logger(PlataformaModule.name);

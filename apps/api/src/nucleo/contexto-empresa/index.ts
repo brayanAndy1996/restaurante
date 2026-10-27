@@ -1,4 +1,5 @@
 export { ContextoEmpresa } from './contexto-empresa';
+export type { ActorTransaccion, OpcionesEjecucion } from './actor';
 export {
   ContextoEmpresaAusenteError,
   ContextoEmpresaConflictoError,

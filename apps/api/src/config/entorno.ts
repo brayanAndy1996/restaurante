@@ -8,6 +8,14 @@ const urlPostgres = z.string().regex(/^postgres(ql)?:\/\//, 'Debe ser una URL po
 /** Valores válidos de `NODE_ENV` (criterio 29b). */
 export const VALORES_NODE_ENV = ['development', 'test', 'production'] as const;
 
+/** Valor de `PIN_PEPPER` con `NODE_ENV` `development` o `test` si no se define (32 bytes en base64). */
+export const PIN_PEPPER_LOCAL = Buffer.from('pin-pepper-solo-para-desarrollo!').toString('base64');
+
+/** Valor de `ORIGENES_PERMITIDOS` con `NODE_ENV` `development` o `test` si no se define (la PWA con Vite). */
+export const ORIGENES_PERMITIDOS_LOCAL = 'http://localhost:5173';
+
+const MINIMO_BYTES_PIN_PEPPER = 32;
+
 const entornoSchema = z.object({
   // Sin valor por defecto: un despliegue que olvide `NODE_ENV=production` no debe arrancar con
   // el resolutor por cabecera ni con contraseñas conocidas (criterio 29b).
@@ -19,9 +27,56 @@ const entornoSchema = z.object({
   DATABASE_PLATAFORMA_URL: urlPostgres,
   DB_POOL_MAX: z.coerce.number().int().min(1).max(200).default(10),
   EMPRESA_POR_HEADER: z.enum(['habilitado', 'deshabilitado']).optional(),
+  PIN_PEPPER: z.string().optional(),
+  ORIGENES_PERMITIDOS: z.string().optional(),
 });
 
-export type Entorno = z.infer<typeof entornoSchema>;
+type EntornoLeido = z.infer<typeof entornoSchema>;
+
+export interface Entorno extends Omit<EntornoLeido, 'PIN_PEPPER' | 'ORIGENES_PERMITIDOS'> {
+  /**
+   * Secreto con el que se calcula la huella de los PIN (base64, 32 bytes o más). Con `NODE_ENV`
+   * `development` o `test` tiene un valor por defecto. Será obligatoria en producción desde la tarea
+   * T10; hasta entonces puede faltar (`undefined`).
+   */
+  PIN_PEPPER: string | undefined;
+  /** Orígenes de la PWA permitidos por CORS (`ORIGENES_PERMITIDOS`, separados por coma). */
+  ORIGENES_PERMITIDOS: string[];
+}
+
+/** Base64 o base64url, con o sin relleno. */
+const FORMATO_BASE64 = /^[A-Za-z0-9+/_-]+={0,2}$/;
+
+function validarPinPepper(valor: string, problemas: string[]): void {
+  const bytes = FORMATO_BASE64.test(valor) ? Buffer.from(valor, 'base64').length : 0;
+  if (bytes < MINIMO_BYTES_PIN_PEPPER) {
+    problemas.push(
+      `PIN_PEPPER: debe estar en base64 y tener al menos ${MINIMO_BYTES_PIN_PEPPER} bytes al decodificarse`,
+    );
+  }
+}
+
+function leerOrigenes(valor: string, problemas: string[]): string[] {
+  const origenes = valor
+    .split(',')
+    .map((origen) => origen.trim())
+    .filter((origen) => origen !== '');
+  for (const origen of origenes) {
+    let valido = false;
+    try {
+      const url = new URL(origen);
+      valido = (url.protocol === 'http:' || url.protocol === 'https:') && url.origin === origen;
+    } catch {
+      valido = false;
+    }
+    if (!valido) {
+      problemas.push(
+        `ORIGENES_PERMITIDOS: "${origen}" no es un origen válido (por ejemplo https://app.ejemplo.pe, sin ruta ni barra final)`,
+      );
+    }
+  }
+  return origenes;
+}
 
 export class EntornoInvalidoError extends Error {
   constructor(readonly problemas: string[]) {
@@ -53,6 +108,15 @@ export function cargarEntorno(env: NodeJS.ProcessEnv = process.env): Entorno {
         'la cabecera x-empresa-id permitiría suplantar a cualquier empresa',
     );
   }
+  // Con development o test las dos variables nuevas tienen valor por defecto; en producción pueden
+  // faltar hasta la tarea T10, que las vuelve obligatorias.
+  const conDefectos = limpio.NODE_ENV === 'development' || limpio.NODE_ENV === 'test';
+  const pinPepper = limpio.PIN_PEPPER ?? (conDefectos ? PIN_PEPPER_LOCAL : undefined);
+  if (typeof limpio.PIN_PEPPER === 'string') validarPinPepper(limpio.PIN_PEPPER, problemas);
+  const origenesTexto =
+    limpio.ORIGENES_PERMITIDOS ?? (conDefectos ? ORIGENES_PERMITIDOS_LOCAL : undefined);
+  const origenes = leerOrigenes(origenesTexto ?? '', problemas);
+
   if (problemas.length > 0 || !resultado.success) throw new EntornoInvalidoError(problemas);
-  return resultado.data;
+  return { ...resultado.data, PIN_PEPPER: pinPepper, ORIGENES_PERMITIDOS: origenes };
 }

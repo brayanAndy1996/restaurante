@@ -2,8 +2,8 @@ import { Controller, Get, Inject, Res } from '@nestjs/common';
 import type { SaludRespuesta } from '@restaurante/contratos';
 import type { Response } from 'express';
 import type { Sequelize } from 'sequelize';
-import { SinEmpresa } from '../../nucleo/contexto-empresa';
 import { CONEXION_API, comprobarConexion } from '../../nucleo/base-de-datos';
+import { Publica } from '../seguridad';
 
 @Controller('health')
 export class SaludController {
@@ -14,7 +14,7 @@ export class SaludController {
    * si no, 503 `{ estado: 'error', baseDeDatos: 'error' }` sin mensaje ni datos de conexión.
    */
   @Get()
-  @SinEmpresa()
+  @Publica()
   async comprobar(@Res({ passthrough: true }) respuesta: Response): Promise<SaludRespuesta> {
     const baseDeDatos = await comprobarConexion(this.conexion);
     if (baseDeDatos) return { estado: 'ok', baseDeDatos: 'ok' };

@@ -15,6 +15,24 @@ export const CODIGOS_ERROR = [
   'DEMASIADAS_PETICIONES',
   'PETICION_INVALIDA',
   'ERROR_INTERNO',
+  // Sección "Plataforma y acceso" (historia 002).
+  'CREDENCIALES_INVALIDAS',
+  'SESION_EXPIRADA',
+  'EQUIPO_NO_RECONOCIDO',
+  'BLOQUEO_TEMPORAL',
+  'FUERA_DE_HORARIO',
+  'CAMBIO_CONTRASENA_REQUERIDO',
+  'CLAVE_INVALIDA',
+  'CLAVE_REQUERIDA',
+  'AUTORIZACION_INVALIDA',
+  'CLAVE_INNECESARIA',
+  'SUCURSAL_NO_ELEGIDA',
+  'SUCURSAL_INVALIDA',
+  'SUCURSAL_SUSPENDIDA',
+  'MODULO_NO_INCLUIDO',
+  'ULTIMO_ADMINISTRADOR',
+  'PLAN_INVALIDO',
+  'CLAVE_IDEMPOTENCIA_REUTILIZADA',
 ] as const;
 
 export const codigoErrorSchema = z.enum(CODIGOS_ERROR);
@@ -29,6 +47,8 @@ export const errorRespuestaSchema = z.object({
   codigo: z.string(),
   mensaje: z.string(),
   campos: z.array(campoErrorSchema).optional(),
+  /** Solo en `BLOQUEO_TEMPORAL` (429): segundos que faltan; también va en la cabecera `Retry-After`. */
+  reintentarEnSegundos: z.number().int().nonnegative().optional(),
 });
 
 export type CodigoError = z.infer<typeof codigoErrorSchema>;

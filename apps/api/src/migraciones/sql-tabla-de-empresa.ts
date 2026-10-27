@@ -5,6 +5,9 @@
  * privilegios explícitos nunca se olvidan (criterio 38 de la historia 001).
  *
  * Nunca se concede `TRUNCATE`, `REFERENCES` ni `TRIGGER`: `TRUNCATE` ignora la RLS.
+ *
+ * Historia 002: las tablas nuevas usan `sqlTablaDeEmpresaTrazable` (al final de este archivo), que
+ * agrega la trazabilidad de quién creó y quién cambió cada fila.
  */
 
 export type PrivilegioDml = 'SELECT' | 'INSERT' | 'UPDATE' | 'DELETE';
@@ -83,4 +86,32 @@ export function sqlTablaDePlataforma(
     `GRANT ${privilegios(privilegiosPlataforma)} ON ${t} TO restaurante_plataforma;`,
   );
   return partes.join('\n');
+}
+
+export interface OpcionesTrazabilidad {
+  /** Columna con la empresa dueña de la fila; `id` en la propia tabla `empresa`. Por defecto `empresa_id`. */
+  columnaEmpresa?: string;
+}
+
+/**
+ * Agrega a una tabla ya creada las columnas `creado_por_*` y `actualizado_por_*` (usuario, equipo,
+ * superadministrador y sistema), sus `CHECK` (exactamente uno entre usuario, superadministrador y
+ * sistema; equipo solo con usuario), las llaves foráneas compuestas con la empresa y el trigger
+ * `trazabilidad` (criterios 113 a 115). `sqlTablaDeEmpresa` no cambia: la usan las migraciones de 001.
+ * Lógica en la tarea T7 (hasta entonces lanza `Error('No implementado')`).
+ */
+export function sqlTrazabilidad(_tabla: string, _opciones: OpcionesTrazabilidad = {}): string {
+  throw new Error('No implementado');
+}
+
+/**
+ * `sqlTablaDeEmpresa` más `sqlTrazabilidad`: toda tabla nueva con datos de clientes se crea con esta
+ * función, salvo las excepciones de la lista cerrada (`auditoria`, `sesion`, `bloqueo_intentos` e
+ * `idempotencia`). Lógica en la tarea T7 (hasta entonces lanza `Error('No implementado')`).
+ */
+export function sqlTablaDeEmpresaTrazable(
+  _tabla: string,
+  _opciones: OpcionesTablaDeEmpresa,
+): string {
+  throw new Error('No implementado');
 }

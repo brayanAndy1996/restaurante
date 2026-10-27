@@ -1,6 +1,14 @@
 {
   "$schema": "https://turbo.build/schema.json",
-  "globalPassThroughEnv": ["DATABASE_*", "DB_*", "EMPRESA_POR_HEADER", "NODE_ENV", "PORT"],
+  "globalPassThroughEnv": [
+    "DATABASE_*",
+    "DB_*",
+    "EMPRESA_POR_HEADER",
+    "NODE_ENV",
+    "ORIGENES_PERMITIDOS",
+    "PIN_PEPPER",
+    "PORT"
+  ],
   "tasks": {
     "build": {
       "dependsOn": ["^build"],

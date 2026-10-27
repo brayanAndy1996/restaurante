@@ -2,3 +2,8 @@ export * from './comunes';
 export * from './plataforma';
 export * from './salud';
 export * from './errores';
+export * from './sesiones';
+export * from './usuarios';
+export * from './equipos';
+export * from './autorizaciones';
+export * from './suscripciones';

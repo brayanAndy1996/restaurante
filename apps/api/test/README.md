@@ -1,4 +1,4 @@
-# Pruebas de la API (historia 001)
+# Pruebas de la API (historias 001 y 002)
 
 Pruebas de integración contra **PostgreSQL real** (sin mocks de la base). Vitest + SWC.
 Los archivos van en `apps/api/test/**/*.spec.ts`; las pruebas protegidas de la historia 001 van en
@@ -58,8 +58,10 @@ crea sus propias empresas con UUID aleatorios.
 - `fijarEntornoDePrueba({ poolMax = 2, nodeEnv = 'test', empresaPorHeader = true, extra })`: fija en
   `process.env` `DATABASE_URL` (como `restaurante_api`), `DATABASE_PLATAFORMA_URL` (como
   `restaurante_plataforma`), `NODE_ENV`, `EMPRESA_POR_HEADER=habilitado` (o lo borra con
-  `empresaPorHeader: false`) y `DB_POOL_MAX`; `extra` agrega o, con `undefined`, borra variables.
-  Se puede llamar varias veces en el mismo proceso.
+  `empresaPorHeader: false`), `DB_POOL_MAX`, `PIN_PEPPER` (`PIN_PEPPER_DE_PRUEBA`, base64 de 32 bytes) y
+  `ORIGENES_PERMITIDOS` (`ORIGENES_PERMITIDOS_DE_PRUEBA`, `http://localhost:5173`); `extra` agrega o, con
+  `undefined`, borra variables. Se puede llamar varias veces en el mismo proceso.
+- `rutasRegistradas(app)` y `rutasDeNest(app)` (`test/utilidades/rutas.ts`): ver "Historia 002, fase A".
 
 ## La aplicación de prueba
 
@@ -84,7 +86,7 @@ await request(app.getHttpServer()).get('/sucursales').set('x-empresa-id', empres
 await app.close(); // siempre, en afterAll
 ```
 
-- `crearAplicacion(opciones?: { controladoresExtra?: Type[]; logger?: false | LogLevel[] })`
+- `crearAplicacion(opciones?: { controladoresExtra?: Type[]; logger?: false | LogLevel[]; reloj?: Reloj })`
   (`src/aplicacion.ts`) lee `process.env` **en cada llamada**, valida el entorno y rechaza con
   `EntornoInvalidoError` (`src/config/entorno.ts`) `EMPRESA_POR_HEADER=habilitado` con
   `NODE_ENV=production`. Incluye el filtro global de errores y el interceptor global. Los
@@ -267,3 +269,152 @@ que replique a mano el SQL exacto de `ContextoEmpresa` sobre una transacción pr
 contexto que `ContextoEmpresa.ejecutar(empresa, …)`; para eso hay que escribir el parámetro de
 contexto, que la regla de ESLint del criterio 37 prohíbe fuera de `contexto-empresa.ts`. La garantía de
 fondo sigue siendo la RLS, que ningún rol de la aplicación puede apagar (criterios 7 a 9).
+
+## Historia 002 · fase A: contratos públicos para las pruebas de la fase B
+
+Lo que dejó la fase A (T1 a T5 de `specs/002-plataforma-y-acceso/tasks.md`). Todo compila; casi toda
+la lógica de acceso **no existe todavía**: las firmas de la ruta crítica lanzan `Error('No implementado')`
+y las rutas nuevas responden 500 `ERROR_INTERNO` (el guard de autenticación y el resolutor de sesión
+**no están registrados**, así que las rutas de empresa siguen resolviéndose por la cabecera
+`x-empresa-id`, como en 001). Las pruebas de la fase B deben fallar por eso (o por tablas, columnas y
+funciones que aún no existen), no por errores de importación.
+
+### Reloj de la API y `RelojManual`
+
+```ts
+import { RELOJ, RelojManual, RelojSistema, type Reloj } from '../../src/nucleo/reloj';
+import { crearAplicacion } from '../../src/aplicacion';
+
+const reloj = new RelojManual('2026-11-02T08:00:00-05:00'); // Date, texto ISO con zona o milisegundos
+fijarEntornoDePrueba();
+const app = await crearAplicacion({ reloj }); // instala `reloj` como proveedor RELOJ
+app.get(RELOJ) === reloj; // true
+reloj.avanzar(15 * 60 * 1000); // +15 minutos (milisegundos; negativo retrocede)
+reloj.fijar('2026-11-03T00:00:00-05:00'); // salta a otro instante
+reloj.ahora(); // Date nuevo cada vez
+```
+
+- `RelojManual` no avanza solo. Sin argumento empieza en la hora real al crearlo.
+- `crearAplicacion()` sin `reloj` usa `RelojSistema` (hora real). Cada aplicación tiene su reloj.
+- `Reloj` es `{ ahora(): Date }`. Toda regla de tiempo de la API (inactividad, bloqueos, vencimientos,
+  horario, `ocurrido_en` de la auditoría) tomará la hora de `RELOJ`, nunca de `now()` de la base.
+
+### Variables de entorno nuevas
+
+`PIN_PEPPER` (base64, al menos 32 bytes) y `ORIGENES_PERMITIDOS` (orígenes separados por coma, sin ruta
+ni barra final). Con `NODE_ENV` `development` o `test` tienen valor por defecto
+(`PIN_PEPPER_LOCAL`, `ORIGENES_PERMITIDOS_LOCAL` en `src/config/entorno.ts`); en producción todavía
+pueden faltar (la obligatoriedad llega con T10). `Entorno.PIN_PEPPER` es `string | undefined` y
+`Entorno.ORIGENES_PERMITIDOS` es `string[]`. La regla de `EMPRESA_POR_HEADER` **no cambió** todavía
+(sigue valiendo con `development`; el criterio 7 llega en la fase C).
+
+### Rutas de import de los símbolos nuevos (desde `apps/api/test/<carpeta>/`)
+
+| Símbolo                                                                                                                                                                                                                                                         | Import                                                                               |
+| --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
+| `RELOJ`, `RelojManual`, `RelojSistema`, tipo `Reloj`                                                                                                                                                                                                            | `src/nucleo/reloj`                                                                   |
+| `crearAplicacion({ reloj })`, `AppModule.registrar({ reloj })`                                                                                                                                                                                                  | `src/aplicacion`, `src/app.module`                                                   |
+| tipo `Principal` (`{ tipo, empresaId, sesionId, usuarioId, superadministradorId, sucursalId, rol, esAdministrador, equipoId, equipoRecordadoId }`)                                                                                                              | `src/nucleo/principal` (también `src/modulos/seguridad`)                             |
+| `ContextoEmpresa.ejecutar(empresaId, fn, { actor? })`, `ContextoEmpresa.fijarActor(actor)`, tipos `ActorTransaccion` (`{ usuarioId, equipoId? } \| { superadministradorId } \| { sistema }`) y `OpcionesEjecucion`                                              | `src/nucleo/contexto-empresa` (`actor` y `fijarActor` se aceptan e ignoran hasta T7) |
+| `AuditoriaService.registrar(entrada)`, `insertarAuditoriaPlataforma(transaccion, entrada)`, `AuditoriaModule`, tipos `EntradaAuditoria`, `EntradaAuditoriaPlataforma`                                                                                           | `src/modulos/auditoria`                                                              |
+| Decoradores `Publica`, `SoloAdministrador`, `RequiereSucursal`, `Permiso(accion)`, `RequiereModulo(modulo)`, `Idempotente` y sus constantes de metadatos `PUBLICA`, `SOLO_ADMINISTRADOR`, `REQUIERE_SUCURSAL`, `PERMISO`, `REQUIERE_MODULO`, `IDEMPOTENTE`      | `src/modulos/seguridad`                                                              |
+| `AutenticacionGuard`, `ResolutorEmpresaSesion`, `SesionActual` (`principal(): Principal`), `AutorizacionService` (`consumir({ autorizacionId, accion, entidad?, entidadId?, detalle? }): Promise<{ solicitanteId, autorizadorId, motivo }>`), `SeguridadModule` | `src/modulos/seguridad`                                                              |
+| `Superadministrador` (decorador), `SUPERADMINISTRADOR`, `SuperadministradorGuard`                                                                                                                                                                               | `src/modulos/plataforma`                                                             |
+| `SuscripcionService` (`estadoDeSucursal(sucursalId)`, `exigirAperturaDeCaja(sucursalId)`, `registrarComprobanteEmitido(sucursalId, instante: Date): Promise<{ periodo, emitidos, cuota, excedente }>`), tipos `EstadoDeSucursal`, `ConsumoRegistrado`           | `src/modulos/plataforma`                                                             |
+| `crearSuperadministrador({ usuario, nombre, contrasena }): Promise<{ id }>`, `desactivarSuperadministrador({ usuario }): Promise<void>`                                                                                                                         | `scripts/lib/superadministrador` (toman `DATABASE_PLATAFORMA_URL` de `process.env`)  |
+| `sqlTrazabilidad(tabla, { columnaEmpresa? })`, `sqlTablaDeEmpresaTrazable(tabla, opciones)`                                                                                                                                                                     | `src/migraciones/sql-tabla-de-empresa`                                               |
+| `noImplementado()`                                                                                                                                                                                                                                              | `src/nucleo/errores`                                                                 |
+| `rutasRegistradas(app)`, `rutasDeNest(app)`, `PIN_PEPPER_DE_PRUEBA`, `ORIGENES_PERMITIDOS_DE_PRUEBA`                                                                                                                                                            | `../utilidades`                                                                      |
+
+Nota sobre el árbol de módulos: `AppModule` importa ahora `AuditoriaModule` y `SeguridadModule`, y
+`PlataformaModule` exporta también `SuscripcionService` y `SuperadministradorGuard`. Todos los
+servicios se obtienen con `app.get(Clase)`.
+
+### Rutas registradas (todas con su lógica pendiente)
+
+Metadatos (`Reflect.getMetadata(CONSTANTE, manejador | clase)`): públicas con `@Publica()` (que implica
+`@SinEmpresa()`) son exactamente `GET /health`, `POST /sesiones/contrasena`, `POST /sesiones/pin`,
+`GET /equipo` y `POST /plataforma/sesiones`; el resto de `/plataforma/*` lleva `@Superadministrador()`
+(en la clase); `/usuarios/*` y `/sucursales/:id/acceso` llevan `@SoloAdministrador()` en la clase;
+`POST /emisores`, `POST /sucursales` y `PATCH /sucursales/:id` llevan `@SoloAdministrador()` en el
+método; `POST /autorizaciones` lleva `@SinEmpresa()`, `@RequiereSucursal()` e `@Idempotente()`;
+`PUT /sesion/contrasena` lleva `@SinEmpresa()`.
+
+| Ruta                                                                              | Cuerpo / consulta (esquema de `@restaurante/contratos`) | Respuesta                                                            |
+| --------------------------------------------------------------------------------- | ------------------------------------------------------- | -------------------------------------------------------------------- |
+| `POST /sesiones/contrasena`                                                       | `ingresoContrasenaEntradaSchema`                        | `ingresoRespuestaSchema`                                             |
+| `POST /sesiones/pin` (`X-Equipo`)                                                 | `ingresoPinEntradaSchema`                               | `ingresoRespuestaSchema`                                             |
+| `GET /sesion`                                                                     |                                                         | `sesionRespuestaSchema`                                              |
+| `PUT /sesion/sucursal`                                                            | `elegirSucursalEntradaSchema`                           | `sesionRespuestaSchema`                                              |
+| `PUT /sesion/contrasena`                                                          | `cambiarContrasenaEntradaSchema`                        | 204                                                                  |
+| `DELETE /sesion`                                                                  |                                                         | 204                                                                  |
+| `POST /sesion/equipo`                                                             | `recordarEquipoEntradaSchema`                           | `recordarEquipoRespuestaSchema`                                      |
+| `GET /sesion/equipos`                                                             |                                                         | `equipoRecordadoRespuestaSchema[]`                                   |
+| `DELETE /sesion/equipos/:equipoRecordadoId`                                       |                                                         | 204                                                                  |
+| `GET /equipo` (`X-Equipo`)                                                        |                                                         | `equipoActualRespuestaSchema`                                        |
+| `GET /usuarios`, `GET /usuarios/:id`                                              |                                                         | `usuarioRespuestaSchema`                                             |
+| `POST /usuarios`                                                                  | `usuarioCrearEntradaSchema`                             | `usuarioCreadoRespuestaSchema` (con `pin`)                           |
+| `PATCH /usuarios/:id`                                                             | `usuarioModificarEntradaSchema`                         | `usuarioModificadoRespuestaSchema` (`pin?`)                          |
+| `POST /usuarios/:id/pin`                                                          |                                                         | 200 `pinRespuestaSchema`                                             |
+| `POST /usuarios/:id/contrasena`                                                   | `restablecerContrasenaEntradaSchema`                    | 204                                                                  |
+| `GET /usuarios/:id/equipos`                                                       |                                                         | `equipoRecordadoRespuestaSchema[]`                                   |
+| `DELETE /usuarios/:id/equipos/:equipoRecordadoId`, `DELETE /usuarios/:id/equipos` |                                                         | 204                                                                  |
+| `POST /autorizaciones`                                                            | `autorizacionEntradaSchema`                             | `autorizacionRespuestaSchema`                                        |
+| `GET /emisores`, `POST /emisores`                                                 | `emisorCrearEntradaSchema`                              | `emisorRespuestaSchema`                                              |
+| `POST /sucursales`                                                                | `sucursalCrearEntradaSchema` (sin `suscripcion`)        | `sucursalRespuestaSchema`                                            |
+| `PATCH /sucursales/:id`                                                           | como en 001                                             | como en 001                                                          |
+| `GET`, `PATCH /sucursales/:id/acceso`                                             | `sucursalAccesoEntradaSchema`                           | `sucursalAccesoRespuestaSchema`                                      |
+| `POST /plataforma/sesiones`                                                       | `ingresoSuperadministradorEntradaSchema`                | `ingresoSuperadministradorRespuestaSchema`                           |
+| `DELETE /plataforma/sesion`                                                       |                                                         | 204                                                                  |
+| `GET /plataforma/empresas`, `GET /plataforma/empresas/:id`                        |                                                         | `empresaPlataformaResumenSchema[]`, `empresaPlataformaDetalleSchema` |
+| `POST /plataforma/empresas`                                                       | `altaEmpresaEntradaSchema`                              | `altaEmpresaRespuestaSchema`                                         |
+| `POST /plataforma/empresas/:id/emisores`                                          | `emisorPlataformaEntradaSchema`                         | `emisorRespuestaSchema`                                              |
+| `POST /plataforma/empresas/:id/sucursales`                                        | `sucursalPlataformaEntradaSchema`                       | `sucursalPlataformaRespuestaSchema`                                  |
+| `POST /plataforma/empresas/:id/soporte`                                           | `soporteEntradaSchema`                                  | `ingresoRespuestaSchema`                                             |
+| `GET`, `POST /plataforma/planes`, `PATCH /plataforma/planes/:id`                  | `planCrearEntradaSchema`, `planModificarEntradaSchema`  | `planRespuestaSchema`                                                |
+| `GET /plataforma/suscripciones?estado=`                                           | `suscripcionesConsultaSchema`                           | `suscripcionResumenSchema[]`                                         |
+| `PATCH /plataforma/suscripciones/:id`                                             | `suscripcionModificarEntradaSchema`                     | `suscripcionRespuestaSchema`                                         |
+| `POST /plataforma/suscripciones/:id/pagos`                                        | `pagoEntradaSchema`                                     | `pagoRegistradoRespuestaSchema`                                      |
+
+Todas validan cuerpo, consulta y parámetros con esos esquemas antes de llegar a la lógica: una entrada
+inválida ya responde 400 `DATOS_INVALIDOS`; una válida responde 500 hasta que se implemente la ruta.
+Los cambios de estado que fija `@HttpCode`: 204 en las salidas, `PUT /sesion/contrasena`,
+`POST /usuarios/:id/contrasena` y los `DELETE`; 200 en `POST /usuarios/:id/pin`. `POST /sesion/equipo`
+responde hoy el 201 por defecto (el 200 del equipo ya conocido llega con T33).
+
+### `rutasRegistradas(app)` y `rutasDeNest(app)` (`test/utilidades/rutas.ts`)
+
+- `rutasRegistradas(app): { metodo, ruta }[]`: las rutas que Express tiene registradas (incluidas las de
+  los `controladoresExtra`), con la ruta como `/usuarios/:id`. Es lo que debe recorrer la prueba del
+  criterio 1 (no una lista fija).
+- `rutasDeNest(app): { metodo, ruta, controlador, manejador }[]`: lo mismo, con la clase del controlador y
+  el nombre del método, para leer los metadatos:
+  `Reflect.getMetadata(PUBLICA, r.controlador.prototype[r.manejador])` y
+  `Reflect.getMetadata(SOLO_ADMINISTRADOR, r.controlador)` (los decoradores de clase están en la clase).
+
+### Contratos de `@restaurante/contratos` fijados por esta fase
+
+- `comunes`: `rolSchema`, `rolAccesoSchema` (sin `ADMINISTRADOR`), `accionSchema`, `requisitoPermisoSchema`,
+  `moduloSchema`, `claveIdempotenciaSchema`, `nombreUsuarioSchema` (acepta mayúsculas ASCII y las guarda en
+  minúsculas; `^[a-z0-9._-]{3,50}$`), `nombreUsuarioIngresoSchema`, `contrasenaSchema` (8 a 128 caracteres,
+  sin NUL ni sustitutos sueltos, sin recortar), `contrasenaIngresoSchema` (1 a 128: un PIN como contraseña
+  es una contraseña incorrecta, no un 400), `pinSchema` (`^(\d{4}|\d{6})$`), `pinAutorizacionSchema`
+  (`^\d{6}$`), `fechaSchema`, `montoSchema`, `motivoSchema` (`textoSchema(300)`), `minusculasAscii`.
+- `errores`: `CODIGOS_ERROR` con los 17 códigos nuevos y `reintentarEnSegundos` opcional en `errorRespuestaSchema`.
+- Las entradas nuevas son estrictas (un campo desconocido, como `empresaId` o `creadoPor*`, es 400).
+  `sucursalEntradaSchema` y `emisorEntradaSchema` de 001 siguen sin ser estrictas; sus variantes HTTP
+  (`sucursalCrearEntradaSchema`, `emisorCrearEntradaSchema`, `altaEmpresaEntradaSchema`…) sí.
+- `sucursalEntradaSchema` gana `suscripcion?: { planId?, vencimiento? }`. El Administrador no puede
+  enviarla (`sucursalCrearEntradaSchema` la excluye).
+
+### Contratos de `@restaurante/dominio` fijados por esta fase
+
+- Implementado y probado: `estadoSuscripcion`, `sumarMeses`, `fechaLima`, `periodoLima` (`suscripcion.ts`),
+  `MODULOS`, `MAXIMO_PERSONAS_POR_EQUIPO`, `ROLES`, `ROLES_DE_ACCESO`, `ACCIONES`.
+  `estadoSuscripcion({ vencimiento, diasGracia }, instante)` devuelve `{ estado, suspensionDesde,
+diasRestantesGracia }` (`diasRestantesGracia` solo en gracia, si no `null`). Lanzan `RangeError` ante
+  fechas o instantes inválidos.
+- Firmas que lanzan `Error('No implementado')` (ruta crítica): `requisitoPermiso(rol, accion)`,
+  `puedeAutorizar(rol, accion)`, `alcanceReportes(rol)` (`'TURNO' | 'SUCURSAL' | 'EMPRESA' | null`),
+  `permisosDeRol(rol)` (`Record<Accion, RequisitoPermiso>`), `largoPin({ esAdministrador, roles })`
+  (`4 | 6`) y `dentroDeHorario(tramos | null, instante: Date)`.

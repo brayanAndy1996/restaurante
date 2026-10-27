@@ -1,5 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { EntornoInvalidoError, cargarEntorno } from '../src/config/entorno';
+import {
+  EntornoInvalidoError,
+  ORIGENES_PERMITIDOS_LOCAL,
+  PIN_PEPPER_LOCAL,
+  cargarEntorno,
+} from '../src/config/entorno';
 
 const base = {
   NODE_ENV: 'development',
@@ -52,6 +57,78 @@ describe('cargarEntorno', () => {
     expect(() => cargarEntorno({})).toThrow(/DATABASE_URL/);
     expect(() => cargarEntorno({ ...base, NODE_ENV: 'staging' })).toThrow(/NODE_ENV/);
     expect(() => cargarEntorno({ ...base, DATABASE_URL: 'mysql://x' })).toThrow(/DATABASE_URL/);
+  });
+});
+
+describe('PIN_PEPPER y ORIGENES_PERMITIDOS (historia 002)', () => {
+  const pepper = Buffer.alloc(32, 7).toString('base64');
+
+  it('con development y test tienen valor por defecto', () => {
+    for (const NODE_ENV of ['development', 'test']) {
+      const entorno = cargarEntorno({ ...base, NODE_ENV });
+      expect(entorno.PIN_PEPPER, NODE_ENV).toBe(PIN_PEPPER_LOCAL);
+      expect(entorno.ORIGENES_PERMITIDOS, NODE_ENV).toEqual([ORIGENES_PERMITIDOS_LOCAL]);
+    }
+    expect(Buffer.from(PIN_PEPPER_LOCAL, 'base64').length).toBeGreaterThanOrEqual(32);
+  });
+
+  it('el valor por defecto de PIN_PEPPER no se aplica en producción (será obligatoria desde T10)', () => {
+    const entorno = cargarEntorno({ ...base, NODE_ENV: 'production' });
+    expect(entorno.PIN_PEPPER).toBeUndefined();
+    expect(entorno.ORIGENES_PERMITIDOS).toEqual([]);
+  });
+
+  it('acepta los valores explícitos, también en producción', () => {
+    const entorno = cargarEntorno({
+      ...base,
+      NODE_ENV: 'production',
+      PIN_PEPPER: pepper,
+      ORIGENES_PERMITIDOS: 'https://app.ejemplo.pe, http://localhost:5173',
+    });
+    expect(entorno.PIN_PEPPER).toBe(pepper);
+    expect(entorno.ORIGENES_PERMITIDOS).toEqual([
+      'https://app.ejemplo.pe',
+      'http://localhost:5173',
+    ]);
+  });
+
+  it('una variable vacía es como una ausente', () => {
+    const entorno = cargarEntorno({ ...base, PIN_PEPPER: '', ORIGENES_PERMITIDOS: '' });
+    expect(entorno.PIN_PEPPER).toBe(PIN_PEPPER_LOCAL);
+    expect(entorno.ORIGENES_PERMITIDOS).toEqual([ORIGENES_PERMITIDOS_LOCAL]);
+  });
+
+  it('rechaza un PIN_PEPPER corto o que no es base64', () => {
+    for (const malo of [
+      Buffer.alloc(31, 1).toString('base64'),
+      'corto',
+      'no es base64 !!',
+      '***',
+    ]) {
+      expect(() => cargarEntorno({ ...base, PIN_PEPPER: malo }), malo).toThrow(/PIN_PEPPER/);
+    }
+    expect(() => cargarEntorno({ ...base, PIN_PEPPER: pepper })).not.toThrow();
+  });
+
+  it('rechaza orígenes con ruta, barra final, otro protocolo o que no son URL', () => {
+    for (const malo of [
+      'https://app.ejemplo.pe/',
+      'https://app.ejemplo.pe/ruta',
+      'ftp://app.ejemplo.pe',
+      'app.ejemplo.pe',
+      'http://localhost:5173,*',
+    ]) {
+      expect(() => cargarEntorno({ ...base, ORIGENES_PERMITIDOS: malo }), malo).toThrow(
+        /ORIGENES_PERMITIDOS/,
+      );
+    }
+  });
+
+  it('no cambia la regla de EMPRESA_POR_HEADER (se cambia en la fase C)', () => {
+    expect(
+      cargarEntorno({ ...base, NODE_ENV: 'development', EMPRESA_POR_HEADER: 'habilitado' })
+        .EMPRESA_POR_HEADER,
+    ).toBe('habilitado');
   });
 });
 

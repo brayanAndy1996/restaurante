@@ -3,6 +3,7 @@ import type { INestApplication, LogLevel, Type } from '@nestjs/common';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import { AppModule } from './app.module';
 import { cargarEntorno } from './config/entorno';
+import type { Reloj } from './nucleo/reloj';
 import { LIMITE_CUERPO_BYTES, traducirErrorDeCuerpo } from './nucleo/errores/filtro-global-errores';
 
 export interface OpcionesAplicacion {
@@ -13,6 +14,11 @@ export interface OpcionesAplicacion {
   controladoresExtra?: Type[];
   /** Registro de Nest; por defecto `false` con NODE_ENV=test y el normal en los demás casos. */
   logger?: false | LogLevel[];
+  /**
+   * Reloj de la API (`RELOJ`) del que toda regla de tiempo toma la hora; por defecto el del sistema.
+   * Las pruebas pasan un `RelojManual` y lo mueven con `fijar` y `avanzar`.
+   */
+  reloj?: Reloj;
 }
 
 /**
@@ -29,7 +35,7 @@ export async function crearAplicacion(
 ): Promise<INestApplication> {
   const entorno = cargarEntorno(process.env); // falla antes de construir nada
   const app = await NestFactory.create<NestExpressApplication>(
-    AppModule.registrar({ controladoresExtra: opciones.controladoresExtra }),
+    AppModule.registrar({ controladoresExtra: opciones.controladoresExtra, reloj: opciones.reloj }),
     {
       // En pruebas se silencia el registro de Nest; los errores de arranque se propagan como excepción.
       // `abortOnError: false` evita que Nest llame a process.abort() y tumbe el proceso de pruebas.
