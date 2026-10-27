@@ -83,6 +83,9 @@ export class Credenciales {
       );
     }
     this.pepper = Buffer.from(entorno.PIN_PEPPER, 'base64');
+    // El hash fijo se calcula al arrancar, no en el primer ingreso fallido: así ese ingreso no paga un scrypt
+    // de más ni hace esperar a los demás en el pool de hilos.
+    void this.contrasenaFalsa().catch(() => undefined);
   }
 
   // ---- Contraseñas -------------------------------------------------------------------------------

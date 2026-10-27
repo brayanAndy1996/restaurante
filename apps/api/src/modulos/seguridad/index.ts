@@ -39,13 +39,15 @@ export { EquipoController } from './equipo.controller';
 export { SesionController } from './sesion.controller';
 export { SesionesController } from './sesiones.controller';
 export { UsuariosController } from './usuarios.controller';
-export { BloqueosService, segundosHasta } from './bloqueos.service';
+export { BloqueosService, VIGENCIA_RESERVA_MS, segundosHasta } from './bloqueos.service';
 export type {
   AmbitoBloqueo,
   EstadoBloqueo,
   ResultadoFallo,
   ResultadoFalloAcumulado,
+  ReservaIntento,
 } from './bloqueos.service';
+export { TopeDeIntentos } from './tope-de-intentos';
 export { SesionesService } from './sesiones.service';
 export { EquiposService, equipoNoReconocido, tokenEquipoDeCabecera } from './equipos.service';
 export type { EquipoRevocado } from './equipos.service';

@@ -141,12 +141,39 @@ export class ClaveSupervisorService {
     entrada: AutorizacionEntrada,
     claveIdempotencia: string | undefined,
   ): Promise<Resultado> {
-    const ahora = this.reloj.ahora();
     const empresaId = principal.empresaId;
     const solicitanteId = principal.usuarioId!;
     const sucursalId = principal.sucursalId!;
 
-    // Idempotencia (criterio 85): la clave se reserva en esta misma transacción.
+    // Los intentos de esta persona y de este equipo se atienden de uno en uno. `NO KEY UPDATE` no choca
+    // con las llaves foráneas que otras transacciones toman sobre estas mismas filas.
+    await this.conexion.query('SELECT id FROM usuario WHERE id = $1 FOR NO KEY UPDATE', {
+      bind: [solicitanteId],
+      type: QueryTypes.SELECT,
+    });
+    if (principal.equipoId !== null) {
+      await this.conexion.query('SELECT id FROM equipo WHERE id = $1 FOR NO KEY UPDATE', {
+        bind: [principal.equipoId],
+        type: QueryTypes.SELECT,
+      });
+    }
+    const ahora = this.reloj.ahora(); // después de esperar el turno
+
+    // El bloqueo se mira antes que la clave de idempotencia (criterio 47): durante el bloqueo, todo intento
+    // con clave —incluida la réplica exacta de uno anterior— responde igual que uno sin clave. Si no, la
+    // clave serviría para saber si un PIN es el correcto sin que el intento cuente ni se audite.
+    const bloqueoUsuario = await this.bloqueos.estado('CLAVE_USUARIO', solicitanteId, ahora);
+    const bloqueoEquipo =
+      principal.equipoId === null
+        ? { bloqueadoHasta: null }
+        : await this.bloqueos.estado('CLAVE_EQUIPO', principal.equipoId, ahora);
+    const hasta = [bloqueoUsuario.bloqueadoHasta, bloqueoEquipo.bloqueadoHasta]
+      .filter((fecha): fecha is Date => fecha !== null)
+      .sort((a, b) => b.getTime() - a.getTime())[0];
+    if (hasta !== undefined) return { error: bloqueoTemporal(hasta, ahora) };
+
+    // Idempotencia (criterio 85): la clave se reserva en esta misma transacción. Sin bloqueo, la clave con
+    // otro cuerpo responde 422 sin evaluar el PIN (criterio 86).
     let huellaIdempotencia = '';
     if (claveIdempotencia !== undefined) {
       huellaIdempotencia = huellaDeEntrada(
@@ -199,30 +226,7 @@ export class ClaveSupervisorService {
     sucursalId: string,
     ahora: Date,
   ): Promise<Resultado> {
-    // Los intentos de esta persona y de este equipo se atienden de uno en uno. `NO KEY UPDATE` no choca
-    // con las llaves foráneas que otras transacciones toman sobre estas mismas filas.
-    await this.conexion.query('SELECT id FROM usuario WHERE id = $1 FOR NO KEY UPDATE', {
-      bind: [solicitanteId],
-      type: QueryTypes.SELECT,
-    });
-    if (principal.equipoId !== null) {
-      await this.conexion.query('SELECT id FROM equipo WHERE id = $1 FOR NO KEY UPDATE', {
-        bind: [principal.equipoId],
-        type: QueryTypes.SELECT,
-      });
-    }
-
-    // Bloqueo por solicitante y por equipo: se responde sin evaluar el PIN (criterio 47).
-    const bloqueoUsuario = await this.bloqueos.estado('CLAVE_USUARIO', solicitanteId, ahora);
-    const bloqueoEquipo =
-      principal.equipoId === null
-        ? { bloqueadoHasta: null }
-        : await this.bloqueos.estado('CLAVE_EQUIPO', principal.equipoId, ahora);
-    const hasta = [bloqueoUsuario.bloqueadoHasta, bloqueoEquipo.bloqueadoHasta]
-      .filter((fecha): fecha is Date => fecha !== null)
-      .sort((a, b) => b.getTime() - a.getTime())[0];
-    if (hasta !== undefined) return { error: bloqueoTemporal(hasta, ahora) };
-
+    // El bloqueo por solicitante y por equipo ya se miró en `enContexto` (criterio 47).
     const huella = this.credenciales.huellaPin(empresaId, entrada.pin);
     const candidatos = await this.conexion.query<FilaAutorizador>(
       `SELECT u.id, u.nombre, u.activo, u.es_administrador, u.horario, a.rol
@@ -313,9 +317,9 @@ export class ClaveSupervisorService {
     ahora: Date,
   ): Promise<AutorizacionRespuesta> {
     const solicitanteId = principal.usuarioId!;
-    await this.bloqueos.reiniciar('CLAVE_USUARIO', solicitanteId);
+    await this.bloqueos.reiniciar('CLAVE_USUARIO', solicitanteId, ahora);
     if (principal.equipoId !== null)
-      await this.bloqueos.reiniciar('CLAVE_EQUIPO', principal.equipoId);
+      await this.bloqueos.reiniciar('CLAVE_EQUIPO', principal.equipoId, ahora);
 
     const expiraEn = new Date(ahora.getTime() + MINUTOS_VIGENCIA_AUTORIZACION * MINUTO_MS);
     const filas = await this.conexion.query<{ id: string }>(

@@ -51,7 +51,8 @@ export class IdempotenciaInterceptor implements NestInterceptor {
         : principal?.superadministradorId != null
           ? `superadministrador:${principal.superadministradorId}`
           : 'prueba';
-    const ruta = `${peticion.method} ${peticion.route?.path ?? peticion.path}`;
+    // La ruta concreta, con sus parámetros: la misma clave en `/x/1` y en `/x/2` son peticiones distintas.
+    const ruta = `${peticion.method} ${peticion.path}`;
     const huella = huellaDeEntrada(this.claveHuella, ruta, actor, peticion.body);
     const empresaId = this.contexto.empresaActual();
     const ahora = this.reloj.ahora();

@@ -1,5 +1,5 @@
-// Alta y baja de superadministradores (personal de nuestra empresa). Son las únicas vías: no hay ruta
-// HTTP para crearlos ni desactivarlos (criterio 61). Las usa `pnpm plataforma:superadmin` y las pruebas.
+// Alta, baja y desbloqueo de superadministradores (personal de nuestra empresa). Son las únicas vías: no hay
+// ruta HTTP para crearlos, desactivarlos ni desbloquearlos (criterio 61). Las usa `pnpm plataforma:superadmin` y las pruebas.
 //
 // Corren por la vía de plataforma (`OperacionPlataforma`, rol `restaurante_plataforma`) con el actor de
 // sistema `cli:superadmin`, así que cada una deja su fila de auditoría sin empresa. Toman
@@ -26,7 +26,7 @@ export class SuperadministradorExistenteError extends Error {
   }
 }
 
-/** Actor de sistema de las dos operaciones (criterio 61). */
+/** Actor de sistema de las operaciones (criterio 61). */
 export const ACTOR_SUPERADMIN = 'cli:superadmin';
 
 export interface DatosNuevoSuperadministrador {
@@ -147,6 +147,40 @@ export async function desactivarSuperadministrador(datos: { usuario: string }): 
           entidad: 'superadministrador',
           entidadId: id,
           detalle: { superadministradorId: id, usuario, sesionesDeSoporteCerradas: soporte },
+        });
+      },
+    ),
+  );
+}
+
+/**
+ * Desbloquea a un superadministrador bloqueado por intentos fallidos (decisión operativa: el bloqueo de 15
+ * minutos no tiene otra salida antes de vencer). Limpia `bloqueado_hasta` y `fallos_seguidos` y deja la fila
+ * de auditoría `desbloquear_superadministrador` (actor `cli:superadmin`, sin empresa y sin datos sensibles).
+ * Falla si no existe. Un superadministrador inactivo también se limpia, pero sigue sin poder entrar.
+ */
+export async function desbloquearSuperadministrador(datos: { usuario: string }): Promise<void> {
+  const usuario = minusculasAscii(datos.usuario);
+  await conOperacion((operacion) =>
+    operacion.ejecutar(
+      {
+        actor: ACTOR_SUPERADMIN,
+        motivo: 'Desbloqueo de superadministrador (pnpm plataforma:superadmin)',
+        operacion: 'desbloquear_superadministrador',
+      },
+      async (transaccion) => {
+        const filas = await sequelizeDe(transaccion).query<{ id: string }>(
+          `UPDATE superadministrador
+              SET fallos_seguidos = 0, bloqueado_hasta = NULL, actualizado_en = $2
+            WHERE usuario = $1 RETURNING id`,
+          { transaction: transaccion, bind: [usuario, new Date()], type: QueryTypes.SELECT },
+        );
+        const id = filas[0]?.id;
+        if (id === undefined) throw new Error(`No existe el superadministrador "${usuario}"`);
+        operacion.registrarDatosDeAuditoria(transaccion, {
+          entidad: 'superadministrador',
+          entidadId: id,
+          detalle: { superadministradorId: id, usuario },
         });
       },
     ),

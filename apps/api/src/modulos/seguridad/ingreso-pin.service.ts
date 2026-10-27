@@ -86,7 +86,6 @@ export class IngresoPinService {
     token: TokenEquipo,
     entrada: IngresoPinEntrada,
   ): Promise<Resultado<IngresoRespuesta>> {
-    const ahora = this.reloj.ahora();
     const empresaId = token.empresaId;
 
     const equipo = await this.equipos.equipoDelToken(token);
@@ -97,6 +96,7 @@ export class IngresoPinService {
       bind: [equipo.id],
       type: QueryTypes.SELECT,
     });
+    const ahora = this.reloj.ahora(); // después de esperar el turno
 
     const personas = await this.conexion.query<FilaPersonaEnEquipo>(
       `SELECT er.id AS recordado_id, er.ultima_sucursal_id, u.id AS usuario_id, u.nombre, u.nombre_usuario,
@@ -139,7 +139,7 @@ export class IngresoPinService {
 
     // PIN correcto: de aquí en adelante lo que se escribe queda a nombre de la persona y de este equipo.
     await this.contexto.fijarActor({ usuarioId: persona.usuario_id, equipoId: equipo.id });
-    await this.bloqueos.reiniciar('PIN_EQUIPO_RECORDADO', persona.recordado_id);
+    await this.bloqueos.reiniciar('PIN_EQUIPO_RECORDADO', persona.recordado_id, ahora);
 
     // El horario se mira después del PIN y del bloqueo (criterio 107): no cuenta como fallo.
     if (

@@ -162,17 +162,17 @@ superusuario, `DB_PROTECCION_CATALOGO=omitir` (ver arriba).
 
 ## Comandos
 
-| Comando                      | Qué hace                                                                 |
-| ---------------------------- | ------------------------------------------------------------------------ |
-| `pnpm lint`                  | ESLint en todo el monorepo (incluye las reglas del criterio 37)          |
-| `pnpm typecheck`             | Verificación de tipos                                                    |
-| `pnpm build`                 | Compila los paquetes y la API                                            |
-| `pnpm test`                  | Todas las pruebas (la API necesita `DATABASE_ADMIN_URL`)                 |
-| `pnpm format:check`          | Comprueba el formato con Prettier (`pnpm format` lo corrige)             |
-| `pnpm dev`                   | API (puerto 3000) y app del personal (puerto 5173) en modo desarrollo    |
-| `pnpm build:compartidos`     | Compila `packages/dominio` y `packages/contratos` (`db:semilla` lo hace) |
-| `pnpm db:semilla`            | Superadministrador y dos empresas de demostración, con usuarios por rol  |
-| `pnpm plataforma:superadmin` | Crea o desactiva un superadministrador (ver "Superadministrador")        |
+| Comando                      | Qué hace                                                                      |
+| ---------------------------- | ----------------------------------------------------------------------------- |
+| `pnpm lint`                  | ESLint en todo el monorepo (incluye las reglas del criterio 37)               |
+| `pnpm typecheck`             | Verificación de tipos                                                         |
+| `pnpm build`                 | Compila los paquetes y la API                                                 |
+| `pnpm test`                  | Todas las pruebas (la API necesita `DATABASE_ADMIN_URL`)                      |
+| `pnpm format:check`          | Comprueba el formato con Prettier (`pnpm format` lo corrige)                  |
+| `pnpm dev`                   | API (puerto 3000) y app del personal (puerto 5173) en modo desarrollo         |
+| `pnpm build:compartidos`     | Compila `packages/dominio` y `packages/contratos` (`db:semilla` lo hace)      |
+| `pnpm db:semilla`            | Superadministrador y dos empresas de demostración, con usuarios por rol       |
+| `pnpm plataforma:superadmin` | Crea, desactiva o desbloquea un superadministrador (ver "Superadministrador") |
 
 ## La app del personal (`apps/app`) y `packages/ui`
 
@@ -328,18 +328,20 @@ Una empresa nunca ve datos de otra. La garantía la da PostgreSQL (RLS) y la ref
   a los 30 minutos sin peticiones y a las 12 horas. Los usuarios nuevos tienen una contraseña temporal
   y deben cambiarla (`PUT /sesion/contrasena`) antes de usar el resto de rutas.
 - **Superadministrador** (nuestro personal; entra a todas las empresas por `/plataforma/*` y da soporte).
-  Solo se crea y se desactiva con el script, no hay ruta HTTP:
+  Solo se crea, se desactiva y se desbloquea con el script, no hay ruta HTTP:
 
   ```bash
   pnpm plataforma:superadmin crear <usuario> "<nombre>"   # pide la contraseña por la entrada estándar
   pnpm plataforma:superadmin desactivar <usuario>         # cierra sus sesiones y las de soporte
+  pnpm plataforma:superadmin desbloquear <usuario>        # levanta el bloqueo de 15 minutos por 5 fallos seguidos
   ```
 
   La contraseña nunca va como argumento: se escribe cuando el script la pide, o se pasa por
   `SUPERADMIN_CONTRASENA` (para automatizar). Entra con `POST /plataforma/sesiones` (token `sa.…`, 8
   horas) y da de alta empresas con `POST /plataforma/empresas`, que crea también a su primer
   Administrador (el PIN se muestra una sola vez). `POST /plataforma/empresas/:id/soporte` abre una sesión
-  de soporte (permisos de Administrador, 2 horas, siempre auditada).
+  de soporte (permisos de Administrador, 2 horas, siempre auditada). `desbloquear` deja la fila de
+  auditoría `desbloquear_superadministrador` (actor `cli:superadmin`, sin empresa).
 
 - **`pnpm db:semilla`** crea el superadministrador `superadmin` (contraseña `Superadmin-Demo-1` o la de
   `SUPERADMIN_CONTRASENA`) y dos empresas de demostración con un usuario por rol (`fogon.admin`,

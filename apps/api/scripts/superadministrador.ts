@@ -1,18 +1,24 @@
 // pnpm plataforma:superadmin crear <usuario> "<nombre>"   -> crea un superadministrador
 // pnpm plataforma:superadmin desactivar <usuario>         -> lo desactiva y cierra sus sesiones
+// pnpm plataforma:superadmin desbloquear <usuario>        -> levanta el bloqueo por intentos fallidos
 //
-// Son las únicas vías para crearlos y desactivarlos (no hay ruta HTTP). La contraseña de `crear` se pide
+// Son las únicas vías para crearlos, desactivarlos y desbloquearlos (no hay ruta HTTP). La contraseña de `crear` se pide
 // por la entrada estándar (sin mostrarla si hay terminal) o, solo para automatizar, por la variable
 // SUPERADMIN_CONTRASENA; nunca va como argumento. Cada operación deja su fila de auditoría con el actor
 // `cli:superadmin`. Usa la conexión de plataforma (DATABASE_PLATAFORMA_URL, o derivada de
 // DATABASE_ADMIN_URL).
 import { createInterface } from 'node:readline';
 import { prepararEntornoDeScript } from './lib/entorno-scripts';
-import { crearSuperadministrador, desactivarSuperadministrador } from './lib/superadministrador';
+import {
+  crearSuperadministrador,
+  desactivarSuperadministrador,
+  desbloquearSuperadministrador,
+} from './lib/superadministrador';
 
 const USO = `Uso:
   pnpm plataforma:superadmin crear <usuario> "<nombre>"
   pnpm plataforma:superadmin desactivar <usuario>
+  pnpm plataforma:superadmin desbloquear <usuario>
 
 La contraseña de "crear" se lee de la entrada estándar (o de SUPERADMIN_CONTRASENA).`;
 
@@ -59,6 +65,11 @@ async function main() {
   if (orden === 'desactivar' && usuario && resto.length === 0) {
     await desactivarSuperadministrador({ usuario });
     console.log(`Superadministrador desactivado: ${usuario.toLowerCase()}`);
+    return;
+  }
+  if (orden === 'desbloquear' && usuario && resto.length === 0) {
+    await desbloquearSuperadministrador({ usuario });
+    console.log(`Superadministrador desbloqueado: ${usuario.toLowerCase()}`);
     return;
   }
   console.error(USO);
