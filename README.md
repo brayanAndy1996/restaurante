@@ -31,11 +31,13 @@ ejecuta `db:preparar`, `db:migrar` y `db:semilla`. Se puede repetir sin duplicar
 Necesitas un usuario administrador (`DATABASE_ADMIN_URL`) que pueda crear roles y bases y que sea
 **superusuario** (o dueño de los objetos de `pg_catalog`): `db:preparar` también quita a
 `restaurante_api` y `restaurante_plataforma` el acceso al texto de las consultas de otras sesiones
-(`pg_stat_activity`, `pg_stat_get_activity`, `pg_stat_get_backend_activity`) en la base de destino, y si
-el administrador no puede aplicarlo **falla con un mensaje que lo dice** en vez de dejar la base sin esa
-protección. En PostgreSQL gestionado sin superusuario, pide al proveedor que quite esos permisos de
-`pg_catalog` (`REVOKE ... FROM PUBLIC` sobre esas funciones y esa vista) o usa un usuario con permiso sobre
-`pg_catalog`. Copia
+(`pg_stat_activity`, `pg_stat_get_activity`, `pg_stat_get_backend_activity`) en la base de destino, y
+les quita poder cancelar o terminar sesiones ajenas (`pg_cancel_backend`, `pg_terminate_backend`), enumerarlas
+(`pg_stat_get_backend_*`) y ser miembros de `pg_signal_backend` (criterio 38c). Si el administrador no puede
+aplicarlo **falla con un mensaje que lo dice** en vez de dejar la base sin esa protección. En PostgreSQL
+gestionado sin superusuario, pide al proveedor que quite esos permisos de `pg_catalog` (`REVOKE ... FROM
+PUBLIC` sobre esas funciones y esa vista) o usa un usuario con permiso sobre `pg_catalog`. Los permisos de
+señal quedan para `pg_signal_backend` y `restaurante_migrador`; los de estadísticas, para `pg_read_all_stats`. Copia
 `.env.example` a `.env` y ajusta los puertos y las contraseñas, o exporta las variables:
 
 ```bash
@@ -104,7 +106,12 @@ Una empresa nunca ve datos de otra. La garantía la da PostgreSQL (RLS) y la ref
   `set_config('app.empresa_id', …, true)`. El servicio `ContextoEmpresa`
   (`apps/api/src/nucleo/contexto-empresa/contexto-empresa.ts`) es el único archivo que escribe ese
   parámetro (regla de ESLint). Sin contexto, cualquier consulta de la API, incluso cruda, lanza
-  `ContextoEmpresaAusenteError` antes de llegar a la base.
+  `ContextoEmpresaAusenteError` antes de llegar a la base. Dentro de `ContextoEmpresa.ejecutar`, `fn`
+  no puede controlar la transacción por SQL: `COMMIT`, `ROLLBACK`, `END`, `ABORT`, `SAVEPOINT`,
+  `RELEASE`, `BEGIN`, `START TRANSACTION`, `PREPARE TRANSACTION` y similares (también entre varias
+  sentencias o tras comentarios) lanzan `ConsultaProhibidaError` antes de llegar a la base; un literal con
+  ese texto en un valor sí se guarda. Tampoco sirven las transacciones anidadas de Sequelize (usan
+  `SAVEPOINT`): `ejecutar` confirma o revierte todo al terminar `fn`.
 - **Fuera de HTTP** (colas pg-boss, WebSockets, tareas programadas): envuelve siempre el trabajo en
   `ContextoEmpresa.ejecutar(empresaId, async () => { … })`. Sin eso, los servicios y modelos de
   empresa fallan. No lances efectos secundarios (imprimir, PSE, avisos) dentro de esa transacción: se

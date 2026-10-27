@@ -11,6 +11,8 @@ import {
   textoDeConsulta,
   type OpcionesSinEmpresa,
 } from './consultas-sin-empresa';
+import { estaCerrandoPropio } from './cierre-propio';
+import { contieneControlDeTransaccion } from './control-transaccion';
 import { ColaPorTransaccion } from './cola-por-transaccion';
 import { ConsultaProhibidaError } from './errores';
 import type { OpcionesConsultaInterna, TransaccionInterna } from './transaccion-interna';
@@ -25,6 +27,11 @@ import { estadoActual } from './estado-operacion';
 const PATRON_CONTEXTO = /set_config|app\s*\.\s*empresa_id/i;
 const PATRON_SESION = /(^|;)\s*(SET|RESET|DISCARD|DO)\b/i;
 
+const PROHIBIDO_CONTROLAR =
+  'Dentro de ContextoEmpresa.ejecutar no se puede confirmar, revertir ni subdividir la transacción ' +
+  '(COMMIT, ROLLBACK, END, ABORT, SAVEPOINT, RELEASE, BEGIN, START TRANSACTION, PREPARE…): ' +
+  'lo hace ejecutar al terminar fn';
+
 /**
  * Instala la guarda de la API en `sequelize.query`, por donde pasan todas las consultas de la
  * instancia (modelos, `queryInterface`, consultas crudas y las sentencias de transacción).
@@ -38,8 +45,11 @@ const PATRON_SESION = /(^|;)\s*(SET|RESET|DISCARD|DO)\b/i;
  * 3. Una transacción queda autorizada cuando el SQL exacto de `ContextoEmpresa` (`SQL_FIJAR_CONTEXTO`,
  *    con un UUID) se ejecuta en ella con éxito. Fijarlo dos veces en la misma transacción falla, así
  *    que una transacción no cambia de empresa.
- * 4. Las sentencias de control de transacción (`START TRANSACTION`, `COMMIT`, `ROLLBACK`) pasan sin
- *    autorización, porque la transacción tiene que abrirse antes de poder fijar la empresa.
+ * 4. Las sentencias de control de transacción (`START TRANSACTION`, `COMMIT`, `ROLLBACK`) pasan solo
+ *    antes de la autorización, porque la transacción tiene que abrirse antes de poder fijar la
+ *    empresa. Ya autorizada, solo pasan el `COMMIT` y el `ROLLBACK` de `ContextoEmpresa.ejecutar`
+ *    (ver `cierre-propio.ts`); toda otra sentencia de control, sola, entre varias o tras comentarios,
+ *    se rechaza antes de llegar a la base (criterio 22b, analizador de `control-transaccion.ts`).
  *
  * Esto sustituye al CLS de Sequelize (`useCLS` es global para toda la clase `Sequelize` y mezclaría
  * la API con la plataforma): la transacción de la petición se toma del `AsyncLocalStorage` aquí,
@@ -73,8 +83,15 @@ export function instalarGuardaApi(sequelize: Sequelize): void {
     }
     opts.transaction = transaccion;
 
-    if (esControlDeTransaccion(texto))
+    if (esControlDeTransaccion(texto)) {
+      // Abrir la transacción (`START TRANSACTION`) pasa antes de la autorización. Ya autorizada, solo
+      // el cierre propio de `ContextoEmpresa.ejecutar` puede mandar `COMMIT` o `ROLLBACK` (22b).
+      const cierra = /^(COMMIT|ROLLBACK);?$/i.test(texto ?? '');
+      if (autorizadas.has(transaccion) && !(cierra && estaCerrandoPropio(transaccion))) {
+        throw new ConsultaProhibidaError(PROHIBIDO_CONTROLAR);
+      }
       return cola.ejecutar(transaccion, () => consultar(sql, opts));
+    }
     if (transaccion.finished && !opts.completesTransaction) throw new ContextoEmpresaAusenteError();
 
     if (texto === SQL_FIJAR_CONTEXTO) {
@@ -92,6 +109,7 @@ export function instalarGuardaApi(sequelize: Sequelize): void {
     if (texto === undefined || PATRON_CONTEXTO.test(texto) || PATRON_SESION.test(texto)) {
       throw new ConsultaProhibidaError();
     }
+    if (contieneControlDeTransaccion(texto)) throw new ConsultaProhibidaError(PROHIBIDO_CONTROLAR);
     return cola.ejecutar(transaccion, () => consultar(sql, opts));
   }
 

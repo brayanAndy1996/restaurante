@@ -121,12 +121,107 @@ async function protegerCatalogoDeActividad(adminUrl: string, baseDeDatos: string
   }
 }
 
+/** Funciones de `pg_catalog` que cancelan o terminan la sesión de otro backend. */
+const FUNCIONES_DE_SENAL = ['pg_cancel_backend', 'pg_terminate_backend'];
+
+/**
+ * Criterio 38c: igual que el 38b, las sesiones de `restaurante_api` (y de `restaurante_plataforma`)
+ * comparten rol, y PostgreSQL deja que una cancele (`pg_cancel_backend`) o termine
+ * (`pg_terminate_backend`) a otra del mismo rol, aunque atienda a otra empresa, y que enumere las
+ * demás sesiones con las funciones `pg_stat_get_backend_*` (pid, usuario, tiempos). Se quita el
+ * `EXECUTE` de todas las firmas a PUBLIC y a los dos roles (se devuelve a `pg_signal_backend` y a
+ * `restaurante_migrador` las de señal, y a `pg_read_all_stats` las de estadísticas, para no quitar
+ * capacidades a quien las tenga por esos roles) y se les quita la pertenencia a `pg_signal_backend`.
+ * Es repetible. El `statement_timeout` del servidor no usa estas funciones (cancela por dentro) ni
+ * `pg` (que cancela por el protocolo, con una conexión nueva), así que `/health` y las consultas con
+ * tiempo límite no se ven afectados.
+ */
+async function protegerSenalesDeSesiones(adminUrl: string, baseDeDatos: string): Promise<void> {
+  const cliente = new Client({ connectionString: urlAdminParaBase(adminUrl, baseDeDatos) });
+  cliente.on('error', () => undefined);
+  await cliente.connect();
+  const roles = [ROLES.api, ROLES.plataforma];
+  const listaRoles = roles.map((rol) => cliente.escapeIdentifier(rol)).join(', ');
+  const migrador = cliente.escapeIdentifier(ROLES.migrador);
+  try {
+    const { rows: funciones } = await cliente.query<{ firma: string; senal: boolean }>(
+      `SELECT p.oid::regprocedure::text AS firma, p.proname = ANY ($1::text[]) AS senal
+         FROM pg_proc p
+         JOIN pg_namespace n ON n.oid = p.pronamespace
+        WHERE n.nspname = 'pg_catalog'
+          AND (p.proname = ANY ($1::text[]) OR p.proname LIKE 'pg\\_stat\\_get\\_backend\\_%')
+        ORDER BY 1`,
+      [FUNCIONES_DE_SENAL],
+    );
+    for (const nombre of FUNCIONES_DE_SENAL) {
+      if (!funciones.some((f) => f.firma.startsWith(`${nombre}(`))) {
+        throw new Error(`no se encontró la función ${nombre} de pg_catalog`);
+      }
+    }
+    if (!funciones.some((f) => f.firma.startsWith('pg_stat_get_backend_idset('))) {
+      throw new Error('no se encontraron las funciones pg_stat_get_backend_* de pg_catalog');
+    }
+    const sentencias: string[] = [];
+    for (const { firma, senal } of funciones) {
+      sentencias.push(`REVOKE ALL ON FUNCTION ${firma} FROM PUBLIC, ${listaRoles}`);
+      if (senal) {
+        sentencias.push(`GRANT EXECUTE ON FUNCTION ${firma} TO pg_signal_backend, ${migrador}`);
+      } else {
+        sentencias.push(`GRANT EXECUTE ON FUNCTION ${firma} TO pg_read_all_stats`);
+      }
+    }
+    for (const rol of roles) {
+      const { rows } = await cliente.query('SELECT pg_has_role($1, $2, $3) AS miembro', [
+        rol,
+        'pg_signal_backend',
+        'MEMBER',
+      ]);
+      if (rows[0]?.miembro) {
+        sentencias.push(`REVOKE pg_signal_backend FROM ${cliente.escapeIdentifier(rol)}`);
+      }
+    }
+    for (const sentencia of sentencias) await cliente.query(sentencia);
+
+    // Verificación: un administrador sin permisos sobre pg_catalog no recibe error, solo avisos.
+    const pendientes: string[] = [];
+    for (const rol of roles) {
+      for (const { firma } of funciones) {
+        const { rows } = await cliente.query(
+          'SELECT has_function_privilege($1, $2::regprocedure, $3) AS permitido',
+          [rol, firma, 'EXECUTE'],
+        );
+        if (rows[0]?.permitido) pendientes.push(`${rol} puede ejecutar ${firma}`);
+      }
+      const { rows } = await cliente.query('SELECT pg_has_role($1, $2, $3) AS miembro', [
+        rol,
+        'pg_signal_backend',
+        'MEMBER',
+      ]);
+      if (rows[0]?.miembro) pendientes.push(`${rol} es miembro de pg_signal_backend`);
+    }
+    if (pendientes.length > 0) {
+      throw new Error(pendientes.join('; '));
+    }
+  } catch (error) {
+    const motivo = error instanceof Error ? error.message : String(error);
+    throw new Error(
+      `No se pudo impedir que ${ROLES.api} y ${ROLES.plataforma} cancelen, terminen o enumeren ` +
+        `sesiones ajenas en la base ${baseDeDatos} (${motivo}). El usuario de DATABASE_ADMIN_URL ` +
+        'debe ser superusuario (o dueño de los objetos de pg_catalog) para quitar permisos sobre ' +
+        'pg_cancel_backend, pg_terminate_backend y pg_stat_get_backend_* (criterio 38c). ' +
+        'La base queda sin esta protección.',
+    );
+  } finally {
+    await cliente.end();
+  }
+}
+
 /**
  * Prepara el clúster de forma idempotente: roles sin privilegios especiales (con contraseña),
  * la base con dueño `restaurante_migrador` y los permisos de conexión de la base. Es la única
  * fuente de verdad de los roles: la usan db:preparar, el entorno local, la nube, CI y las pruebas.
  * Los privilegios sobre el esquema y las tablas los fija la primera migración. Además quita a los dos
- * roles de la aplicación el acceso al texto de las consultas de otras sesiones (criterio 38b), lo que
+ * roles de la aplicación el acceso al texto de las consultas de otras sesiones (criterio 38b) y la posibilidad de cancelar, terminar o enumerar sesiones ajenas (criterio 38c), lo que
  * exige que el usuario de `DATABASE_ADMIN_URL` sea superusuario.
  */
 export async function prepararBaseDeDatos(opciones: OpcionesPrepararBd = {}): Promise<void> {
@@ -195,5 +290,11 @@ export async function prepararBaseDeDatos(opciones: OpcionesPrepararBd = {}): Pr
   await protegerCatalogoDeActividad(adminUrl, baseDeDatos);
   registrar(
     `base ${baseDeDatos}: texto de consultas ajenas oculto a ${ROLES.api} y ${ROLES.plataforma}`,
+  );
+
+  // 5. Señales y enumeración de sesiones ajenas, también en la base de destino (criterio 38c).
+  await protegerSenalesDeSesiones(adminUrl, baseDeDatos);
+  registrar(
+    `base ${baseDeDatos}: ${ROLES.api} y ${ROLES.plataforma} no pueden cancelar, terminar ni enumerar sesiones ajenas`,
   );
 }

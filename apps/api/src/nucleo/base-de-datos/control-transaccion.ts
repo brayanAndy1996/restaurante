@@ -1,7 +1,7 @@
 /**
- * Detección de sentencias que controlan la transacción o la sesión (criterio 32b). En la conexión de
- * plataforma el código de `fn` nunca puede confirmar, revertir ni reabrir la transacción: eso lo
- * hace solo `OperacionPlataforma`. Además de `COMMIT`/`ROLLBACK`/`END`/`ABORT` se rechazan
+ * Detección de sentencias que controlan la transacción o la sesión (criterios 32b y 22b). En la
+ * conexión de plataforma el código de `fn` nunca puede confirmar, revertir ni reabrir la transacción:
+ * eso lo hace solo `OperacionPlataforma`; en la de la API, solo `ContextoEmpresa.ejecutar`. Además de `COMMIT`/`ROLLBACK`/`END`/`ABORT` se rechazan
  * `SAVEPOINT`, `RELEASE`, `BEGIN`, `START`, `PREPARE`/`COMMIT PREPARED` y `SET`/`RESET`/`DISCARD`/
  * `DO` (los dos últimos cambian la sesión, por ejemplo la lectura de cadenas, y servirían para
  * esconder una de las anteriores).

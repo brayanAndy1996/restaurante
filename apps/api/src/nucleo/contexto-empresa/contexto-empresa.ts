@@ -1,6 +1,7 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { uuidSchema } from '@restaurante/contratos';
 import type { Sequelize } from 'sequelize';
+import { confirmarPropia, revertirPropia } from '../base-de-datos/cierre-propio';
 import { ejecutarConEstado, estadoActual } from '../base-de-datos/estado-operacion';
 import { CONEXION_API } from '../base-de-datos/token-api';
 import type { TransaccionInterna } from '../base-de-datos/transaccion-interna';
@@ -29,7 +30,7 @@ export class ContextoEmpresa {
   /**
    * Valida el UUID, abre una transacción en la conexión de la API, fija `app.empresa_id` como
    * primera sentencia y corre `fn` con el contexto activo. Confirma si `fn` termina bien y revierte
-   * si lanza. Misma empresa dentro de un contexto activo: reutiliza la transacción; otra empresa:
+   * si lanza; `fn` no puede controlar la transacción por SQL (la guarda de la API lo rechaza, criterio 22b). Misma empresa dentro de un contexto activo: reutiliza la transacción; otra empresa:
    * `ContextoEmpresaConflictoError`. Dentro de una operación de plataforma también falla.
    */
   async ejecutar<T>(empresaId: string, fn: () => Promise<T>): Promise<T> {
@@ -54,12 +55,12 @@ export class ContextoEmpresa {
     try {
       await this.conexion.query(SQL_FIJAR_CONTEXTO, { bind: [empresa], transaction: transaccion });
       const resultado = await ejecutarConEstado({ empresaId: empresa, transaccion }, fn);
-      await transaccion.commit();
+      await confirmarPropia(transaccion);
       return resultado;
     } catch (error) {
       if (!transaccion.finished) {
         try {
-          await transaccion.rollback();
+          await revertirPropia(transaccion);
         } catch {
           // Sequelize ya destruye la conexión si el rollback falla; el error original es el que importa.
         }

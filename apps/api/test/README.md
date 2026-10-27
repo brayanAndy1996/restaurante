@@ -27,7 +27,9 @@ Contraseñas de los roles: `DB_PASSWORD_MIGRADOR|API|PLATAFORMA`; si faltan, `mi
    `restaurante_plataforma`: `LOGIN NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE NOINHERIT`;
    `idle_in_transaction_session_timeout = 30s` en el de la API). Misma lógica que `pnpm db:preparar`
    (`scripts/lib/preparar-bd.ts`). También quita a esos dos roles el acceso al texto de consultas
-   ajenas en la base de destino (criterio 38b); por eso `DATABASE_ADMIN_URL` debe ser superusuario.
+   ajenas en la base de destino (criterio 38b) y el poder cancelar, terminar o enumerar sesiones ajenas
+   (`pg_cancel_backend`, `pg_terminate_backend`, `pg_stat_get_backend_*`, `pg_signal_backend`; criterio
+   38c); por eso `DATABASE_ADMIN_URL` debe ser superusuario.
 2. `DROP DATABASE IF EXISTS restaurante_test WITH (FORCE)` y la crea con dueño `restaurante_migrador`.
 3. `REVOKE ALL ... FROM PUBLIC` sobre la base y `CONNECT` para `restaurante_api` y `restaurante_plataforma`.
 4. Corre las migraciones como migrador (`src/migraciones/`, umzug): `202610270001-plataforma-base.ts`
@@ -188,6 +190,13 @@ consultas (modelos, `queryInterface`, consultas crudas y las sentencias de trans
 - Dentro del contexto se rechazan (`ConsultaProhibidaError`) las sentencias que cambian la sesión o el
   contexto: `set_config`, cualquier mención del parámetro de contexto, `SET`, `RESET`, `DISCARD` y `DO`.
   Fijar el contexto otra vez en la misma transacción lanza `ContextoEmpresaConflictoError`.
+- Dentro del contexto también se rechazan (`ConsultaProhibidaError`) las sentencias de control de
+  transacción (`COMMIT`, `ROLLBACK`, `END`, `ABORT`, `SAVEPOINT`, `RELEASE`, `ROLLBACK TO`, `BEGIN`,
+  `START TRANSACTION`, `PREPARE TRANSACTION`, `COMMIT/ROLLBACK PREPARED`), solas, entre varias sentencias o
+  tras comentarios (criterio 22b). Usa el analizador `control-transaccion.ts` (ignora literales y
+  comentarios, así que `'COMMIT'` como valor funciona). Solo el `COMMIT`/`ROLLBACK` propio de
+  `ejecutar` pasa (`cierre-propio.ts`). Efecto: `sequelize.transaction({ transaction })` anidado
+  (usa `SAVEPOINT`) no está permitido dentro de un contexto.
 
 ### La excepción `sinEmpresa: 'salud' | 'verificacion-roles'`
 
