@@ -47,7 +47,7 @@ Para proteger las pruebas del paso 4, antes del paso 7 el orquestador revisa con
 - Enviar comanda: ruteo por estación, descuento de stock (combos, modificadores y porciones) e idempotencia.
 - Cobro y caja: varios medios de pago, vuelto, reportes X y Z, y el bloqueo del cierre con mesas o pedidos abiertos.
 - Comprobantes: series y correlativos sin saltos ni duplicados (también con dos cajas a la vez), reintentos con el PSE y notas de crédito.
-- Permisos: clave de supervisor, equipos vinculados y auditoría.
+- Permisos: clave de supervisor, equipos recordados (PIN), horario de acceso, trazabilidad de autor y auditoría.
 - Pedidos web: confirmación, vencimiento y protección contra pedidos falsos.
 
 Fuera de la ruta crítica, por ejemplo: pantallas de reportes, mantenimiento simple de carta y usuarios, apariencia de la carta web y la web comercial.
