@@ -7,3 +7,13 @@ export class OperacionPlataformaAnidadaError extends Error {
     this.name = 'OperacionPlataformaAnidadaError';
   }
 }
+
+/** El código de una operación de plataforma cerró la transacción por su cuenta (criterio 32b). */
+export class OperacionPlataformaCerradaError extends Error {
+  constructor(
+    mensaje = 'El código de la operación cerró la transacción de plataforma por su cuenta; no se puede confirmar nada sin su auditoría',
+  ) {
+    super(mensaje);
+    this.name = 'OperacionPlataformaCerradaError';
+  }
+}

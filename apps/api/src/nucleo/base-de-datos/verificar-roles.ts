@@ -7,12 +7,35 @@ interface FilaRol {
   superusuario: boolean;
   bypassrls: boolean;
   tablas_propias: string[];
+  membresias: MembresiaPrivilegiada[];
+}
+
+interface MembresiaPrivilegiada {
+  rol: string;
+  via: string;
+  migrador: boolean;
+  superusuario: boolean;
+  bypassrls: boolean;
+  tablas_propias: string[];
+}
+
+function describirMembresia(m: MembresiaPrivilegiada): string {
+  const motivos: string[] = [];
+  if (m.migrador) motivos.push('es el rol migrador, dueño de las tablas');
+  if (m.superusuario) motivos.push('es superusuario (SUPERUSER)');
+  if (m.bypassrls) motivos.push('tiene el atributo BYPASSRLS');
+  if (m.tablas_propias.length > 0) {
+    motivos.push(`es dueño de tablas de public (${m.tablas_propias.join(', ')})`);
+  }
+  const cadena = m.via.includes(' > ') ? ` por la cadena ${m.via}` : '';
+  return `es miembro de "${m.rol}"${cadena}, que ${motivos.join(' y ')}`;
 }
 
 /**
  * Comprueba que el rol de la conexión no pueda saltarse la RLS: no debe ser superusuario, ni tener
  * `BYPASSRLS`, ni ser dueño de ninguna tabla de `public` (el dueño ve sus tablas aunque la RLS esté
- * activa, salvo que esté forzada). Lanza `RolPrivilegiadoError` indicando el rol y cada atributo.
+ * activa, salvo que esté forzada), ni ser miembro, directo o transitivo, de un rol así (con una
+ * membresía puede hacer `SET ROLE` y apagar la RLS; criterio 10b). Lanza `RolPrivilegiadoError` indicando el rol y cada atributo.
  * `origen` es la variable de entorno de la conexión (por ejemplo `DATABASE_URL`), solo para el mensaje.
  */
 export async function verificarRolDeConexion(sequelize: Sequelize, origen: string): Promise<void> {
@@ -36,6 +59,7 @@ export async function verificarRolDeConexion(sequelize: Sequelize, origen: strin
   if (fila.tablas_propias.length > 0) {
     atributos.push(`es dueño de tablas de public (${fila.tablas_propias.join(', ')})`);
   }
+  for (const membresia of fila.membresias) atributos.push(describirMembresia(membresia));
   if (atributos.length > 0) {
     throw new RolPrivilegiadoError(
       `La API se niega a arrancar: el rol "${fila.rol}" de ${origen} ${atributos.join(' y ')}. ` +

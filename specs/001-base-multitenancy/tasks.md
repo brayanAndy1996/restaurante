@@ -48,11 +48,11 @@ El ataque encontró seis fallas (F1 a F6). No cambian reglas de negocio; quedan 
 
 - [ ] P9 · test-writer · Pruebas de F1 a F6: arranque con roles miembros, directos o transitivos (con `INHERIT` y `NOINHERIT`), de `restaurante_migrador`, del dueño de una tabla o de un rol superusuario o con `BYPASSRLS` (10b); `fn` de `OperacionPlataforma.ejecutar` y de `consultar` que intenta `commit`, `rollback` o `COMMIT`/`ROLLBACK`/`END`/`ABORT` por SQL, sin que quede ningún cambio sin auditoría (32b); lint sobre `.ts`, `.tsx`, `.mts` y `.cts` con `import()` dinámico, `require` y reexportes de la conexión de plataforma (37b); texto de consultas de otra sesión del mismo rol en `pg_stat_activity`, `pg_stat_get_activity` y `pg_stat_get_backend_activity`, y membresía en `pg_read_all_stats`/`pg_monitor` (38b); NUL en `PATCH /sucursales/:id` y en las entradas de plataforma, y cuerpo mayor a 100 KB con 413 (40b). (criterios 10b, 32b, 37b, 38b, 40b)
 - [ ] P10 · tester · Confirmar que P9 falla por la razón esperada.
-- [ ] T20 · backend · Verificación de membresías transitivas al arrancar, con rol y membresía en el registro. (criterio 10b)
-- [ ] T21 · backend · `OperacionPlataforma`: impedir que `fn` cierre la transacción (en `ejecutar` y en `consultar`) y fallar si lo intenta. (criterio 32b)
-- [ ] T22 · backend · Reglas de ESLint ampliadas a `.ts`, `.tsx`, `.mts` y `.cts`, con detección de `import()`, `require` y reexportes. (criterio 37b)
-- [ ] T23 · backend · `db:preparar` (o la migración): quitar a `restaurante_api` y `restaurante_plataforma` el acceso al texto de consultas ajenas, de forma repetible y fallando con un mensaje claro si el administrador no puede aplicarlo. (criterio 38b)
-- [ ] T24 · backend · Rechazo de NUL en los esquemas de texto (`packages/contratos` y entradas de plataforma, incluidos `actor` y `motivo`), límite de cuerpo de 100 KB con 413 `CUERPO_DEMASIADO_GRANDE` y el código nuevo en `CODIGOS_ERROR`. (criterio 40b)
+- [x] T20 · backend · Verificación de membresías transitivas al arrancar, con rol y membresía en el registro. (criterio 10b)
+- [x] T21 · backend · `OperacionPlataforma`: impedir que `fn` cierre la transacción (en `ejecutar` y en `consultar`) y fallar si lo intenta. (criterio 32b)
+- [x] T22 · backend · Reglas de ESLint ampliadas a `.ts`, `.tsx`, `.mts` y `.cts`, con detección de `import()`, `require` y reexportes. (criterio 37b)
+- [x] T23 · backend · `db:preparar` (o la migración): quitar a `restaurante_api` y `restaurante_plataforma` el acceso al texto de consultas ajenas, de forma repetible y fallando con un mensaje claro si el administrador no puede aplicarlo. (criterio 38b)
+- [x] T24 · backend · Rechazo de NUL en los esquemas de texto (`packages/contratos` y entradas de plataforma, incluidos `actor` y `motivo`), límite de cuerpo de 100 KB con 413 `CUERPO_DEMASIADO_GRANDE` y el código nuevo en `CODIGOS_ERROR`. (criterio 40b)
 - [ ] T25 · tester · Suite completa, lint, verificación de tipos y `pnpm build`; luego vuelve el adversarial (ronda 2).
 
 ## Solo ruta crítica

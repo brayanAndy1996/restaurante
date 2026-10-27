@@ -1,7 +1,9 @@
 import { NestFactory } from '@nestjs/core';
 import type { INestApplication, LogLevel, Type } from '@nestjs/common';
+import type { NestExpressApplication } from '@nestjs/platform-express';
 import { AppModule } from './app.module';
 import { cargarEntorno } from './config/entorno';
+import { LIMITE_CUERPO_BYTES } from './nucleo/errores/filtro-global-errores';
 
 export interface OpcionesAplicacion {
   /**
@@ -26,15 +28,20 @@ export async function crearAplicacion(
   opciones: OpcionesAplicacion = {},
 ): Promise<INestApplication> {
   const entorno = cargarEntorno(process.env); // falla antes de construir nada
-  const app = await NestFactory.create(
+  const app = await NestFactory.create<NestExpressApplication>(
     AppModule.registrar({ controladoresExtra: opciones.controladoresExtra }),
     {
       // En pruebas se silencia el registro de Nest; los errores de arranque se propagan como excepción.
       // `abortOnError: false` evita que Nest llame a process.abort() y tumbe el proceso de pruebas.
       logger: opciones.logger ?? (entorno.NODE_ENV === 'test' ? false : ['error', 'warn', 'log']),
       abortOnError: false,
+      // Los analizadores de cuerpo se registran abajo con el límite explícito (criterio 40b).
+      bodyParser: false,
     },
   );
+  // Un cuerpo mayor a 100 KB responde 413 CUERPO_DEMASIADO_GRANDE (lo traduce el filtro global).
+  app.useBodyParser('json', { limit: LIMITE_CUERPO_BYTES });
+  app.useBodyParser('urlencoded', { limit: LIMITE_CUERPO_BYTES, extended: true });
   try {
     await app.init();
   } catch (error) {

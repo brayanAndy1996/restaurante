@@ -26,7 +26,8 @@ Contraseñas de los roles: `DB_PASSWORD_MIGRADOR|API|PLATAFORMA`; si faltan, `mi
 1. Crea los roles que falten, de forma idempotente (`restaurante_migrador`, `restaurante_api`,
    `restaurante_plataforma`: `LOGIN NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE NOINHERIT`;
    `idle_in_transaction_session_timeout = 30s` en el de la API). Misma lógica que `pnpm db:preparar`
-   (`scripts/lib/preparar-bd.ts`).
+   (`scripts/lib/preparar-bd.ts`). También quita a esos dos roles el acceso al texto de consultas
+   ajenas en la base de destino (criterio 38b); por eso `DATABASE_ADMIN_URL` debe ser superusuario.
 2. `DROP DATABASE IF EXISTS restaurante_test WITH (FORCE)` y la crea con dueño `restaurante_migrador`.
 3. `REVOKE ALL ... FROM PUBLIC` sobre la base y `CONNECT` para `restaurante_api` y `restaurante_plataforma`.
 4. Corre las migraciones como migrador (`src/migraciones/`, umzug): `202610270001-plataforma-base.ts`
@@ -136,8 +137,9 @@ listarEmpresas(): Promise<{ id: string; nombre: string }[]>
   `apps/api/src/nucleo/contexto-empresa/contexto-empresa.ts` (clase `ContextoEmpresa`).
 - Prueba de lint: `new ESLint({ cwd: <apps/api> }).lintText(codigo, { filePath })` con `filePath`
   absoluto bajo `apps/api/src/...`. `apps/api/eslint.config.js` (configuración plana) extiende la base
-  de `packages/config` y agrega las dos reglas del criterio 37, que solo se aplican a `src/**/*.ts`
-  (las migraciones quedan fuera de la segunda porque su SQL nombra el parámetro; las pruebas y los
+  de `packages/config` y agrega las dos reglas del criterio 37 (y 37b), que se aplican a
+  `src/**/*.{ts,tsx,mts,cts}` y detectan también `import()`, `require`, `import x = require()` y los
+  reexportes (las migraciones quedan fuera de la segunda porque su SQL nombra el parámetro; las pruebas y los
   scripts no son código de la API).
 
 ## Crear las empresas A y B en las pruebas

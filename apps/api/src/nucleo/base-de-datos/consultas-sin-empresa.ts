@@ -15,8 +15,25 @@ export type MotivoSinEmpresa = 'salud' | 'verificacion-roles';
 
 export const SQL_SALUD = 'SELECT 1 AS ok';
 
-/** Atributos del rol de la conexión y tablas de `public` que posee. */
-export const SQL_VERIFICACION_ROLES = `SELECT r.rolname AS rol,
+/**
+ * Atributos del rol de la conexión, tablas de `public` que posee y roles privilegiados de los que es
+ * miembro (criterio 10b). La membresía se recorre de forma recursiva por `pg_auth_members` y cuenta
+ * con `INHERIT` o `NOINHERIT` (con `NOINHERIT` basta un `SET ROLE`). Un rol es privilegiado si es
+ * `restaurante_migrador`, superusuario, tiene `BYPASSRLS` o es dueño de alguna tabla de `public`.
+ */
+export const SQL_VERIFICACION_ROLES = `WITH RECURSIVE
+  conexion AS (SELECT oid, rolname FROM pg_roles WHERE rolname = current_user),
+  pertenencia (oid, ruta) AS (
+    SELECT m.roleid, ARRAY[m.roleid]
+      FROM pg_auth_members m
+      JOIN conexion c ON c.oid = m.member
+    UNION ALL
+    SELECT m.roleid, p.ruta || m.roleid
+      FROM pg_auth_members m
+      JOIN pertenencia p ON p.oid = m.member
+     WHERE NOT m.roleid = ANY (p.ruta)
+  )
+SELECT r.rolname AS rol,
        r.rolsuper AS superusuario,
        r.rolbypassrls AS bypassrls,
        COALESCE((SELECT array_agg(c.relname::text ORDER BY c.relname)
@@ -24,9 +41,36 @@ export const SQL_VERIFICACION_ROLES = `SELECT r.rolname AS rol,
                    JOIN pg_namespace n ON n.oid = c.relnamespace
                   WHERE n.nspname = 'public'
                     AND c.relowner = r.oid
-                    AND c.relkind IN ('r', 'p', 'v', 'm')), ARRAY[]::text[]) AS tablas_propias
+                    AND c.relkind IN ('r', 'p', 'v', 'm')), ARRAY[]::text[]) AS tablas_propias,
+       COALESCE((SELECT json_agg(json_build_object(
+                          'rol', g.rolname,
+                          'via', (SELECT string_agg(v.rolname::text, ' > ' ORDER BY u.n)
+                                    FROM unnest(p.ruta) WITH ORDINALITY AS u(oid, n)
+                                    JOIN pg_roles v ON v.oid = u.oid),
+                          'migrador', g.rolname = 'restaurante_migrador',
+                          'superusuario', g.rolsuper,
+                          'bypassrls', g.rolbypassrls,
+                          'tablas_propias', COALESCE((SELECT array_agg(c.relname::text ORDER BY c.relname)
+                                                        FROM pg_class c
+                                                        JOIN pg_namespace n ON n.oid = c.relnamespace
+                                                       WHERE n.nspname = 'public'
+                                                         AND c.relowner = g.oid
+                                                         AND c.relkind IN ('r', 'p', 'v', 'm')),
+                                                     ARRAY[]::text[])
+                        ) ORDER BY g.rolname)
+                   FROM pertenencia p
+                   JOIN pg_roles g ON g.oid = p.oid
+                  WHERE g.rolname = 'restaurante_migrador'
+                     OR g.rolsuper
+                     OR g.rolbypassrls
+                     OR EXISTS (SELECT 1
+                                  FROM pg_class c
+                                  JOIN pg_namespace n ON n.oid = c.relnamespace
+                                 WHERE n.nspname = 'public'
+                                   AND c.relowner = g.oid
+                                   AND c.relkind IN ('r', 'p', 'v', 'm'))), '[]'::json) AS membresias
   FROM pg_roles r
- WHERE r.rolname = current_user`;
+  JOIN conexion c ON c.oid = r.oid`;
 
 const SQL_POR_MOTIVO: Record<MotivoSinEmpresa, string> = {
   salud: SQL_SALUD,

@@ -212,3 +212,40 @@ describe('respuestas', () => {
     );
   });
 });
+
+describe('carácter NUL en los textos de plataforma (criterio 40b)', () => {
+  const NUL = '\u0000';
+
+  it('sucursalConfigurarEntradaSchema rechaza NUL en nombre y dirección indicando el campo', () => {
+    expect(
+      camposConError(sucursalConfigurarEntradaSchema.safeParse({ nombre: `a${NUL}b` })),
+    ).toEqual(['nombre']);
+    expect(
+      camposConError(sucursalConfigurarEntradaSchema.safeParse({ direccion: `Av.${NUL}1` })),
+    ).toEqual(['direccion']);
+  });
+
+  it('sucursalEntradaSchema rechaza NUL en nombre y dirección', () => {
+    expect(
+      camposConError(sucursalEntradaSchema.safeParse({ ...sucursalBase, nombre: `a${NUL}` })),
+    ).toEqual(['nombre']);
+    expect(
+      camposConError(sucursalEntradaSchema.safeParse({ ...sucursalBase, direccion: `${NUL}x` })),
+    ).toEqual(['direccion']);
+  });
+
+  it('registrarEmpresaEntradaSchema rechaza NUL en el nombre y en la razón social', () => {
+    expect(
+      camposConError(
+        registrarEmpresaEntradaSchema.safeParse({ ...empresaBase, nombre: `x${NUL}` }),
+      ),
+    ).toEqual(['nombre']);
+    const conRazon = {
+      ...empresaBase,
+      emisores: [{ ...empresaBase.emisores[0]!, razonSocial: `SAC${NUL}` }],
+    };
+    expect(camposConError(registrarEmpresaEntradaSchema.safeParse(conRazon))).toEqual([
+      'emisores.0.razonSocial',
+    ]);
+  });
+});

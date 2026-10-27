@@ -7,6 +7,7 @@ export const CODIGOS_ERROR = [
   'NO_ENCONTRADO',
   'CONFLICTO',
   'EMISOR_INVALIDO',
+  'CUERPO_DEMASIADO_GRANDE',
   'ERROR_INTERNO',
 ] as const;
 

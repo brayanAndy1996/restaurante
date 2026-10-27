@@ -7,7 +7,24 @@ const CODIGO_POR_ESTADO: Record<number, CodigoError> = {
   400: 'DATOS_INVALIDOS',
   404: 'NO_ENCONTRADO',
   409: 'CONFLICTO',
+  413: 'CUERPO_DEMASIADO_GRANDE',
 };
+
+/** Límite del cuerpo de una petición (criterio 40b); lo aplica el analizador de cuerpos de `aplicacion.ts`. */
+export const LIMITE_CUERPO_BYTES = 100 * 1024;
+export const MENSAJE_CUERPO_DEMASIADO_GRANDE =
+  'El cuerpo de la petición supera el límite de 100 KB';
+
+/**
+ * El analizador de cuerpos de Express (body-parser) lanza `PayloadTooLargeError` (status 413, tipo
+ * `entity.too.large`) antes de llegar a Nest: no es una `HttpException` y sin esta regla acabaría
+ * como un 500. Se reconoce por su forma y no por la clase, que vive en un paquete interno.
+ */
+function esCuerpoDemasiadoGrande(excepcion: unknown): boolean {
+  if (typeof excepcion !== 'object' || excepcion === null) return false;
+  const { type, status, statusCode } = excepcion as Record<string, unknown>;
+  return type === 'entity.too.large' || status === 413 || statusCode === 413;
+}
 
 /**
  * Convierte cualquier excepción en `{ codigo, mensaje, campos? }`. Los errores no previstos
@@ -28,6 +45,12 @@ export class FiltroGlobalErrores implements ExceptionFilter {
       const cuerpo: ErrorRespuesta = { codigo: excepcion.codigo, mensaje: excepcion.message };
       if (excepcion.campos) cuerpo.campos = excepcion.campos;
       return { estado: excepcion.getStatus(), cuerpo };
+    }
+    if (esCuerpoDemasiadoGrande(excepcion)) {
+      return {
+        estado: 413,
+        cuerpo: { codigo: 'CUERPO_DEMASIADO_GRANDE', mensaje: MENSAJE_CUERPO_DEMASIADO_GRANDE },
+      };
     }
     if (excepcion instanceof HttpException) {
       const estado = excepcion.getStatus();

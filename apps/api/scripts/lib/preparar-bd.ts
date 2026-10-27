@@ -19,11 +19,115 @@ export interface OpcionesPrepararBd {
   registrar?: (mensaje: string) => void;
 }
 
+/** Funciones de `pg_catalog` que devuelven el texto de las consultas en curso de otras sesiones. */
+const FUNCIONES_DE_ACTIVIDAD = ['pg_stat_get_activity', 'pg_stat_get_backend_activity'];
+/** Roles integrados de monitoreo: sus miembros ven el texto de todas las consultas. */
+const ROLES_DE_MONITOREO = ['pg_read_all_stats', 'pg_monitor'];
+
+/**
+ * Criterio 38b: todas las conexiones de la API comparten el rol `restaurante_api` (y las de
+ * plataforma, `restaurante_plataforma`), y PostgreSQL deja que una sesión lea el texto de las
+ * consultas de otras sesiones del mismo rol (`pg_stat_activity`, `pg_stat_get_activity(NULL)`,
+ * `pg_stat_get_backend_activity(pid)`), con valores de otras empresas. No hay una opción que lo
+ * apague, así que se quita el permiso sobre esos objetos de `pg_catalog` (que existen por base de
+ * datos: hay que aplicarlo conectado a la base de destino) y se les quita la pertenencia a
+ * `pg_read_all_stats` y `pg_monitor`. Los miembros de `pg_read_all_stats` (monitoreo) los conservan.
+ * Es repetible. Falla con un mensaje claro si el administrador no puede aplicarlo.
+ */
+async function protegerCatalogoDeActividad(adminUrl: string, baseDeDatos: string): Promise<void> {
+  const cliente = new Client({ connectionString: urlAdminParaBase(adminUrl, baseDeDatos) });
+  cliente.on('error', () => undefined);
+  await cliente.connect();
+  const roles = [ROLES.api, ROLES.plataforma];
+  const listaRoles = roles.map((rol) => cliente.escapeIdentifier(rol)).join(', ');
+  try {
+    const { rows: funciones } = await cliente.query<{ firma: string }>(
+      `SELECT p.oid::regprocedure::text AS firma
+         FROM pg_proc p
+         JOIN pg_namespace n ON n.oid = p.pronamespace
+        WHERE n.nspname = 'pg_catalog' AND p.proname = ANY ($1::text[])
+        ORDER BY 1`,
+      [FUNCIONES_DE_ACTIVIDAD],
+    );
+    const sentencias: string[] = [];
+    for (const { firma } of funciones) {
+      sentencias.push(
+        `REVOKE ALL ON FUNCTION ${firma} FROM PUBLIC, ${listaRoles}`,
+        `GRANT EXECUTE ON FUNCTION ${firma} TO pg_read_all_stats`,
+      );
+    }
+    sentencias.push(
+      `REVOKE ALL ON pg_catalog.pg_stat_activity FROM PUBLIC, ${listaRoles}`,
+      'GRANT SELECT ON pg_catalog.pg_stat_activity TO pg_read_all_stats',
+    );
+    for (const monitoreo of ROLES_DE_MONITOREO) {
+      for (const rol of roles) {
+        const { rows } = await cliente.query('SELECT pg_has_role($1, $2, $3) AS miembro', [
+          rol,
+          monitoreo,
+          'MEMBER',
+        ]);
+        if (rows[0]?.miembro) {
+          sentencias.push(
+            `REVOKE ${cliente.escapeIdentifier(monitoreo)} FROM ${cliente.escapeIdentifier(rol)}`,
+          );
+        }
+      }
+    }
+    if (funciones.length === 0) {
+      throw new Error('no se encontraron las funciones de actividad de pg_catalog');
+    }
+    for (const sentencia of sentencias) await cliente.query(sentencia);
+
+    // Verificación: un administrador sin permisos sobre pg_catalog no recibe error, solo avisos.
+    const pendientes: string[] = [];
+    for (const rol of roles) {
+      for (const { firma } of funciones) {
+        const { rows } = await cliente.query(
+          'SELECT has_function_privilege($1, $2::regprocedure, $3) AS permitido',
+          [rol, firma, 'EXECUTE'],
+        );
+        if (rows[0]?.permitido) pendientes.push(`${rol} puede ejecutar ${firma}`);
+      }
+      const vista = await cliente.query('SELECT has_table_privilege($1, $2, $3) AS permitido', [
+        rol,
+        'pg_catalog.pg_stat_activity',
+        'SELECT',
+      ]);
+      if (vista.rows[0]?.permitido) pendientes.push(`${rol} puede leer pg_stat_activity`);
+      for (const monitoreo of ROLES_DE_MONITOREO) {
+        const { rows } = await cliente.query('SELECT pg_has_role($1, $2, $3) AS miembro', [
+          rol,
+          monitoreo,
+          'MEMBER',
+        ]);
+        if (rows[0]?.miembro) pendientes.push(`${rol} es miembro de ${monitoreo}`);
+      }
+    }
+    if (pendientes.length > 0) {
+      throw new Error(pendientes.join('; '));
+    }
+  } catch (error) {
+    const motivo = error instanceof Error ? error.message : String(error);
+    throw new Error(
+      `No se pudo ocultar el texto de las consultas en curso de la base ${baseDeDatos} a ` +
+        `${ROLES.api} y ${ROLES.plataforma} (${motivo}). El usuario de DATABASE_ADMIN_URL debe ser ` +
+        'superusuario (o dueño de los objetos de pg_catalog) para quitar permisos sobre ' +
+        'pg_stat_activity, pg_stat_get_activity y pg_stat_get_backend_activity (criterio 38b). ' +
+        'La base queda sin esta protección.',
+    );
+  } finally {
+    await cliente.end();
+  }
+}
+
 /**
  * Prepara el clúster de forma idempotente: roles sin privilegios especiales (con contraseña),
  * la base con dueño `restaurante_migrador` y los permisos de conexión de la base. Es la única
  * fuente de verdad de los roles: la usan db:preparar, el entorno local, la nube, CI y las pruebas.
- * Los privilegios sobre el esquema y las tablas los fija la primera migración.
+ * Los privilegios sobre el esquema y las tablas los fija la primera migración. Además quita a los dos
+ * roles de la aplicación el acceso al texto de las consultas de otras sesiones (criterio 38b), lo que
+ * exige que el usuario de `DATABASE_ADMIN_URL` sea superusuario.
  */
 export async function prepararBaseDeDatos(opciones: OpcionesPrepararBd = {}): Promise<void> {
   const env = opciones.env ?? process.env;
@@ -86,4 +190,10 @@ export async function prepararBaseDeDatos(opciones: OpcionesPrepararBd = {}): Pr
   } finally {
     await admin.end();
   }
+
+  // 4. Texto de consultas ajenas: se aplica conectado a la base de destino (criterio 38b).
+  await protegerCatalogoDeActividad(adminUrl, baseDeDatos);
+  registrar(
+    `base ${baseDeDatos}: texto de consultas ajenas oculto a ${ROLES.api} y ${ROLES.plataforma}`,
+  );
 }

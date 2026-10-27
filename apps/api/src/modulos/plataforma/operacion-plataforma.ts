@@ -7,7 +7,7 @@ import {
   ConexionPlataforma,
 } from '../../nucleo/base-de-datos/conexion-plataforma';
 import { textoObligatorio, validarAuditoria } from './auditoria';
-import { OperacionPlataformaAnidadaError } from './errores';
+import { OperacionPlataformaAnidadaError, OperacionPlataformaCerradaError } from './errores';
 import { MODELOS_PLATAFORMA, type Modelos } from './modelos';
 import type { OpcionesOperacionPlataforma, TransaccionPlataforma } from './tipos';
 
@@ -21,7 +21,8 @@ export interface DatosAuditoria {
  * Operaciones del superadministrador que no pertenecen a una empresa. Usa la conexión de
  * `restaurante_plataforma`, abre una transacción explícita, corre `fn` y escribe la fila de
  * auditoría en esa misma transacción antes de confirmar: o queda el cambio con su auditoría, o no
- * queda nada. No se puede llamar dentro de un contexto de empresa ni de otra operación de plataforma.
+ * queda nada. `fn` no puede confirmar ni revertir la transacción por su cuenta: si lo intenta, la
+ * operación falla y no queda nada (criterio 32b). No se puede llamar dentro de un contexto de empresa ni de otra operación de plataforma.
  */
 @Injectable()
 export class OperacionPlataforma {
@@ -45,6 +46,7 @@ export class OperacionPlataforma {
 
     return this.enTransaccion(async (transaccion) => {
       const resultado = await fn(transaccion);
+      this.exigirAbierta(transaccion);
       const datos = this.datosDeAuditoria.get(transaccion);
       await Auditoria.create(
         {
@@ -69,12 +71,17 @@ export class OperacionPlataforma {
   }
 
   /**
-   * Lectura por la vía de plataforma, sin auditoría ni cambios (la transacción siempre se revierte).
-   * Mismas restricciones de anidamiento que `ejecutar`.
+   * Lectura por la vía de plataforma, sin auditoría ni cambios: la transacción es de solo lectura y
+   * siempre se revierte; `fn` no puede confirmarla (criterio 32b). Mismas restricciones de anidamiento que `ejecutar`.
    */
   async consultar<T>(fn: (transaccion: TransaccionPlataforma) => Promise<T>): Promise<T> {
     this.exigirSinContexto();
     return this.enTransaccion(fn, { confirmar: false });
+  }
+
+  /** `fn` no puede haber cerrado la transacción (la guarda ya lo impide; esto cubre un error tragado). */
+  private exigirAbierta(transaccion: Transaction): void {
+    if ((transaccion as TransaccionInterna).finished) throw new OperacionPlataformaCerradaError();
   }
 
   private exigirSinContexto(): void {
@@ -86,16 +93,19 @@ export class OperacionPlataforma {
     { confirmar }: { confirmar: boolean } = { confirmar: true },
   ): Promise<T> {
     return ejecutarConEstado({ plataforma: true }, async () => {
-      const transaccion = (await this.conexion.abrirTransaccion()) as TransaccionInterna;
+      const transaccion = (await this.conexion.abrirTransaccion({
+        soloLectura: !confirmar,
+      })) as TransaccionInterna;
       try {
         const resultado = await fn(transaccion);
-        if (confirmar) await transaccion.commit();
-        else await transaccion.rollback();
+        this.exigirAbierta(transaccion);
+        if (confirmar) await this.conexion.confirmar(transaccion);
+        else await this.conexion.revertir(transaccion);
         return resultado;
       } catch (error) {
         if (!transaccion.finished) {
           try {
-            await transaccion.rollback();
+            await this.conexion.revertir(transaccion);
           } catch {
             // Sequelize destruye la conexión si el rollback falla; importa el error original.
           }

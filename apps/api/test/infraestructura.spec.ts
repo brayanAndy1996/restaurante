@@ -91,6 +91,42 @@ describe('scripts de preparación y migración', () => {
     });
   });
 
+  it('prepararBaseDeDatos oculta el texto de consultas ajenas en la base de destino (criterio 38b)', async () => {
+    await prepararBaseDeDatos({ baseDeDatos: baseAuxiliar, recrear: true });
+    // Una membresía de monitoreo que alguien haya dado a mano se quita al volver a preparar.
+    await conCliente('admin', async (admin) => {
+      await admin.query('GRANT pg_monitor TO restaurante_api');
+    });
+    await prepararBaseDeDatos({ baseDeDatos: baseAuxiliar });
+    const admin = await abrirCliente('admin', baseAuxiliar);
+    try {
+      for (const rol of ['restaurante_api', 'restaurante_plataforma']) {
+        const { rows } = await admin.query(
+          `SELECT has_function_privilege($1, 'pg_stat_get_activity(integer)', 'EXECUTE') AS actividad,
+                  has_function_privilege($1, 'pg_stat_get_backend_activity(integer)', 'EXECUTE') AS backend,
+                  has_table_privilege($1, 'pg_catalog.pg_stat_activity', 'SELECT') AS vista,
+                  pg_has_role($1, 'pg_read_all_stats', 'MEMBER') AS estadisticas,
+                  pg_has_role($1, 'pg_monitor', 'MEMBER') AS monitor`,
+          [rol],
+        );
+        expect(rows[0], rol).toEqual({
+          actividad: false,
+          backend: false,
+          vista: false,
+          estadisticas: false,
+          monitor: false,
+        });
+      }
+      // El monitoreo legítimo sigue disponible para pg_read_all_stats.
+      const { rows } = await admin.query(
+        `SELECT has_function_privilege('pg_read_all_stats', 'pg_stat_get_activity(integer)', 'EXECUTE') AS ok`,
+      );
+      expect(rows[0].ok).toBe(true);
+    } finally {
+      await admin.end();
+    }
+  });
+
   it('umzug descubre migraciones .ts, las aplica una sola vez y las revierte', async () => {
     await prepararBaseDeDatos({ baseDeDatos: baseAuxiliar, recrear: true });
     const url = urlDeRol('migrador', baseAuxiliar);

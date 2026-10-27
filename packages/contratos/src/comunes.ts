@@ -7,6 +7,22 @@ import { z } from 'zod';
  */
 export const uuidSchema = z.guid();
 
+/** Carácter NUL (U+0000): PostgreSQL no lo admite en `text` y nunca es parte de un texto legítimo. */
+const NUL = '\u0000';
+
+/** Refinamiento común de los textos: sin el carácter NUL. Pensado para `.refine(sinNul, mensaje)`. */
+export const MENSAJE_NUL = 'No puede contener el carácter NUL (U+0000)';
+export const sinNul = (texto: string): boolean => !texto.includes(NUL);
+
+/**
+ * Texto libre de entrada: sin espacios en los extremos, de 1 a `max` caracteres y sin NUL. Es la
+ * base de todos los textos que escribe una persona; úsalo en vez de `z.string()` suelto para que el
+ * rechazo del NUL valga igual en la API y en la PWA.
+ */
+export function textoSchema(max: number) {
+  return z.string().trim().min(1).max(max).refine(sinNul, MENSAJE_NUL);
+}
+
 /** Hora `HH:MM`, de `00:00` a `23:59`. */
 export const horaSchema = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'Debe tener formato HH:MM');
 

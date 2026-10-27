@@ -5,9 +5,11 @@ import {
   horarioSchema,
   regimenTributarioSchema,
   rucSchema,
+  textoSchema,
   uuidSchema,
   whatsappSchema,
 } from '../src';
+import { CODIGOS_ERROR } from '../src';
 
 describe('esquemas comunes', () => {
   it('horaSchema acepta de 00:00 a 23:59', () => {
@@ -75,5 +77,35 @@ describe('esquemas comunes', () => {
     expect(horarioSchema.safeParse([{ dia: 8, desde: '10:00', hasta: '12:00' }]).success).toBe(
       false,
     );
+  });
+});
+
+describe('textoSchema (criterio 40b)', () => {
+  const nombre = textoSchema(10);
+
+  it('recorta los extremos y acepta un texto normal', () => {
+    expect(nombre.parse('  Hola  ')).toBe('Hola');
+  });
+
+  it('rechaza el carácter NUL en cualquier posición, sin alterar el texto', () => {
+    for (const texto of ['a\u0000b', '\u0000', 'a\u0000', '\u0000a', ' \u0000 ']) {
+      const resultado = nombre.safeParse(texto);
+      expect(resultado.success, JSON.stringify(texto)).toBe(false);
+    }
+  });
+
+  it('sigue rechazando vacío y demasiado largo', () => {
+    expect(nombre.safeParse('   ').success).toBe(false);
+    expect(nombre.safeParse('x'.repeat(11)).success).toBe(false);
+  });
+
+  it('acepta otros caracteres de control y Unicode (solo el NUL es dato mal formado)', () => {
+    expect(nombre.safeParse('Ñandú\tá').success).toBe(true);
+  });
+});
+
+describe('CODIGOS_ERROR', () => {
+  it('incluye CUERPO_DEMASIADO_GRANDE', () => {
+    expect(CODIGOS_ERROR).toContain('CUERPO_DEMASIADO_GRANDE');
   });
 });

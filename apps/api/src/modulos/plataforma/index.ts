@@ -1,5 +1,5 @@
 export { OperacionPlataforma } from './operacion-plataforma';
-export { OperacionPlataformaAnidadaError } from './errores';
+export { OperacionPlataformaAnidadaError, OperacionPlataformaCerradaError } from './errores';
 export { PlataformaEmpresasService } from './plataforma-empresas.service';
 export { SucursalService } from './sucursal.service';
 export { SucursalesController } from './sucursales.controller';

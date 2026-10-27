@@ -1,8 +1,17 @@
+import { MENSAJE_NUL, sinNul } from '@restaurante/contratos';
 import { ErrorAplicacion } from '../../nucleo/errores/error-aplicacion';
 
-/** Texto recortado; lanza 400 DATOS_INVALIDOS (indicando el campo) si queda vacío. */
+/**
+ * Texto recortado; lanza 400 DATOS_INVALIDOS (indicando el campo) si queda vacío o si contiene el
+ * carácter NUL (criterio 40b: nunca se guarda alterado).
+ */
 export function textoObligatorio(campo: string, valor: unknown, nombre: string): string {
   const texto = typeof valor === 'string' ? valor.trim() : '';
+  if (!sinNul(texto)) {
+    throw new ErrorAplicacion(400, 'DATOS_INVALIDOS', `${nombre} no es válido`, [
+      { campo, mensaje: MENSAJE_NUL },
+    ]);
+  }
   if (texto === '') {
     throw new ErrorAplicacion(400, 'DATOS_INVALIDOS', `${nombre} es obligatorio`, [
       { campo, mensaje: `${nombre} no puede estar vacío` },

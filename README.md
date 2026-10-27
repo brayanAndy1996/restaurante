@@ -28,12 +28,19 @@ ejecuta `db:preparar`, `db:migrar` y `db:semilla`. Se puede repetir sin duplicar
 
 ## Levantar con un PostgreSQL propio (sin Docker)
 
-Necesitas un usuario administrador (`DATABASE_ADMIN_URL`) que pueda crear roles y bases. Copia
+Necesitas un usuario administrador (`DATABASE_ADMIN_URL`) que pueda crear roles y bases y que sea
+**superusuario** (o dueño de los objetos de `pg_catalog`): `db:preparar` también quita a
+`restaurante_api` y `restaurante_plataforma` el acceso al texto de las consultas de otras sesiones
+(`pg_stat_activity`, `pg_stat_get_activity`, `pg_stat_get_backend_activity`) en la base de destino, y si
+el administrador no puede aplicarlo **falla con un mensaje que lo dice** en vez de dejar la base sin esa
+protección. En PostgreSQL gestionado sin superusuario, pide al proveedor que quite esos permisos de
+`pg_catalog` (`REVOKE ... FROM PUBLIC` sobre esas funciones y esa vista) o usa un usuario con permiso sobre
+`pg_catalog`. Copia
 `.env.example` a `.env` y ajusta los puertos y las contraseñas, o exporta las variables:
 
 ```bash
 export DATABASE_ADMIN_URL=postgres://postgres:postgres@localhost:5432/postgres
-pnpm db:preparar   # roles restaurante_migrador / _api / _plataforma y la base `restaurante` (idempotente)
+pnpm db:preparar   # roles restaurante_migrador / _api / _plataforma, la base `restaurante` y la ocultación del texto de consultas ajenas (idempotente)
 pnpm db:migrar     # aplica las migraciones pendientes (idempotente)
 pnpm db:semilla    # dos empresas de demostración, actor `semilla` (idempotente)
 pnpm dev
@@ -90,7 +97,9 @@ Una empresa nunca ve datos de otra. La garantía la da PostgreSQL (RLS) y la ref
 - **Tres roles de base de datos**, ninguno superusuario ni con `BYPASSRLS`: `restaurante_migrador`
   (dueño de las tablas, solo migraciones), `restaurante_api` (la API, sujeta a RLS) y
   `restaurante_plataforma` (operaciones de plataforma, con sus propias políticas). La API se niega
-  a arrancar si su conexión usa un rol superusuario, con `BYPASSRLS` o dueño de tablas.
+  a arrancar si su conexión usa un rol superusuario, con `BYPASSRLS` o dueño de tablas, o que sea
+  miembro (directo o transitivo, con `INHERIT` o `NOINHERIT`) de `restaurante_migrador`, del dueño de
+  una tabla o de un rol así; el error nombra el rol de conexión y la membresía que lo impide.
 - **Contexto de empresa.** Cada petición con empresa corre en una transacción con
   `set_config('app.empresa_id', …, true)`. El servicio `ContextoEmpresa`
   (`apps/api/src/nucleo/contexto-empresa/contexto-empresa.ts`) es el único archivo que escribe ese
@@ -104,7 +113,12 @@ Una empresa nunca ve datos de otra. La garantía la da PostgreSQL (RLS) y la ref
   `OperacionPlataforma.ejecutar({ actor, motivo, operacion }, fn)` o `PlataformaEmpresasService`.
   Corren con `restaurante_plataforma`, dejan una fila inmutable en `auditoria_plataforma` en la misma
   transacción y no pueden anidarse con un contexto de empresa. Solo `src/modulos/plataforma/` puede
-  importar la conexión de plataforma (regla de ESLint).
+  importar la conexión de plataforma (regla de ESLint, que también ve `import()`, `require`,
+  `import x = require()` y los reexportes, en archivos `.ts`, `.tsx`, `.mts` y `.cts`). `fn` no puede
+  confirmar ni revertir la transacción (`commit()`, `rollback()` o SQL `COMMIT`/`ROLLBACK`/`END`/
+  `ABORT`/`SAVEPOINT`…): la operación falla y no queda nada; `consultar` es de solo lectura.
+- **Entradas.** Los textos de `packages/contratos` (`textoSchema`) rechazan el carácter NUL (U+0000), y
+  cualquier cuerpo de petición de más de 100 KB responde 413 `CUERPO_DEMASIADO_GRANDE`.
 - **Quién resuelve la empresa de la petición.** El token `RESOLUTOR_EMPRESA`: en producción es el
   resolutor nulo (siempre 401 `EMPRESA_NO_RESUELTA`) hasta que la historia 002 instale el de sesión; en
   desarrollo y pruebas, con `EMPRESA_POR_HEADER=habilitado`, lee `x-empresa-id`. Una ruta que no

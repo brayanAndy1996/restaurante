@@ -6,21 +6,22 @@ import {
   horarioSchema,
   regimenTributarioSchema,
   rucSchema,
+  textoSchema,
   uuidSchema,
   whatsappSchema,
 } from './comunes';
 
 export const emisorEntradaSchema = z.object({
   ruc: rucSchema,
-  razonSocial: z.string().trim().min(1).max(200),
+  razonSocial: textoSchema(200),
   regimen: regimenTributarioSchema,
 });
 
 export const sucursalEntradaSchema = z.object({
   rucEmisor: rucSchema,
-  nombre: z.string().trim().min(1).max(100),
+  nombre: textoSchema(100),
   codigoEstablecimiento: codigoEstablecimientoSchema,
-  direccion: z.string().trim().min(1).max(300),
+  direccion: textoSchema(300),
   horario: horarioSchema.default([]),
   whatsapp: whatsappSchema.optional(),
   horaCorte: horaSchema.default(HORA_CORTE_POR_DEFECTO),
@@ -28,7 +29,7 @@ export const sucursalEntradaSchema = z.object({
 
 export const registrarEmpresaEntradaSchema = z
   .object({
-    nombre: z.string().trim().min(1).max(150),
+    nombre: textoSchema(150),
     emisores: z.array(emisorEntradaSchema).min(1),
     sucursales: z.array(sucursalEntradaSchema).min(1),
   })
@@ -83,9 +84,9 @@ export const registrarEmpresaEntradaSchema = z
 export const sucursalConfigurarEntradaSchema = z
   .object({
     emisorId: uuidSchema,
-    nombre: z.string().trim().min(1).max(100),
+    nombre: textoSchema(100),
     codigoEstablecimiento: codigoEstablecimientoSchema,
-    direccion: z.string().trim().min(1).max(300),
+    direccion: textoSchema(300),
     horario: horarioSchema,
     whatsapp: whatsappSchema.nullable(),
     horaCorte: horaSchema,
