@@ -10,29 +10,13 @@ import {
   type EstadoOperacion,
 } from '../base-de-datos/estado-operacion';
 import { CONEXION_API } from '../base-de-datos/token-api';
+import { SQL_FIJAR_CONTEXTO } from '../fijar-contexto';
 import type { TransaccionInterna } from '../base-de-datos/transaccion-interna';
 import {
   ContextoEmpresaAusenteError,
   ContextoEmpresaConflictoError,
   EmpresaIdInvalidoError,
 } from './errores';
-
-/**
- * Nombre de la función de la base que fija la empresa de la transacción (criterio 22e). La guarda de
- * consultas lo lee de aquí para rechazar toda otra mención, porque el lint prohíbe escribir el texto
- * fuera de este archivo y de las migraciones.
- */
-export const NOMBRE_FUNCION_FIJAR_CONTEXTO = 'fijar_contexto_empresa';
-
-/**
- * Sentencia que fija la empresa de la transacción. Este es el único archivo de la API autorizado a
- * escribir `fijar_contexto_empresa` y el parámetro `app.empresa_id` (regla de ESLint, criterios 37 y
- * 22e), y el texto no se puede importar fuera de `src/nucleo/` (criterio 22c). La guarda de consultas
- * (`base-de-datos/guarda-api.ts`) reconoce este texto exacto, pero solo autoriza la transacción si
- * `ejecutar` la registró antes como pendiente. La base (no la guarda) garantiza que la empresa se
- * fija una sola vez por transacción: una segunda llamada falla con `42501` (criterio 22e).
- */
-export const SQL_FIJAR_CONTEXTO = `SELECT ${NOMBRE_FUNCION_FIJAR_CONTEXTO}($1)`;
 
 /**
  * Contexto de empresa de la operación en curso: `AsyncLocalStorage` + la fila de la sesión en

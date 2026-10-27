@@ -8,7 +8,7 @@ que enlaza `CLAUDE.md`; las historias, en `specs/NNN-nombre/`.
 
 ## Estado
 
-La historia 001 (base del monorepo, multitenancy y aislamiento entre empresas) está terminada. Su especificación, plan y tareas están en [`specs/001-base-multitenancy/`](specs/001-base-multitenancy/).
+Historia 001 (base del monorepo, multitenancy y aislamiento entre empresas) terminada; fase E (fijación única del contexto, errores 4xx y modo sin superusuario) en cierre. Su especificación, plan y tareas están en [`specs/001-base-multitenancy/`](specs/001-base-multitenancy/).
 
 Hasta la historia 002 (autenticación) las rutas de empresa responden 401 `EMPRESA_NO_RESUELTA`, salvo con el resolutor por cabecera de desarrollo y pruebas (`EMPRESA_POR_HEADER=habilitado`): todavía no hay forma de saber la empresa de una petición real.
 
@@ -96,6 +96,33 @@ DB_PROTECCION_CATALOGO=omitir NODE_ENV=production pnpm db:preparar
   `SUPERUSER`, `BYPASSRLS` ni `REPLICATION` a quien no es superusuario, así que en ese modo `db:preparar`
   los omite de `ALTER ROLE` (sí los pone en `CREATE ROLE`) y comprueba que el rol no los tiene.
 
+#### TLS y conexión directa (producción administrada)
+
+- **TLS.** Los proveedores administrados exigen conexión cifrada: agrega `sslmode` a **todas** las URL
+  (`DATABASE_ADMIN_URL`, `DATABASE_URL`, `DATABASE_PLATAFORMA_URL`, `DATABASE_MIGRADOR_URL`). Lo toman
+  la API (Sequelize) y los scripts (`pg`) de la propia URL, sin configuración aparte; las URL de los
+  roles que `db:preparar`, `db:migrar` y `db:semilla` derivan del administrador conservan sus
+  parámetros (`apps/api/test/ssl-url.spec.ts` lo comprueba). Sin `sslmode` no hay TLS. Con `pg` 8,
+  `sslmode=require` (y `prefer`, `verify-ca`) **verifica el certificado** igual que `verify-full`, y
+  la CA privada de un proveedor como DigitalOcean no está entre las de Node, así que hay dos formas
+  de configurarlo:
+  - Recomendada: `?sslmode=verify-full&sslrootcert=/ruta/ca-certificate.crt` (la CA que descargas
+    del panel del proveedor; el archivo debe existir en la máquina que corre la API y los scripts).
+  - Cifrar sin verificar el servidor: `?sslmode=require&uselibpqcompat=true` (semántica de libpq;
+    no protege de un intermediario).
+- **Base de mantenimiento.** `db:preparar` se conecta con `DATABASE_ADMIN_URL` tal cual para crear
+  roles y la base, así que en DigitalOcean (`.../defaultdb?sslmode=...`) usa `defaultdb`. Si la URL
+  no nombra base, o nombra la que se va a preparar, usa `postgres`, como en local.
+- **Conexión directa, no un pooler en modo transacción.** `db:preparar` usa un bloqueo asesor de
+  sesión (`pg_advisory_lock`) y `SET`/`RESET` de sesión, y las migraciones corren DDL dentro de una
+  transacción por migración y crean roles y esquemas con el rol migrador; un
+  pooler en modo transacción (PgBouncer, el «connection pool» del panel de DigitalOcean) reparte
+  esas sentencias entre conexiones distintas y las rompe. Apunta `DATABASE_ADMIN_URL` y
+  `DATABASE_MIGRADOR_URL` al puerto directo del clúster (en DigitalOcean, el de la base, no el del
+  pool de conexiones). La API en ejecución no tiene esta restricción.
+- **Bloqueo de `db:preparar`.** Si otra ejecución sigue en curso, espera hasta 60 s por el bloqueo y
+  falla con un mensaje claro en vez de colgarse.
+
 `NODE_ENV` es obligatoria (`development`, `test` o `production`; sin valor por defecto): sin ella la API
 no arranca, y `db:preparar` solo usa las contraseñas por defecto de los roles (`*_local`) con
 `NODE_ENV=development` o `NODE_ENV=test` escrito de forma explícita; en otro caso falla nombrando la
@@ -172,7 +199,7 @@ utilidades están en `apps/api/test/README.md`. Las pruebas de `packages/*` no u
 | `DATABASE_URL`                                                      | Conexión de la API (`restaurante_api`); su base es también la que usan por defecto `db:preparar` y `db:migrar`                   |
 | `DATABASE_PLATAFORMA_URL`                                           | Conexión de plataforma (`restaurante_plataforma`)                                                                                |
 | `DATABASE_MIGRADOR_URL`                                             | Migraciones (`restaurante_migrador`); si falta se deriva del admin                                                               |
-| `DATABASE_ADMIN_URL`                                                | Solo `db:preparar` y las pruebas: administrador de PostgreSQL                                                                    |
+| `DATABASE_ADMIN_URL`                                                | Solo `db:preparar` y las pruebas: administrador de PostgreSQL; su base es la de mantenimiento; `sslmode` en producción           |
 | `DB_PASSWORD_MIGRADOR`, `DB_PASSWORD_API`, `DB_PASSWORD_PLATAFORMA` | Contraseñas que `db:preparar` asigna a los roles; obligatorias salvo con `NODE_ENV` `development` o `test`                       |
 | `DB_PROTECCION_CATALOGO`                                            | Solo `db:preparar`. `omitir`: sin superusuario, omite las protecciones del catálogo y avisa (producción); otro valor es un error |
 | `DB_POOL_MAX`                                                       | Tamaño del pool de la API (por defecto 10)                                                                                       |
@@ -198,8 +225,9 @@ Una empresa nunca ve datos de otra. La garantía la da PostgreSQL (RLS) y la ref
   `empresa_actual()` desde esa tabla; `app.empresa_id` queda solo como copia para diagnóstico y ningún
   `set_config` cambia lo que ve la RLS (criterio 22e; lo crea una migración y no requiere
   superusuario). El servicio `ContextoEmpresa`
-  (`apps/api/src/nucleo/contexto-empresa/contexto-empresa.ts`) es el único archivo que escribe
-  `fijar_contexto_empresa` y `app.empresa_id` (regla de ESLint, también si el texto se arma con `+`,
+  (`apps/api/src/nucleo/contexto-empresa/contexto-empresa.ts`) y `apps/api/src/nucleo/fijar-contexto.ts`
+  (que define el nombre de la función y `SQL_FIJAR_CONTEXTO`, sin dependencias de Nest) son los únicos
+  archivos que escriben `fijar_contexto_empresa` y `app.empresa_id` (regla de ESLint, también si el texto se arma con `+`,
   plantillas, `.concat()` o `.join()` de literales; las migraciones están exentas). Sin contexto,
   cualquier consulta de la API, incluso cruda, lanza `ContextoEmpresaAusenteError` antes de llegar a la
   base. Dentro de `ContextoEmpresa.ejecutar`, `fn` no puede controlar la transacción por SQL: `COMMIT`,
@@ -211,7 +239,7 @@ Una empresa nunca ve datos de otra. La garantía la da PostgreSQL (RLS) y la ref
   confirma o revierte todo al terminar `fn`. Solo la transacción que abre `ejecutar` cuando no hay
   contexto vigente queda autorizada: otra transacción de la API abierta desde `fn`
   (`sequelize.transaction()`), aunque fije una empresa a mano, lanza error en cada consulta
-  (criterio 22c). El texto SQL que fija la empresa (`SQL_FIJAR_CONTEXTO`) y el registro de
+  (criterio 22c). El texto SQL que fija la empresa (`SQL_FIJAR_CONTEXTO`, de `nucleo/fijar-contexto.ts`) y el registro de
   transacciones por autorizar no se pueden usar fuera de `apps/api/src/nucleo/` (regla de ESLint).
   Además, dentro del contexto solo pasan sentencias cuya primera palabra (en cada sentencia de un
   texto con varias, tras quitar comentarios) es `SELECT`, `INSERT`, `UPDATE`, `DELETE`, `WITH`,

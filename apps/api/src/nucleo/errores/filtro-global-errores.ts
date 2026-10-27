@@ -36,6 +36,9 @@ const CODIGO_POR_ESTADO: Record<number, CodigoDe4xx> = {
 };
 const CODIGO_4XX_GENERICO: CodigoDe4xx = 'PETICION_INVALIDA';
 
+/** Límite del cuerpo de una petición (criterio 40b); lo aplica el analizador de cuerpos de `aplicacion.ts`. */
+export const LIMITE_CUERPO_BYTES = 100 * 1024;
+
 /**
  * Mensaje fijo por código para los 4xx que no son `ErrorAplicacion`: nunca repite el texto de la
  * excepción, la ruta, el método, el cuerpo, el charset ni la codificación (criterio 40d).
@@ -47,41 +50,57 @@ const MENSAJE_POR_CODIGO: Record<CodigoDe4xx, string> = {
   NO_ENCONTRADO: 'El recurso solicitado no existe',
   METODO_NO_PERMITIDO: 'El método de la petición no está permitido para este recurso',
   CONFLICTO: 'La operación entra en conflicto con el estado actual del recurso',
-  CUERPO_DEMASIADO_GRANDE: 'El cuerpo de la petición supera el límite de 100 KB',
+  CUERPO_DEMASIADO_GRANDE: `El cuerpo de la petición supera el límite de ${LIMITE_CUERPO_BYTES / 1024} KB`,
   TIPO_NO_SOPORTADO: 'El tipo de contenido de la petición no está soportado',
   DEMASIADAS_PETICIONES: 'Demasiadas peticiones; intenta de nuevo más tarde',
   PETICION_INVALIDA: 'La petición no se puede procesar',
 };
 
-/** Límite del cuerpo de una petición (criterio 40b); lo aplica el analizador de cuerpos de `aplicacion.ts`. */
-export const LIMITE_CUERPO_BYTES = 100 * 1024;
-export const MENSAJE_CUERPO_DEMASIADO_GRANDE =
-  'El cuerpo de la petición supera el límite de 100 KB';
+/**
+ * Tipos de los errores de body-parser (`entity.too.large`, `charset.unsupported`…): son errores de
+ * `http-errors` de la petición, y se reconocen también por su `type` por si perdieran `expose`.
+ */
+const TIPOS_DE_CUERPO = new Set([
+  'entity.too.large',
+  'entity.parse.failed',
+  'entity.verify.failed',
+  'request.aborted',
+  'request.size.invalid',
+  'charset.unsupported',
+  'encoding.unsupported',
+  'stream.encoding.set',
+  'parameters.too.many',
+]);
 
 /**
- * El analizador de cuerpos de Express (body-parser) lanza `PayloadTooLargeError` (status 413, tipo
- * `entity.too.large`) antes de llegar a Nest: no es una `HttpException` y sin esta regla acabaría
- * como un 500. Se reconoce por su forma y no por la clase, que vive en un paquete interno.
+ * `true` si el objeto es un error de la petición con la forma de `http-errors` (el analizador de
+ * cuerpos y otros middlewares de Express): `expose === true` (`http-errors` lo pone en los 4xx) o un
+ * `type` de body-parser. No basta con tener `status` o `statusCode`: un error de un cliente HTTP
+ * saliente (axios, fetch, el PSE) también los trae y no es un 4xx de esta petición, sino un fallo
+ * interno que debe dar 500 y registrarse. Se reconoce por su forma y no por la clase, que vive en un
+ * paquete interno.
  */
-function esCuerpoDemasiadoGrande(excepcion: unknown): boolean {
-  if (typeof excepcion !== 'object' || excepcion === null) return false;
-  const { type, status, statusCode } = excepcion as Record<string, unknown>;
-  return type === 'entity.too.large' || status === 413 || statusCode === 413;
+function esErrorHttpDeLaPeticion(excepcion: object): boolean {
+  const { expose, type } = excepcion as Record<string, unknown>;
+  return expose === true || (typeof type === 'string' && TIPOS_DE_CUERPO.has(type));
 }
 
 /**
- * Estado 4xx de una excepción, o `undefined` si no es un 4xx: una `HttpException` (de Nest: guards,
- * pipes, interceptores, controladores y el enrutador) o un error con la forma de `http-errors` que
- * lanzan el analizador de cuerpos y otros middlewares de Express (`status` o `statusCode` enteros;
- * por ejemplo el 415 de `charset.unsupported` y `encoding.unsupported`). Se reconoce por su forma y
- * no por la clase, que vive en un paquete interno. Un error interno con esa forma por casualidad
- * respondería un 4xx genérico, pero el mensaje es siempre fijo y el detalle no sale de la API.
+ * Estado 4xx de una excepción, o `undefined` si no es un 4xx de la petición: una `HttpException` (de
+ * Nest: guards, pipes, interceptores, controladores y el enrutador) o un error de `http-errors` que
+ * lanzan el analizador de cuerpos y otros middlewares de Express (`status` o `statusCode` enteros; por
+ * ejemplo el 413 de `entity.too.large` y el 415 de `charset.unsupported` y `encoding.unsupported`).
+ * Cualquier otro objeto con `status` 4xx (por ejemplo, la respuesta de un servicio externo) no cuenta.
  */
 function estado4xxDe(excepcion: unknown): number | undefined {
   let estado: unknown;
   if (excepcion instanceof HttpException) {
     estado = excepcion.getStatus();
-  } else if (typeof excepcion === 'object' && excepcion !== null) {
+  } else if (
+    typeof excepcion === 'object' &&
+    excepcion !== null &&
+    esErrorHttpDeLaPeticion(excepcion)
+  ) {
     const { status, statusCode } = excepcion as Record<string, unknown>;
     estado = Number.isInteger(status) ? status : statusCode;
   }
@@ -129,12 +148,6 @@ export class FiltroGlobalErrores implements ExceptionFilter {
       const cuerpo: ErrorRespuesta = { codigo: excepcion.codigo, mensaje: excepcion.message };
       if (excepcion.campos) cuerpo.campos = excepcion.campos;
       return { estado: excepcion.getStatus(), cuerpo };
-    }
-    if (esCuerpoDemasiadoGrande(excepcion)) {
-      return {
-        estado: 413,
-        cuerpo: { codigo: 'CUERPO_DEMASIADO_GRANDE', mensaje: MENSAJE_CUERPO_DEMASIADO_GRANDE },
-      };
     }
     const estado = estado4xxDe(excepcion);
     if (estado !== undefined) {

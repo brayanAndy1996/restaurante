@@ -8,10 +8,12 @@
 //    falla, porque no se puede saber qué carga.
 // 2. El texto del parámetro de contexto de empresa (`app.empresa_id`) y el de la función que lo fija
 //    (`fijar_contexto_empresa`, criterio 22e) solo los escribe el servicio de contexto
-//    (`src/nucleo/contexto-empresa/contexto-empresa.ts`), también si se arma por concatenación de
+//    (`src/nucleo/contexto-empresa/contexto-empresa.ts`) y `src/nucleo/fijar-contexto.ts` (que define
+//    el nombre de la función y `SQL_FIJAR_CONTEXTO`, sin dependencias de Nest), también si se arma por concatenación de
 //    literales o con una plantilla de literales (criterio 22c: el parser de `herramientas/` calcula
 //    esos textos antes de aplicar la regla).
-// 3. El texto SQL con el que `ContextoEmpresa` fija la empresa (`SQL_FIJAR_CONTEXTO`) y el registro
+// 3. El texto SQL con el que `ContextoEmpresa` fija la empresa (`SQL_FIJAR_CONTEXTO`, definido en
+//    `nucleo/fijar-contexto`, y su antigua ruta `contexto-empresa/contexto-empresa`) y el registro
 //    de transacciones por autorizar (`nucleo/base-de-datos/autorizacion-transaccion`) solo se usan
 //    dentro de `src/nucleo/` (criterio 22c), con las mismas formas de importación de la regla 1.
 //
@@ -26,12 +28,14 @@ const SRC = `src/**/*.${EXTENSIONES}`;
 const PLATAFORMA = `src/modulos/plataforma/**/*.${EXTENSIONES}`;
 const NUCLEO = `src/nucleo/**/*.${EXTENSIONES}`;
 const SERVICIO_DE_CONTEXTO = 'src/nucleo/contexto-empresa/contexto-empresa.ts';
+const TEXTO_DE_FIJACION = 'src/nucleo/fijar-contexto.ts';
 const MIGRACIONES = `src/migraciones/**/*.${EXTENSIONES}`;
 
 // Fragmentos de ruta. Sin `/` en los selectores (esquery no admite la barra dentro de una expresión
 // regular): `\x2f` es la barra. Las mismas rutas para `no-restricted-imports` van como `regex` normal.
 const RUTA_CONEXION = '(^|\\x2f)conexion-plataforma(\\.[cm]?[jt]sx?)?$';
-const RUTA_SQL_CONTEXTO = '(^|\\x2f)contexto-empresa\\x2fcontexto-empresa(\\.[cm]?[jt]sx?)?$';
+const RUTA_SQL_CONTEXTO =
+  '(^|\\x2f)(contexto-empresa\\x2fcontexto-empresa|fijar-contexto)(\\.[cm]?[jt]sx?)?$';
 const RUTA_AUTORIZACION = '(^|\\x2f)autorizacion-transaccion(\\.[cm]?[jt]sx?)?$';
 
 const MENSAJE_CONEXION =
@@ -128,6 +132,11 @@ const PATRON_SQL_CONTEXTO = {
   importNames: ['SQL_FIJAR_CONTEXTO'],
   message: MENSAJE_SQL_CONTEXTO,
 };
+// El archivo que define el texto de fijación: nada de fuera de `src/nucleo/` lo importa.
+const PATRON_TEXTO_DE_FIJACION = {
+  regex: '(^|/)fijar-contexto(\\.[cm]?[jt]sx?)?$',
+  message: MENSAJE_SQL_CONTEXTO,
+};
 const PATRON_AUTORIZACION = {
   regex: '(^|/)autorizacion-transaccion(\\.[cm]?[jt]sx?)?$',
   message: MENSAJE_AUTORIZACION,
@@ -150,6 +159,7 @@ module.exports = [
       'no-restricted-imports': importaciones(
         PATRON_CONEXION,
         PATRON_SQL_CONTEXTO,
+        PATRON_TEXTO_DE_FIJACION,
         PATRON_AUTORIZACION,
       ),
     },
@@ -157,7 +167,13 @@ module.exports = [
   {
     // El módulo de plataforma sí puede usar la conexión de plataforma.
     files: [PLATAFORMA],
-    rules: { 'no-restricted-imports': importaciones(PATRON_SQL_CONTEXTO, PATRON_AUTORIZACION) },
+    rules: {
+      'no-restricted-imports': importaciones(
+        PATRON_SQL_CONTEXTO,
+        PATRON_TEXTO_DE_FIJACION,
+        PATRON_AUTORIZACION,
+      ),
+    },
   },
   {
     // `src/nucleo/` sí usa el texto SQL de fijación y el registro de autorización.
@@ -196,14 +212,14 @@ module.exports = [
   {
     // `src/nucleo/`, salvo el servicio de contexto: sí usa el SQL de fijación, pero no escribe el parámetro.
     files: [NUCLEO],
-    ignores: [SERVICIO_DE_CONTEXTO],
+    ignores: [SERVICIO_DE_CONTEXTO, TEXTO_DE_FIJACION],
     rules: {
       'no-restricted-syntax': ['error', ...SELECTORES_CONEXION, ...SELECTORES_PARAMETRO],
     },
   },
   {
-    // El servicio de contexto sí nombra el parámetro.
-    files: [SERVICIO_DE_CONTEXTO],
+    // El servicio de contexto y el archivo del texto de fijación sí nombran el parámetro y la función.
+    files: [SERVICIO_DE_CONTEXTO, TEXTO_DE_FIJACION],
     rules: { 'no-restricted-syntax': ['error', ...SELECTORES_CONEXION] },
   },
 ];

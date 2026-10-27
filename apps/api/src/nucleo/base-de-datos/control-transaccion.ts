@@ -11,7 +11,7 @@
  * `UPDATE …; COMMIT` en un mismo texto sí. Si el texto tiene un literal o comentario sin cerrar, se
  * rechaza (no se puede saber dónde termina).
  */
-import { NOMBRE_FUNCION_FIJAR_CONTEXTO } from '../contexto-empresa/contexto-empresa';
+import { NOMBRE_FUNCION_FIJAR_CONTEXTO } from '../fijar-contexto';
 
 const PALABRAS_DE_CONTROL = new Set([
   'COMMIT',
@@ -280,6 +280,11 @@ const MENCION_DE_CONTEXTO = new RegExp(
     'app\\s*\\.\\s*empresa_id)',
   'i',
 );
+
+/** `false` si el texto tiene un literal o comentario sin cerrar o algo que no se puede leer con certeza. */
+export function esTextoAnalizable(texto: string): boolean {
+  return analizar(texto) !== null;
+}
 
 /**
  * `true` si el texto, sin literales ni comentarios, nombra una función o un objeto de la lista de

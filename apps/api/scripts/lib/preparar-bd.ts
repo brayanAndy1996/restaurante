@@ -4,6 +4,7 @@ import {
   ROLES,
   contrasenasDeRoles,
   exigirUrlAdmin,
+  urlAdminDeMantenimiento,
   urlAdminParaBase,
   validarNombreDeBase,
 } from './roles';
@@ -24,6 +25,8 @@ export interface OpcionesPrepararBd {
    * error (`console.warn`).
    */
   avisar?: (mensaje: string) => void;
+  /** Espera máxima por el bloqueo asesor, en ms; por defecto 60 s. Falla con un mensaje claro si vence. */
+  esperaBloqueoMs?: number;
 }
 
 /** Funciones de `pg_catalog` que devuelven el texto de las consultas en curso de otras sesiones. */
@@ -490,6 +493,9 @@ function avisoDeProteccionesOmitidas(baseDeDatos: string): string {
 
 /** Clave del bloqueo asesor que serializa las preparaciones (evita "tuple concurrently updated"). */
 const BLOQUEO_PREPARAR = "hashtext('restaurante:preparar-bd')";
+/** Espera máxima por el bloqueo asesor: otra preparación que no termina no debe colgar esta. */
+const ESPERA_BLOQUEO_PREPARAR_MS = 60_000;
+const SQLSTATE_BLOQUEO_NO_DISPONIBLE = '55P03';
 
 /** Atributos que `ALTER ROLE` rechaza nombrar a un administrador que no es superusuario (PostgreSQL 16). */
 const ATRIBUTOS_RESERVADOS_A_SUPERUSUARIO = [
@@ -522,15 +528,31 @@ export async function prepararBaseDeDatos(opciones: OpcionesPrepararBd = {}): Pr
   const baseDeDatos = validarNombreDeBase(opciones.baseDeDatos ?? BASE_DE_DATOS_POR_DEFECTO);
   const contrasenas = contrasenasDeRoles(env);
   const { omitir } = leerProteccionCatalogo(env);
+  const esperaMs = opciones.esperaBloqueoMs ?? ESPERA_BLOQUEO_PREPARAR_MS;
 
-  const admin = new Client({ connectionString: urlAdminParaBase(adminUrl, 'postgres') });
+  // La base de mantenimiento es la de DATABASE_ADMIN_URL (`defaultdb` en DigitalOcean); `postgres` si no nombra una.
+  const admin = new Client({ connectionString: urlAdminDeMantenimiento(adminUrl, baseDeDatos) });
   admin.on('error', () => undefined);
   await admin.connect();
   let aplicarProtecciones: boolean;
   try {
     // Dos preparaciones a la vez sobre el mismo clúster (por ejemplo varios archivos de pruebas)
     // chocan con "tuple concurrently updated" al modificar los mismos roles y objetos: se serializan.
-    await admin.query(`SELECT pg_advisory_lock(${BLOQUEO_PREPARAR})`);
+    await admin.query(`SET lock_timeout = ${Math.max(1, Math.trunc(esperaMs))}`);
+    try {
+      await admin.query(`SELECT pg_advisory_lock(${BLOQUEO_PREPARAR})`);
+    } catch (error) {
+      if ((error as { code?: string }).code === SQLSTATE_BLOQUEO_NO_DISPONIBLE) {
+        throw new Error(
+          `No se obtuvo el bloqueo de preparación en ${esperaMs / 1000} s: otra ` +
+            'ejecución de db:preparar sigue en curso (o quedó colgada). Espera a que termine, o ' +
+            'cierra su sesión en el servidor, y vuelve a intentarlo.',
+        );
+      }
+      throw error;
+    }
+    // El límite era solo para esperar el bloqueo; el resto de las sentencias no lo lleva.
+    await admin.query('RESET lock_timeout');
 
     // 0. Antes de tocar nada: ¿puede el administrador aplicar las protecciones del catálogo?
     const { rows: yo } = await admin.query<{ usuario: string; esSuperusuario: boolean }>(

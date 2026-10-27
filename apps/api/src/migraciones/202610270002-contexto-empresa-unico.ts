@@ -26,12 +26,26 @@ CREATE SCHEMA contexto AUTHORIZATION restaurante_migrador;
 REVOKE ALL ON SCHEMA contexto FROM PUBLIC;
 
 -- Una fila por sesión de la base (pid); solo vale para la transacción cuya xid guarda. UNLOGGED: no
--- necesita sobrevivir a un reinicio y evita escribir WAL en cada transacción.
+-- necesita sobrevivir a un reinicio y evita escribir WAL en cada transacción. Cada transacción
+-- actualiza su fila, así que la tabla es casi todo versiones muertas: fillfactor bajo para que las
+-- actualizaciones sean HOT (en la misma página) y autovacuum más agresivo para reciclarlas pronto.
 CREATE UNLOGGED TABLE contexto.sesion_empresa (
   pid integer PRIMARY KEY,
   xid xid8 NOT NULL,
   empresa_id uuid NOT NULL
+) WITH (
+  fillfactor = 50,
+  autovacuum_vacuum_scale_factor = 0,
+  autovacuum_vacuum_threshold = 50,
+  autovacuum_vacuum_insert_threshold = 50,
+  autovacuum_analyze_scale_factor = 0,
+  autovacuum_analyze_threshold = 500,
+  autovacuum_vacuum_cost_delay = 2
 );
+-- Defensa en profundidad: RLS activada y sin políticas niega todo a quien no sea dueño ni la salte.
+-- El dueño (migrador, que ejecuta las funciones SECURITY DEFINER) la usa igual porque no es FORCE.
+-- Si una migración futura concediera privilegios sobre la tabla a otro rol, seguiría sin ver filas.
+ALTER TABLE contexto.sesion_empresa ENABLE ROW LEVEL SECURITY;
 REVOKE ALL ON TABLE contexto.sesion_empresa FROM PUBLIC;
 
 -- Fija la empresa de la transacción en curso. No es STRICT: con STRICT un NULL devolvería sin ejecutar
@@ -103,6 +117,7 @@ REVOKE ALL ON FUNCTION public.empresa_actual() FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.empresa_actual() TO restaurante_api;
 
 DROP FUNCTION public.fijar_contexto_empresa(uuid);
+-- La RLS, el fillfactor y los parámetros de autovacuum van con la tabla.
 DROP TABLE contexto.sesion_empresa;
 DROP SCHEMA contexto;
 `;

@@ -4,7 +4,7 @@ import {
   ContextoEmpresaAusenteError,
   ContextoEmpresaConflictoError,
 } from '../contexto-empresa/errores';
-import { SQL_FIJAR_CONTEXTO } from '../contexto-empresa/contexto-empresa';
+import { SQL_FIJAR_CONTEXTO } from '../fijar-contexto';
 import {
   esConsultaSinEmpresaValida,
   esControlDeTransaccion,
@@ -16,11 +16,11 @@ import { consumirPendienteDeAutorizar } from './autorizacion-transaccion';
 import {
   contieneControlDeTransaccion,
   contieneSentenciaNoPermitida,
+  esTextoAnalizable,
   mencionaContextoDeEmpresa,
 } from './control-transaccion';
 import { ColaPorTransaccion } from './cola-por-transaccion';
 import { ConsultaProhibidaError } from './errores';
-import { SQLSTATE } from './errores-pg';
 import type { OpcionesConsultaInterna, TransaccionInterna } from './transaccion-interna';
 import { estadoActual } from './estado-operacion';
 
@@ -130,12 +130,12 @@ export function instalarGuardaApi(sequelize: Sequelize): void {
     }
 
     if (!autorizadas.has(transaccion)) throw new ContextoEmpresaAusenteError();
-    if (texto === undefined) throw new ConsultaProhibidaError();
+    // Un texto ausente o que no se puede analizar (literal o comentario sin cerrar) se rechaza con el
+    // mensaje genérico: no se puede afirmar que nombre algo prohibido.
+    if (texto === undefined || !esTextoAnalizable(texto)) throw new ConsultaProhibidaError();
     // Nombres de la lista del criterio 38e (y `set_config`, `pg_settings`, `ts_*`, `app.empresa_id`,
-    // la función que fija el contexto, `U&"…"`): denegación equivalente a un permiso denegado.
-    if (mencionaContextoDeEmpresa(texto)) {
-      throw new ConsultaProhibidaError(PROHIBIDO_NOMBRE, SQLSTATE.PERMISO_DENEGADO);
-    }
+    // la función que fija el contexto, `U&"…"`).
+    if (mencionaContextoDeEmpresa(texto)) throw new ConsultaProhibidaError(PROHIBIDO_NOMBRE);
     // Incluye `SET`/`RESET`/`DISCARD`/`DO` como sentencia, además del control de transacción.
     if (contieneControlDeTransaccion(texto)) throw new ConsultaProhibidaError(PROHIBIDO_CONTROLAR);
     // Lista blanca (22d): solo SELECT, INSERT, UPDATE, DELETE, WITH, VALUES y TABLE. Las sentencias

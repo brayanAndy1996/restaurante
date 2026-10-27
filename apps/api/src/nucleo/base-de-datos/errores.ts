@@ -13,15 +13,12 @@ export class RolPrivilegiadoError extends Error {
 /**
  * Una consulta intentó cambiar el contexto de empresa o la sesión, o nombrar un objeto prohibido, por
  * una vía no autorizada. La guarda la rechaza antes de llegar a la base, así que no es un error de
- * PostgreSQL (`DatabaseError`). Cuando la denegación equivale a un permiso denegado de la base (los
- * nombres de la lista del criterio 38e, que en producción sin superusuario no tienen la revocación
- * de `pg_catalog`), lleva `code` = `42501` (`insufficient_privilege`), para que quien distinga los
- * permisos denegados los trate igual con o sin superusuario.
+ * PostgreSQL (`DatabaseError`) y no lleva el `code` de uno: quien necesite distinguir una denegación
+ * de la guarda de un permiso denegado de la base usa `instanceof ConsultaProhibidaError`.
  */
 export class ConsultaProhibidaError extends Error {
   constructor(
     mensaje = 'Consulta no permitida: el contexto de empresa y la sesión solo los gestiona ContextoEmpresa',
-    readonly code?: string,
   ) {
     super(mensaje);
     this.name = 'ConsultaProhibidaError';

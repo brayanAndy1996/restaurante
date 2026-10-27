@@ -26,7 +26,6 @@ import type { OpcionesSinEmpresa } from './consultas-sin-empresa';
 import { contieneControlDeTransaccion, mencionaContextoDeEmpresa } from './control-transaccion';
 import { crearSequelize } from './crear-sequelize';
 import { ConsultaProhibidaError } from './errores';
-import { SQLSTATE } from './errores-pg';
 import { estadoActual } from './estado-operacion';
 import type { OpcionesConsultaInterna, TransaccionInterna } from './transaccion-interna';
 
@@ -170,8 +169,7 @@ export class ConexionPlataforma {
       // señales, objetos grandes…) y el rechazo de `U&"…"`. Aquí no hay lista blanca de sentencias,
       // pero `DO`, `PREPARE` y `SET` (las vías para ejecutar SQL dinámico sin nombrarlo) ya se
       // rechazaron arriba. Es un `ConsultaProhibidaError`, no un error de la base.
-      if (mencionaContextoDeEmpresa(texto))
-        throw new ConsultaProhibidaError(PROHIBIDO_NOMBRE, SQLSTATE.PERMISO_DENEGADO);
+      if (mencionaContextoDeEmpresa(texto)) throw new ConsultaProhibidaError(PROHIBIDO_NOMBRE);
       return this.cola.ejecutar(transaccion, () => consultar(sql, opts));
     };
     sequelize.query = guardada as unknown as typeof sequelize.query;

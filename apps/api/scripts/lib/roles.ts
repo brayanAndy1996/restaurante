@@ -86,6 +86,28 @@ export function urlAdminParaBase(adminUrl: string, baseDeDatos: string): string 
   return url.toString();
 }
 
+/** Base de mantenimiento por defecto de PostgreSQL. */
+export const BASE_DE_MANTENIMIENTO = 'postgres';
+
+/**
+ * URL con la que el administrador crea roles y bases: la de `DATABASE_ADMIN_URL` tal cual (en
+ * DigitalOcean la base de mantenimiento es `defaultdb`, no `postgres`). Si la URL no nombra base, o
+ * nombra la que se va a preparar (no se puede borrar la base a la que se está conectado), usa
+ * `postgres`, como antes.
+ */
+export function urlAdminDeMantenimiento(adminUrl: string, baseDeDestino: string): string {
+  let nombre: string;
+  try {
+    nombre = decodeURIComponent(new URL(adminUrl).pathname.replace(/^\//, ''));
+  } catch {
+    throw new Error('DATABASE_ADMIN_URL no es una URL válida');
+  }
+  if (nombre === '' || nombre === baseDeDestino) {
+    return urlAdminParaBase(adminUrl, BASE_DE_MANTENIMIENTO);
+  }
+  return adminUrl;
+}
+
 /** URL de un rol de la aplicación derivada de la del administrador (mismo servidor y puerto). */
 export function urlParaRol(
   adminUrl: string,
