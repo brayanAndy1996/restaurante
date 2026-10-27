@@ -114,6 +114,8 @@ Commit propio. HU-04, RF-06.
   - **Idempotencia:** respuestas de A devueltas en B, claves reutilizadas por otro usuario, respuestas con secretos guardadas.
 
   Cada falla vuelve como prueba nueva (test-writer, con las reglas de la fase B) y a la fase C. (criterios 1 a 68, 85 a 91, 105 a 120)
+
+  - [x] Ronda 3 (commit e7cb2e5): ingreso con contraseña en tres tiempos (usuarios, cambio de contraseña y superadministrador), topes en memoria de `TopeDeIntentos`, bloqueo de la clave de supervisor revisado antes de la clave de idempotencia, huella de idempotencia con la ruta concreta y, como decisión operativa del orquestador, el desbloqueo del superadministrador con `pnpm plataforma:superadmin desbloquear <usuario>` (auditoría `desbloquear_superadministrador`). Ver `plan.md`, "Ingreso con contraseña en tres tiempos" y "Superadministrador y soporte". (criterios 11, 12, 16, 47, 61, 85, 86)
 - [ ] T45 · revisor · Comparar el cambio con `spec.md`, `plan.md` y `CLAUDE.md`; confirmar que P10 no debilitó ninguna aserción de 001, que ninguna tarea de la fase C tocó los archivos de la fase B, y que toda tabla nueva usa `sqlTablaDeEmpresaTrazable` salvo las excepciones.
 - [ ] T46 · tester · Suite completa, lint, tipos, build y E2E; `pnpm db:migrar`, `pnpm db:revertir` de las migraciones nuevas y otra vez `pnpm db:migrar`, sin errores; `pnpm local:preparar` en un clon limpio con la semilla nueva.
 
