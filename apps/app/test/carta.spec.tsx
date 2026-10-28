@@ -428,6 +428,57 @@ describe('secciones: familias y estaciones', () => {
     ).toBe(1);
   });
 
+  it('con el navegador sin red (navigator.onLine en falso y evento offline) no se queda en "Guardando…": queda "Pendiente de envío" y sale solo al volver (evento online) con la misma clave', async () => {
+    const enLinea = vi.spyOn(navigator, 'onLine', 'get');
+    try {
+      let sinRed = true;
+      let esperas = 0;
+      let liberar!: () => void;
+      const compuerta = new Promise<void>((resolver) => (liberar = resolver));
+      vi.spyOn(espera, 'dormir').mockImplementation(async () => {
+        if (++esperas === 7) await compuerta;
+      });
+      const s = carta(administrador(), {
+        'POST /carta/familias': () => {
+          if (sinRed) throw new TypeError('Failed to fetch');
+          return json(201, familia('f3000000-0000-4000-8000-000000000003', 'Postres', 3));
+        },
+      });
+      renderApp('/carta?ver=familias');
+      await screen.findByText('Entradas');
+      await userEvent.click(screen.getByRole('button', { name: 'Agregar familia' }));
+      await userEvent.type(screen.getByLabelText('Nombre de la familia'), 'Postres');
+      // Se corta el wifi con la pantalla ya abierta (TanStack empieza a oír `offline` al montarse).
+      enLinea.mockReturnValue(false);
+      window.dispatchEvent(new Event('offline'));
+      await userEvent.click(screen.getByRole('button', { name: 'Crear familia' }));
+      // La escritura sale aunque el navegador diga que no hay red (TanStack no la pausa) y queda pendiente.
+      const aviso = (await screen.findAllByText('Pendiente de envío'))[0]!.closest(
+        '[role="status"]',
+      )!;
+      expect(aviso).toHaveTextContent('Tus cambios se enviarán solos');
+      expect(s.de('POST', '/carta/familias').length).toBeGreaterThan(0);
+      expect(screen.getByLabelText('Nombre de la familia')).toHaveValue('Postres');
+
+      // Vuelve la red: sale sola, con la misma clave, y la pantalla se limpia.
+      sinRed = false;
+      enLinea.mockReturnValue(true);
+      window.dispatchEvent(new Event('online'));
+      liberar();
+      await waitFor(() => expect(screen.queryByText('Pendiente de envío')).not.toBeInTheDocument());
+      await waitFor(() =>
+        expect(screen.queryByLabelText('Nombre de la familia')).not.toBeInTheDocument(),
+      );
+      expect(
+        new Set(s.de('POST', '/carta/familias').map((l) => l.cabeceras.get('Idempotency-Key')))
+          .size,
+      ).toBe(1);
+    } finally {
+      enLinea.mockReturnValue(true);
+      window.dispatchEvent(new Event('online'));
+    }
+  });
+
   it('un nombre repetido se dice en el campo y lo escrito se conserva', async () => {
     carta(administrador(), {
       'POST /carta/familias': () => json(409, { codigo: 'CONFLICTO', mensaje: 'x' }),
