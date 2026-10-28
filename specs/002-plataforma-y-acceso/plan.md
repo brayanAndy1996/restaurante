@@ -310,7 +310,7 @@ Con fecha posterior a las de 001 (`202610270002`), una o dos por grupo de tareas
 
 Las tablas nuevas con datos de clientes usan `sqlTablaDeEmpresaTrazable` (salvo las cuatro excepciones, con `sqlTablaDeEmpresa`); `plan` necesita una variante con lectura para la API.
 
-Mientras C1 no esté, `registrarEmpresa` y `agregarSucursal` no crean suscripción (como en 001); las pruebas de P8 que la esperan quedan en rojo hasta el cierre de C1.
+Desde C1, `registrarEmpresa` y `agregarSucursal` crean la suscripción de cada sucursal nueva, con el plan indicado o el por defecto y su primer vencimiento (en 001 no la creaban).
 
 ## Riesgos
 
