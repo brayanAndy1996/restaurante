@@ -4,6 +4,10 @@ export const SQLSTATE = {
   VIOLACION_LLAVE_FORANEA: '23503',
   TEXTO_INVALIDO: '22P02',
   PERMISO_DENEGADO: '42501',
+  /** `40001`: la base abortó la transacción por una falla de serialización; se puede reintentar. */
+  FALLA_DE_SERIALIZACION: '40001',
+  /** `40P01`: la base abortó la transacción para romper un abrazo mortal; se puede reintentar. */
+  ABRAZO_MORTAL: '40P01',
 } as const;
 
 interface ErrorPg {

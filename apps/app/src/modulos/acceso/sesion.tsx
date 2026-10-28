@@ -30,6 +30,11 @@ import {
   type SoporteEnCurso,
 } from '../../lib/almacen';
 import { api, configurarApi } from '../../lib/api';
+import {
+  avisarCambioDeIdentidad,
+  configurarIdentidad,
+  type MotivoDeCambioDeIdentidad,
+} from '../../lib/identidad';
 import type { ErrorApi } from '../../lib/errores';
 
 /** Por qué se cerró la sesión sin que la persona lo pidiera: se avisa en la pantalla de ingreso. */
@@ -126,15 +131,28 @@ export function SesionProvider({ children }: { children: ReactNode }) {
     staleTime: Infinity,
   });
 
-  const limpiarEmpresa = useCallback(() => {
-    borrarTokenDeSesion();
-    borrarSoporteEnCurso();
-    setHayToken(false);
-    setSoporte(null);
-    clientes.removeQueries({ queryKey: CLAVE_SESION });
-    // Nada de lo que se leyó con esa sesión debe quedar a la vista de la siguiente persona.
-    clientes.removeQueries({ predicate: (q) => q.queryKey[0] !== 'plataforma' });
+  // Quién escribe y en qué sucursal: lo que un envío pendiente compara para no salir con otra sesión.
+  useEffect(() => {
+    configurarIdentidad(() => ({
+      token: tokenDeSesion(),
+      sucursalId: clientes.getQueryData<SesionRespuesta>(CLAVE_SESION)?.sucursal?.id ?? null,
+    }));
   }, [clientes]);
+
+  const limpiarEmpresa = useCallback(
+    (porque?: MotivoDeCambioDeIdentidad) => {
+      borrarTokenDeSesion();
+      borrarSoporteEnCurso();
+      setHayToken(false);
+      setSoporte(null);
+      clientes.removeQueries({ queryKey: CLAVE_SESION });
+      // Nada de lo que se leyó con esa sesión debe quedar a la vista de la siguiente persona.
+      clientes.removeQueries({ predicate: (q) => q.queryKey[0] !== 'plataforma' });
+      // Los envíos que esperaban la red con esta sesión se cancelan: no salen con la siguiente.
+      avisarCambioDeIdentidad(porque);
+    },
+    [clientes],
+  );
 
   const limpiarPlataforma = useCallback(() => {
     borrarSesionDePlataforma();
@@ -173,6 +191,7 @@ export function SesionProvider({ children }: { children: ReactNode }) {
       guardarTokenDeSesion(respuesta.token, equipo);
       clientes.setQueryData(CLAVE_SESION, respuesta.sesion);
       setHayToken(true);
+      avisarCambioDeIdentidad();
     },
     [clientes],
   );
@@ -180,6 +199,8 @@ export function SesionProvider({ children }: { children: ReactNode }) {
   const actualizarSesion = useCallback(
     (sesion: SesionRespuesta) => {
       clientes.setQueryData(CLAVE_SESION, sesion);
+      // Otra sucursal activa: los envíos que esperaban la red en la anterior no deben salir en la nueva.
+      avisarCambioDeIdentidad();
     },
     [clientes],
   );
@@ -192,6 +213,7 @@ export function SesionProvider({ children }: { children: ReactNode }) {
         ...(opciones?.segundoPlano ? { segundoPlano: true } : {}),
       });
       clientes.setQueryData(CLAVE_SESION, sesion);
+      avisarCambioDeIdentidad();
       return sesion;
     },
     [clientes],
@@ -214,7 +236,7 @@ export function SesionProvider({ children }: { children: ReactNode }) {
   const cambiarUsuario = useCallback(async () => {
     void api.delete('/sesion', { reintentos: 1 }).catch(() => undefined);
     setSalida({ a: '/pin', estado: {} });
-    limpiarEmpresa();
+    limpiarEmpresa('usuario');
   }, [limpiarEmpresa]);
 
   const soltarSesion = useCallback(

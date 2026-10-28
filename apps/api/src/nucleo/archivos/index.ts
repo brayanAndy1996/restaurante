@@ -8,4 +8,10 @@ export { ArchivosModule } from './archivos.module';
 export { crearAlmacenDeEntorno } from './crear-almacen';
 export { leerImagen, TIPOS_DE_IMAGEN } from './leer-imagen';
 export type { FormatoImagen, ImagenLeida } from './leer-imagen';
-export { analizadorBinarioDeFoto, esSubidaDeFoto, LIMITE_FOTO_BYTES } from './cuerpo-binario';
+export {
+  descartarCuerpoDeFotoAlResponder,
+  esSubidaDeFoto,
+  leerCuerpoDeFoto,
+  LIMITE_FOTO_BYTES,
+} from './cuerpo-binario';
+export type { CuerpoDeFoto } from './cuerpo-binario';

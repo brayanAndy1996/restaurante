@@ -1,6 +1,7 @@
 import { ArgumentsHost, Catch, ExceptionFilter, HttpException, Logger } from '@nestjs/common';
 import type { CodigoError, ErrorRespuesta } from '@restaurante/contratos';
 import type { Response } from 'express';
+import { SQLSTATE, sqlstateDe } from '../base-de-datos/errores-pg';
 import { ErrorAplicacion } from './error-aplicacion';
 
 /** Códigos que el filtro asigna por estado HTTP a un 4xx que no es un `ErrorAplicacion`. */
@@ -109,6 +110,19 @@ function estado4xxDe(excepcion: unknown): number | undefined {
     : undefined;
 }
 
+/** Mensaje del 409 `CONFLICTO` cuando la base aborta la transacción por un abrazo mortal o una falla de serialización. */
+export const MENSAJE_OPERACION_CONCURRENTE =
+  'Otra operación se estaba aplicando a los mismos datos. Intenta de nuevo';
+
+/**
+ * `true` si PostgreSQL abortó la transacción para romper un abrazo mortal (`40P01`) o por una falla de
+ * serialización (`40001`): no es un fallo de la API sino una carrera perdida que el cliente puede reintentar.
+ */
+const esCarreraPerdida = (excepcion: unknown): boolean => {
+  const codigo = sqlstateDe(excepcion);
+  return codigo === SQLSTATE.ABRAZO_MORTAL || codigo === SQLSTATE.FALLA_DE_SERIALIZACION;
+};
+
 export const MENSAJE_CUERPO_MAL_FORMADO = 'El cuerpo de la petición no tiene un formato válido';
 
 /**
@@ -162,6 +176,14 @@ export class FiltroGlobalErrores implements ExceptionFilter {
     if (estado !== undefined) {
       const codigo = CODIGO_POR_ESTADO[estado] ?? CODIGO_4XX_GENERICO;
       return { estado, cuerpo: { codigo, mensaje: MENSAJE_POR_CODIGO[codigo] } };
+    }
+    if (esCarreraPerdida(excepcion)) {
+      // 409, no 500: la transacción ya se revirtió entera y reintentar es seguro. Solo se deja constancia.
+      this.logger.warn(`Transacción abortada por la base (${sqlstateDe(excepcion)}); responde 409`);
+      return {
+        estado: 409,
+        cuerpo: { codigo: 'CONFLICTO', mensaje: MENSAJE_OPERACION_CONCURRENTE },
+      };
     }
     this.logger.error(
       excepcion instanceof Error ? (excepcion.stack ?? excepcion.message) : String(excepcion),

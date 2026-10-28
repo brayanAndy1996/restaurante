@@ -6,7 +6,7 @@ import {
 } from '@restaurante/contratos';
 
 /** Códigos que solo existen en el cliente. */
-export type CodigoCliente = 'SIN_CONEXION' | 'RESPUESTA_INVALIDA';
+export type CodigoCliente = 'SIN_CONEXION' | 'RESPUESTA_INVALIDA' | 'ENVIO_CANCELADO';
 
 /** Error de una llamada a la API: siempre con estado, código y campos, listo para mostrarse. */
 export class ErrorApi extends Error {
@@ -94,6 +94,9 @@ export function mensajeDeError(error: unknown, porCodigo: Record<string, string>
   switch (error.codigo) {
     case 'SIN_CONEXION':
       return 'No hay conexión con el servidor. Revisa tu internet e inténtalo de nuevo.';
+    case 'ENVIO_CANCELADO':
+      // Ya trae el motivo en palabras ("No se envió: cambiaste de usuario.").
+      return error.message;
     case 'RESPUESTA_INVALIDA':
       return 'Recibimos una respuesta que no entendemos. Actualiza la aplicación e inténtalo de nuevo.';
     case 'CREDENCIALES_INVALIDAS':

@@ -8,6 +8,7 @@ import { SucursalesConsultaService } from '../plataforma';
 import { armarProductoDeVenta, armarVista } from './armador-carta';
 import { cargarCarta, type CartaCargada } from './cargador-carta';
 import { ErrorProductoNoVendible, ErrorSeleccionInvalida, noEncontrado } from './errores-carta';
+import { esUuid } from './util-carta';
 
 /** Entrada de `CartaVentaService.prepararLinea` (criterio 52). */
 export interface PrepararLineaEntrada {
@@ -20,8 +21,6 @@ export interface PrepararLineaEntrada {
   /** Instante de la venta: define el día operativo (menú del día y agotados). */
   instante: Date;
 }
-
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /**
  * Contrato de la carta para el comandero (sección 3) y la carta web (sección 5): la vista de una sucursal y el
@@ -44,7 +43,7 @@ export class CartaVentaService {
    * viene del reloj de la API, nunca con `now()` de la base). 404 si la sucursal no es de la empresa.
    */
   private async diaDe(sucursalId: string, instante: Date): Promise<string> {
-    const horaCorte = UUID.test(sucursalId) ? await this.sucursales.horaCorte(sucursalId) : null;
+    const horaCorte = esUuid(sucursalId) ? await this.sucursales.horaCorte(sucursalId) : null;
     if (horaCorte === null) throw noEncontrado('La sucursal');
     return diaOperativo(instante, horaCorte);
   }
@@ -73,7 +72,7 @@ export class CartaVentaService {
   async prepararLinea(entrada: PrepararLineaEntrada): Promise<LineaPreparada> {
     const dia = await this.diaDe(entrada.sucursalId, entrada.instante);
     const productoId = entrada.productoId.toLowerCase();
-    if (!UUID.test(productoId)) throw noEncontrado('El producto');
+    if (!esUuid(productoId)) throw noEncontrado('El producto');
     const carta = await cargarCarta(this.conexion, {
       sucursalId: entrada.sucursalId.toLowerCase(),
       diaOperativo: dia,

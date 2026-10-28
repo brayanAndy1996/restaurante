@@ -3,7 +3,11 @@ import type { INestApplication, LogLevel, Type } from '@nestjs/common';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import { AppModule } from './app.module';
 import { cargarEntorno, exigirEntornoDeProduccion } from './config/entorno';
-import { analizadorBinarioDeFoto, AlmacenEnDisco, type AlmacenArchivos } from './nucleo/archivos';
+import {
+  AlmacenEnDisco,
+  descartarCuerpoDeFotoAlResponder,
+  type AlmacenArchivos,
+} from './nucleo/archivos';
 import type { PublicadorEventos } from './nucleo/eventos';
 import type { Reloj } from './nucleo/reloj';
 import { LIMITE_CUERPO_BYTES, traducirErrorDeCuerpo } from './nucleo/errores/filtro-global-errores';
@@ -82,8 +86,10 @@ export async function crearAplicacion(
     exposedHeaders: ['Retry-After', 'Date', 'ETag'],
     maxAge: 600,
   });
-  // La foto de un producto es la única ruta con cuerpo binario, con su propio límite de 1 MB (historia 003).
-  app.use(analizadorBinarioDeFoto());
+  // La foto de un producto es la única ruta con cuerpo binario, con su propio límite de 1 MB (historia 003). El
+  // controlador lee ese cuerpo después del guard y del permiso (401 y 403 van antes que el 413); aquí solo se
+  // asegura que, si se responde sin leerlo, lo que falte por llegar se descarte.
+  app.use(descartarCuerpoDeFotoAlResponder());
   // Un cuerpo mayor a 100 KB responde 413 CUERPO_DEMASIADO_GRANDE (lo traduce el filtro global).
   app.useBodyParser('json', { limit: LIMITE_CUERPO_BYTES });
   app.useBodyParser('urlencoded', { limit: LIMITE_CUERPO_BYTES, extended: true });

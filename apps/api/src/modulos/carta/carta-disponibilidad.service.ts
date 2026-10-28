@@ -14,7 +14,7 @@ import { AuditoriaService } from '../auditoria';
 import { SucursalesConsultaService } from '../plataforma';
 import { noEncontrado } from './errores-carta';
 import { EventosCarta } from './eventos-carta';
-import { aIso } from './util-carta';
+import { aIso, esUuid } from './util-carta';
 
 /** Entrada de `CartaDisponibilidadService.marcarAgotado` (criterio 53). */
 export interface MarcarAgotadoEntrada {
@@ -37,8 +37,6 @@ interface FilaAgotado {
   hasta: HastaAgotado;
   origen: OrigenAgotado;
 }
-
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /** Lo que dice un agotado en la auditoría. */
 const paraAuditoria = (a: {
@@ -71,23 +69,34 @@ export class CartaDisponibilidadService {
     @Inject(SucursalesConsultaService) private readonly sucursales: SucursalesConsultaService,
   ) {}
 
-  /** Día operativo actual de la sucursal (404 si no es de la empresa) y el id del producto (404 si no es de la empresa). */
+  /**
+   * Día operativo actual de la sucursal (404 si no es de la empresa) y el id del producto (404 si no es de la
+   * empresa). El producto queda bloqueado `FOR NO KEY UPDATE` hasta el fin de la transacción: es lo que
+   * serializa dos cambios del agotado del mismo producto aunque todavía no haya fila en `producto_agotado`
+   * (la primera marca, o la siguiente a una reactivación), donde `FOR UPDATE` sobre esa tabla no bloquea nada.
+   * Es el mismo bloqueo que toman los ajustes por sucursal y el armado del menú del día, y va antes de leer
+   * el estado (orden del módulo: producto y después sus filas hijas; nadie bloquea `producto_agotado` antes
+   * que el producto).
+   */
   private async preparar(sucursalId: string, productoId: string) {
     const sucursal = sucursalId.toLowerCase();
     const producto = productoId.toLowerCase();
-    if (!UUID.test(sucursal)) throw noEncontrado('La sucursal');
-    if (!UUID.test(producto)) throw noEncontrado('El producto');
+    if (!esUuid(sucursal)) throw noEncontrado('La sucursal');
+    if (!esUuid(producto)) throw noEncontrado('El producto');
     const horaCorte = await this.sucursales.horaCorte(sucursal);
     if (horaCorte === null) throw noEncontrado('La sucursal');
     const existe = await this.conexion.query<{ id: string }>(
-      'SELECT id FROM producto WHERE id = $1',
+      'SELECT id FROM producto WHERE id = $1 FOR NO KEY UPDATE',
       { bind: [producto], type: QueryTypes.SELECT },
     );
     if (existe[0] === undefined) throw noEncontrado('El producto');
     return { sucursal, producto, dia: diaOperativo(this.reloj.ahora(), horaCorte) };
   }
 
-  /** El agotado guardado (vigente o vencido) con la fila bloqueada, para decidir el no-op y el antes. */
+  /**
+   * El agotado guardado (vigente o vencido), para decidir el no-op y el antes. Se lee después de que `preparar`
+   * bloqueó el producto; el `FOR UPDATE` de la fila (si existe) es redundante pero inocuo.
+   */
   private async leerBloqueado(
     producto: string,
     sucursal: string,

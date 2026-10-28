@@ -15,7 +15,7 @@ import {
   claseBoton,
 } from '@restaurante/ui';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useMemo, useState, type ComponentType, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ComponentType, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { EtiquetaPendiente } from '../../componentes/PendienteDeEnvio';
 import { enviarSinPerder } from '../../lib/envios';
@@ -95,6 +95,15 @@ export function MenuDelDiaSeccion({
   const [repitiendo, setRepitiendo] = useState(false);
   const [copiado, setCopiado] = useState<string | null>(null);
   const [falloAlRepetir, setFalloAlRepetir] = useState<string | null>(null);
+
+  // Para saber si la pantalla sigue ahí cuando un envío pendiente se cancela por un cambio de sucursal.
+  const montada = useRef(true);
+  useEffect(() => {
+    montada.current = true;
+    return () => {
+      montada.current = false;
+    };
+  }, []);
 
   // "Hoy" lo decide la API (día operativo de la sucursal): sin `dia`, su respuesta dice cuál es.
   const hoyConsulta = useQuery({
@@ -193,7 +202,10 @@ export function MenuDelDiaSeccion({
               { dia: diaGuardado, opciones: [...marcadasDe(menu)] },
               extra,
             ),
-          { alCambiar: (esperando) => marcarPendiente(menu.productoId, esperando) },
+          {
+            alCambiar: (esperando) => marcarPendiente(menu.productoId, esperando),
+            pantallaViva: () => montada.current,
+          },
         ),
       ),
     );

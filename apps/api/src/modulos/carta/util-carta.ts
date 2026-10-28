@@ -1,7 +1,12 @@
+import { uuidSchema } from '@restaurante/contratos';
+
 /**
  * Ayudantes comunes de los servicios de la carta: instantes y diferencias para la auditoría. Sin montos
  * (los montos se normalizan y calculan con `packages/dominio`).
  */
+
+/** `true` si el texto tiene la forma de un UUID (el mismo criterio que los contratos y que `PipeUuid`). */
+export const esUuid = (valor: string): boolean => uuidSchema.safeParse(valor).success;
 
 /** Instante en el formato de los contratos (`z.iso.datetime()`). */
 export const aIso = (fecha: Date | string): string => new Date(fecha).toISOString();

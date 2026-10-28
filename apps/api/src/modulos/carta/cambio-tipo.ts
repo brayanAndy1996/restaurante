@@ -157,7 +157,11 @@ export async function calcularSeQuita(
     const nombres = new Map((await sucursales.listar(ids)).map((s) => [s.id, s.nombre]));
     const hoyDe = new Map<string, string>();
     for (const id of ids) {
-      hoyDe.set(id, diaOperativo(reloj.ahora(), (await sucursales.horaCorte(id)) ?? '05:00'));
+      // Una sucursal sin hora de corte (no es de la empresa o ya no existe) no se puede evaluar: 404, no una
+      // hora de corte inventada que mostraría o escondería opciones por error.
+      const horaCorte = await sucursales.horaCorte(id);
+      if (horaCorte === null) throw noEncontrado('La sucursal');
+      hoyDe.set(id, diaOperativo(reloj.ahora(), horaCorte));
     }
     seQuita.opcionesDelDia = filas
       .filter((f) => f.dia >= hoyDe.get(f.sucursal_id)!)

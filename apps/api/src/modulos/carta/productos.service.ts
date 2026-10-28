@@ -122,8 +122,9 @@ const ordenInvalido = () =>
  * ella, con el antes y el después de cada cambio (los precios como texto exacto).
  *
  * **Orden de bloqueo** (para no formar esperas cruzadas con `GruposService`, que bloquea el grupo y después
- * los productos ligados, y con el orden de una familia): familia, estación, grupos y, al final, productos.
- * Un `PATCH` bloquea antes de leer el producto la familia de destino y los grupos que el cuerpo menciona
+ * los productos ligados, y con el orden de una familia): familia, estación, grupos y, al final, productos
+ * (varios productos, siempre ordenados por id). Un `PATCH` bloquea antes de leer el producto la familia de
+ * destino, los grupos que el cuerpo menciona y, juntos y en orden de id, el producto y sus componentes
  * (`bloquearEnOrden`); un alta lee familia, estación, grupos y componentes en ese orden.
  */
 @Injectable()
@@ -644,6 +645,18 @@ export class ProductosService {
       await this.conexion.query(
         'SELECT id FROM grupo_modificadores WHERE id = ANY($1::uuid[]) ORDER BY id FOR SHARE',
         { bind: [[...grupos]], type: QueryTypes.SELECT },
+      );
+    }
+    // Productos: el propio y los componentes que el cuerpo menciona, en una sola consulta ordenada por id y
+    // `FOR UPDATE`. Si este `PATCH` tomara primero su producto y después leyera los componentes `FOR SHARE`, dos
+    // `PATCH` cruzados (A pasa a combo con B de componente y B pasa a combo con A) se esperarían entre sí
+    // (`40P01`). Con un solo orden global por id, el segundo espera al primero, ve el tipo nuevo y responde
+    // 422 `REFERENCIA_INVALIDA` (el componente ya no es simple) o 409 `EN_USO`.
+    if (cambios.componentes !== undefined && cambios.componentes.length > 0) {
+      const productos = new Set([id, ...cambios.componentes.map((c) => c.productoId.toLowerCase())]);
+      await this.conexion.query(
+        'SELECT id FROM producto WHERE id = ANY($1::uuid[]) ORDER BY id FOR UPDATE',
+        { bind: [[...productos]], type: QueryTypes.SELECT },
       );
     }
   }

@@ -1125,3 +1125,18 @@ body,
   font-weight: 600;
   overflow-wrap: anywhere;
 }
+
+/* Aviso de un envío pendiente que se canceló por cambio de sesión: encima de todo, también en el PIN */
+.aviso-global {
+  position: fixed;
+  z-index: 40;
+  top: max(var(--espacio-md), env(safe-area-inset-top));
+  left: var(--espacio-md);
+  right: var(--espacio-md);
+  max-width: 36rem;
+  margin-inline: auto;
+}
+
+.aviso-global__texto {
+  display: block;
+}

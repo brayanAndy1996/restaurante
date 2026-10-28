@@ -83,7 +83,8 @@ export class MenuDelDiaService {
   // ---- Consulta --------------------------------------------------------------------------------
 
   /**
-   * Criterio 34: los menús del día activos y disponibles en la sucursal activa, con sus tiempos y platos
+   * Criterio 34: los menús del día activos, de una familia activa y disponibles en la sucursal activa (los
+   * mismos que entran en la vista de la sucursal), con sus tiempos y platos
    * candidatos y cuáles se ofrecen en `dia`. Se aceptan el día operativo anterior, el actual (por defecto) y el
    * siguiente; otro día responde 400.
    */
@@ -103,7 +104,7 @@ export class MenuDelDiaService {
          FROM producto p
          JOIN familia f ON f.id = p.familia_id
          LEFT JOIN producto_sucursal ps ON ps.producto_id = p.id AND ps.sucursal_id = $1
-        WHERE p.tipo = 'MENU_DEL_DIA' AND p.activo AND coalesce(ps.disponible, true)
+        WHERE p.tipo = 'MENU_DEL_DIA' AND p.activo AND f.activa AND coalesce(ps.disponible, true)
         ORDER BY f.orden, f.id, p.orden, p.id`,
       { bind: [sucursalId], type: QueryTypes.SELECT },
     );

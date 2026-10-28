@@ -29,6 +29,7 @@ import { EtiquetaPendiente } from '../../componentes/PendienteDeEnvio';
 import { estacionGuardada, guardarEstacion } from '../../lib/almacen';
 import { ahoraDelServidor } from '../../lib/api';
 import { useEnvioPendiente } from '../../lib/envios';
+import { identidadActual } from '../../lib/identidad';
 import { ErrorApi, mensajeDeError } from '../../lib/errores';
 import { horaDeLima } from '../../lib/formato';
 import { usePermiso } from '../acceso/permisos';
@@ -219,6 +220,9 @@ export function AgotadosSeccion({
     setIntenciones((previas) => ({ ...previas, [producto.id]: intencion }));
     setFallos([]);
     const clave = CLAVES_DISPONIBILIDAD.vista(sucursalId);
+    // Quién lo pide y en qué sucursal se toma ahora, no cuando le toque el turno en la cadena: si la sesión
+    // cambia mientras espera, este cambio no debe salir a nombre de otra persona ni en otra sucursal.
+    const origen = identidadActual();
     const envio = encolar(producto.id, () =>
       enviar(
         (extra) =>
@@ -226,6 +230,7 @@ export function AgotadosSeccion({
             ? marcarAgotado(producto.id, { hasta: accion.hasta }, extra)
             : reactivarAgotado(producto.id, extra).then(() => null),
         (esperando) => ajustarPendiente(producto.id, esperando),
+        origen,
       ),
     );
     envio.then(

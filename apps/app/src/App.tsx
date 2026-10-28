@@ -1,7 +1,9 @@
-import { lazy, Suspense } from 'react';
+import { lazy, Suspense, useEffect } from 'react';
 import { Navigate, Outlet, Route, Routes, useLocation } from 'react-router-dom';
 import { AppLayout } from './componentes/AppLayout';
+import { AvisoDeEnvioCancelado } from './componentes/AvisoDeEnvioCancelado';
 import { ErrorDeArranque, PantallaDeCarga } from './componentes/Pantallas';
+import { instalarAvisoAlSalir } from './lib/envios';
 import { CambiarContrasenaPagina } from './modulos/acceso/CambiarContrasenaPagina';
 import { ElegirSucursalPagina } from './modulos/acceso/ElegirSucursalPagina';
 import { IngresoPagina } from './modulos/acceso/IngresoPagina';
@@ -189,8 +191,11 @@ function Cargando() {
 }
 
 export function App() {
+  // La cola de envíos pendientes vive en memoria: recargar o cerrar la pestaña los perdería.
+  useEffect(() => instalarAvisoAlSalir(), []);
   return (
     <>
+      <AvisoDeEnvioCancelado />
       <Suspense fallback={<Cargando />}>
         <Routes>
           <Route path="/pin" element={<PinPagina />} />
