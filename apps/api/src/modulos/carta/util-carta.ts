@@ -36,3 +36,10 @@ export const sinCambioDeOrden = (
   actuales: readonly string[],
   pedidos: readonly string[],
 ): boolean => actuales.length === pedidos.length && actuales.every((id, i) => id === pedidos[i]);
+
+/** El día (AAAA-MM-DD) que está `dias` días después de `dia` (negativo, antes). Aritmética de calendario pura. */
+export function sumarDias(dia: string, dias: number): string {
+  const [anio, mes, diaDelMes] = dia.split('-').map(Number);
+  const fecha = new Date(Date.UTC(anio!, mes! - 1, diaDelMes! + dias));
+  return fecha.toISOString().slice(0, 10);
+}

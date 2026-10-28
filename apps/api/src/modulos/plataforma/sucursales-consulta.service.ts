@@ -57,13 +57,13 @@ export class SucursalesConsultaService {
   /**
    * Hora de corte (`HH:MM`) de una sucursal de la empresa del contexto, o `null` si no existe (una sucursal
    * de otra empresa es indistinguible de una inexistente). La usan la carta (agotados y menú del día) para
-   * calcular el día operativo con el reloj de la API (historia 003, tarea T20).
-   *
-   * Fase A: solo la firma; lanza `Error('No implementado')`.
+   * calcular el día operativo con el reloj de la API, nunca con `now()` de la base (historia 003).
    */
-  horaCorte(sucursalId: string, transaccion?: Transaction): Promise<string | null> {
-    void sucursalId;
-    void transaccion;
-    return Promise.reject(new Error('No implementado'));
+  async horaCorte(sucursalId: string, transaccion?: Transaction): Promise<string | null> {
+    const filas = await this.conexion.query<{ hora: string }>(
+      `SELECT to_char(hora_corte, 'HH24:MI') AS hora FROM sucursal WHERE id = $1`,
+      { bind: [sucursalId], type: QueryTypes.SELECT, transaction: transaccion },
+    );
+    return filas[0]?.hora ?? null;
   }
 }

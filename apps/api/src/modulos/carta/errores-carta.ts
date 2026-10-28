@@ -1,4 +1,4 @@
-import type { CampoError } from '@restaurante/contratos';
+import type { CampoError, SeQuita, UsadoEn } from '@restaurante/contratos';
 import { ErrorAplicacion } from '../../nucleo/errores/error-aplicacion';
 
 /**
@@ -47,3 +47,14 @@ export const fotoInvalida = (mensaje: string): ErrorAplicacion =>
 /** 409 por un conflicto con lo guardado que no es un nombre repetido (criterio 10d). */
 export const conflicto = (mensaje: string, campos: CampoError[]): ErrorAplicacion =>
   new ErrorAplicacion(409, 'CONFLICTO', mensaje, campos);
+
+/**
+ * 409 `EN_USO` de un cambio de tipo (criterio 10c): el producto es componente de un combo o producto ligado de
+ * un modificador, así que no puede pasar a `COMBO` ni a `MENU_DEL_DIA`. Lleva `usadoEn` y dice dónde se usa.
+ */
+export const enUsoPorCambioDeTipo = (mensaje: string, usadoEn: UsadoEn): ErrorAplicacion =>
+  new ErrorAplicacion(409, 'EN_USO', mensaje, undefined, undefined, { usadoEn });
+
+/** 409 `CONFIRMACION_REQUERIDA` (criterio 10b): el cambio de tipo quitaría algo; lleva `seQuita`. */
+export const confirmacionRequerida = (mensaje: string, seQuita: SeQuita): ErrorAplicacion =>
+  new ErrorAplicacion(409, 'CONFIRMACION_REQUERIDA', mensaje, undefined, undefined, { seQuita });

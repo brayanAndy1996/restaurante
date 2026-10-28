@@ -17,21 +17,35 @@ import { AuditoriaService } from '../auditoria';
 import { SucursalesConsultaService } from '../plataforma';
 import {
   conflicto,
+  confirmacionRequerida,
   datosInvalidos,
+  enUsoPorCambioDeTipo,
   nombreRepetido,
   noEncontrado,
   referenciaInvalida,
 } from './errores-carta';
 import { EventosCarta } from './eventos-carta';
 import { PermisosCarta } from './permisos-carta';
-import { gruposActivos, validarFamiliaYEstacion } from './referencias';
+import {
+  borrarOpcionesDelDia,
+  calcularSeQuita,
+  hayQueQuitar,
+  mensajeDeConfirmacion,
+  mensajeEnUso,
+  reglasDelTipo,
+  seUsa,
+  usadoEnDe,
+  type ComponenteGuardado,
+  type TipoProducto,
+} from './cambio-tipo';
+import { gruposActivos, productosSimplesActivos, validarFamiliaYEstacion } from './referencias';
 import { aIso, diferencias, sinCambioDeOrden, type Cambio } from './util-carta';
 
 /** Fila de `producto` tal como la leen las consultas de este servicio. */
 interface FilaProducto {
   id: string;
   familia_id: string;
-  tipo: 'SIMPLE' | 'COMBO' | 'MENU_DEL_DIA';
+  tipo: TipoProducto;
   nombre: string;
   descripcion: string | null;
   precio: string | null;
@@ -53,6 +67,7 @@ const COLUMNAS = `p.id, p.familia_id, p.tipo, p.nombre, p.descripcion, p.precio,
 
 /** Estado de un producto en los nombres de la API: lo que se compara y lo que va a la auditoría. */
 interface EstadoProducto extends Record<string, unknown> {
+  tipo: TipoProducto;
   nombre: string;
   descripcion: string | null;
   familiaId: string;
@@ -66,6 +81,7 @@ interface EstadoProducto extends Record<string, unknown> {
 }
 
 const CAMPOS_AUDITADOS = [
+  'tipo',
   'nombre',
   'descripcion',
   'familiaId',
@@ -79,6 +95,7 @@ const CAMPOS_AUDITADOS = [
 ] as const;
 
 const estadoDe = (f: FilaProducto): EstadoProducto => ({
+  tipo: f.tipo,
   nombre: f.nombre,
   descripcion: f.descripcion,
   familiaId: f.familia_id,
@@ -99,11 +116,15 @@ const ordenInvalido = () =>
   datosInvalidos([{ campo: 'ids', mensaje: 'Debe contener exactamente una vez cada producto' }]);
 
 /**
- * Productos de la carta (HU-05, RF-14, criterios 6 a 13). Hasta el grupo C3 solo hay productos `SIMPLE` y
- * "que no se vende solo", con sus grupos de modificadores asignados (criterios 6, 8, 9 y 10); los tipos
- * `COMBO` y `MENU_DEL_DIA`, el cambio de tipo y los componentes (criterios 10b a 10d, 30 a 33) llegan en el
- * grupo C4: mientras tanto, enviarlos responde 400. Todo corre dentro de la transacción de la petición y deja su fila de
- * auditoría en ella, con el antes y el después de cada cambio (los precios como texto exacto).
+ * Productos de la carta (HU-05, HU-08, RF-14, RF-17, RF-18, criterios 6 a 13 y 30 a 33): los tres tipos
+ * (`SIMPLE`, `COMBO` y `MENU_DEL_DIA`), con sus grupos de modificadores y sus componentes, y el cambio de tipo
+ * (criterios 10b a 10d). Todo corre dentro de la transacción de la petición y deja su fila de auditoría en
+ * ella, con el antes y el después de cada cambio (los precios como texto exacto).
+ *
+ * **Orden de bloqueo** (para no formar esperas cruzadas con `GruposService`, que bloquea el grupo y después
+ * los productos ligados, y con el orden de una familia): familia, estación, grupos y, al final, productos.
+ * Un `PATCH` bloquea antes de leer el producto la familia de destino y los grupos que el cuerpo menciona
+ * (`bloquearEnOrden`); un alta lee familia, estación, grupos y componentes en ese orden.
  */
 @Injectable()
 export class ProductosService {
@@ -164,9 +185,8 @@ export class ProductosService {
       afectacionIgv: f.afectacion_igv,
       aplicaIcbper: f.aplica_icbper,
       grupos: await this.gruposDe(id),
-      // Los componentes y los combos que usan el producto salen de `componente_combo`, que llega con C4.
-      componentes: [],
-      usadoEn: { combos: [], modificadores: await this.modificadoresQueLoUsan(id) },
+      componentes: await this.componentesDe(id),
+      usadoEn: await usadoEnDe(this.conexion, id),
       creadoEn: aIso(f.creado_en),
       actualizadoEn: aIso(f.actualizado_en),
     };
@@ -181,23 +201,13 @@ export class ProductosService {
     );
   }
 
-  /**
-   * Dónde se usa el producto como producto ligado (criterios 10c y 12): los modificadores activos que lo
-   * apuntan, de un grupo activo o no.
-   */
-  private async modificadoresQueLoUsan(
-    productoId: string,
-  ): Promise<{ id: string; nombre: string; grupoId: string; grupoNombre: string }[]> {
-    return this.conexion.query<{
-      id: string;
-      nombre: string;
-      grupoId: string;
-      grupoNombre: string;
-    }>(
-      `SELECT m.id, m.nombre, g.id AS "grupoId", g.nombre AS "grupoNombre"
-         FROM modificador m JOIN grupo_modificadores g ON g.id = m.grupo_id
-        WHERE m.producto_id = $1 AND m.activo ORDER BY lower(g.nombre), g.id, m.orden, m.id`,
-      { bind: [productoId], type: QueryTypes.SELECT },
+  /** Los componentes del combo con su nombre y cantidad, en su orden (criterio 12). */
+  private async componentesDe(comboId: string): Promise<ComponenteGuardado[]> {
+    return this.conexion.query<ComponenteGuardado>(
+      `SELECT cc.producto_id AS "productoId", p.nombre, cc.cantidad::int AS cantidad
+         FROM componente_combo cc JOIN producto p ON p.id = cc.producto_id
+        WHERE cc.combo_id = $1 ORDER BY cc.orden, p.id`,
+      { bind: [comboId], type: QueryTypes.SELECT },
     );
   }
 
@@ -235,15 +245,74 @@ export class ProductosService {
     );
   }
 
+  /**
+   * Escribe la lista de componentes del combo con su orden y cantidad (borra los que salen; inserta o actualiza
+   * el resto). Los productos componentes ya se leyeron `FOR SHARE` al validarlos.
+   */
+  private async escribirComponentes(
+    comboId: string,
+    lista: readonly { productoId: string; cantidad: number }[],
+    ahora: Date,
+  ): Promise<void> {
+    await this.conexion.query(
+      'DELETE FROM componente_combo WHERE combo_id = $1 AND producto_id <> ALL($2::uuid[])',
+      { bind: [comboId, lista.map((c) => c.productoId)] },
+    );
+    if (lista.length === 0) return;
+    await this.conexion.query(
+      `INSERT INTO componente_combo (empresa_id, combo_id, producto_id, cantidad, orden, creado_en,
+                                     actualizado_en)
+       SELECT $1, $2, v.producto_id, v.cantidad, v.orden, $5, $5
+         FROM unnest($3::uuid[], $4::smallint[]) WITH ORDINALITY AS v(producto_id, cantidad, orden)
+       ON CONFLICT (combo_id, producto_id)
+       DO UPDATE SET cantidad = EXCLUDED.cantidad, orden = EXCLUDED.orden,
+                     actualizado_en = EXCLUDED.actualizado_en
+        WHERE componente_combo.cantidad <> EXCLUDED.cantidad
+           OR componente_combo.orden <> EXCLUDED.orden`,
+      {
+        bind: [
+          this.contexto.empresaActual(),
+          comboId,
+          lista.map((c) => c.productoId),
+          lista.map((c) => c.cantidad),
+          ahora,
+        ],
+      },
+    );
+  }
+
+  /**
+   * Los componentes de `ids` que no se pueden agregar (no existen, son de otra empresa, están inactivos o no son
+   * simples: un combo no contiene combos ni menús, criterio 9), con `FOR SHARE`: un cambio de tipo concurrente
+   * del producto lo bloquea `FOR UPDATE` y se serializan (criterio 10c). `propio` es el combo que se edita: un
+   * producto no puede ser componente de sí mismo.
+   */
+  private async componentesNoAgregables(
+    ids: readonly string[],
+    propio?: string,
+  ): Promise<CampoError[]> {
+    if (ids.length === 0) return [];
+    const simples = await productosSimplesActivos(this.conexion, ids, 'SHARE');
+    const mala = ids.some((id) => id === propio || !simples.has(id));
+    return mala
+      ? [
+          {
+            campo: 'componentes',
+            mensaje: 'Un componente no existe, está inactivo o no es un producto simple',
+          },
+        ]
+      : [];
+  }
+
   // ---- Alta ------------------------------------------------------------------------------------
 
   /**
-   * Criterio 6: crea un producto `SIMPLE` (las reglas del criterio 7 ya las comprobó el esquema). La
-   * familia y la estación deben existir en la empresa y estar activas (422 `REFERENCIA_INVALIDA`, mismo
-   * cuerpo para un id de otra empresa y uno inexistente). Queda el último de su familia.
+   * Criterios 6 y 30 a 33: crea un producto de cualquier tipo (las reglas del criterio 7 ya las comprobó el
+   * esquema). La familia, la estación, los grupos, los componentes y las sucursales deben existir en la
+   * empresa y estar activos (422 `REFERENCIA_INVALIDA`, mismo cuerpo para un id de otra empresa y uno
+   * inexistente). Queda el último de su familia.
    */
   async crear(entrada: ProductoCrearEntradaValidada): Promise<ProductoRespuesta> {
-    this.exigirLoDeEstaVersion(entrada);
     const fallan = await validarFamiliaYEstacion(this.conexion, {
       familiaId: entrada.familiaId,
       estacionId: entrada.estacionId ?? null,
@@ -262,6 +331,11 @@ export class ProductosService {
     }
     const grupos = (entrada.gruposModificadores ?? []).map((id) => id.toLowerCase());
     fallan.push(...(await this.gruposNoAsignables(grupos)));
+    const componentes = (entrada.componentes ?? []).map((c) => ({
+      productoId: c.productoId.toLowerCase(),
+      cantidad: c.cantidad,
+    }));
+    fallan.push(...(await this.componentesNoAgregables(componentes.map((c) => c.productoId))));
     if (fallan.length > 0) throw referenciaInvalida(fallan);
     await this.permisos.exigirAjustarSucursales(noDisponibleEn);
 
@@ -298,6 +372,7 @@ export class ProductosService {
       );
       id = filas[0]!.id;
       await this.escribirGrupos(id, grupos, ahora);
+      if (componentes.length > 0) await this.escribirComponentes(id, componentes, ahora);
       if (noDisponibleEn.length > 0) {
         await this.conexion.query(
           `INSERT INTO producto_sucursal (empresa_id, producto_id, sucursal_id, precio, disponible,
@@ -325,6 +400,7 @@ export class ProductosService {
         estacionId: entrada.estacionId ?? null,
         tipoControlStock: entrada.tipoControlStock,
         ...(grupos.length > 0 ? { gruposModificadores: grupos } : {}),
+        ...(componentes.length > 0 ? { componentes } : {}),
         ...(noDisponibleEn.length > 0 ? { noDisponibleEn } : {}),
       },
     });
@@ -335,33 +411,43 @@ export class ProductosService {
   // ---- Edición ---------------------------------------------------------------------------------
 
   /**
-   * Criterios 10 y 11: edita el producto, también para desactivarlo (`activo: false`) o reactivarlo. Las
-   * reglas del criterio 7 se comprueban sobre el resultado de mezclar lo guardado con lo enviado. Orden de
-   * los rechazos: 400 de forma (el esquema), 404, 422, 400 de las reglas y 409 de nombre. Un `PATCH` que no
-   * cambia nada responde 200 sin auditoría ni evento.
+   * Criterios 10, 10b a 10d y 11: edita el producto (datos, grupos, componentes y tipo), también para
+   * desactivarlo (`activo: false`) o reactivarlo. Las reglas del criterio 7 se comprueban sobre el resultado de
+   * mezclar lo guardado con lo enviado. Orden de los rechazos: 400 de forma (el esquema), 404, 422
+   * `REFERENCIA_INVALIDA`, 400 de las reglas, 409 `EN_USO` (criterio 10c), 409 `CONFLICTO` (criterio 10d) y, al
+   * final, 409 `CONFIRMACION_REQUERIDA` (criterio 10b); un nombre repetido (409) sale al escribir. Un `PATCH`
+   * que no cambia nada responde 200 sin auditoría ni evento.
    */
   async modificar(id: string, cambios: ProductoModificarEntrada): Promise<ProductoRespuesta> {
+    await this.bloquearEnOrden(id, cambios);
     const filas = await this.conexion.query<FilaProducto>(
       `SELECT ${COLUMNAS} FROM producto p WHERE p.id = $1 FOR UPDATE`,
       { bind: [id], type: QueryTypes.SELECT },
     );
     const guardado = filas[0];
     if (guardado === undefined) throw noEncontrado('El producto');
-    this.exigirLoDeEstaVersion(cambios, guardado.tipo);
 
     const antes = estadoDe(guardado);
+    const tipo = cambios.tipo ?? antes.tipo;
+    const cambiaTipo = tipo !== antes.tipo;
+    const aSimple = cambiaTipo && tipo === 'SIMPLE';
     const despues: EstadoProducto = {
+      tipo,
       nombre: cambios.nombre ?? antes.nombre,
       descripcion: cambios.descripcion !== undefined ? cambios.descripcion : antes.descripcion,
       familiaId: (cambios.familiaId ?? antes.familiaId).toLowerCase(),
       precio: cambios.precio !== undefined ? aDosDecimales(cambios.precio) : antes.precio,
-      seVendeSolo: cambios.seVendeSolo ?? antes.seVendeSolo,
+      // Un combo o un menú se vende solo y no tiene estación propia (criterio 10b): al pasar a uno de ellos
+      // el producto queda así, y lo enviado en contra no cumple las reglas del criterio 7 (400).
+      seVendeSolo: cambios.seVendeSolo ?? (tipo === 'SIMPLE' ? antes.seVendeSolo : true),
       afectacionIgv: cambios.afectacionIgv ?? antes.afectacionIgv,
       aplicaIcbper: cambios.aplicaIcbper ?? antes.aplicaIcbper,
       estacionId:
         cambios.estacionId !== undefined
           ? (cambios.estacionId?.toLowerCase() ?? null)
-          : antes.estacionId,
+          : tipo === 'SIMPLE'
+            ? antes.estacionId
+            : null,
       tipoControlStock: cambios.tipoControlStock ?? antes.tipoControlStock,
       activo: cambios.activo ?? antes.activo,
     };
@@ -388,22 +474,92 @@ export class ProductosService {
         gruposDespues.filter((g) => reactiva || !guardadosGrupos.has(g)),
       )),
     );
+    // Componentes (criterios 9 y 32): los guardados se conservan aunque se hayan desactivado (criterio 11);
+    // los que se agregan deben ser simples y activos, y no el propio producto. Un `SIMPLE` no los admite (400
+    // de las reglas, más abajo), así que ahí no se miran.
+    const componentesAntes =
+      cambios.componentes !== undefined || cambiaTipo || antes.tipo !== 'SIMPLE'
+        ? await this.componentesDe(id)
+        : [];
+    const componentesEnviados = cambios.componentes?.map((c) => ({
+      productoId: c.productoId.toLowerCase(),
+      cantidad: c.cantidad,
+    }));
+    const componentesDespues: { productoId: string; cantidad: number }[] =
+      tipo === 'SIMPLE'
+        ? []
+        : (componentesEnviados ??
+          componentesAntes.map((c) => ({ productoId: c.productoId, cantidad: c.cantidad })));
+    if (tipo !== 'SIMPLE' && componentesEnviados !== undefined) {
+      const conocidos = new Set(componentesAntes.map((c) => c.productoId));
+      fallan.push(
+        ...(await this.componentesNoAgregables(
+          componentesEnviados.map((c) => c.productoId).filter((p) => p === id || !conocidos.has(p)),
+          id,
+        )),
+      );
+    }
     if (fallan.length > 0) throw referenciaInvalida(fallan);
 
-    const reglas = this.reglasDelTipoSimple(despues);
+    const reglas = reglasDelTipo({
+      tipo,
+      seVendeSolo: despues.seVendeSolo,
+      precio: despues.precio,
+      estacionId: despues.estacionId,
+      componentes: componentesDespues.length,
+      grupos: gruposDespues.length,
+      componentesEnviados: cambios.componentes?.length ?? 0,
+      faltaEstacion: aSimple && cambios.estacionId === undefined,
+    });
     if (reglas.length > 0) throw datosInvalidos(reglas);
+
+    // 409 `EN_USO` (criterio 10c): un producto que es componente de un combo o producto ligado de un
+    // modificador activo no puede pasar a combo ni a menú. Con `FOR UPDATE` en el producto, quien lo agregue
+    // a un combo o a un modificador después (lo lee `FOR SHARE`) espera y ve el tipo nuevo.
+    if (cambiaTipo && antes.tipo === 'SIMPLE' && tipo !== 'SIMPLE') {
+      const usadoEn = await usadoEnDe(this.conexion, id);
+      if (seUsa(usadoEn)) throw enUsoPorCambioDeTipo(mensajeEnUso(usadoEn, tipo), usadoEn);
+    }
+    // 409 `CONFLICTO` (criterio 10d).
     if (!despues.seVendeSolo) await this.exigirSinPreciosDeSucursal(id);
+    // 409 `CONFIRMACION_REQUERIDA` (criterio 10b): al final, para que nada se pida confirmar si otro rechazo
+    // lo impide.
+    if (cambiaTipo) {
+      const seQuita = await calcularSeQuita(
+        { conexion: this.conexion, sucursales: this.sucursales, reloj: this.reloj },
+        {
+          productoId: id,
+          desde: antes.tipo,
+          hacia: tipo,
+          estacionId: antes.estacionId,
+          componentes: componentesAntes,
+        },
+      );
+      if (hayQueQuitar(seQuita) && cambios.confirmarPerdida !== true) {
+        throw confirmacionRequerida(mensajeDeConfirmacion(seQuita), seQuita);
+      }
+    }
 
     const diff: Record<string, Cambio> = diferencias(antes, despues, CAMPOS_AUDITADOS);
     const cambiaGrupos =
       cambios.gruposModificadores !== undefined && !sinCambioDeOrden(gruposAntes, gruposDespues);
     if (cambiaGrupos) diff.gruposModificadores = { antes: gruposAntes, despues: gruposDespues };
+    const listaAntes = componentesAntes.map((c) => `${c.productoId}:${c.cantidad}`);
+    const listaDespues = componentesDespues.map((c) => `${c.productoId}:${c.cantidad}`);
+    const cambiaComponentes = !sinCambioDeOrden(listaAntes, listaDespues);
+    if (cambiaComponentes) {
+      diff.componentes = {
+        antes: componentesAntes.map((c) => ({ productoId: c.productoId, cantidad: c.cantidad })),
+        despues: componentesDespues,
+      };
+    }
     if (Object.keys(diff).length === 0) return this.obtener(id);
 
     const ahora = this.reloj.ahora();
+    const quitado: Record<string, unknown> = {};
     try {
       await this.conexion.query(
-        `UPDATE producto SET nombre = $2, descripcion = $3, familia_id = $4, precio = $5,
+        `UPDATE producto SET tipo = $14, nombre = $2, descripcion = $3, familia_id = $4, precio = $5,
                 se_vende_solo = $6, afectacion_igv = $7, aplica_icbper = $8, estacion_id = $9,
                 tipo_control_stock = $10, activo = $11, actualizado_en = $12,
                 orden = CASE WHEN $13::boolean
@@ -425,10 +581,28 @@ export class ProductosService {
             despues.activo,
             ahora,
             cambiaFamilia, // un producto que cambia de familia queda el último de la nueva (criterio 13)
+            despues.tipo,
           ],
         },
       );
       if (cambiaGrupos) await this.escribirGrupos(id, gruposDespues, ahora);
+      if (cambiaComponentes) await this.escribirComponentes(id, componentesDespues, ahora);
+      if (cambiaTipo) {
+        // Lo que deja de aplicar se borra, no se conserva desactivado (criterio 10b): las ventas guardan su
+        // propia copia y no queda nada oculto que reaparezca al volver al tipo anterior.
+        if (antes.tipo === 'SIMPLE' && tipo !== 'SIMPLE' && antes.estacionId !== null) {
+          const estacion = await this.conexion.query<{ id: string; nombre: string }>(
+            'SELECT id, nombre FROM estacion WHERE id = $1',
+            { bind: [antes.estacionId], type: QueryTypes.SELECT },
+          );
+          quitado.estacion = estacion[0] ?? { id: antes.estacionId, nombre: null };
+        }
+        if (aSimple && componentesAntes.length > 0) quitado.componentes = componentesAntes;
+        if (antes.tipo === 'MENU_DEL_DIA' && tipo !== 'MENU_DEL_DIA') {
+          const borradas = await borrarOpcionesDelDia(this.conexion, id);
+          if (borradas.length > 0) quitado.opcionesDelDia = borradas;
+        }
+      }
     } catch (error) {
       throw this.traducir(error);
     }
@@ -436,10 +610,45 @@ export class ProductosService {
       accion: 'modificar_producto',
       entidad: 'producto',
       entidadId: id,
-      detalle: diff,
+      detalle: Object.keys(quitado).length > 0 ? { ...diff, quitado } : diff,
     });
     this.eventos.cartaActualizada(null);
     return this.obtener(id);
+  }
+
+  /**
+   * Bloquea, antes del producto, lo que el `PATCH` va a validar y que debe tomarse antes (orden de bloqueo:
+   * familia, grupos y producto; ver la descripción de la clase). Quien cambia un grupo (`GruposService`)
+   * bloquea el grupo y luego sus productos ligados `FOR SHARE`; si este `PATCH` tomara primero el producto
+   * `FOR UPDATE` y después el grupo `FOR SHARE`, dos peticiones que se esperen entre sí (un producto que es
+   * el ligado de un grupo que se le asigna) formarían un abrazo mortal. Lo mismo vale para la familia, que
+   * `ordenarDeFamilia` bloquea antes que sus productos. Las lecturas previas no bloquean; si el producto no
+   * existe no se bloquea nada y el 404 sale al leerlo.
+   */
+  private async bloquearEnOrden(id: string, cambios: ProductoModificarEntrada): Promise<void> {
+    const previo = (
+      await this.conexion.query<{ familia_id: string; activo: boolean }>(
+        'SELECT familia_id, activo FROM producto WHERE id = $1',
+        { bind: [id], type: QueryTypes.SELECT },
+      )
+    )[0];
+    if (previo === undefined) return;
+    const reactiva = cambios.activo === true && !previo.activo;
+    const familiaDestino = cambios.familiaId?.toLowerCase();
+    if (reactiva || (familiaDestino !== undefined && familiaDestino !== previo.familia_id)) {
+      await this.conexion.query('SELECT id FROM familia WHERE id = $1 FOR UPDATE', {
+        bind: [familiaDestino ?? previo.familia_id],
+        type: QueryTypes.SELECT,
+      });
+    }
+    const grupos = new Set((cambios.gruposModificadores ?? []).map((g) => g.toLowerCase()));
+    if (reactiva) for (const g of await this.gruposDe(id)) grupos.add(g.id);
+    if (grupos.size > 0) {
+      await this.conexion.query(
+        'SELECT id FROM grupo_modificadores WHERE id = ANY($1::uuid[]) ORDER BY id FOR SHARE',
+        { bind: [[...grupos]], type: QueryTypes.SELECT },
+      );
+    }
   }
 
   // ---- Orden -----------------------------------------------------------------------------------
@@ -493,48 +702,6 @@ export class ProductosService {
   // ---- Reglas ----------------------------------------------------------------------------------
 
   /**
-   * Lo que todavía no se puede enviar en esta versión (hasta el grupo C3): otro tipo que `SIMPLE`, cambiar el
-   * tipo y componentes. Una lista vacía no cambia nada y se acepta.
-   */
-  private exigirLoDeEstaVersion(
-    entrada: {
-      tipo?: string;
-      componentes?: readonly unknown[];
-    },
-    tipoGuardado?: string,
-  ): void {
-    const campos: CampoError[] = [];
-    if (entrada.tipo !== undefined && entrada.tipo !== (tipoGuardado ?? 'SIMPLE')) {
-      campos.push({
-        campo: 'tipo',
-        mensaje: 'Por ahora solo se pueden crear productos simples',
-      });
-    }
-    if ((entrada.componentes?.length ?? 0) > 0) {
-      campos.push({
-        campo: 'componentes',
-        mensaje: 'Los componentes de un combo todavía no están disponibles',
-      });
-    }
-    if (campos.length > 0) throw datosInvalidos(campos);
-  }
-
-  /** Criterio 7, `SIMPLE`: "se vende solo" lleva precio; si no, no lleva precio. */
-  private reglasDelTipoSimple(estado: EstadoProducto): CampoError[] {
-    const campos: CampoError[] = [];
-    if (estado.seVendeSolo && estado.precio === null) {
-      campos.push({
-        campo: 'precio',
-        mensaje: 'El precio es obligatorio si el producto se vende solo',
-      });
-    }
-    if (!estado.seVendeSolo && estado.precio !== null) {
-      campos.push({ campo: 'precio', mensaje: 'Un producto que no se vende solo no lleva precio' });
-    }
-    return campos;
-  }
-
-  /**
    * Criterio 10d: un producto que deja de venderse solo no puede tener precio propio en ninguna sucursal
    * (los precios de sucursal los quita cada quien con su permiso, criterio 19b; no se borran de paso). El
    * producto está bloqueado `FOR UPDATE`, así que un ajuste concurrente (`FOR NO KEY UPDATE`) espera y ve el
@@ -562,6 +729,14 @@ export class ProductosService {
         return nombreRepetido('un producto');
       case SQLSTATE.VIOLACION_LLAVE_FORANEA: {
         const restriccion = restriccionDe(error) ?? '';
+        if (restriccion.includes('componente')) {
+          return referenciaInvalida([
+            {
+              campo: 'componentes',
+              mensaje: 'Un componente no existe, está inactivo o no es un producto simple',
+            },
+          ]);
+        }
         if (restriccion.includes('grupo')) {
           return referenciaInvalida([
             {
