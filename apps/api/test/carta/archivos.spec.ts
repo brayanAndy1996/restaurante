@@ -139,12 +139,15 @@ describe('AlmacenR2', () => {
     metodo: string;
     cabeceras: Record<string, string>;
     cuerpo: number;
+    /** Si la llamada lleva un límite de tiempo (`AbortSignal`). */
+    conLimite: boolean;
   }
 
   function almacenCon(respuestas: number[]): { almacen: AlmacenR2; pedidos: Pedido[] } {
     const pedidos: Pedido[] = [];
-    const llamar = (async (peticion: Request) => {
+    const llamar = (async (peticion: Request, init?: RequestInit) => {
       pedidos.push({
+        conLimite: init?.signal instanceof AbortSignal,
         url: peticion.url,
         metodo: peticion.method,
         cabeceras: Object.fromEntries(peticion.headers.entries()),
@@ -181,6 +184,8 @@ describe('AlmacenR2', () => {
     // Con S3 sobre HTTPS, aws4fetch firma sin el hash del cuerpo (`UNSIGNED-PAYLOAD`), que R2 acepta.
     expect(p.cabeceras['x-amz-content-sha256']).toMatch(/^([0-9a-f]{64}|UNSIGNED-PAYLOAD)$/);
     expect(p.cuerpo).toBe(5);
+    // La subida corre dentro de la transacción de la petición: no puede quedar colgada sin límite.
+    expect(p.conLimite).toBe(true);
   });
 
   it('borra con DELETE firmado; un 404 no es un error y un 5xx sí', async () => {
@@ -189,6 +194,7 @@ describe('AlmacenR2', () => {
     await almacen.borrar('carta/e/p/b.png');
     await expect(almacen.borrar('carta/e/p/c.png')).rejects.toThrow(/HTTP 500/);
     expect(pedidos.map((p) => p.metodo)).toEqual(['DELETE', 'DELETE', 'DELETE']);
+    expect(pedidos.every((p) => p.conLimite)).toBe(true);
     expect(pedidos[0]!.cabeceras.authorization).toMatch(/^AWS4-HMAC-SHA256 /);
   });
 

@@ -8,9 +8,11 @@ import {
   arrancarCarta,
   asentar,
   auditoriaCarta,
+  equipoDe,
   esperarError,
   exigirEstado,
   instantaneaCarta,
+  sesionPin,
 } from '../carta-critica/fabrica-permisos-carta';
 import {
   crearEscenarioCarta,
@@ -233,6 +235,87 @@ describe('criterio 6 · crear un producto simple', () => {
     // Trazabilidad (criterio 63): creado por el Cajero.
     const { rows } = await admin.query('SELECT * FROM producto WHERE id = $1', [res.body.id]);
     expect(rows[0].creado_por_usuario_id).toBe(e.A.cajero.id);
+  });
+});
+
+describe('criterio 63 · trazabilidad con el equipo', () => {
+  it('un producto creado y cambiado con una sesión de PIN queda con el usuario y el equipo; con contraseña, sin equipo', async () => {
+    const tokenEquipo = await equipoDe(ctx, e.A.cajero);
+    const equipoId = tokenEquipo.split('.')[2]!;
+    const pin = await sesionPin(ctx, e.A.cajero, tokenEquipo, e.A.S1);
+    const creado = await post(pin, productoSimple(base));
+    exigirEstado(creado, 201, 'crear con PIN');
+    const fila = (await admin.query('SELECT * FROM producto WHERE id = $1', [creado.body.id]))
+      .rows[0];
+    expect(fila.creado_por_usuario_id).toBe(e.A.cajero.id);
+    expect(fila.creado_por_equipo_id).toBe(equipoId);
+    const contrasena = await sesionContrasena(ctx, e.A.base.admin, null);
+    exigirEstado(await patch(contrasena, creado.body.id, { precio: '31.00' }), 200, 'cambiar');
+    const despues = (await admin.query('SELECT * FROM producto WHERE id = $1', [creado.body.id]))
+      .rows[0];
+    expect(despues.actualizado_por_usuario_id).toBe(e.A.base.admin.id);
+    expect(despues.actualizado_por_equipo_id).toBeNull();
+    expect(despues.creado_por_equipo_id).toBe(equipoId);
+    // La auditoría lleva el mismo equipo que la fila.
+    const auditoria = await auditoriaCarta(admin, e.A.empresaId, {
+      accion: 'crear_producto',
+      entidadId: creado.body.id,
+    });
+    expect(auditoria[0]).toMatchObject({ actor_usuario_id: e.A.cajero.id, equipo_id: equipoId });
+  });
+});
+
+describe('Idempotency-Key en los POST de la carta (criterio 85 de 002)', () => {
+  it('repetir el POST con la misma clave devuelve el mismo producto y no crea otro; con otro cuerpo, 422', async () => {
+    const clave = crypto.randomUUID();
+    const cuerpo = productoSimple(base);
+    const enviar = (c: unknown) =>
+      llamar(ctx, tokenA, {
+        metodo: 'post',
+        ruta: '/carta/productos',
+        cuerpo: c,
+        cabeceras: { 'Idempotency-Key': clave },
+      });
+    const primera = await enviar(cuerpo);
+    const repetida = await enviar(cuerpo);
+    exigirEstado(primera, 201, 'primera');
+    exigirEstado(repetida, 201, 'repetida');
+    expect(repetida.body).toEqual(primera.body);
+    const n = await admin.query('SELECT count(*)::int AS n FROM producto WHERE nombre = $1', [
+      cuerpo.nombre,
+    ]);
+    expect(n.rows[0].n).toBe(1);
+    esperarError(
+      await enviar({ ...cuerpo, nombre: unico('Otro') }),
+      422,
+      'CLAVE_IDEMPOTENCIA_REUTILIZADA',
+    );
+  });
+
+  it('un rol sin permiso recibe 403 aunque la clave ya exista: nunca ve la respuesta guardada', async () => {
+    const clave = crypto.randomUUID();
+    const cuerpo = productoSimple(base);
+    exigirEstado(
+      await llamar(ctx, tokenA, {
+        metodo: 'post',
+        ruta: '/carta/productos',
+        cuerpo,
+        cabeceras: { 'Idempotency-Key': clave },
+      }),
+      201,
+      'el Administrador',
+    );
+    const mozo = await sesionContrasena(ctx, e.A.mozo, e.A.S1);
+    esperarError(
+      await llamar(ctx, mozo, {
+        metodo: 'post',
+        ruta: '/carta/productos',
+        cuerpo,
+        cabeceras: { 'Idempotency-Key': clave },
+      }),
+      403,
+      'PROHIBIDO',
+    );
   });
 });
 
@@ -517,7 +600,10 @@ describe('criterios 10 y 11 · editar y desactivar', () => {
     const movido = await patch(tokenA, p.id, { familiaId: otra.familiaId });
     exigirEstado(movido, 200, 'mover');
     expect(movido.body.orden).toBe(ultimo.orden + 1);
-    const fila = (await auditoriaCarta(admin, e.A.empresaId, { entidadId: p.id })).at(-1)!;
+    // Con el reloj manual las filas comparten instante: se busca la de la mudanza por su contenido.
+    const fila = (await auditoriaCarta(admin, e.A.empresaId, { entidadId: p.id })).find(
+      (f) => f.accion === 'modificar_producto',
+    )!;
     expect(fila.detalle).toMatchObject({
       familiaId: { antes: base.familiaId, despues: otra.familiaId },
     });

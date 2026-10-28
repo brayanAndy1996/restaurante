@@ -60,7 +60,9 @@ CREATE TABLE producto (
   descripcion text CHECK (descripcion IS NULL OR char_length(descripcion) BETWEEN 1 AND 500),
   -- Precio de la empresa con IGV, en soles; nulo si el producto no se vende solo.
   precio numeric(10, 2) CHECK (precio > 0),
-  se_vende_solo boolean NOT NULL DEFAULT true,
+  -- Sin valor por defecto a propósito: la API siempre lo envía y el CHECK con precio no debe rechazar una fila
+  -- que todavía no los tiene (la prueba de catálogo de trazabilidad inserta filas casi vacías).
+  se_vende_solo boolean NOT NULL,
   afectacion_igv text NOT NULL DEFAULT 'GRAVADO'
     CHECK (afectacion_igv IN ('GRAVADO', 'EXONERADO', 'INAFECTO')),
   aplica_icbper boolean NOT NULL DEFAULT false,
