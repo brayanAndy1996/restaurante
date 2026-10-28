@@ -3,7 +3,7 @@ import type { INestApplication, LogLevel, Type } from '@nestjs/common';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import { AppModule } from './app.module';
 import { cargarEntorno, exigirEntornoDeProduccion } from './config/entorno';
-import type { AlmacenArchivos } from './nucleo/archivos';
+import { analizadorBinarioDeFoto, AlmacenEnDisco, type AlmacenArchivos } from './nucleo/archivos';
 import type { PublicadorEventos } from './nucleo/eventos';
 import type { Reloj } from './nucleo/reloj';
 import { LIMITE_CUERPO_BYTES, traducirErrorDeCuerpo } from './nucleo/errores/filtro-global-errores';
@@ -77,10 +77,13 @@ export async function crearAplicacion(
       'X-Actividad',
       'X-Autorizacion',
       'Idempotency-Key',
+      'If-None-Match',
     ],
-    exposedHeaders: ['Retry-After', 'Date'],
+    exposedHeaders: ['Retry-After', 'Date', 'ETag'],
     maxAge: 600,
   });
+  // La foto de un producto es la única ruta con cuerpo binario, con su propio límite de 1 MB (historia 003).
+  app.use(analizadorBinarioDeFoto());
   // Un cuerpo mayor a 100 KB responde 413 CUERPO_DEMASIADO_GRANDE (lo traduce el filtro global).
   app.useBodyParser('json', { limit: LIMITE_CUERPO_BYTES });
   app.useBodyParser('urlencoded', { limit: LIMITE_CUERPO_BYTES, extended: true });
@@ -89,6 +92,23 @@ export async function crearAplicacion(
     (error: unknown, _peticion: unknown, _respuesta: unknown, siguiente: (e?: unknown) => void) =>
       siguiente(traducirErrorDeCuerpo(error)),
   );
+  // Solo en desarrollo y con el almacén en disco, la API sirve las fotos en `/archivos/*` con un servidor
+  // estático de Express montado fuera del enrutador de Nest (no es una ruta de Nest). Nunca en otro entorno.
+  if (
+    entorno.NODE_ENV === 'development' &&
+    entorno.ARCHIVOS_DRIVER === 'disco' &&
+    opciones.almacenArchivos === undefined
+  ) {
+    app.useStaticAssets(new AlmacenEnDisco(entorno.ARCHIVOS_DIRECTORIO, '').directorio(), {
+      prefix: '/archivos',
+      index: false,
+      dotfiles: 'ignore',
+      setHeaders: (respuesta) => {
+        respuesta.setHeader('X-Content-Type-Options', 'nosniff');
+        respuesta.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+      },
+    });
+  }
   try {
     await app.init();
   } catch (error) {

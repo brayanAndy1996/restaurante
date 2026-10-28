@@ -72,7 +72,7 @@ const MATRIZ: Readonly<Record<Accion, readonly [...RequisitoPermiso[]]>> = {
   GESTIONAR_DISPONIBILIDAD: [X, X, P, P, P],
   REGISTRAR_INGRESO_MERCADERIA: [X, P, X, P, P],
   AJUSTAR_STOCK: [X, X, X, P, P],
-  EDITAR_CARTA: [X, X, X, X, P],
+  EDITAR_CARTA: [X, P, X, X, P],
   ADMINISTRAR: [X, X, X, X, P],
 };
 

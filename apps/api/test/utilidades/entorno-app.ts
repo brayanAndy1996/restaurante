@@ -28,16 +28,24 @@ export interface OpcionesEntornoDePrueba {
 export function fijarEntornoDePrueba(
   opciones: OpcionesEntornoDePrueba = {},
 ): Record<string, string | undefined> {
+  const nodeEnv = opciones.nodeEnv ?? 'test';
   const aplicado: Record<string, string | undefined> = {
     DATABASE_URL: urlDeRol('api'),
     DATABASE_PLATAFORMA_URL: urlDeRol('plataforma'),
-    NODE_ENV: opciones.nodeEnv ?? 'test',
+    NODE_ENV: nodeEnv,
     EMPRESA_POR_HEADER: opciones.empresaPorHeader === false ? undefined : 'habilitado',
     DB_POOL_MAX: String(opciones.poolMax ?? 2),
     PIN_PEPPER: PIN_PEPPER_DE_PRUEBA,
     ORIGENES_PERMITIDOS: ORIGENES_PERMITIDOS_DE_PRUEBA,
-    // Las pruebas guardan los archivos en memoria (`AlmacenEnMemoria`), nunca en disco ni en R2.
-    ARCHIVOS_DRIVER: 'memoria',
+    // Las pruebas guardan los archivos en memoria (`AlmacenEnMemoria`), nunca en disco ni en R2. Solo con
+    // `NODE_ENV=production`, que exige `r2` para arrancar, se dan credenciales falsas: ninguna prueba las
+    // usa (el `AlmacenR2` no sale a la red hasta que se guarda o se borra un archivo).
+    ARCHIVOS_DRIVER: nodeEnv === 'production' ? 'r2' : 'memoria',
+    ARCHIVOS_URL_PUBLICA: nodeEnv === 'production' ? 'https://archivos.prueba.invalid' : undefined,
+    R2_ACCOUNT_ID: nodeEnv === 'production' ? 'cuenta-de-prueba' : undefined,
+    R2_ACCESS_KEY_ID: nodeEnv === 'production' ? 'clave-de-prueba' : undefined,
+    R2_SECRET_ACCESS_KEY: nodeEnv === 'production' ? 'secreto-de-prueba' : undefined,
+    R2_BUCKET: nodeEnv === 'production' ? 'bucket-de-prueba' : undefined,
     ...opciones.extra,
   };
   for (const [clave, valor] of Object.entries(aplicado)) {

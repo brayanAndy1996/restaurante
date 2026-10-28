@@ -682,6 +682,33 @@ Símbolos nuevos entre módulos: `SucursalesConsultaService` (`src/modulos/plata
 `bloqueoTemporal`, `credencialesInvalidas`, `errorDeReserva` y `claveDeIngresoSuperadministrador` (`src/modulos/seguridad`).
 `DatosAdministradorInicial` recibe `hashContrasena` (calculado antes de abrir la transacción) en lugar de la contraseña.
 
+## Historia 003 · grupo C1 (T6 a T10): estaciones, familias, productos simples y fotos
+
+Pruebas del desarrollador (no protegidas) en `apps/api/test/carta/` y `packages/dominio/test/`; no tocan ninguna
+prueba protegida (`carta-critica/`, `acceso/`, `aislamiento/` ni `packages/dominio/test/carta/`). Usan solo la
+fábrica de `carta-critica/fabrica-permisos-carta.ts` (aplicación con `RelojManual`, `PublicadorEnMemoria` y
+`AlmacenEnMemoria`, dos empresas, sesiones de contraseña y de PIN) y sus ayudantes propios en `carta/ayudas.ts`
+(`sembrarBase`, `productoSimple` e imágenes de muestra: `jpegValido`, `webpValido`, `webpConPerdida` y
+`webpExtendido`; el PNG sale de la fábrica protegida).
+
+| Archivo                                              | Qué prueba                                                                                                                                                                                                                      |
+| ---------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `carta/estaciones-familias.spec.ts`                  | Criterios 1 a 5, 2b y 13: alta, nombre único, `EN_USO`, orden, 403 del Cajero en `POST` y `PATCH` de estaciones, auditoría con el antes y el después, un evento por escritura real y la trazabilidad (criterio 63)              |
+| `carta/productos.spec.ts`                            | Criterios 6 a 12: alta de productos simples y reglas del criterio 7, referencias (422 con el mismo cuerpo para B e inexistente), `PATCH` con mezcla, no-op sin auditoría ni evento, desactivar y reactivar, y los 400 de C3/C4  |
+| `carta/fotos.spec.ts`                                | Criterios 14 a 17: JPEG, PNG y WebP válidos, truncados, firma que no coincide, 199 y 2049 px, 1 MB y 1 MB + 1, 415, reemplazo con borrado posterior a la confirmación, fallo antes del `COMMIT` y en el `COMMIT`                |
+| `carta/archivos.spec.ts`                             | `leerImagen`, `AlmacenEnDisco`, `AlmacenR2` (con un `fetch` falso), `ARCHIVOS_DRIVER` y sus reglas por entorno y el servidor estático de `/archivos` (solo `development` con `disco`)                                           |
+| `carta/rls-base.spec.ts`                             | Criterios 63 a 66 para `estacion`, `familia` y `producto`: RLS por tabla, llaves compuestas, `CHECK` y trazabilidad. El archivo protegido `carta-critica/rls-carta.spec.ts` siembra las diez tablas y solo corre al final de C5 |
+| `packages/dominio/test/precios-casos-limite.spec.ts` | Casos límite de `precios.ts` que no cubre la prueba protegida (repetidos, orden de las comprobaciones, configuración global de `decimal.js`)                                                                                    |
+
+`fijarEntornoDePrueba` da ahora `ARCHIVOS_DRIVER=r2` con credenciales falsas cuando `nodeEnv` es `production`
+(la API exige `r2` para arrancar en producción; ninguna prueba sale a la red) y `memoria` en los demás casos.
+
+Qué sigue en rojo de las pruebas protegidas de la historia 003 y por qué: `rls-carta.spec.ts` (la siembra inserta en
+las diez tablas, y faltan siete hasta C5), `linea-preparada.spec.ts` (`prepararLinea`, C5), `referencias-carta.spec.ts`
+(`sembrarCarta` necesita grupos, combos y menú, y la vista y los agotados son de C5) y, en `cajero-carta.spec.ts` y
+`permisos-carta.spec.ts`, todo lo que usa `sembrarCarta` (C4) o toca ajustes por sucursal (C2), grupos (C3), menú del
+día (C4) o agotados (C5).
+
 ## Pendientes menores
 
 - `apps/api/test/infraestructura.spec.ts:79` fija la base auxiliar `restaurante_test_infra` sin usar `BASE_DE_PRUEBA` (la variable de entorno que elige la base de pruebas, `restaurante_test` por defecto). Por eso dos corridas simultáneas contra la misma instancia de PostgreSQL pueden pisarse: cada una recrea esa base con `prepararBaseDeDatos({ recrear: true })`. Pendiente menor: que cada corrida use su propio nombre de base auxiliar.

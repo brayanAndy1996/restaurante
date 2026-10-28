@@ -33,8 +33,8 @@ const entornoSchema = z.object({
   EMPRESA_POR_HEADER: z.enum(['habilitado', 'deshabilitado']).optional(),
   PIN_PEPPER: z.string().optional(),
   ORIGENES_PERMITIDOS: z.string().optional(),
-  // Almacén de archivos (fotos de la carta, historia 003). Sin comportamiento todavía: la tarea T10 elige
-  // el almacén con `ARCHIVOS_DRIVER` y agrega sus reglas por entorno.
+  // Almacén de archivos (fotos de la carta, historia 003): `ARCHIVOS_DRIVER` elige el almacén (ver
+  // `cargarEntorno` y `exigirEntornoDeProduccion` para las reglas por entorno).
   ARCHIVOS_DRIVER: z.enum(DRIVERS_DE_ARCHIVOS).optional(),
   ARCHIVOS_DIRECTORIO: z.string().optional(),
   ARCHIVOS_URL_PUBLICA: z.string().optional(),
@@ -61,11 +61,21 @@ export interface Entorno extends Omit<
   ORIGENES_PERMITIDOS: string[];
   /**
    * Almacén de archivos: `memoria` con `NODE_ENV=test` y `disco` con `development` si no se define; en
-   * producción puede faltar (`undefined`) al leer el entorno. Sin efecto hasta la tarea T10, que agrega sus
-   * reglas (`disco` solo en desarrollo, `r2` obligatorio en producción).
+   * producción puede faltar (`undefined`) al leer el entorno, pero la API no arranca sin `r2`
+   * (`exigirEntornoDeProduccion`). `disco` solo vale en desarrollo.
    */
   ARCHIVOS_DRIVER: DriverDeArchivos | undefined;
+  /** Carpeta del almacén en disco; por defecto `./archivos` (solo con `disco`). */
+  ARCHIVOS_DIRECTORIO: string;
+  /**
+   * URL base pública de los archivos, sin barra final. Con `disco` y sin definir, la de la propia API
+   * (`http://localhost:<PORT>/archivos`); con `r2` es obligatoria (el dominio público del bucket).
+   */
+  ARCHIVOS_URL_PUBLICA: string | undefined;
 }
+
+/** Carpeta del almacén en disco si no se define `ARCHIVOS_DIRECTORIO`. */
+export const ARCHIVOS_DIRECTORIO_LOCAL = './archivos';
 
 /** Base64 o base64url, con o sin relleno. */
 const FORMATO_BASE64 = /^[A-Za-z0-9+/_-]+={0,2}$/;
@@ -147,6 +157,12 @@ export function cargarEntorno(env: NodeJS.ProcessEnv = process.env): Entorno {
     limpio.ORIGENES_PERMITIDOS ?? (conDefectos ? ORIGENES_PERMITIDOS_LOCAL : undefined);
   const origenes = leerOrigenes(origenesTexto ?? '', problemas);
 
+  const driver =
+    resultado.success && limpio.ARCHIVOS_DRIVER !== undefined
+      ? (limpio.ARCHIVOS_DRIVER as DriverDeArchivos)
+      : undefined;
+  validarArchivos(limpio, driver, problemas);
+
   if (problemas.length > 0 || !resultado.success) throw new EntornoInvalidoError(problemas);
   const driverPorDefecto: DriverDeArchivos | undefined =
     limpio.NODE_ENV === 'test'
@@ -154,18 +170,73 @@ export function cargarEntorno(env: NodeJS.ProcessEnv = process.env): Entorno {
       : limpio.NODE_ENV === 'development'
         ? 'disco'
         : undefined;
+  const driverFinal = resultado.data.ARCHIVOS_DRIVER ?? driverPorDefecto;
+  const urlPublica =
+    resultado.data.ARCHIVOS_URL_PUBLICA ??
+    (driverFinal === 'disco' ? `http://localhost:${resultado.data.PORT}/archivos` : undefined);
   return {
     ...resultado.data,
     PIN_PEPPER: pinPepper,
     ORIGENES_PERMITIDOS: origenes,
-    ARCHIVOS_DRIVER: resultado.data.ARCHIVOS_DRIVER ?? driverPorDefecto,
+    ARCHIVOS_DRIVER: driverFinal,
+    ARCHIVOS_DIRECTORIO: resultado.data.ARCHIVOS_DIRECTORIO ?? ARCHIVOS_DIRECTORIO_LOCAL,
+    ARCHIVOS_URL_PUBLICA: urlPublica?.replace(/\/+$/, ''),
   };
+}
+
+const VARIABLES_R2 = [
+  'R2_ACCOUNT_ID',
+  'R2_ACCESS_KEY_ID',
+  'R2_SECRET_ACCESS_KEY',
+  'R2_BUCKET',
+] as const;
+
+/**
+ * Reglas del almacén de archivos (historia 003, tarea T10): `disco` solo con `NODE_ENV=development` (la API
+ * sirve esa carpeta en `/archivos`, y nunca debe hacerlo en otro entorno); `r2` exige sus credenciales y la
+ * URL pública del bucket.
+ */
+function validarArchivos(
+  env: Record<string, string | undefined>,
+  driver: DriverDeArchivos | undefined,
+  problemas: string[],
+): void {
+  if (driver === 'disco' && env.NODE_ENV !== 'development') {
+    problemas.push(
+      'ARCHIVOS_DRIVER=disco solo vale con NODE_ENV=development: ' +
+        'usa r2 (producción) o memoria (pruebas)',
+    );
+  }
+  if (driver === 'r2') {
+    for (const variable of VARIABLES_R2) {
+      if (env[variable] === undefined) {
+        problemas.push(`${variable} es obligatoria con ARCHIVOS_DRIVER=r2`);
+      }
+    }
+    if (env.ARCHIVOS_URL_PUBLICA === undefined) {
+      problemas.push('ARCHIVOS_URL_PUBLICA es obligatoria con ARCHIVOS_DRIVER=r2');
+    }
+  }
+  if (env.ARCHIVOS_URL_PUBLICA !== undefined) {
+    let valida = false;
+    try {
+      const url = new URL(env.ARCHIVOS_URL_PUBLICA);
+      valida = url.protocol === 'http:' || url.protocol === 'https:';
+    } catch {
+      valida = false;
+    }
+    if (!valida) {
+      problemas.push(
+        'ARCHIVOS_URL_PUBLICA no es una URL http(s) válida (por ejemplo https://fotos.ejemplo.pe)',
+      );
+    }
+  }
 }
 
 /**
  * Lo que la API exige para arrancar en producción y que `cargarEntorno` no exige al leer el entorno:
- * `PIN_PEPPER` (sin ella no se puede calcular la huella de los PIN) y `ORIGENES_PERMITIDOS` (CORS de la
- * PWA). Con `development` y `test` tienen valor por defecto. `crearAplicacion` la llama antes de
+ * `PIN_PEPPER` (sin ella no se puede calcular la huella de los PIN), `ORIGENES_PERMITIDOS` (CORS de la
+ * PWA) y `ARCHIVOS_DRIVER=r2` (las fotos no pueden quedar en memoria ni en disco). Con `development` y `test` tienen valor por defecto. `crearAplicacion` la llama antes de
  * construir nada; lanza `EntornoInvalidoError` con todo lo que falte.
  */
 export function exigirEntornoDeProduccion(entorno: Entorno): void {
@@ -180,6 +251,12 @@ export function exigirEntornoDeProduccion(entorno: Entorno): void {
   if (entorno.ORIGENES_PERMITIDOS.length === 0) {
     problemas.push(
       'ORIGENES_PERMITIDOS es obligatoria en producción (orígenes de la PWA separados por coma)',
+    );
+  }
+  if (entorno.ARCHIVOS_DRIVER !== 'r2') {
+    problemas.push(
+      'ARCHIVOS_DRIVER=r2 es obligatorio en producción (fotos de la carta en Cloudflare R2, con sus ' +
+        'R2_* y ARCHIVOS_URL_PUBLICA)',
     );
   }
   if (problemas.length > 0) throw new EntornoInvalidoError(problemas);

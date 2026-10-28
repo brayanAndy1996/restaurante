@@ -1,20 +1,43 @@
-import { Controller, Delete, HttpCode, Put } from '@nestjs/common';
-import { noImplementado } from './errores-carta';
+import { Controller, Delete, HttpCode, Inject, Param, Put, Req } from '@nestjs/common';
+import type { FotoRespuesta } from '@restaurante/contratos';
+import type { Request } from 'express';
+import { TIPOS_DE_IMAGEN } from '../../nucleo/archivos';
+import { ErrorAplicacion } from '../../nucleo/errores/error-aplicacion';
+import { PipeUuid } from '../../nucleo/errores/pipes';
+import { Permiso } from '../seguridad';
+import { FotosProductoService } from './fotos-producto.service';
+
+const tipoNoSoportado = () =>
+  new ErrorAplicacion(
+    415,
+    'TIPO_NO_SOPORTADO',
+    'La foto debe enviarse como image/jpeg, image/png o image/webp',
+  );
 
 /**
- * Foto de un producto (criterios 14 a 17). Firmas de la fase A: sin `@Permiso` (en la fase C,
- * `EDITAR_CARTA`), sin el analizador binario de 1 MB y sin lógica.
+ * Foto de un producto (criterios 14 a 17): `EDITAR_CARTA`. El cuerpo binario (hasta 1 MB) lo lee
+ * `analizadorBinarioDeFoto`, solo para esta ruta, y llega aquí como `Buffer`.
  */
 @Controller('carta/productos/:id/foto')
 export class FotosProductoController {
+  constructor(@Inject(FotosProductoService) private readonly fotos: FotosProductoService) {}
+
+  /** 200 `{ fotoUrl }`; 403; 404; 413; 415; 422 `FOTO_INVALIDA`. */
   @Put()
-  subir(): never {
-    throw noImplementado();
+  @Permiso('EDITAR_CARTA')
+  subir(@Param('id', PipeUuid) id: string, @Req() peticion: Request): Promise<FotoRespuesta> {
+    const tipo = (peticion.headers['content-type'] ?? '').split(';')[0]!.trim().toLowerCase();
+    if (!(TIPOS_DE_IMAGEN as readonly string[]).includes(tipo) || !Buffer.isBuffer(peticion.body)) {
+      throw tipoNoSoportado();
+    }
+    return this.fotos.subir(id, peticion.body, tipo);
   }
 
+  /** 204 (también sin foto); 403; 404. */
   @Delete()
   @HttpCode(204)
-  quitar(): never {
-    throw noImplementado();
+  @Permiso('EDITAR_CARTA')
+  quitar(@Param('id', PipeUuid) id: string): Promise<void> {
+    return this.fotos.quitar(id);
   }
 }

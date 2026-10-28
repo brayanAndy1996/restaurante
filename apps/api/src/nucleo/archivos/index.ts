@@ -1,4 +1,11 @@
 export { ALMACEN_ARCHIVOS } from './almacen-archivos';
 export type { AlmacenArchivos } from './almacen-archivos';
 export { AlmacenEnMemoria, URL_BASE_ALMACEN_EN_MEMORIA } from './almacen-en-memoria';
+export { AlmacenEnDisco } from './almacen-en-disco';
+export { AlmacenR2, CACHE_CONTROL_FOTOS } from './almacen-r2';
+export type { OpcionesAlmacenR2 } from './almacen-r2';
 export { ArchivosModule } from './archivos.module';
+export { crearAlmacenDeEntorno } from './crear-almacen';
+export { leerImagen, TIPOS_DE_IMAGEN } from './leer-imagen';
+export type { FormatoImagen, ImagenLeida } from './leer-imagen';
+export { analizadorBinarioDeFoto, esSubidaDeFoto, LIMITE_FOTO_BYTES } from './cuerpo-binario';
