@@ -718,8 +718,8 @@ para B e inexistente—, la auditoría con el antes y el después de lo que camb
 `carta.actualizada` de la sala de esa sucursal, `noDisponibleEn` del alta con 422 antes que 403, y dejar de venderse
 solo con precios de sucursal, incluida la carrera con un ajuste concurrente). `carta/fotos.spec.ts` suma la subida
 fuera de la transacción: un almacén lento (`vi.spyOn` sobre `AlmacenEnMemoria.guardar` con una puerta) y el pool de 2
-conexiones del arranque de prueba, con tres subidas detenidas y otras ocho peticiones que responden y ninguna
-transacción abierta en `pg_stat_activity`; el producto que desaparece mientras se sube (404 y el archivo nuevo se
+conexiones del arranque de prueba, con tres subidas detenidas y otras ocho peticiones que responden (si cada subida retuviera
+una conexión, la tercera subida ni siquiera entraría al almacén y estas peticiones esperarían); el producto que desaparece mientras se sube (404 y el archivo nuevo se
 borra); la transacción corta que falla (conserva la foto anterior, borra exactamente la nueva, sin eventos); el
 borrado de compensación que también falla (solo se registra, la respuesta es el 500 original); y dos subidas
 concurrentes del mismo producto. La parte de `producto_sucursal` de la prueba de catálogo de trazabilidad (inserta

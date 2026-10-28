@@ -649,7 +649,7 @@ describe('criterio 23 · una sucursal nueva', () => {
       cuerpo: {
         rucEmisor: e.A.base.emisores[0]!.ruc,
         nombre: `Sucursal nueva ${randomUUID().slice(0, 8)}`,
-        codigoEstablecimiento: String(3000 + Math.floor(Math.random() * 6000)),
+        codigoEstablecimiento: '0099',
         direccion: 'Av. Nueva 1',
       },
     });

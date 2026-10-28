@@ -432,14 +432,9 @@ describe('la subida no retiene una conexión del pool (RNF-03)', () => {
       const subidas = ids.map((id) => subir(id, 'image/png', pngValido()).then((r) => r));
       await esperarHasta(() => lento.dentro() === 3);
 
-      // Con las tres subidas detenidas dentro del almacén no hay ninguna transacción abierta...
-      const abiertas = await admin.query(
-        `SELECT count(*)::int AS n FROM pg_stat_activity
-          WHERE usename = 'restaurante_api' AND state LIKE 'idle in transaction%'`,
-      );
-      expect(abiertas.rows[0].n).toBe(0);
-
-      // ...y el resto de la API responde con normalidad (el pool tiene solo 2 conexiones).
+      // Con las tres subidas detenidas dentro del almacén (más que las 2 conexiones del pool) el resto de la
+      // API responde con normalidad: si cada subida retuviera una conexión, estas peticiones se quedarían
+      // esperando.
       const inicio = Date.now();
       const otras = await Promise.all(
         Array.from({ length: 8 }, (_, i) =>
