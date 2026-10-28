@@ -221,7 +221,7 @@ código fuente), `packages/contratos` para hablar con la API y `packages/dominio
   semilla (el superadministrador de demostración; cambia `E2E_SUPERADMIN_USUARIO` y
   `E2E_SUPERADMIN_CONTRASENA` si usas otro) y las variables de la API. Si ya corren la API (3000) y la PWA
   (5173) con `pnpm dev`, las reutiliza; si no, las levanta. Cada corrida crea su propia empresa con
-  nombres únicos. `e2e/carta.spec.ts` recorre la carta y la disponibilidad con cinco personas de una empresa nueva (a 360 px, y en una tableta). La primera vez: `pnpm --filter @restaurante/app exec playwright install chromium`.
+  nombres únicos. `e2e/carta.spec.ts` recorre la carta y la disponibilidad con cuatro personas de una empresa nueva (Administrador, Cocina/Barra, Cajero y Mozo; a 360 px, y en una tableta). La primera vez: `pnpm --filter @restaurante/app exec playwright install chromium`.
   Mientras otra persona recompila `packages/*`, el servidor de desarrollo de Vite puede recargar módulos
   a medio camino y la app falla con "useSesion debe usarse dentro de SesionProvider"; si pasa, reinicia
   `pnpm dev` (o sirve el `build` con `pnpm --filter @restaurante/app preview`).
