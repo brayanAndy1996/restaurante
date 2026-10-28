@@ -16,6 +16,10 @@ export const ORIGENES_PERMITIDOS_LOCAL = 'http://localhost:5173';
 
 const MINIMO_BYTES_PIN_PEPPER = 32;
 
+/** Valores de `ARCHIVOS_DRIVER`: dónde se guardan las fotos de la carta. */
+export const DRIVERS_DE_ARCHIVOS = ['memoria', 'disco', 'r2'] as const;
+export type DriverDeArchivos = (typeof DRIVERS_DE_ARCHIVOS)[number];
+
 const entornoSchema = z.object({
   // Sin valor por defecto: un despliegue que olvide `NODE_ENV=production` no debe arrancar con
   // el resolutor por cabecera ni con contraseñas conocidas (criterio 29b).
@@ -29,11 +33,23 @@ const entornoSchema = z.object({
   EMPRESA_POR_HEADER: z.enum(['habilitado', 'deshabilitado']).optional(),
   PIN_PEPPER: z.string().optional(),
   ORIGENES_PERMITIDOS: z.string().optional(),
+  // Almacén de archivos (fotos de la carta, historia 003). Sin comportamiento todavía: la tarea T10 elige
+  // el almacén con `ARCHIVOS_DRIVER` y agrega sus reglas por entorno.
+  ARCHIVOS_DRIVER: z.enum(DRIVERS_DE_ARCHIVOS).optional(),
+  ARCHIVOS_DIRECTORIO: z.string().optional(),
+  ARCHIVOS_URL_PUBLICA: z.string().optional(),
+  R2_ACCOUNT_ID: z.string().optional(),
+  R2_ACCESS_KEY_ID: z.string().optional(),
+  R2_SECRET_ACCESS_KEY: z.string().optional(),
+  R2_BUCKET: z.string().optional(),
 });
 
 type EntornoLeido = z.infer<typeof entornoSchema>;
 
-export interface Entorno extends Omit<EntornoLeido, 'PIN_PEPPER' | 'ORIGENES_PERMITIDOS'> {
+export interface Entorno extends Omit<
+  EntornoLeido,
+  'PIN_PEPPER' | 'ORIGENES_PERMITIDOS' | 'ARCHIVOS_DRIVER'
+> {
   /**
    * Secreto con el que se calcula la huella de los PIN (base64, 32 bytes o más). Con `NODE_ENV`
    * `development` o `test` tiene un valor por defecto; en producción es obligatoria
@@ -43,6 +59,12 @@ export interface Entorno extends Omit<EntornoLeido, 'PIN_PEPPER' | 'ORIGENES_PER
   PIN_PEPPER: string | undefined;
   /** Orígenes de la PWA permitidos por CORS (`ORIGENES_PERMITIDOS`, separados por coma). */
   ORIGENES_PERMITIDOS: string[];
+  /**
+   * Almacén de archivos: `memoria` con `NODE_ENV=test` y `disco` con `development` si no se define; en
+   * producción puede faltar (`undefined`) al leer el entorno. Sin efecto hasta la tarea T10, que agrega sus
+   * reglas (`disco` solo en desarrollo, `r2` obligatorio en producción).
+   */
+  ARCHIVOS_DRIVER: DriverDeArchivos | undefined;
 }
 
 /** Base64 o base64url, con o sin relleno. */
@@ -126,7 +148,18 @@ export function cargarEntorno(env: NodeJS.ProcessEnv = process.env): Entorno {
   const origenes = leerOrigenes(origenesTexto ?? '', problemas);
 
   if (problemas.length > 0 || !resultado.success) throw new EntornoInvalidoError(problemas);
-  return { ...resultado.data, PIN_PEPPER: pinPepper, ORIGENES_PERMITIDOS: origenes };
+  const driverPorDefecto: DriverDeArchivos | undefined =
+    limpio.NODE_ENV === 'test'
+      ? 'memoria'
+      : limpio.NODE_ENV === 'development'
+        ? 'disco'
+        : undefined;
+  return {
+    ...resultado.data,
+    PIN_PEPPER: pinPepper,
+    ORIGENES_PERMITIDOS: origenes,
+    ARCHIVOS_DRIVER: resultado.data.ARCHIVOS_DRIVER ?? driverPorDefecto,
+  };
 }
 
 /**

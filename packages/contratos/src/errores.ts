@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { seQuitaSchema, usadoEnSchema } from './carta';
 
 /** Códigos de error que devuelve la API en el cuerpo de las respuestas de error. */
 export const CODIGOS_ERROR = [
@@ -33,6 +34,13 @@ export const CODIGOS_ERROR = [
   'ULTIMO_ADMINISTRADOR',
   'PLAN_INVALIDO',
   'CLAVE_IDEMPOTENCIA_REUTILIZADA',
+  // Sección "Carta" (historia 003).
+  'REFERENCIA_INVALIDA',
+  'EN_USO',
+  'CONFIRMACION_REQUERIDA',
+  'FOTO_INVALIDA',
+  'PRODUCTO_NO_VENDIBLE',
+  'SELECCION_INVALIDA',
 ] as const;
 
 export const codigoErrorSchema = z.enum(CODIGOS_ERROR);
@@ -49,6 +57,10 @@ export const errorRespuestaSchema = z.object({
   campos: z.array(campoErrorSchema).optional(),
   /** Solo en `BLOQUEO_TEMPORAL` (429): segundos que faltan; también va en la cabecera `Retry-After`. */
   reintentarEnSegundos: z.number().int().nonnegative().optional(),
+  /** Solo en `EN_USO` de un cambio de tipo (criterio 10c de 003): dónde se usa el producto. */
+  usadoEn: usadoEnSchema.optional(),
+  /** Solo en `CONFIRMACION_REQUERIDA` (criterio 10b de 003): lo que el cambio de tipo quitaría. */
+  seQuita: seQuitaSchema.optional(),
 });
 
 export type CodigoError = z.infer<typeof codigoErrorSchema>;

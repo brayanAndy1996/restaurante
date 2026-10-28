@@ -22,7 +22,7 @@ export interface OpcionesEntornoDePrueba {
 /**
  * Fija en `process.env` las variables de la app de prueba (DATABASE_URL como `restaurante_api`,
  * DATABASE_PLATAFORMA_URL como `restaurante_plataforma`, NODE_ENV, EMPRESA_POR_HEADER, DB_POOL_MAX,
- * PIN_PEPPER y ORIGENES_PERMITIDOS) y devuelve lo aplicado. Llámala antes de `crearAplicacion()`; se puede llamar varias veces en
+ * PIN_PEPPER, ORIGENES_PERMITIDOS y ARCHIVOS_DRIVER) y devuelve lo aplicado. Llámala antes de `crearAplicacion()`; se puede llamar varias veces en
  * el mismo proceso para crear apps con configuraciones distintas.
  */
 export function fijarEntornoDePrueba(
@@ -36,6 +36,8 @@ export function fijarEntornoDePrueba(
     DB_POOL_MAX: String(opciones.poolMax ?? 2),
     PIN_PEPPER: PIN_PEPPER_DE_PRUEBA,
     ORIGENES_PERMITIDOS: ORIGENES_PERMITIDOS_DE_PRUEBA,
+    // Las pruebas guardan los archivos en memoria (`AlmacenEnMemoria`), nunca en disco ni en R2.
+    ARCHIVOS_DRIVER: 'memoria',
     ...opciones.extra,
   };
   for (const [clave, valor] of Object.entries(aplicado)) {

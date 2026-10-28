@@ -33,3 +33,6 @@ coverage/
 playwright-report/
 test-results/
 apps/app/e2e/resultados/
+
+# Archivos subidos en desarrollo (ARCHIVOS_DRIVER=disco, historia 003)
+apps/api/archivos/

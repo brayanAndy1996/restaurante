@@ -53,4 +53,17 @@ export class SucursalesConsultaService {
       { bind: [[...new Set(ids)]], type: QueryTypes.SELECT, transaction: transaccion },
     );
   }
+
+  /**
+   * Hora de corte (`HH:MM`) de una sucursal de la empresa del contexto, o `null` si no existe (una sucursal
+   * de otra empresa es indistinguible de una inexistente). La usan la carta (agotados y menú del día) para
+   * calcular el día operativo con el reloj de la API (historia 003, tarea T20).
+   *
+   * Fase A: solo la firma; lanza `Error('No implementado')`.
+   */
+  horaCorte(sucursalId: string, transaccion?: Transaction): Promise<string | null> {
+    void sucursalId;
+    void transaccion;
+    return Promise.reject(new Error('No implementado'));
+  }
 }

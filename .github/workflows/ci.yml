@@ -31,6 +31,8 @@ jobs:
       # Valores solo para CI (no son secretos de producción).
       PIN_PEPPER: Y2ktcGluLXBlcHBlci1zb2xvLXBhcmEtcHJ1ZWJhcyEh
       ORIGENES_PERMITIDOS: http://localhost:5173
+      # Las fotos de la carta (historia 003) se guardan en memoria en las pruebas.
+      ARCHIVOS_DRIVER: memoria
 
     steps:
       - uses: actions/checkout@v4
@@ -85,6 +87,10 @@ jobs:
       # Valores solo para CI (no son secretos de producción).
       PIN_PEPPER: Y2ktcGluLXBlcHBlci1zb2xvLXBhcmEtcHJ1ZWJhcyEh
       ORIGENES_PERMITIDOS: http://localhost:5173
+      # Las fotos de la carta (historia 003) se guardan en disco en desarrollo.
+      ARCHIVOS_DRIVER: disco
+      ARCHIVOS_DIRECTORIO: ./archivos
+      ARCHIVOS_URL_PUBLICA: http://localhost:3000/archivos
 
     steps:
       - uses: actions/checkout@v4

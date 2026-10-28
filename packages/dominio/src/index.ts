@@ -31,3 +31,4 @@ export type {
   EstadoSuscripcionCodigo,
   ResultadoEstadoSuscripcion,
 } from './suscripcion';
+export * from './carta';

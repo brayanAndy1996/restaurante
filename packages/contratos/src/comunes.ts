@@ -201,6 +201,14 @@ export const montoSchema = z
   .regex(/^\d{1,8}(\.\d{1,2})?$/, 'Debe ser un monto con hasta 2 decimales')
   .refine((texto) => /[1-9]/.test(texto), 'Debe ser mayor que 0');
 
+/**
+ * Monto en soles como texto decimal que admite 0 (por ejemplo el precio extra de un modificador): hasta 8
+ * enteros y 2 decimales, mayor o igual que 0. `montoSchema` es el mismo sin admitir el 0.
+ */
+export const montoNoNegativoSchema = z
+  .string()
+  .regex(/^\d{1,8}(\.\d{1,2})?$/, 'Debe ser un monto con hasta 2 decimales');
+
 /** Motivo de una acción sensible: de 1 a 300 caracteres, sin NUL ni sustitutos sueltos. */
 export const motivoSchema = textoSchema(300);
 

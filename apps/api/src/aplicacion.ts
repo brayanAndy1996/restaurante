@@ -3,6 +3,8 @@ import type { INestApplication, LogLevel, Type } from '@nestjs/common';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import { AppModule } from './app.module';
 import { cargarEntorno, exigirEntornoDeProduccion } from './config/entorno';
+import type { AlmacenArchivos } from './nucleo/archivos';
+import type { PublicadorEventos } from './nucleo/eventos';
 import type { Reloj } from './nucleo/reloj';
 import { LIMITE_CUERPO_BYTES, traducirErrorDeCuerpo } from './nucleo/errores/filtro-global-errores';
 
@@ -19,6 +21,16 @@ export interface OpcionesAplicacion {
    * Las pruebas pasan un `RelojManual` y lo mueven con `fijar` y `avanzar`.
    */
   reloj?: Reloj;
+  /**
+   * Publicador de eventos en tiempo real (`PUBLICADOR_EVENTOS`); por defecto el `PublicadorNulo`, que los
+   * descarta hasta la sección 3. Las pruebas pasan un `PublicadorEnMemoria`.
+   */
+  publicadorEventos?: PublicadorEventos;
+  /**
+   * Almacén de archivos (`ALMACEN_ARCHIVOS`), por ejemplo el de las fotos de la carta. Las pruebas pasan un
+   * `AlmacenEnMemoria`.
+   */
+  almacenArchivos?: AlmacenArchivos;
 }
 
 /**
@@ -36,7 +48,12 @@ export async function crearAplicacion(
   const entorno = cargarEntorno(process.env); // falla antes de construir nada
   exigirEntornoDeProduccion(entorno); // en producción exige PIN_PEPPER y ORIGENES_PERMITIDOS
   const app = await NestFactory.create<NestExpressApplication>(
-    AppModule.registrar({ controladoresExtra: opciones.controladoresExtra, reloj: opciones.reloj }),
+    AppModule.registrar({
+      controladoresExtra: opciones.controladoresExtra,
+      reloj: opciones.reloj,
+      publicadorEventos: opciones.publicadorEventos,
+      almacenArchivos: opciones.almacenArchivos,
+    }),
     {
       // En pruebas se silencia el registro de Nest; los errores de arranque se propagan como excepción.
       // `abortOnError: false` evita que Nest llame a process.abort() y tumbe el proceso de pruebas.
