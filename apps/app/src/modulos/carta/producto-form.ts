@@ -306,7 +306,8 @@ export function avisosDeCambioDeTipo(
         ? `Se quitará la estación ${nombreDeEstacion}: ${tipoEnFrase(tipo)} no tiene estación propia, cada componente y cada opción va a la suya.`
         : `Un ${tipoEnFrase(tipo)} no tiene estación propia: cada componente y cada opción va a la suya.`,
     );
-    if (!original.seVendeSolo) avisos.push('Escribe su precio: un combo o un menú siempre se vende solo.');
+    if (!original.seVendeSolo)
+      avisos.push('Escribe su precio: un combo o un menú siempre se vende solo.');
   }
   if (original.tipo === 'MENU_DEL_DIA') {
     avisos.push('Se borrarán las opciones del día ya armadas en todas las sucursales.');

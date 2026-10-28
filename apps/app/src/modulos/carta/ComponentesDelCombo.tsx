@@ -62,7 +62,9 @@ export function ComponentesDelCombo({ productoId, valor, onCambio, error, tipo }
   );
   const buscado = paraBuscar(busqueda);
   const visibles =
-    buscado === '' ? disponibles : disponibles.filter((p) => paraBuscar(p.nombre).includes(buscado));
+    buscado === ''
+      ? disponibles
+      : disponibles.filter((p) => paraBuscar(p.nombre).includes(buscado));
   const lleno = valor.length >= MAXIMO_COMPONENTES_POR_COMBO;
   const nombreDelTipo = tipo === 'COMBO' ? 'combo' : 'menú';
 
@@ -70,12 +72,14 @@ export function ComponentesDelCombo({ productoId, valor, onCambio, error, tipo }
     onCambio([...valor, { productoId: producto.id, nombre: producto.nombre, cantidad: 1 }]);
     setAviso(`«${producto.nombre}» agregado. Se guarda con el producto.`);
     setBusqueda('');
-    if (valor.length + 1 >= MAXIMO_COMPONENTES_POR_COMBO) setEligiendo(false);
+    setEligiendo(false);
   }
 
   function quitar(componente: ComponenteDeProducto) {
     onCambio(valor.filter((c) => c.productoId !== componente.productoId));
-    setAviso(`«${componente.nombre}» quitado de este ${nombreDelTipo}. El producto sigue existiendo.`);
+    setAviso(
+      `«${componente.nombre}» quitado de este ${nombreDelTipo}. El producto sigue existiendo.`,
+    );
   }
 
   function cambiarCantidad(componente: ComponenteDeProducto, cantidad: number) {
@@ -124,7 +128,9 @@ export function ComponentesDelCombo({ productoId, valor, onCambio, error, tipo }
                         : undefined
                     }
                     derecha={
-                      inactivo ? <EtiquetaDeEstado tono="neutro">Inactivo</EtiquetaDeEstado> : undefined
+                      inactivo ? (
+                        <EtiquetaDeEstado tono="neutro">Inactivo</EtiquetaDeEstado>
+                      ) : undefined
                     }
                     extra={
                       <span className="componente__controles">
@@ -135,7 +141,11 @@ export function ComponentesDelCombo({ productoId, valor, onCambio, error, tipo }
                           maximo={CANTIDAD_MAXIMA_COMPONENTE}
                           onCambio={(cantidad) => cambiarCantidad(c, cantidad)}
                         />
-                        <Boton variante="texto" aria-label={`Quitar ${c.nombre}`} onClick={() => quitar(c)}>
+                        <Boton
+                          variante="texto"
+                          aria-label={`Quitar ${c.nombre}`}
+                          onClick={() => quitar(c)}
+                        >
                           Quitar
                         </Boton>
                       </span>

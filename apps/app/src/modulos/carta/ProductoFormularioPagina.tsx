@@ -18,7 +18,7 @@ import {
   claseBoton,
 } from '@restaurante/ui';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { Pagina } from '../../componentes/Pagina';
 import { AvisoPendiente } from '../../componentes/PendienteDeEnvio';
@@ -222,6 +222,13 @@ function FormularioDeProducto({ modo, original, familias, estaciones }: PropsFor
   const [porConfirmar, setPorConfirmar] = useState<ConfirmacionDeTipo | null>(null);
   const [falloDeConfirmacion, setFalloDeConfirmacion] = useState<string | null>(null);
   const [usoQueImpide, setUsoQueImpide] = useState<UsoQueImpide | null>(null);
+
+  // El botón de guardar está abajo y los avisos arriba: al aparecer uno, se trae a la vista.
+  useEffect(() => {
+    if (usoQueImpide || fallo) {
+      document.getElementById('aviso-de-guardado')?.scrollIntoView?.({ block: 'center' });
+    }
+  }, [usoQueImpide, fallo]);
 
   const recienCreado = Boolean((ubicacion.state as { creado?: boolean } | null)?.creado);
   const definicion = definicionDeTipo(estado.tipo);
@@ -487,18 +494,20 @@ function FormularioDeProducto({ modo, original, familias, estaciones }: PropsFor
         </Aviso>
       ) : null}
       <AvisoPendiente pendiente={envio.pendiente} />
-      {fallo ? (
-        <Aviso tipo="error" titulo="No pudimos guardar">
-          {fallo}
-        </Aviso>
-      ) : null}
-      {usoQueImpide ? (
-        <AvisoDeUso
-          uso={usoQueImpide}
-          alVolver={() => elegirTipo(tipoGuardado ?? 'SIMPLE')}
-          tipoGuardado={tipoGuardado}
-        />
-      ) : null}
+      <div id="aviso-de-guardado" className="avisos-de-guardado">
+        {fallo ? (
+          <Aviso tipo="error" titulo="No pudimos guardar">
+            {fallo}
+          </Aviso>
+        ) : null}
+        {usoQueImpide ? (
+          <AvisoDeUso
+            uso={usoQueImpide}
+            alVolver={() => elegirTipo(tipoGuardado ?? 'SIMPLE')}
+            tipoGuardado={tipoGuardado}
+          />
+        ) : null}
+      </div>
       {avisosDeTipo.length > 0 ? (
         <Aviso
           tipo={modo === 'crear' ? 'info' : 'alerta'}
@@ -662,7 +671,8 @@ function FormularioDeProducto({ modo, original, familias, estaciones }: PropsFor
       </form>
 
       <div className="formulario formulario--secciones formulario--continuacion">
-        {definicion.campos.componentes && (estado.tipo === 'COMBO' || estado.tipo === 'MENU_DEL_DIA') ? (
+        {definicion.campos.componentes &&
+        (estado.tipo === 'COMBO' || estado.tipo === 'MENU_DEL_DIA') ? (
           <ComponentesDelCombo
             tipo={estado.tipo}
             productoId={guardadoPrevio?.id}

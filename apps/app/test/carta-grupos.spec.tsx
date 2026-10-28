@@ -575,14 +575,18 @@ describe('formulario de grupo: edición', () => {
     await userEvent.clear(nombre);
     await userEvent.type(nombre, 'Extras nuevos');
     await userEvent.click(screen.getByRole('button', { name: 'Guardar cambios' }));
-    const aviso = (await screen.findAllByText('Pendiente de envío'))[0]!.closest('[role="status"]')!;
+    const aviso = (await screen.findAllByText('Pendiente de envío'))[0]!.closest(
+      '[role="status"]',
+    )!;
     expect(aviso).toHaveTextContent('Tus cambios se enviarán solos');
     expect(screen.getByLabelText('Nombre del grupo')).toHaveValue('Extras nuevos');
     sinRed = false;
     liberar();
     expect(await screen.findByText('Cambios guardados')).toBeInTheDocument();
     expect(screen.queryByText('Pendiente de envío')).not.toBeInTheDocument();
-    expect(new Set(s.de('PATCH', ruta).map((l) => l.cabeceras.get('Idempotency-Key'))).size).toBe(1);
+    expect(new Set(s.de('PATCH', ruta).map((l) => l.cabeceras.get('Idempotency-Key'))).size).toBe(
+      1,
+    );
   });
 });
 

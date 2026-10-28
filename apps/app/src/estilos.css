@@ -866,8 +866,14 @@ body,
 }
 
 .confirmacion__lista {
+  gap: var(--espacio-sm);
   margin: var(--espacio-sm) 0 var(--espacio-md);
-  padding-left: var(--espacio-lg);
+  padding: var(--espacio-md);
+  list-style: none;
+  background: var(--color-fondo);
+  border: 1px solid var(--color-junta);
+  border-radius: var(--radio-baldosa);
+  font-weight: 600;
 }
 
 .pendiente-de-envio {
@@ -989,4 +995,15 @@ body,
   margin: 0;
   font-weight: 600;
   color: var(--color-aviso-texto);
+}
+
+/* Los avisos de un guardado fallido: siempre en el mismo sitio y, si no hay ninguno, sin ocupar espacio */
+.avisos-de-guardado {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espacio-md);
+}
+
+.avisos-de-guardado:empty {
+  display: none;
 }

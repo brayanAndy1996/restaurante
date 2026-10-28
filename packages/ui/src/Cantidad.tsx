@@ -28,7 +28,11 @@ export function SelectorDeCantidad({
   const enElMinimo = valor <= minimo;
   const enElMaximo = valor >= maximo;
   return (
-    <div className={clases('ui-cantidad', className)} role="group" aria-label={`Cantidad de ${nombre}`}>
+    <div
+      className={clases('ui-cantidad', className)}
+      role="group"
+      aria-label={`Cantidad de ${nombre}`}
+    >
       <BotonIcono
         icono={IconoMenos}
         etiqueta={`Quitar una unidad de ${nombre}`}

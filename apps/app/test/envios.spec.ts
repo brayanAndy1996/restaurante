@@ -40,7 +40,8 @@ describe('api.ts: aviso del primer reintento', () => {
     const alReintentar = vi.fn();
     let intentos = 0;
     servidor({
-      'PUT /c': () => (++intentos < 2 ? json(503, { codigo: 'ERROR_INTERNO', mensaje: 'x' }) : json(200, {})),
+      'PUT /c': () =>
+        ++intentos < 2 ? json(503, { codigo: 'ERROR_INTERNO', mensaje: 'x' }) : json(200, {}),
     });
     await api.put('/c', {}, { alReintentar });
     expect(alReintentar).toHaveBeenCalledTimes(1);
@@ -70,10 +71,9 @@ describe('enviarSinPerder', () => {
         return json(201, { id: 'ok' });
       },
     });
-    await enviarSinPerder(
-      (extra) => api.post<{ id: string }>('/cosas', { a: 1 }, { ...extra }),
-      { alCambiar: (p) => estados.push(p) },
-    );
+    await enviarSinPerder((extra) => api.post<{ id: string }>('/cosas', { a: 1 }, { ...extra }), {
+      alCambiar: (p) => estados.push(p),
+    });
     expect(estados).toEqual([true, false]);
     expect(new Set(s.llamadas.map((l) => l.cabeceras.get('Idempotency-Key'))).size).toBe(1);
   });
@@ -146,7 +146,9 @@ describe('enviarSinPerder', () => {
   });
 
   it('un 500 del servidor tampoco se reintenta en una escritura', async () => {
-    const s = servidor({ 'POST /cosas': () => json(500, { codigo: 'ERROR_INTERNO', mensaje: 'x' }) });
+    const s = servidor({
+      'POST /cosas': () => json(500, { codigo: 'ERROR_INTERNO', mensaje: 'x' }),
+    });
     const error = await falla(enviarAlgo());
     expect(error.codigo).toBe('ERROR_INTERNO');
     expect(s.llamadas).toHaveLength(1);

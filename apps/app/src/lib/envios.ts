@@ -8,7 +8,10 @@ import { ErrorApi } from './errores';
  * idempotencia de esta escritura lógica (la misma en todos los intentos) y el aviso de "empezó a
  * reintentarse". Cada llamada de `carta.ts` lo pasa tal cual a `api.ts`.
  */
-export type ExtraDeEscritura = Pick<OpcionesApi<unknown>, 'idempotente' | 'alReintentar' | 'reintentos'>;
+export type ExtraDeEscritura = Pick<
+  OpcionesApi<unknown>,
+  'idempotente' | 'alReintentar' | 'reintentos'
+>;
 
 /** Espera entre los intentos que siguen a `api.ts` (que ya reintenta unos 35 s): 15 s, 30 s y luego 60 s. */
 const ESPERAS_DE_ENVIO_MS = [15_000, 30_000, 60_000] as const;

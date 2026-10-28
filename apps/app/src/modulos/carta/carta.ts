@@ -71,11 +71,7 @@ export const modificarFamilia = (
   extra?: ExtraDeEscritura,
 ) => api.patch(`/carta/familias/${id}`, cambios, { esquema: familiaRespuestaSchema, ...extra });
 export const ordenarFamilias = (ids: string[], extra?: ExtraDeEscritura) =>
-  api.put(
-    '/carta/familias/orden',
-    { ids },
-    { esquema: listaDe(familiaRespuestaSchema), ...extra },
-  );
+  api.put('/carta/familias/orden', { ids }, { esquema: listaDe(familiaRespuestaSchema), ...extra });
 
 export const listarProductos = (senal?: AbortSignal) =>
   api.get('/carta/productos', { esquema: listaDe(productoResumenSchema), ...conSenal(senal) });

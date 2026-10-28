@@ -406,14 +406,20 @@ describe('secciones: familias y estaciones', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Agregar familia' }));
     await userEvent.type(screen.getByLabelText('Nombre de la familia'), 'Postres');
     await userEvent.click(screen.getByRole('button', { name: 'Crear familia' }));
-    const aviso = (await screen.findAllByText('Pendiente de envío'))[0]!.closest('[role="status"]')!;
+    const aviso = (await screen.findAllByText('Pendiente de envío'))[0]!.closest(
+      '[role="status"]',
+    )!;
     expect(aviso).toHaveTextContent('Tus cambios se enviarán solos');
     expect(screen.getByLabelText('Nombre de la familia')).toHaveValue('Postres');
     sinRed = false;
     liberar();
     await waitFor(() => expect(screen.queryByText('Pendiente de envío')).not.toBeInTheDocument());
-    await waitFor(() => expect(screen.queryByLabelText('Nombre de la familia')).not.toBeInTheDocument());
-    expect(new Set(s.de('POST', '/carta/familias').map((l) => l.cabeceras.get('Idempotency-Key'))).size).toBe(1);
+    await waitFor(() =>
+      expect(screen.queryByLabelText('Nombre de la familia')).not.toBeInTheDocument(),
+    );
+    expect(
+      new Set(s.de('POST', '/carta/familias').map((l) => l.cabeceras.get('Idempotency-Key'))).size,
+    ).toBe(1);
   });
 
   it('un nombre repetido se dice en el campo y lo escrito se conserva', async () => {

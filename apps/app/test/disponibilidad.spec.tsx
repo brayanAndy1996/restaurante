@@ -141,25 +141,39 @@ describe('menú del día: lectura', () => {
       [HOY]: [menu(HOY, [M_HUANCAINA, M_AJI], { noDisponibles: [M_SOPA] })],
     });
     renderApp('/disponibilidad');
-    expect(await screen.findByRole('status', { name: 'Cargando el menú del día' })).toBeInTheDocument();
+    expect(
+      await screen.findByRole('status', { name: 'Cargando el menú del día' }),
+    ).toBeInTheDocument();
     const bloque = await screen.findByRole('region', { name: 'Menú criollo' });
     expect(screen.getByText('jueves 29 de octubre')).toBeInTheDocument();
     expect(screen.getAllByText('Miraflores').length).toBeGreaterThan(0);
     expect(within(bloque).getByText('S/ 12.00')).toBeInTheDocument();
     expect(within(bloque).getByText('Armado')).toBeInTheDocument();
     const entrada = within(bloque).getByRole('group', { name: 'Entrada' });
-    expect(within(entrada).getByText(/Elige 1, obligatorio · se ofrecen 1 de 2 platos/)).toBeInTheDocument();
+    expect(
+      within(entrada).getByText(/Elige 1, obligatorio · se ofrecen 1 de 2 platos/),
+    ).toBeInTheDocument();
     expect(within(entrada).getByRole('checkbox', { name: /Papa a la huancaína/ })).toBeChecked();
     const sopa = within(entrada).getByRole('checkbox', { name: /Sopa del día/ });
     expect(sopa).not.toBeChecked();
     expect(sopa.closest('label')).toHaveTextContent('No disponible hoy');
     const segundo = within(bloque).getByRole('group', { name: 'Segundo' });
-    expect(within(segundo).getByRole('checkbox', { name: /Lomo saltado/ }).closest('label')).toHaveTextContent('+ S/ 5.00 de recargo');
-    expect(within(segundo).getByRole('checkbox', { name: /Ají de gallina/ }).closest('label')).toHaveTextContent('Sin recargo');
+    expect(
+      within(segundo)
+        .getByRole('checkbox', { name: /Lomo saltado/ })
+        .closest('label'),
+    ).toHaveTextContent('+ S/ 5.00 de recargo');
+    expect(
+      within(segundo)
+        .getByRole('checkbox', { name: /Ají de gallina/ })
+        .closest('label'),
+    ).toHaveTextContent('Sin recargo');
     // Hoy y Mañana; "Agotados" llega en C5, así que aún no hay cambio de sección.
     expect(screen.getByRole('button', { name: 'Hoy' })).toHaveAttribute('aria-pressed', 'true');
     expect(screen.getByRole('button', { name: 'Mañana' })).toHaveAttribute('aria-pressed', 'false');
-    expect(screen.queryByRole('group', { name: 'Secciones de disponibilidad' })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('group', { name: 'Secciones de disponibilidad' }),
+    ).not.toBeInTheDocument();
     expect(screen.queryByText(/no está armado/)).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Guardar el menú de hoy' })).toBeDisabled();
   });
@@ -167,19 +181,28 @@ describe('menú del día: lectura', () => {
   it('si hoy no está armado lo dice arriba y cada tiempo dice cuántos platos faltan', async () => {
     disponibilidad(cocina(), { [HOY]: [menu(HOY, [])] });
     renderApp('/disponibilidad');
-    const aviso = (await screen.findByText('El menú de hoy no está armado: no se puede vender')).closest('[role="status"]')!;
+    const aviso = (
+      await screen.findByText('El menú de hoy no está armado: no se puede vender')
+    ).closest('[role="status"]')!;
     expect(aviso).toHaveTextContent('Marca los platos que se ofrecen hoy');
     const bloque = screen.getByRole('region', { name: 'Menú criollo' });
     expect(within(bloque).getByText('Sin armar')).toBeInTheDocument();
-    expect(within(bloque).getAllByText(/Elige al menos 1 plato para que se pueda vender/)).toHaveLength(2);
+    expect(
+      within(bloque).getAllByText(/Elige al menos 1 plato para que se pueda vender/),
+    ).toHaveLength(2);
   });
 
   it('con dos menús nombra el que falta', async () => {
     disponibilidad(cocina(), {
-      [HOY]: [menu(HOY, [M_HUANCAINA, M_AJI]), menu(HOY, [], { id: P_OTRO_MENU, nombre: 'Menú ejecutivo' })],
+      [HOY]: [
+        menu(HOY, [M_HUANCAINA, M_AJI]),
+        menu(HOY, [], { id: P_OTRO_MENU, nombre: 'Menú ejecutivo' }),
+      ],
     });
     renderApp('/disponibilidad');
-    const aviso = (await screen.findByText('El menú de hoy no está armado: no se puede vender')).closest('[role="status"]')!;
+    const aviso = (
+      await screen.findByText('El menú de hoy no está armado: no se puede vender')
+    ).closest('[role="status"]')!;
     expect(aviso).toHaveTextContent('Falta armar: Menú ejecutivo.');
   });
 
@@ -187,7 +210,10 @@ describe('menú del día: lectura', () => {
     disponibilidad(administrador(), { [HOY]: [] });
     renderApp('/disponibilidad');
     expect(await screen.findByText('Esta sucursal no tiene un menú del día')).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Crear un menú del día' })).toHaveAttribute('href', '/carta/productos/nuevo');
+    expect(screen.getByRole('link', { name: 'Crear un menú del día' })).toHaveAttribute(
+      'href',
+      '/carta/productos/nuevo',
+    );
   });
 
   it('sin menús, Cocina/Barra sabe a quién pedírselo y no ve botones que no puede usar', async () => {
@@ -200,9 +226,16 @@ describe('menú del día: lectura', () => {
 
   it('si falla la carga nombra el problema y deja reintentar en la misma pantalla', async () => {
     let falla = true;
-    const s = disponibilidad(cocina(), { [HOY]: [menu(HOY, [M_HUANCAINA, M_AJI])] }, {
-      [`GET ${RUTA}`]: () => (falla ? json(500, { codigo: 'ERROR_INTERNO', mensaje: 'x' }) : json(200, [menu(HOY, [M_HUANCAINA, M_AJI])])),
-    });
+    const s = disponibilidad(
+      cocina(),
+      { [HOY]: [menu(HOY, [M_HUANCAINA, M_AJI])] },
+      {
+        [`GET ${RUTA}`]: () =>
+          falla
+            ? json(500, { codigo: 'ERROR_INTERNO', mensaje: 'x' })
+            : json(200, [menu(HOY, [M_HUANCAINA, M_AJI])]),
+      },
+    );
     renderApp('/disponibilidad');
     expect(await screen.findByText('No pudimos cargar el menú del día')).toBeInTheDocument();
     falla = false;
@@ -269,7 +302,9 @@ describe('menú del día: armar', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Guardar el menú de hoy' }));
     await waitFor(() => expect(s.de('PUT', `${RUTA}/${P_MENU}`)).toHaveLength(1));
     expect(s.de('PUT', `${RUTA}/${P_MENU}`)[0]?.cuerpo).toEqual({ dia: HOY, opciones: [] });
-    expect(await screen.findByText('El menú de hoy no está armado: no se puede vender')).toBeInTheDocument();
+    expect(
+      await screen.findByText('El menú de hoy no está armado: no se puede vender'),
+    ).toBeInTheDocument();
   });
 
   it('"Mañana" trae el menú del día siguiente y guarda con esa fecha', async () => {
@@ -282,7 +317,9 @@ describe('menú del día: armar', () => {
     await screen.findByRole('region', { name: 'Menú criollo' });
     await userEvent.click(screen.getByRole('button', { name: 'Mañana' }));
     expect(await screen.findByText('viernes 30 de octubre')).toBeInTheDocument();
-    const aviso = screen.getByText('El menú de mañana todavía no está armado').closest('[role="status"]')!;
+    const aviso = screen
+      .getByText('El menú de mañana todavía no está armado')
+      .closest('[role="status"]')!;
     expect(aviso).toHaveTextContent('Puedes dejarlo listo desde hoy');
     expect(s.de('GET', RUTA).some((l) => l.cuerpo === undefined)).toBe(true);
     const bloque = screen.getByRole('region', { name: 'Menú criollo' });
@@ -290,7 +327,10 @@ describe('menú del día: armar', () => {
     await userEvent.click(within(bloque).getByRole('checkbox', { name: /Ají de gallina/ }));
     await userEvent.click(screen.getByRole('button', { name: 'Guardar el menú de mañana' }));
     await screen.findByText('El menú de mañana quedó guardado.');
-    expect(s.de('PUT', `${RUTA}/${P_MENU}`)[0]?.cuerpo).toEqual({ dia: MANANA, opciones: [M_SOPA, M_AJI] });
+    expect(s.de('PUT', `${RUTA}/${P_MENU}`)[0]?.cuerpo).toEqual({
+      dia: MANANA,
+      opciones: [M_SOPA, M_AJI],
+    });
   });
 
   it('lo marcado en un día no se pierde al cambiar de pestaña y se avisa', async () => {
@@ -316,7 +356,11 @@ describe('menú del día: armar', () => {
       { [HOY]: [menu(HOY, [M_HUANCAINA, M_AJI])] },
       {
         [`PUT ${RUTA}/${P_MENU}`]: () =>
-          json(422, { codigo: 'REFERENCIA_INVALIDA', mensaje: 'x', campos: [{ campo: 'opciones.0', mensaje: 'x' }] }),
+          json(422, {
+            codigo: 'REFERENCIA_INVALIDA',
+            mensaje: 'x',
+            campos: [{ campo: 'opciones.0', mensaje: 'x' }],
+          }),
       },
     );
     renderApp('/disponibilidad');
@@ -333,9 +377,15 @@ describe('menú del día: armar', () => {
     const s = disponibilidad(
       cocina(),
       {
-        [HOY]: [menu(HOY, [M_HUANCAINA, M_AJI]), menu(HOY, [M_SOPA, M_LOMO], { id: P_OTRO_MENU, nombre: 'Menú ejecutivo' })],
+        [HOY]: [
+          menu(HOY, [M_HUANCAINA, M_AJI]),
+          menu(HOY, [M_SOPA, M_LOMO], { id: P_OTRO_MENU, nombre: 'Menú ejecutivo' }),
+        ],
       },
-      { [`PUT ${RUTA}/${P_OTRO_MENU}`]: () => json(200, menu(HOY, [M_SOPA, M_AJI], { id: P_OTRO_MENU, nombre: 'Menú ejecutivo' })) },
+      {
+        [`PUT ${RUTA}/${P_OTRO_MENU}`]: () =>
+          json(200, menu(HOY, [M_SOPA, M_AJI], { id: P_OTRO_MENU, nombre: 'Menú ejecutivo' })),
+      },
     );
     renderApp('/disponibilidad');
     const ejecutivo = await screen.findByRole('region', { name: 'Menú ejecutivo' });
@@ -344,7 +394,10 @@ describe('menú del día: armar', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Guardar el menú de hoy' }));
     await screen.findByText('1 menú guardado para hoy.');
     expect(s.de('PUT', `${RUTA}/${P_MENU}`)).toHaveLength(0);
-    expect(s.de('PUT', `${RUTA}/${P_OTRO_MENU}`)[0]?.cuerpo).toEqual({ dia: HOY, opciones: [M_SOPA, M_AJI] });
+    expect(s.de('PUT', `${RUTA}/${P_OTRO_MENU}`)[0]?.cuerpo).toEqual({
+      dia: HOY,
+      opciones: [M_SOPA, M_AJI],
+    });
   });
 });
 
@@ -367,7 +420,10 @@ describe('menú del día: repetir las de ayer', () => {
     expect(s.de('PUT', `${RUTA}/${P_MENU}`)).toHaveLength(0);
     await userEvent.click(screen.getByRole('button', { name: 'Guardar el menú de hoy' }));
     await screen.findByText('El menú de hoy quedó guardado.');
-    expect(s.de('PUT', `${RUTA}/${P_MENU}`)[0]?.cuerpo).toEqual({ dia: HOY, opciones: [M_SOPA, M_LOMO] });
+    expect(s.de('PUT', `${RUTA}/${P_MENU}`)[0]?.cuerpo).toEqual({
+      dia: HOY,
+      opciones: [M_SOPA, M_LOMO],
+    });
   });
 
   it('si ayer no había nada armado, lo dice y no marca nada', async () => {
@@ -447,7 +503,9 @@ describe('Pendiente de envío en el menú del día (criterio 78)', () => {
     liberar();
     expect(await screen.findByText('El menú de hoy quedó guardado.')).toBeInTheDocument();
     expect(within(bloque).queryByText('Pendiente de envío')).not.toBeInTheDocument();
-    const claves = new Set(s.de('PUT', `${RUTA}/${P_MENU}`).map((l) => l.cabeceras.get('Idempotency-Key')));
+    const claves = new Set(
+      s.de('PUT', `${RUTA}/${P_MENU}`).map((l) => l.cabeceras.get('Idempotency-Key')),
+    );
     expect(claves.size).toBe(1);
     expect(s.de('PUT', `${RUTA}/${P_MENU}`).length).toBeGreaterThan(2);
   });

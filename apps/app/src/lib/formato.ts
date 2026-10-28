@@ -171,7 +171,15 @@ export function sumarDiasAFecha(fecha: string, dias: number): string {
   return `${resultado.getUTCFullYear()}-${dosCifras(resultado.getUTCMonth() + 1)}-${dosCifras(resultado.getUTCDate())}`;
 }
 
-const DIAS_DE_LA_SEMANA = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];
+const DIAS_DE_LA_SEMANA = [
+  'domingo',
+  'lunes',
+  'martes',
+  'miércoles',
+  'jueves',
+  'viernes',
+  'sábado',
+];
 
 /** "jueves 29 de octubre" a partir de "2026-10-29" (fecha sin hora: no pasa por zonas horarias). */
 export function diaConFecha(fecha: string): string {

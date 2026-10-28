@@ -433,7 +433,9 @@ describe('precio por sucursal: guardar una fila', () => {
     liberar();
     expect(await within(miraflores).findByText('Guardado')).toBeInTheDocument();
     expect(within(miraflores).queryByText('Pendiente de envío')).not.toBeInTheDocument();
-    expect(new Set(s.de('PUT', RUTA_A).map((l) => l.cabeceras.get('Idempotency-Key'))).size).toBe(1);
+    expect(new Set(s.de('PUT', RUTA_A).map((l) => l.cabeceras.get('Idempotency-Key'))).size).toBe(
+      1,
+    );
   });
 
   it('un 400 sobre el precio lo marca en el campo', async () => {

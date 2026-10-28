@@ -19,7 +19,10 @@ const mismoConjunto = (a: ReadonlySet<string>, b: ReadonlySet<string>) =>
   a.size === b.size && [...a].every((id) => b.has(id));
 
 /** `true` si lo que está marcado difiere de lo guardado. */
-export function hayCambiosDeMenu(menu: MenuDelDiaRespuesta, marcadas: ReadonlySet<string>): boolean {
+export function hayCambiosDeMenu(
+  menu: MenuDelDiaRespuesta,
+  marcadas: ReadonlySet<string>,
+): boolean {
   return !mismoConjunto(elegidasDe(menu), marcadas);
 }
 

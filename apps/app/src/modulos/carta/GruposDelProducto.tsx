@@ -39,7 +39,8 @@ const TEXTOS_POR_TIPO: Record<TipoProducto, { titulo: string; ayuda: string; vac
     titulo: 'Tiempos del menú',
     ayuda:
       'Un grupo por tiempo, como Entrada o Segundo. Sus opciones son los platos candidatos; cada día se elige cuáles se ofrecen en Disponibilidad. Un grupo se puede usar en varios productos.',
-    vacio: 'Este menú no tiene tiempos. Agrega un grupo por cada tiempo (Entrada, Segundo…) o crea uno nuevo.',
+    vacio:
+      'Este menú no tiene tiempos. Agrega un grupo por cada tiempo (Entrada, Segundo…) o crea uno nuevo.',
   },
 };
 
@@ -69,13 +70,7 @@ function otrosProductos(
  * ordenarlos, quitarlos, y crear o editar uno sin salir del producto. Un grupo es de todos los productos
  * que lo usan: al editarlo se avisa. Lo elegido aquí se guarda con el producto ("Guardar cambios").
  */
-export function GruposDelProducto({
-  productoId,
-  valor,
-  onCambio,
-  error,
-  tipo = 'SIMPLE',
-}: Props) {
+export function GruposDelProducto({ productoId, valor, onCambio, error, tipo = 'SIMPLE' }: Props) {
   const textos = TEXTOS_POR_TIPO[tipo];
   const idBase = useId();
   const grupos = useQuery({

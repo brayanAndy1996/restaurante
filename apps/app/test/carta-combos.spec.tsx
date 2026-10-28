@@ -32,7 +32,11 @@ const INSTANTE = '2026-10-29T10:00:00.000Z';
 const administrador = (): SesionRespuesta =>
   sesionDe({ rol: 'ADMINISTRADOR', permisos: permisosDeRol('ADMINISTRADOR') });
 
-const resumen = (id: string, nombre: string, extra: Partial<ProductoResumen> = {}): ProductoResumen => ({
+const resumen = (
+  id: string,
+  nombre: string,
+  extra: Partial<ProductoResumen> = {},
+): ProductoResumen => ({
   id,
   tipo: 'SIMPLE',
   nombre,
@@ -46,7 +50,10 @@ const resumen = (id: string, nombre: string, extra: Partial<ProductoResumen> = {
   orden: 1,
   ...extra,
 });
-const completo = (base: ProductoResumen, extra: Partial<ProductoRespuesta> = {}): ProductoRespuesta => ({
+const completo = (
+  base: ProductoResumen,
+  extra: Partial<ProductoRespuesta> = {},
+): ProductoRespuesta => ({
   ...base,
   descripcion: null,
   afectacionIgv: 'GRAVADO',
@@ -60,17 +67,44 @@ const completo = (base: ProductoResumen, extra: Partial<ProductoRespuesta> = {})
 });
 
 const familias: FamiliaRespuesta[] = [
-  { id: FAM, nombre: 'Fondos', orden: 1, activa: true, productos: 6, creadoEn: INSTANTE, actualizadoEn: INSTANTE },
+  {
+    id: FAM,
+    nombre: 'Fondos',
+    orden: 1,
+    activa: true,
+    productos: 6,
+    creadoEn: INSTANTE,
+    actualizadoEn: INSTANTE,
+  },
 ];
 const estaciones: EstacionRespuesta[] = [
-  { id: EST_COCINA, nombre: 'Cocina', activa: true, productosActivos: 3, creadoEn: INSTANTE, actualizadoEn: INSTANTE },
+  {
+    id: EST_COCINA,
+    nombre: 'Cocina',
+    activa: true,
+    productosActivos: 3,
+    creadoEn: INSTANTE,
+    actualizadoEn: INSTANTE,
+  },
 ];
 
 const HAMBURGUESA = resumen(P_HAMB, 'Hamburguesa clásica');
-const PAPAS = resumen(P_PAPAS, 'Papas del combo', { seVendeSolo: false, precio: null, estacionId: null });
+const PAPAS = resumen(P_PAPAS, 'Papas del combo', {
+  seVendeSolo: false,
+  precio: null,
+  estacionId: null,
+});
 const LOMO = resumen(P_LOMO, 'Lomo saltado', { precio: '28.00' });
-const COMBO = resumen(P_COMBO, 'Combo hamburguesa', { tipo: 'COMBO', precio: '22.90', estacionId: null });
-const MENU = resumen(P_MENU, 'Menú criollo', { tipo: 'MENU_DEL_DIA', precio: '12.00', estacionId: null });
+const COMBO = resumen(P_COMBO, 'Combo hamburguesa', {
+  tipo: 'COMBO',
+  precio: '22.90',
+  estacionId: null,
+});
+const MENU = resumen(P_MENU, 'Menú criollo', {
+  tipo: 'MENU_DEL_DIA',
+  precio: '12.00',
+  estacionId: null,
+});
 const INACTIVO = resumen(P_INACTIVO, 'Chaufa', { activo: false });
 const PRODUCTOS = [HAMBURGUESA, PAPAS, LOMO, COMBO, MENU, INACTIVO];
 
@@ -176,13 +210,19 @@ describe('formulario de combo: alta', () => {
     // Componentes: solo productos simples y activos, no el combo, ni el menú, ni el inactivo.
     await userEvent.click(screen.getByRole('button', { name: 'Agregar un componente' }));
     const ofrecidos = await screen.findByRole('list', { name: 'Productos que puedes agregar' });
-    expect(within(ofrecidos).getAllByRole('listitem').map((li) => li.textContent)).toEqual([
+    expect(
+      within(ofrecidos)
+        .getAllByRole('listitem')
+        .map((li) => li.textContent),
+    ).toEqual([
       expect.stringContaining('Hamburguesa clásica'),
       expect.stringContaining('Papas del combo'),
       expect.stringContaining('Lomo saltado'),
     ]);
     expect(within(ofrecidos).getByText(/No se vende solo/)).toBeInTheDocument();
-    await userEvent.click(within(ofrecidos).getByRole('button', { name: 'Agregar Hamburguesa clásica' }));
+    await userEvent.click(
+      within(ofrecidos).getByRole('button', { name: 'Agregar Hamburguesa clásica' }),
+    );
     const componentes = screen.getByRole('list', { name: 'Componentes de este producto' });
     expect(within(componentes).getByText('Hamburguesa clásica')).toBeInTheDocument();
     await userEvent.click(
@@ -197,7 +237,9 @@ describe('formulario de combo: alta', () => {
     await userEvent.click(await screen.findByRole('button', { name: 'Agregar Acompañamiento' }));
 
     // Vista previa: por defecto las primeras opciones, sin recargo.
-    const vista = screen.getByRole('heading', { name: 'Vista previa del precio' }).closest('section')!;
+    const vista = screen
+      .getByRole('heading', { name: 'Vista previa del precio' })
+      .closest('section')!;
     const total = within(vista).getByText('Precio con estas opciones').closest('[role="status"]')!;
     expect(total).toHaveTextContent('S/ 22.90');
     await userEvent.click(within(vista).getByRole('radio', { name: /Cerveza/ }));
@@ -232,7 +274,9 @@ describe('formulario de combo: alta', () => {
     await elegirTipo('Combo');
     await userEvent.click(screen.getByRole('button', { name: 'Agregar un grupo' }));
     await userEvent.click(await screen.findByRole('button', { name: 'Agregar Bebida' }));
-    const vista = screen.getByRole('heading', { name: 'Vista previa del precio' }).closest('section')!;
+    const vista = screen
+      .getByRole('heading', { name: 'Vista previa del precio' })
+      .closest('section')!;
     expect(within(vista).getByText(/Escribe el precio del producto/)).toBeInTheDocument();
     await userEvent.type(screen.getByLabelText('Precio base con IGV'), '10');
     expect(within(vista).getByText('S/ 10.00')).toBeInTheDocument();
@@ -256,7 +300,9 @@ describe('formulario de combo: alta', () => {
     await userEvent.type(screen.getByLabelText('Precio base con IGV'), '28');
     await userEvent.click(screen.getByRole('button', { name: 'Agregar un grupo' }));
     await userEvent.click(await screen.findByRole('button', { name: 'Agregar Extras' }));
-    const vista = screen.getByRole('heading', { name: 'Vista previa del precio' }).closest('section')!;
+    const vista = screen
+      .getByRole('heading', { name: 'Vista previa del precio' })
+      .closest('section')!;
     const total = within(vista).getByText('Precio con estas opciones').closest('[role="status"]')!;
     expect(total).toHaveTextContent('S/ 28.00');
     await userEvent.click(within(vista).getByRole('checkbox', { name: /Huevo/ }));
@@ -272,12 +318,16 @@ describe('formulario de combo: alta', () => {
     await screen.findByRole('heading', { name: 'Datos' });
     await elegirTipo('Combo');
     await userEvent.click(screen.getByRole('button', { name: 'Crear producto' }));
-    expect(screen.getByText('Agrega al menos un componente o un grupo de opciones')).toBeInTheDocument();
+    expect(
+      screen.getByText('Agrega al menos un componente o un grupo de opciones'),
+    ).toBeInTheDocument();
     expect(screen.getByText('Escribe el precio con IGV')).toBeInTheDocument();
     expect(screen.queryByText(/Elige la estación/)).not.toBeInTheDocument();
     await elegirTipo('Menú del día');
     await userEvent.click(screen.getByRole('button', { name: 'Crear producto' }));
-    expect(screen.getByText(/Agrega al menos un grupo: cada grupo es un tiempo/)).toBeInTheDocument();
+    expect(
+      screen.getByText(/Agrega al menos un grupo: cada grupo es un tiempo/),
+    ).toBeInTheDocument();
     expect(s.de('POST', '/carta/productos')).toHaveLength(0);
   });
 
@@ -287,7 +337,9 @@ describe('formulario de combo: alta', () => {
     await screen.findByRole('heading', { name: 'Datos' });
     await elegirTipo('Menú del día');
     expect(screen.getByText('Un menú del día nace sin armar')).toBeInTheDocument();
-    expect(screen.getByText(/No se podrá vender hasta armar sus opciones del día/)).toBeInTheDocument();
+    expect(
+      screen.getByText(/No se podrá vender hasta armar sus opciones del día/),
+    ).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Tiempos del menú' })).toBeInTheDocument();
   });
 
@@ -308,7 +360,9 @@ describe('formulario de combo: alta', () => {
     await userEvent.type(screen.getByLabelText('Precio base con IGV'), '22.9');
     await userEvent.click(screen.getByRole('radio', { name: /Por unidades/ }));
     await userEvent.click(screen.getByRole('button', { name: 'Agregar un componente' }));
-    await userEvent.click(await screen.findByRole('button', { name: 'Agregar Hamburguesa clásica' }));
+    await userEvent.click(
+      await screen.findByRole('button', { name: 'Agregar Hamburguesa clásica' }),
+    );
     await userEvent.click(screen.getByRole('button', { name: 'Crear producto' }));
     expect(await screen.findByText('Revisa los componentes')).toBeInTheDocument();
     expect(screen.getByLabelText('Nombre')).toHaveValue('Combo hamburguesa');
@@ -359,7 +413,9 @@ describe('formulario de combo: edición', () => {
     renderApp(rutaCombo);
     await screen.findByRole('list', { name: 'Componentes de este producto' });
     await userEvent.click(screen.getByRole('button', { name: 'Quitar Hamburguesa clásica' }));
-    expect(screen.queryByRole('list', { name: 'Componentes de este producto' })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('list', { name: 'Componentes de este producto' }),
+    ).not.toBeInTheDocument();
     expect(screen.getByText(/«Hamburguesa clásica» quitado de este combo/)).toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: 'Guardar cambios' }));
     await screen.findByText('Cambios guardados');
@@ -469,7 +525,11 @@ describe('cambio de tipo al editar', () => {
         json(409, {
           codigo: 'CONFIRMACION_REQUERIDA',
           mensaje: 'x',
-          seQuita: { estacion: { id: EST_COCINA, nombre: 'Cocina' }, componentes: [], opcionesDelDia: [] },
+          seQuita: {
+            estacion: { id: EST_COCINA, nombre: 'Cocina' },
+            componentes: [],
+            opcionesDelDia: [],
+          },
         }),
     });
     renderApp(rutaLomo);
@@ -480,7 +540,11 @@ describe('cambio de tipo al editar', () => {
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
     expect(s.de('PATCH', rutaLomo)).toHaveLength(1);
     expect(screen.getByRole('button', { name: 'Combo' })).toHaveAttribute('aria-pressed', 'true');
-    expect(within(screen.getByRole('list', { name: 'Componentes de este producto' })).getByText('Papas del combo')).toBeInTheDocument();
+    expect(
+      within(screen.getByRole('list', { name: 'Componentes de este producto' })).getByText(
+        'Papas del combo',
+      ),
+    ).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Guardar cambios' })).toBeEnabled();
   });
 
@@ -526,7 +590,9 @@ describe('cambio de tipo al editar', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Guardar cambios' }));
     const hoja = await screen.findByRole('dialog', { name: '¿Cambiar a simple?' });
     expect(
-      within(hoja).getByText('Se quitarán los componentes: Hamburguesa clásica × 1, Papas del combo × 2.'),
+      within(hoja).getByText(
+        'Se quitarán los componentes: Hamburguesa clásica × 1, Papas del combo × 2.',
+      ),
     ).toBeInTheDocument();
     expect(s.de('PATCH', rutaCombo)[0]?.cuerpo).toEqual({ tipo: 'SIMPLE', estacionId: EST_COCINA });
     await userEvent.click(within(hoja).getByRole('button', { name: 'Cambiar a simple' }));
@@ -551,7 +617,12 @@ describe('cambio de tipo al editar', () => {
             estacion: null,
             componentes: [],
             opcionesDelDia: [
-              { sucursalId: ID.sucursalA, sucursalNombre: 'Miraflores', dia: '2026-10-29', opciones: 4 },
+              {
+                sucursalId: ID.sucursalA,
+                sucursalNombre: 'Miraflores',
+                dia: '2026-10-29',
+                opciones: 4,
+              },
               { sucursalId: ID.sucursalB, sucursalNombre: 'Surco', dia: '2026-10-30', opciones: 3 },
             ],
           },
@@ -560,14 +631,20 @@ describe('cambio de tipo al editar', () => {
     renderApp(rutaMenu);
     await screen.findByLabelText('Nombre');
     await elegirTipo('Combo');
-    expect(screen.getByText(/Se borrarán las opciones del día ya armadas en todas las sucursales/)).toBeInTheDocument();
+    expect(
+      screen.getByText(/Se borrarán las opciones del día ya armadas en todas las sucursales/),
+    ).toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: 'Guardar cambios' }));
     const hoja = await screen.findByRole('dialog', { name: '¿Cambiar a combo?' });
     expect(
-      within(hoja).getByText('Se borrarán las opciones del menú del jueves 29 de octubre en Miraflores (4).'),
+      within(hoja).getByText(
+        'Se borrarán las opciones del menú del jueves 29 de octubre en Miraflores (4).',
+      ),
     ).toBeInTheDocument();
     expect(
-      within(hoja).getByText('Se borrarán las opciones del menú del viernes 30 de octubre en Surco (3).'),
+      within(hoja).getByText(
+        'Se borrarán las opciones del menú del viernes 30 de octubre en Surco (3).',
+      ),
     ).toBeInTheDocument();
   });
 
@@ -619,7 +696,12 @@ describe('cambio de tipo al editar', () => {
           usadoEn: {
             combos: [{ id: P_COMBO, nombre: 'Combo hamburguesa' }],
             modificadores: [
-              { id: 'c9000000-0000-4000-8000-000000000009', nombre: 'Inca Kola', grupoId: G_BEBIDA, grupoNombre: 'Bebida del combo' },
+              {
+                id: 'c9000000-0000-4000-8000-000000000009',
+                nombre: 'Inca Kola',
+                grupoId: G_BEBIDA,
+                grupoNombre: 'Bebida del combo',
+              },
             ],
           },
         }),
@@ -630,10 +712,18 @@ describe('cambio de tipo al editar', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Agregar un componente' }));
     await userEvent.click(await screen.findByRole('button', { name: 'Agregar Papas del combo' }));
     await userEvent.click(screen.getByRole('button', { name: 'Guardar cambios' }));
-    const aviso = (await screen.findByText('No se puede cambiar a combo')).closest('[role="alert"]')!;
+    const aviso = (await screen.findByText('No se puede cambiar a combo')).closest(
+      '[role="alert"]',
+    ) as HTMLElement;
     expect(aviso).toHaveTextContent('Se usa en:');
-    expect(within(aviso).getByRole('link', { name: 'Combo hamburguesa' })).toHaveAttribute('href', `/carta/productos/${P_COMBO}`);
-    expect(within(aviso).getByRole('link', { name: 'Bebida del combo' })).toHaveAttribute('href', `/carta/grupos/${G_BEBIDA}`);
+    expect(within(aviso).getByRole('link', { name: 'Combo hamburguesa' })).toHaveAttribute(
+      'href',
+      `/carta/productos/${P_COMBO}`,
+    );
+    expect(within(aviso).getByRole('link', { name: 'Bebida del combo' })).toHaveAttribute(
+      'href',
+      `/carta/grupos/${G_BEBIDA}`,
+    );
     expect(aviso).toHaveTextContent('Inca Kola');
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     expect(within(aviso).queryByRole('button', { name: /Cambiar a/ })).not.toBeInTheDocument();
@@ -691,7 +781,9 @@ describe('Pendiente de envío (criterio 78)', () => {
     await userEvent.type(precio, '31');
     await userEvent.click(screen.getByRole('button', { name: 'Guardar cambios' }));
 
-    const aviso = (await screen.findAllByText('Pendiente de envío'))[0]!.closest('[role="status"]')!;
+    const aviso = (await screen.findAllByText('Pendiente de envío'))[0]!.closest(
+      '[role="status"]',
+    )!;
     expect(aviso).toHaveTextContent('Tus cambios se enviarán solos');
     expect(screen.getByLabelText('Precio con IGV')).toHaveValue('31.00');
     expect(screen.getByText('Sin conexión')).toBeInTheDocument();
@@ -715,7 +807,9 @@ describe('Pendiente de envío (criterio 78)', () => {
     await userEvent.clear(nombre);
     await userEvent.type(nombre, 'Lomo especial');
     await userEvent.click(screen.getByRole('button', { name: 'Guardar cambios' }));
-    expect(await screen.findByText('No tienes permiso para cambiar este producto.')).toBeInTheDocument();
+    expect(
+      await screen.findByText('No tienes permiso para cambiar este producto.'),
+    ).toBeInTheDocument();
     expect(screen.queryByText('Pendiente de envío')).not.toBeInTheDocument();
     expect(screen.getByLabelText('Nombre')).toHaveValue('Lomo especial');
   });

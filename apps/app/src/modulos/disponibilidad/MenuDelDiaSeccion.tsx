@@ -274,7 +274,9 @@ export function MenuDelDiaSeccion({
       </Aviso>
     );
   } else if (hoyConsulta.isPending) {
-    contenido = <EsqueletoDeLista filas={3} conInicial={false} etiqueta="Cargando el menú del día" />;
+    contenido = (
+      <EsqueletoDeLista filas={3} conInicial={false} etiqueta="Cargando el menú del día" />
+    );
   } else if (hoyConsulta.isError) {
     contenido = (
       <ErrorDeCarga
@@ -366,7 +368,10 @@ export function MenuDelDiaSeccion({
               </Aviso>
             ) : null}
             {suciosDelOtroDia > 0 ? (
-              <Aviso tipo="info" titulo={`Tienes cambios sin guardar en ${dia === 'hoy' ? 'mañana' : 'hoy'}`}>
+              <Aviso
+                tipo="info"
+                titulo={`Tienes cambios sin guardar en ${dia === 'hoy' ? 'mañana' : 'hoy'}`}
+              >
                 Siguen ahí. Vuelve a esa pestaña para guardarlos.
               </Aviso>
             ) : null}
