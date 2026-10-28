@@ -2,15 +2,26 @@
 
 Sistema en la nube para restaurantes pequeños del Perú, alquilado por sucursal. Monorepo con pnpm y
 Turborepo: `apps/api` (NestJS + Sequelize + PostgreSQL), `packages/dominio` (reglas puras),
-`packages/contratos` (esquemas zod) y `packages/config`. La PWA, la carta web y el puente Android
+`packages/contratos` (esquemas zod) y `packages/config`. La PWA del personal ya existe (`apps/app`); la carta web y el puente Android
 llegan en historias posteriores. El diseño y los requerimientos viven en los documentos compartidos
 que enlaza `CLAUDE.md`; las historias, en `specs/NNN-nombre/`.
 
 ## Estado
 
-Historia 001 (base del monorepo, multitenancy y aislamiento entre empresas) terminada, con la fase E incluida (fijación única del contexto, errores 4xx y modo sin superusuario para PostgreSQL administrado). Su especificación, plan y tareas están en [`specs/001-base-multitenancy/`](specs/001-base-multitenancy/). La sección 1 de los requerimientos, «Plataforma y acceso», tiene su especificación aprobada en [`specs/002-plataforma-y-acceso/`](specs/002-plataforma-y-acceso/).
+Historia 001 (base del monorepo, multitenancy y aislamiento entre empresas) terminada, con la fase E incluida (fijación única del contexto, errores 4xx y modo sin superusuario para PostgreSQL administrado). Su especificación, plan y tareas están en [`specs/001-base-multitenancy/`](specs/001-base-multitenancy/).
 
-Historia 002 (plataforma y acceso): los grupos C0 a C4 y la fase D (ataque adversarial) están hechos; queda cerrar la revisión y la documentación. **Toda ruta exige sesión** (`Authorization: Bearer se.<empresa>.<sesión>.<secreto>`) salvo las `@Publica()` (`GET /health`, `POST /sesiones/contrasena`, `POST /sesiones/pin`, `GET /equipo` y `POST /plataforma/sesiones`): la empresa y la persona de cada petición salen de la sesión, nunca de una cabecera. Ya funcionan el ingreso con usuario y contraseña, la sesión (`GET /sesion`, sucursal activa, cambio de contraseña, salida), los usuarios y sus accesos, los emisores y sucursales, el superadministrador (`/plataforma/*`), el soporte, la idempotencia y la trazabilidad de quién creó y cambió cada fila, los equipos recordados y el ingreso con PIN (C2), la clave de supervisor (C3), las suscripciones (C1) y su suspensión (C4).
+La sección 1 de los requerimientos, «Plataforma y acceso» (historia 002), está terminada: su especificación, plan y tareas están en [`specs/002-plataforma-y-acceso/`](specs/002-plataforma-y-acceso/). Incluye la revisión y cinco rondas de ataque adversarial. Lo construido:
+
+- **Ingreso con usuario y contraseña** desde cualquier celular, con bloqueo por intentos y horario de acceso por trabajador (el Administrador no tiene horario).
+- **PIN de 4 o 6 dígitos** en los celulares que ya recuerdan a la persona (hasta 5 personas por equipo), con cambio rápido de usuario y cierre por inactividad.
+- **Clave de supervisor** para las acciones protegidas, con la matriz de permisos por rol; **trazabilidad de autor** (quién creó y quién cambió cada fila) y **auditoría general** inmutable.
+- **Suscripciones por sucursal** con vencimiento, días de gracia y suspensión (la suspensión solo impide abrir caja).
+- **Panel del superadministrador** (`/plataforma`) con alta de empresas por HTTP y modo soporte auditado.
+- **La PWA del personal** (`apps/app`) con la dirección de diseño Azulejo, pensada primero para el celular.
+
+**Toda ruta exige sesión** (`Authorization: Bearer se.<empresa>.<sesión>.<secreto>`) salvo las `@Publica()` (`GET /health`, `POST /sesiones/contrasena`, `POST /sesiones/pin`, `GET /equipo` y `POST /plataforma/sesiones`): la empresa y la persona de cada petición salen de la sesión, nunca de una cabecera.
+
+La siguiente es la sección 2 (Carta).
 
 ## Requisitos
 

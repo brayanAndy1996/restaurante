@@ -2,7 +2,7 @@
 
 - **Historias y requerimientos:** HU-01 (lo que faltaba: la suscripción de la sucursal en el alta y el alta por HTTP), HU-02, HU-03, HU-04; RF-03 a RF-13; RF-01 y RF-02 por HTTP (regla de rol, endpoints de plataforma). RNF que aplican: RNF-03, RNF-06, RNF-07, RNF-08 (con el texto nuevo propuesto en "Cambios propuestos a los documentos compartidos"), RNF-09, RNF-10, RNF-11, RNF-13, RNF-14, RNF-18. Requisito transversal de trazabilidad pedido por el usuario (criterios 113 a 120). Fuente de negocio: `fuentes.md` de esta carpeta y "Decisiones del usuario".
 - **Ruta crítica:** sí, en parte. Ver "Clasificación de ruta crítica".
-- **Estado:** aprobada (2026-10-27)
+- **Estado:** terminada (2026-10-28)
 
 ## Objetivo
 

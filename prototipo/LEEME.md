@@ -5,6 +5,8 @@ Un recorrido con datos de ejemplo para entender cómo funciona el sistema y most
 
 Muestra la primera parte del sistema, "Plataforma y acceso": cómo entra cada trabajador desde su celular (usuario y contraseña la primera vez, PIN después), la clave de supervisor, cómo el administrador controla quién entra y cuándo, y el panel de nuestro equipo para atender clientes y suscripciones. Usa la dirección de diseño "Azulejo" (`DESIGN.md`).
 
+El prototipo está publicado como página privada en https://claude.ai/artifact/JR9w18cpJHYFQZ18v2iM7F: solo lo abren su dueño y las personas con quienes se comparta. Esa versión muestra la sección 1 (Plataforma y acceso).
+
 ## Cómo abrirlo
 
 Haz doble clic en `prototipo/index.html`. Se abre en tu navegador, sin internet y sin instalar nada.

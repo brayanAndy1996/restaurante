@@ -2,9 +2,10 @@
 
 Pruebas de integración contra **PostgreSQL real** (sin mocks de la base). Vitest + SWC.
 Los archivos van en `apps/api/test/**/*.spec.ts`; las pruebas protegidas de la historia 001 van en
-`apps/api/test/aislamiento/`. Lo que hay en `test/utilidades/`, `test/global-setup.ts`,
-`test/fixtures/` y los `*.spec.ts` de la raíz de `test/` lo mantiene el desarrollador backend (no
-están protegidos).
+`apps/api/test/aislamiento/` y las de la historia 002 en `apps/api/test/acceso/` (las reglas puras, en
+`packages/dominio/test/`). Lo que hay en `test/utilidades/`, `test/global-setup.ts`, `test/fixtures/`, los
+`*.spec.ts` de la raíz de `test/` y las carpetas `test/nucleo/`, `test/seguridad/` y `test/suscripciones/`
+lo mantiene el desarrollador backend (no están protegidos).
 
 ## Cómo correr
 
@@ -296,10 +297,11 @@ fondo sigue siendo la RLS, que ningún rol de la aplicación puede apagar (crite
 
 ## Historia 002 · fase A: contratos públicos para las pruebas de la fase B
 
-Lo que dejó la fase A (T1 a T5 de `specs/002-plataforma-y-acceso/tasks.md`). Todo compila; casi toda
-la lógica de acceso **no existía todavía**: las firmas de la ruta crítica lanzan `Error('No implementado')`
-y las rutas nuevas responden 500 `ERROR_INTERNO`. Las pruebas de la fase B deben fallar por eso (o por
-tablas, columnas y funciones que aún no existen), no por errores de importación.
+Lo que dejó la fase A (T1 a T5 de `specs/002-plataforma-y-acceso/tasks.md`). Al terminarla todo compilaba;
+casi toda la lógica de acceso **no existía todavía**: las firmas de la ruta crítica lanzaban
+`Error('No implementado')` y las rutas nuevas respondían 500 `ERROR_INTERNO`. Las pruebas de la fase B debían
+fallar por eso (o por tablas, columnas y funciones que aún no existían), no por errores de importación. Hoy
+esas firmas y rutas están implementadas (grupos C0 a C4); esta sección describe lo que fijó la fase A.
 
 Desde el grupo C0 (T6 a T11) ya están **registrados** el guard global de autenticación y el resolutor de
 sesión: toda ruta exige sesión (`Authorization: Bearer se.<empresa>.<sesión>.<secreto>`) salvo las
@@ -335,10 +337,10 @@ reloj.ahora(); // Date nuevo cada vez
 
 `PIN_PEPPER` (base64, al menos 32 bytes) y `ORIGENES_PERMITIDOS` (orígenes separados por coma, sin ruta
 ni barra final). Con `NODE_ENV` `development` o `test` tienen valor por defecto
-(`PIN_PEPPER_LOCAL`, `ORIGENES_PERMITIDOS_LOCAL` en `src/config/entorno.ts`); en producción todavía
-pueden faltar (la obligatoriedad llega con T10). `Entorno.PIN_PEPPER` es `string | undefined` y
-`Entorno.ORIGENES_PERMITIDOS` es `string[]`. La regla de `EMPRESA_POR_HEADER` **no cambió** todavía
-(sigue valiendo con `development`; el criterio 7 llega en la fase C).
+(`PIN_PEPPER_LOCAL`, `ORIGENES_PERMITIDOS_LOCAL` en `src/config/entorno.ts`); en producción son obligatorias
+desde el grupo C0 (`exigirEntornoDeProduccion`). `Entorno.PIN_PEPPER` es `string | undefined` y
+`Entorno.ORIGENES_PERMITIDOS` es `string[]`. La regla de `EMPRESA_POR_HEADER` (criterio 7) se aplica desde el
+grupo C0: la cabecera solo vale con `NODE_ENV=test`, y con `development` la API no arranca.
 
 ### Rutas de import de los símbolos nuevos (desde `apps/api/test/<carpeta>/`)
 
@@ -361,7 +363,7 @@ Nota sobre el árbol de módulos: `AppModule` importa ahora `AuditoriaModule` y 
 `PlataformaModule` exporta también `SuscripcionService` y `SuperadministradorGuard`. Todos los
 servicios se obtienen con `app.get(Clase)`.
 
-### Rutas registradas (todas con su lógica pendiente)
+### Rutas registradas en la fase A (hoy todas tienen su lógica)
 
 Metadatos (`Reflect.getMetadata(CONSTANTE, manejador | clase)`): públicas con `@Publica()` (que implica
 `@SinEmpresa()`) son exactamente `GET /health`, `POST /sesiones/contrasena`, `POST /sesiones/pin`,
@@ -408,10 +410,10 @@ método; `POST /autorizaciones` lleva `@SinEmpresa()`, `@RequiereSucursal()` e `
 | `POST /plataforma/suscripciones/:id/pagos`                                        | `pagoEntradaSchema`                                     | `pagoRegistradoRespuestaSchema`                                      |
 
 Todas validan cuerpo, consulta y parámetros con esos esquemas antes de llegar a la lógica: una entrada
-inválida ya responde 400 `DATOS_INVALIDOS`; una válida responde 500 hasta que se implemente la ruta.
+inválida responde 400 `DATOS_INVALIDOS`; en la fase A, una válida respondía 500 hasta implementar la ruta.
 Los cambios de estado que fija `@HttpCode`: 204 en las salidas, `PUT /sesion/contrasena`,
 `POST /usuarios/:id/contrasena` y los `DELETE`; 200 en `POST /usuarios/:id/pin`. `POST /sesion/equipo`
-responde hoy el 201 por defecto (el 200 del equipo ya conocido llega con T33).
+responde 201 con un equipo nuevo y 200 con uno ya conocido (T33).
 
 ### `rutasRegistradas(app)` y `rutasDeNest(app)` (`test/utilidades/rutas.ts`)
 
@@ -445,7 +447,7 @@ responde hoy el 201 por defecto (el 200 del equipo ya conocido llega con T33).
   `estadoSuscripcion({ vencimiento, diasGracia }, instante)` devuelve `{ estado, suspensionDesde,
 diasRestantesGracia }` (`diasRestantesGracia` solo en gracia, si no `null`). Lanzan `RangeError` ante
   fechas o instantes inválidos.
-- Firmas que lanzan `Error('No implementado')` (ruta crítica): `requisitoPermiso(rol, accion)`,
+- Firmas que la fase A dejó con `Error('No implementado')` (ruta crítica; hoy implementadas): `requisitoPermiso(rol, accion)`,
   `puedeAutorizar(rol, accion)`, `alcanceReportes(rol)` (`'TURNO' | 'SUCURSAL' | 'EMPRESA' | null`),
   `permisosDeRol(rol)` (`Record<Accion, RequisitoPermiso>`), `largoPin({ esAdministrador, roles })`
   (`4 | 6`) y `dentroDeHorario(tramos | null, instante: Date)`.
@@ -480,6 +482,28 @@ Ayudantes en `test/acceso/fabrica-plataforma.ts` (import `./fabrica-plataforma`)
 - `crearBaseNueva(etiqueta)`, `migrarHasta(base, prefijo?)`, `revertirHasta(base, prefijo)`: bases temporales para probar
   migraciones con filas de 001 (`PREFIJO_*` de las migraciones nuevas).
 - Las sondas de las pruebas de 001 son ahora `@Publica()` (las rutas están protegidas por defecto, criterio 1).
+
+## Historia 002 · pruebas protegidas de los grupos 1 y 2, de las rondas adversariales y del dominio
+
+Completan la tabla del grupo 3. Todas llevan la cabecera `// spec: 002-plataforma-y-acceso (pruebas protegidas)`. Las de los grupos 1 y 2 y las del dominio las escribió `test-writer` antes de la implementación; cada una de las rondas adversariales nace de fallas reproducidas por el adversarial, y su cabecera indica el criterio de cada falla. `acceso/fabrica-sesiones.ts` y `acceso/fabrica-equipos.ts` son los ayudantes de estas pruebas: solo usan los contratos públicos y, para leer filas, un cliente administrador.
+
+| Archivo                                                                                   | Qué prueba                                                                                                                                                                                                                   |
+| ----------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `acceso/sesion-rutas.spec.ts` (P1)                                                        | Criterios 1 a 9: rutas sin sesión o con un token malo, la empresa sale de la sesión, tokens adulterados, concurrencia, cambio de rol y desactivación, cabecera solo en `test`                                                |
+| `acceso/ingreso-contrasena.spec.ts` (P2)                                                  | Criterios 10 a 17: ingreso, fallos indistinguibles, bloqueo de 15 minutos, inactividad y duración, contraseña temporal, cambio de contraseña, sucursal activa y salida                                                       |
+| `acceso/usuarios-permisos.spec.ts` y `packages/dominio/test/largo-pin.spec.ts` (P3)       | Criterios 18 a 21, 21b y 23 a 25: solo el Administrador, nombres de usuario, accesos, largo del PIN y su cambio, respuestas sin secretos                                                                                     |
+| `acceso/equipos-recordados.spec.ts` (P4)                                                  | Criterios 27 a 32b: recordar, máximo de 5 personas con reemplazo, revocar, olvidar y revocaciones automáticas                                                                                                                |
+| `acceso/pin.spec.ts` (P5)                                                                 | Criterios 33 a 42: ingreso con PIN, bloqueos por persona en el equipo, sesión atada al equipo, cambio rápido, inactividad y `GET /sesion`                                                                                    |
+| `acceso/clave-supervisor.spec.ts` y `packages/dominio/test/permisos.spec.ts` (P6)         | Criterios 43 a 53: matriz de permisos celda por celda, autorizaciones, rechazos, bloqueos, consumo, concurrencia y soporte                                                                                                   |
+| `acceso/horario-acceso.spec.ts` y `packages/dominio/test/dentro-de-horario.spec.ts` (P11) | Criterios 12b y 105 a 112: horario en el ingreso, en la autorización y en las sesiones abiertas                                                                                                                              |
+| `acceso/lint-fijar-actor.spec.ts`                                                         | Lint de `fijar_contexto_actor`, con el mismo trato que `fijar_contexto_empresa` (criterios 37, 22c y 22e de 001)                                                                                                             |
+| `acceso/ataque-ronda1.spec.ts`                                                            | Ronda 1: bloqueo de contraseña con peticiones concurrentes, permisos de la respuesta de soporte y sesión de soporte de un superadministrador inactivo                                                                        |
+| `acceso/ataque-ronda2.spec.ts`                                                            | Ronda 2: huella de idempotencia de `POST /autorizaciones`, campos desconocidos en `PATCH /sucursales/:id`, concurrencia del PIN y del máximo de 5 personas por equipo                                                        |
+| `acceso/ataque-ronda3.spec.ts`                                                            | Ronda 3: saturación del pool con un usuario desactivado, clave de idempotencia como oráculo del PIN, carrera entre ingreso y baja del superadministrador, bloqueo borrado por un ingreso concurrente, desbloqueo por consola |
+| `acceso/ataque-ronda4.spec.ts`                                                            | Ronda 4: ráfagas repartidas entre nombres reales, ingresos correctos simultáneos, tope de scrypt falso como oráculo de existencia, memoria de 2 s fuera de la ráfaga                                                         |
+| `acceso/ataque-ronda5.spec.ts`                                                            | Ronda 5: inundación de nombres inventados contra el ingreso del superadministrador, nombres reales de una empresa atacados, cambio de contraseña en bucle, exceso de cola como oráculo de pertenencia                        |
+
+No protegida, del grupo C4 (T41): `test/suscripciones/suspension.spec.ts` prueba `avisoSuscripcion` en `GET /sesion`, `exigirAperturaDeCaja` con un controlador sonda y el reloj, la reactivación con un pago, las rutas que siguen funcionando con la sucursal suspendida y que nada más en `src` consulta el estado (criterios 80 a 84).
 
 ## Historia 002 · grupo C0, primera parte (T6 a T11): pruebas del desarrollador
 
@@ -657,3 +681,7 @@ Símbolos nuevos entre módulos: `SucursalesConsultaService` (`src/modulos/plata
 `reservarClave`/`completarClave`/`liberarClave` (`src/nucleo/idempotencia`), `decidirReserva`, `resolverFalloEnFila`,
 `bloqueoTemporal`, `credencialesInvalidas`, `errorDeReserva` y `claveDeIngresoSuperadministrador` (`src/modulos/seguridad`).
 `DatosAdministradorInicial` recibe `hashContrasena` (calculado antes de abrir la transacción) en lugar de la contraseña.
+
+## Pendientes menores
+
+- `apps/api/test/infraestructura.spec.ts:79` fija la base auxiliar `restaurante_test_infra` sin usar `BASE_DE_PRUEBA` (la variable de entorno que elige la base de pruebas, `restaurante_test` por defecto). Por eso dos corridas simultáneas contra la misma instancia de PostgreSQL pueden pisarse: cada una recrea esa base con `prepararBaseDeDatos({ recrear: true })`. Pendiente menor: que cada corrida use su propio nombre de base auxiliar.
