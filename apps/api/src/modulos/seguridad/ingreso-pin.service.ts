@@ -6,7 +6,7 @@ import { ContextoEmpresa } from '../../nucleo/contexto-empresa';
 import { ErrorAplicacion } from '../../nucleo/errores/error-aplicacion';
 import { RELOJ, type Reloj } from '../../nucleo/reloj';
 import { AuditoriaService } from '../auditoria';
-import { BloqueosService, segundosHasta } from './bloqueos.service';
+import { BloqueosService } from './bloqueos.service';
 import {
   FALLOS_PARA_BLOQUEAR_PIN,
   FALLOS_PARA_OLVIDAR_PIN,
@@ -15,6 +15,7 @@ import {
   MINUTOS_INACTIVIDAD_PIN_POR_DEFECTO,
 } from './constantes-acceso';
 import { Credenciales } from './credenciales';
+import { bloqueoTemporal } from './errores-acceso';
 import { EquiposService, equipoNoReconocido, tokenEquipoDeCabecera } from './equipos.service';
 import { HorarioService } from './horario.service';
 import { SesionesService } from './sesiones.service';
@@ -113,15 +114,7 @@ export class IngresoPinService {
 
     const bloqueo = await this.bloqueos.estado('PIN_EQUIPO_RECORDADO', persona.recordado_id, ahora);
     if (bloqueo.bloqueadoHasta !== null) {
-      return {
-        error: new ErrorAplicacion(
-          429,
-          'BLOQUEO_TEMPORAL',
-          'Demasiados intentos fallidos; intenta de nuevo más tarde',
-          undefined,
-          segundosHasta(bloqueo.bloqueadoHasta, ahora),
-        ),
-      };
+      return { error: bloqueoTemporal(bloqueo.bloqueadoHasta, ahora) };
     }
 
     const correcto = this.credenciales.pinCoincide(empresaId, entrada.pin, persona.huella_pin);

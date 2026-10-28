@@ -25,6 +25,7 @@ import { PlataformaEmpresasService } from './plataforma-empresas.service';
 import { PlataformaSesionesController } from './plataforma-sesiones.controller';
 import { SoporteService } from './soporte.service';
 import { SucursalService } from './sucursal.service';
+import { SucursalesConsultaModule } from './sucursales-consulta.module';
 import { SucursalesController } from './sucursales.controller';
 import { SuperadministradorGuard } from './superadministrador.guard';
 import { SuperadministradoresService } from './superadministradores.service';
@@ -38,7 +39,7 @@ import { SuscripcionesPlataformaService } from './suscripciones-plataforma.servi
  * RLS, solo dentro de `ContextoEmpresa`) y los de plataforma (solo dentro de `OperacionPlataforma`).
  */
 @Module({
-  imports: [AuditoriaModule, SuscripcionModule],
+  imports: [AuditoriaModule, SuscripcionModule, SucursalesConsultaModule],
   controllers: [
     SucursalesController,
     EmisoresController,
@@ -81,6 +82,7 @@ import { SuscripcionesPlataformaService } from './suscripciones-plataforma.servi
     EmisoresService,
     PlanesService,
     SuscripcionModule,
+    SucursalesConsultaModule,
     SuperadministradorGuard,
   ],
 })

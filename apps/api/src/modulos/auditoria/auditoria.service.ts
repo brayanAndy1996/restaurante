@@ -68,6 +68,24 @@ export class AuditoriaService {
       type: QueryTypes.INSERT,
     });
   }
+
+  /**
+   * Detalle de la primera fila de la acción `accion` de la sesión `sesionId` en la empresa del contexto
+   * (la RLS limita a la propia empresa), o `null` si no hay. Es la lectura que otros módulos pueden hacer de
+   * `auditoria` sin consultar su tabla (por ejemplo, el soporte lee quién inició la sesión de la fila
+   * `inicio_soporte`).
+   */
+  async detalleDeAccionDeSesion(
+    sesionId: string,
+    accion: string,
+  ): Promise<Record<string, unknown> | null> {
+    const filas = await this.conexion.query<{ detalle: Record<string, unknown> | null }>(
+      `SELECT detalle FROM auditoria WHERE sesion_id = $1 AND accion = $2
+        ORDER BY ocurrido_en LIMIT 1`,
+      { bind: [sesionId, accion], type: QueryTypes.SELECT },
+    );
+    return filas[0]?.detalle ?? null;
+  }
 }
 
 /**

@@ -15,11 +15,14 @@ import {
   GRUPO_PLATAFORMA,
   GRUPO_SIN_CUENTA_PLATAFORMA,
   TopeDeIntentos,
-  VIGENCIA_RESERVA_MS,
-  demasiadosALaVez,
   armarTokenSuperadministrador,
+  claveDeIngresoSuperadministrador,
+  credencialesInvalidas,
+  decidirReserva,
+  errorDeReserva,
   parsearTokenSuperadministrador,
-  segundosHasta,
+  resolverFalloEnFila,
+  type FilaDeFallo,
 } from '../seguridad';
 import { OperacionPlataforma } from './operacion-plataforma';
 import type { SuperadministradorAutenticado, TransaccionPlataforma } from './tipos';
@@ -36,9 +39,6 @@ const MINUTO_MS = 60_000;
 const sequelizeDe = (transaccion: Transaction) =>
   (transaccion as Transaction & { sequelize: Sequelize }).sequelize;
 
-const credencialesInvalidas = () =>
-  new ErrorAplicacion(401, 'CREDENCIALES_INVALIDAS', 'Usuario o contraseña incorrectos');
-
 interface FilaSuperadministrador {
   id: string;
   nombre: string;
@@ -49,15 +49,6 @@ interface FilaSuperadministrador {
   en_curso: number;
   en_curso_desde: Date | null;
 }
-
-const bloqueoTemporal = (hasta: Date, ahora: Date) =>
-  new ErrorAplicacion(
-    429,
-    'BLOQUEO_TEMPORAL',
-    'Demasiados intentos fallidos; intenta de nuevo más tarde',
-    undefined,
-    segundosHasta(hasta, ahora),
-  );
 
 /** Aviso interno de `reservarIntento`: no hay superadministrador activo con ese nombre; revierte sin escribir nada. */
 class SinCuenta extends Error {}
@@ -116,7 +107,7 @@ export class SuperadministradoresService {
   ): Promise<IngresoSuperadministradorRespuesta> {
     const usuario = minusculasAscii(entrada.usuario);
     // Una ráfaga contra un mismo nombre no pasa del tope: lo demás se rechaza sin tocar la base.
-    const clave = `superadministrador:${usuario}`;
+    const clave = claveDeIngresoSuperadministrador(usuario);
     const { soltar } = this.tope.entrar(clave);
     try {
       return await this.tope.conTurno(clave, async () => {
@@ -226,28 +217,15 @@ export class SuperadministradoresService {
     const ahora = this.reloj.ahora();
     const fila = filas[0];
     if (fila === undefined) throw new SinCuenta();
-    let fallos = fila.fallos_seguidos;
-    if (fila.bloqueado_hasta !== null) {
-      if (fila.bloqueado_hasta.getTime() > ahora.getTime()) {
-        throw new ReservaRechazada(bloqueoTemporal(fila.bloqueado_hasta, ahora));
-      }
-      fallos = 0; // el bloqueo venció: la cuenta empieza de cero
-    }
-    // Reservas que nadie resolvió en 60 s (el proceso murió a media evaluación): se dan por perdidas.
-    let enCurso = fila.en_curso;
-    let desde = fila.en_curso_desde;
-    if (
-      enCurso > 0 &&
-      (desde === null || ahora.getTime() - desde.getTime() >= VIGENCIA_RESERVA_MS)
-    ) {
-      enCurso = 0;
-    }
-    // Con `fallos + en curso` en el umbral hay 5 intentos decidiendo la cuenta: este no se evalúa, no cuenta
-    // como fallo y no bloquea (si los 5 resultan correctos no habrá habido ni un fallo).
-    if (fallos + enCurso >= FALLOS_PARA_BLOQUEAR_SUPERADMINISTRADOR) {
-      throw new ReservaRechazada(demasiadosALaVez());
-    }
-    if (enCurso === 0) desde = null;
+    // Misma regla que las personas de empresa (`decidirReserva`): con el bloqueo vigente o con `fallos + en
+    // curso` en el umbral hay 5 intentos decidiendo la cuenta, y este no se evalúa, no cuenta como fallo y no
+    // bloquea (si los 5 resultan correctos no habrá habido ni un fallo).
+    const decision = decidirReserva(fila, ahora, {
+      umbral: FALLOS_PARA_BLOQUEAR_SUPERADMINISTRADOR,
+    });
+    if (!decision.permitido) throw new ReservaRechazada(errorDeReserva(decision, ahora));
+    const { fallos, enCurso } = decision;
+    const desde = enCurso === 0 ? null : decision.desde;
     await sequelize.query(
       `UPDATE superadministrador
           SET fallos_seguidos = $2, en_curso = $3::integer + 1,
@@ -330,41 +308,51 @@ export class SuperadministradoresService {
     ahora: Date,
   ): Promise<{ fallosSeguidos: number; bloqueoNuevoHasta: Date | null }> {
     const sequelize = sequelizeDe(transaccion);
-    const contados = await sequelize.query<{
-      fallos_seguidos: number;
-      bloqueado_hasta: Date | null;
-    }>(
-      `UPDATE superadministrador SET
-          en_curso = GREATEST(en_curso - 1, 0),
-          en_curso_desde = CASE WHEN en_curso - 1 > 0 THEN en_curso_desde ELSE NULL END,
-          fallos_seguidos = CASE
-            WHEN bloqueado_hasta IS NOT NULL AND bloqueado_hasta <= $2 THEN 1
-            WHEN bloqueado_hasta IS NOT NULL THEN fallos_seguidos
-            ELSE fallos_seguidos + 1 END,
-          bloqueado_hasta = CASE
-            WHEN bloqueado_hasta IS NOT NULL AND bloqueado_hasta <= $2 THEN NULL
-            ELSE bloqueado_hasta END,
-          actualizado_en = $2
-        WHERE id = $1
-        RETURNING fallos_seguidos, bloqueado_hasta`,
-      { transaction: transaccion, bind: [id, ahora], type: QueryTypes.SELECT },
-    );
-    const { fallos_seguidos: fallosSeguidos, bloqueado_hasta: vigente } = contados[0]!;
-    if (vigente !== null || fallosSeguidos < FALLOS_PARA_BLOQUEAR_SUPERADMINISTRADOR) {
-      return { fallosSeguidos, bloqueoNuevoHasta: null };
-    }
-    const hasta = new Date(ahora.getTime() + MINUTOS_BLOQUEO_SUPERADMINISTRADOR * MINUTO_MS);
-    const bloqueadas = await sequelize.query<{ fallos_seguidos: number }>(
-      `UPDATE superadministrador SET bloqueado_hasta = $2, actualizado_en = $3
-        WHERE id = $1 AND bloqueado_hasta IS NULL AND fallos_seguidos >= $4
-        RETURNING fallos_seguidos`,
+    const fallo = await resolverFalloEnFila(
       {
-        transaction: transaccion,
-        bind: [id, hasta, ahora, FALLOS_PARA_BLOQUEAR_SUPERADMINISTRADOR],
-        type: QueryTypes.SELECT,
+        contar: async () => {
+          const contados = await sequelize.query<FilaDeFallo>(
+            `UPDATE superadministrador SET
+                en_curso = GREATEST(en_curso - 1, 0),
+                en_curso_desde = CASE WHEN en_curso - 1 > 0 THEN en_curso_desde ELSE NULL END,
+                fallos_seguidos = CASE
+                  WHEN bloqueado_hasta IS NOT NULL AND bloqueado_hasta <= $2 THEN 1
+                  WHEN bloqueado_hasta IS NOT NULL THEN fallos_seguidos
+                  ELSE fallos_seguidos + 1 END,
+                bloqueado_hasta = CASE
+                  WHEN bloqueado_hasta IS NOT NULL AND bloqueado_hasta <= $2 THEN NULL
+                  ELSE bloqueado_hasta END,
+                actualizado_en = $2
+              WHERE id = $1
+              RETURNING fallos_seguidos, bloqueado_hasta`,
+            { transaction: transaccion, bind: [id, ahora], type: QueryTypes.SELECT },
+          );
+          return contados[0]!;
+        },
+        bloquear: async (hasta) => {
+          const bloqueadas = await sequelize.query<{ fallos_seguidos: number }>(
+            `UPDATE superadministrador SET bloqueado_hasta = $2, actualizado_en = $3
+              WHERE id = $1 AND bloqueado_hasta IS NULL AND fallos_seguidos >= $4
+              RETURNING fallos_seguidos`,
+            {
+              transaction: transaccion,
+              bind: [id, hasta, ahora, FALLOS_PARA_BLOQUEAR_SUPERADMINISTRADOR],
+              type: QueryTypes.SELECT,
+            },
+          );
+          return bloqueadas[0] !== undefined;
+        },
+      },
+      ahora,
+      {
+        umbral: FALLOS_PARA_BLOQUEAR_SUPERADMINISTRADOR,
+        duracionMs: MINUTOS_BLOQUEO_SUPERADMINISTRADOR * MINUTO_MS,
       },
     );
-    return { fallosSeguidos, bloqueoNuevoHasta: bloqueadas[0] === undefined ? null : hasta };
+    return {
+      fallosSeguidos: fallo.fallosSeguidos,
+      bloqueoNuevoHasta: fallo.bloqueoNuevo ? fallo.bloqueadoHasta : null,
+    };
   }
 
   /** La reserva termina sin resultado para la cuenta: deja de estar en curso y no cuenta como fallo ni éxito. */

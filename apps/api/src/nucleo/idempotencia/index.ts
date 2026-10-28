@@ -8,3 +8,5 @@ export {
   jsonCanonico,
   RETENCION_IDEMPOTENCIA_MS,
 } from './huella';
+export { completarClave, liberarClave, reservarClave } from './reserva';
+export type { PeticionIdempotente, ReservaClave } from './reserva';

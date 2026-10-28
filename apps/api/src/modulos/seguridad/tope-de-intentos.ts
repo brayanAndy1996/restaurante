@@ -32,6 +32,10 @@ export const demasiadosALaVez = () =>
 /** Clave de los topes del ingreso con contraseña de un nombre de usuario de empresa (ya normalizado). */
 export const claveDeIngresoUsuario = (nombre: string): string => `contrasena:${nombre}`;
 
+/** Clave de los topes del ingreso de un superadministrador (`/plataforma/sesiones`), con su nombre ya normalizado. */
+export const claveDeIngresoSuperadministrador = (usuario: string): string =>
+  `superadministrador:${usuario}`;
+
 /** Clave de los topes del cambio de la propia contraseña (`PUT /sesion/contrasena`), por usuario. */
 export const claveDeCambioContrasena = (usuarioId: string): string =>
   `cambio-contrasena:${usuarioId}`;

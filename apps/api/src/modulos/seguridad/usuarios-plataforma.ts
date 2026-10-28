@@ -18,7 +18,12 @@ export interface DatosAdministradorInicial {
   nombre: string;
   /** Ya en minúsculas (`nombreUsuarioSchema`). */
   nombreUsuario: string;
-  contrasenaTemporal: string;
+  /**
+   * Hash scrypt de la contraseña temporal (`Credenciales.hashContrasena`), calculado **antes** de abrir la
+   * transacción de plataforma y por el cupo del grupo `plataforma` (`CupoScrypt`): scrypt no corre con una
+   * transacción ni una conexión retenidas.
+   */
+  hashContrasena: string;
   ahora: Date;
 }
 
@@ -40,7 +45,6 @@ export async function insertarAdministradorInicial(
     );
     return filas.length > 0;
   });
-  const hash = await credenciales.hashContrasena(datos.contrasenaTemporal);
   try {
     const filas = await sequelize.query<{ id: string }>(
       `INSERT INTO usuario (empresa_id, nombre, nombre_usuario, hash_contrasena, contrasena_temporal,
@@ -49,7 +53,14 @@ export async function insertarAdministradorInicial(
        RETURNING id`,
       {
         transaction: transaccion,
-        bind: [datos.empresaId, datos.nombre, datos.nombreUsuario, hash, huella, datos.ahora],
+        bind: [
+          datos.empresaId,
+          datos.nombre,
+          datos.nombreUsuario,
+          datos.hashContrasena,
+          huella,
+          datos.ahora,
+        ],
         type: QueryTypes.SELECT,
       },
     );

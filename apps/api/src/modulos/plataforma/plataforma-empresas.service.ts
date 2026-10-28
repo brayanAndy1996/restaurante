@@ -21,7 +21,13 @@ import { z } from 'zod';
 import { SQLSTATE, restriccionDe, sqlstateDe } from '../../nucleo/base-de-datos';
 import { ErrorAplicacion, errorDatosInvalidos } from '../../nucleo/errores/error-aplicacion';
 import { RELOJ, type Reloj } from '../../nucleo/reloj';
-import { Credenciales, administradoresDeEmpresa, insertarAdministradorInicial } from '../seguridad';
+import {
+  Credenciales,
+  CupoScrypt,
+  GRUPO_PLATAFORMA,
+  administradoresDeEmpresa,
+  insertarAdministradorInicial,
+} from '../seguridad';
 import { validarAuditoria } from './auditoria';
 import { emisorARespuesta } from './emisores.service';
 import {
@@ -127,6 +133,7 @@ export class PlataformaEmpresasService {
     @Inject(OperacionPlataforma) private readonly operacion: OperacionPlataforma,
     @Inject(MODELOS_PLATAFORMA) private readonly modelos: Modelos,
     @Inject(Credenciales) private readonly credenciales: Credenciales,
+    @Inject(CupoScrypt) private readonly cupo: CupoScrypt,
     @Inject(RELOJ) private readonly reloj: Reloj,
     @Inject(PlanesService) private readonly planes: PlanesService,
     @Inject(SuscripcionService) private readonly suscripciones: SuscripcionService,
@@ -170,6 +177,14 @@ export class PlataformaEmpresasService {
       validarVencimiento(sucursal.suscripcion, `sucursales.${i}`, ahora);
     }
     const { Empresa, Emisor, Sucursal } = this.modelos;
+    // Scrypt de la contraseña temporal antes de abrir la transacción de plataforma, por el cupo del grupo
+    // `plataforma` (el alta la hace un superadministrador): ninguna conexión espera mientras corre.
+    const hashContrasena =
+      administrador === undefined
+        ? undefined
+        : await this.cupo.conCupo(GRUPO_PLATAFORMA, () =>
+            this.credenciales.hashContrasena(administrador.contrasenaTemporal),
+          );
 
     return this.operacion.ejecutar(
       { actor, motivo, operacion: 'registrar_empresa' },
@@ -251,12 +266,12 @@ export class PlataformaEmpresasService {
         }
 
         let primerAdministrador: { id: string; pin: string } | undefined;
-        if (administrador !== undefined) {
+        if (administrador !== undefined && hashContrasena !== undefined) {
           primerAdministrador = await insertarAdministradorInicial(transaccion, this.credenciales, {
             empresaId: empresa.id,
             nombre: administrador.nombre,
             nombreUsuario: minusculasAscii(administrador.nombreUsuario),
-            contrasenaTemporal: administrador.contrasenaTemporal,
+            hashContrasena,
             ahora,
           });
         }

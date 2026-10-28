@@ -6,6 +6,7 @@ import { ContextoEmpresa } from '../../nucleo/contexto-empresa';
 import { ErrorAplicacion } from '../../nucleo/errores/error-aplicacion';
 import { RELOJ, type Reloj } from '../../nucleo/reloj';
 import { AuditoriaService } from '../auditoria';
+import { SucursalesConsultaService } from '../plataforma/sucursales-consulta.service';
 import { MINUTOS_INACTIVIDAD_PIN_POR_DEFECTO } from './constantes-acceso';
 
 /** 404 idéntico para una sucursal de otra empresa y para una inexistente. */
@@ -23,6 +24,7 @@ export class AccesoSucursalService {
     @Inject(ContextoEmpresa) private readonly contexto: ContextoEmpresa,
     @Inject(RELOJ) private readonly reloj: Reloj,
     @Inject(AuditoriaService) private readonly auditoria: AuditoriaService,
+    @Inject(SucursalesConsultaService) private readonly sucursales: SucursalesConsultaService,
   ) {}
 
   /** `GET /sucursales/:id/acceso`. */
@@ -68,10 +70,6 @@ export class AccesoSucursalService {
   }
 
   private async exigirSucursal(sucursalId: string): Promise<void> {
-    const filas = await this.conexion.query<{ id: string }>(
-      'SELECT id FROM sucursal WHERE id = $1',
-      { bind: [sucursalId], type: QueryTypes.SELECT },
-    );
-    if (filas[0] === undefined) throw sucursalNoExiste();
+    if (!(await this.sucursales.existen([sucursalId]))) throw sucursalNoExiste();
   }
 }

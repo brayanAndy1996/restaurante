@@ -2,15 +2,15 @@ import { CallHandler, ExecutionContext, Inject, Injectable, NestInterceptor } fr
 import { HTTP_CODE_METADATA } from '@nestjs/common/constants';
 import type { Request } from 'express';
 import { mergeMap, of, type Observable } from 'rxjs';
-import { QueryTypes, type Sequelize } from 'sequelize';
+import type { Sequelize } from 'sequelize';
 import { CONEXION_API } from '../base-de-datos/token-api';
 import { estadoActual } from '../base-de-datos/estado-operacion';
 import { ContextoEmpresa } from '../contexto-empresa';
-import { ErrorAplicacion } from '../errores/error-aplicacion';
 import { principalActual } from '../principal';
 import { RELOJ, type Reloj } from '../reloj';
 import { leerClaveIdempotencia } from './clave';
-import { CLAVE_HUELLA, RETENCION_IDEMPOTENCIA_MS, huellaDeEntrada } from './huella';
+import { CLAVE_HUELLA, huellaDeEntrada } from './huella';
+import { completarClave, reservarClave, type PeticionIdempotente } from './reserva';
 
 /**
  * Idempotencia de las escrituras de empresa que llevan `@Idempotente()` (RNF-10, criterios 85 y 86). Corre
@@ -57,74 +57,25 @@ export class IdempotenciaInterceptor implements NestInterceptor {
     const empresaId = this.contexto.empresaActual();
     const ahora = this.reloj.ahora();
 
-    await this.conexion.query('DELETE FROM idempotencia WHERE creado_en < $1', {
-      bind: [new Date(ahora.getTime() - RETENCION_IDEMPOTENCIA_MS)],
-    });
-    const nuevas = await this.conexion.query<{ id: string }>(
-      `INSERT INTO idempotencia (empresa_id, clave, ruta, actor, huella_entrada, estado, creado_en)
-       VALUES ($1, $2, $3, $4, $5, 'en_curso', $6)
-       ON CONFLICT (empresa_id, clave) DO NOTHING
-       RETURNING id`,
-      { bind: [empresaId, clave, ruta, actor, huella, ahora], type: QueryTypes.SELECT },
-    );
+    const peticionIdempotente: PeticionIdempotente = {
+      empresaId,
+      clave,
+      ruta,
+      actor,
+      huella,
+      ahora,
+    };
+    const reserva = await reservarClave(this.conexion, peticionIdempotente);
+    if (reserva.tipo === 'rechazada') throw reserva.error;
+    if (reserva.tipo === 'completada') return of(reserva.respuesta);
 
-    if (nuevas.length === 0) {
-      const filas = await this.conexion.query<{
-        huella_entrada: string;
-        ruta: string;
-        actor: string;
-        estado: string;
-        respuesta: unknown;
-      }>(
-        'SELECT huella_entrada, ruta, actor, estado, respuesta FROM idempotencia WHERE clave = $1',
-        { bind: [clave], type: QueryTypes.SELECT },
-      );
-      const fila = filas[0];
-      if (
-        fila === undefined ||
-        fila.huella_entrada !== huella ||
-        fila.ruta !== ruta ||
-        fila.actor !== actor
-      ) {
-        throw new ErrorAplicacion(
-          422,
-          'CLAVE_IDEMPOTENCIA_REUTILIZADA',
-          'La clave de idempotencia ya se usó con otra petición',
-        );
-      }
-      if (fila.estado !== 'completada') {
-        throw new ErrorAplicacion(409, 'CONFLICTO', 'La operación con esa clave sigue en curso');
-      }
-      // El estado HTTP de la respuesta es el de la ruta (`@HttpCode` o 201 en POST), el mismo de la primera vez.
-      return of(fila.respuesta);
-    }
-
+    // El estado HTTP de la respuesta es el de la ruta (`@HttpCode` o 201 en POST), el mismo de la primera vez.
     const estadoHttp: number =
       Reflect.getMetadata(HTTP_CODE_METADATA, contexto.getHandler()) ??
       (peticion.method === 'POST' ? 201 : 200);
     return siguiente.handle().pipe(
       mergeMap(async (cuerpo: unknown) => {
-        // La API no tiene `UPDATE` sobre `idempotencia` (solo `SELECT`, `INSERT` y `DELETE`): la fila
-        // `en_curso` se reemplaza por la `completada` en la misma transacción. Quien esperaba la clave
-        // la encuentra ya completada al confirmarse.
-        await this.conexion.query('DELETE FROM idempotencia WHERE clave = $1', { bind: [clave] });
-        await this.conexion.query(
-          `INSERT INTO idempotencia (empresa_id, clave, ruta, actor, huella_entrada, estado,
-                                     estado_http, respuesta, creado_en)
-           VALUES ($1, $2, $3, $4, $5, 'completada', $6, $7::jsonb, $8)`,
-          {
-            bind: [
-              empresaId,
-              clave,
-              ruta,
-              actor,
-              huella,
-              estadoHttp,
-              JSON.stringify(cuerpo ?? null),
-              ahora,
-            ],
-          },
-        );
+        await completarClave(this.conexion, peticionIdempotente, estadoHttp, cuerpo);
         return cuerpo;
       }),
     );

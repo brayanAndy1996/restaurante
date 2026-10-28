@@ -7,19 +7,23 @@ import { ContextoEmpresa } from '../../nucleo/contexto-empresa';
 import { ErrorAplicacion } from '../../nucleo/errores/error-aplicacion';
 import {
   CLAVE_HUELLA,
-  RETENCION_IDEMPOTENCIA_MS,
+  completarClave,
   huellaDeEntrada,
+  liberarClave,
+  reservarClave,
+  type PeticionIdempotente,
 } from '../../nucleo/idempotencia';
 import type { Principal } from '../../nucleo/principal';
 import { RELOJ, type Reloj } from '../../nucleo/reloj';
 import { AuditoriaService } from '../auditoria';
-import { BloqueosService, segundosHasta, type AmbitoBloqueo } from './bloqueos.service';
+import { BloqueosService, type AmbitoBloqueo } from './bloqueos.service';
 import {
   FALLOS_PARA_BLOQUEAR_CLAVE,
   MINUTOS_BLOQUEO_CLAVE,
   MINUTOS_VIGENCIA_AUTORIZACION,
 } from './constantes-acceso';
 import { Credenciales } from './credenciales';
+import { bloqueoTemporal } from './errores-acceso';
 import { HorarioService } from './horario.service';
 import { SesionActual } from './sesion-actual';
 
@@ -59,15 +63,6 @@ interface FilaAutorizador {
  * su horario, de otra empresa o del propio solicitante): quien ataca no distingue por qué (criterio 45).
  */
 const claveInvalida = () => new ErrorAplicacion(403, 'CLAVE_INVALIDA', 'La clave no es válida');
-
-const bloqueoTemporal = (hasta: Date, ahora: Date) =>
-  new ErrorAplicacion(
-    429,
-    'BLOQUEO_TEMPORAL',
-    'Demasiados intentos fallidos; intenta de nuevo más tarde',
-    undefined,
-    segundosHasta(hasta, ahora),
-  );
 
 /**
  * Clave de supervisor, primera mitad (HU-03, RF-12, criterios 44 a 47, 52, 53 y 110): `POST /autorizaciones`.
@@ -174,21 +169,20 @@ export class ClaveSupervisorService {
 
     // Idempotencia (criterio 85): la clave se reserva en esta misma transacción. Sin bloqueo, la clave con
     // otro cuerpo responde 422 sin evaluar el PIN (criterio 86).
-    let huellaIdempotencia = '';
+    let peticionIdempotente: PeticionIdempotente | undefined;
     if (claveIdempotencia !== undefined) {
-      huellaIdempotencia = huellaDeEntrada(
-        this.claveHuella,
-        RUTA,
-        `usuario:${solicitanteId}`,
-        entrada,
-      );
-      const repetida = await this.reservarClave(
+      const actor = `usuario:${solicitanteId}`;
+      peticionIdempotente = {
         empresaId,
-        claveIdempotencia,
-        huellaIdempotencia,
+        clave: claveIdempotencia,
+        ruta: RUTA,
+        actor,
+        huella: huellaDeEntrada(this.claveHuella, RUTA, actor, entrada),
         ahora,
-      );
-      if (repetida !== null) return repetida;
+      };
+      const reserva = await reservarClave(this.conexion, peticionIdempotente);
+      if (reserva.tipo === 'rechazada') return { error: reserva.error };
+      if (reserva.tipo === 'completada') return { ok: reserva.respuesta as AutorizacionRespuesta };
     }
 
     const resultado = await this.evaluar(
@@ -199,20 +193,12 @@ export class ClaveSupervisorService {
       sucursalId,
       ahora,
     );
-    if (claveIdempotencia !== undefined) {
+    if (peticionIdempotente !== undefined) {
       if ('ok' in resultado) {
-        await this.completarClave(
-          empresaId,
-          claveIdempotencia,
-          huellaIdempotencia,
-          resultado.ok,
-          ahora,
-        );
+        await completarClave(this.conexion, peticionIdempotente, 201, resultado.ok);
       } else {
         // La respuesta de error no se guarda: la clave queda libre para reintentar.
-        await this.conexion.query('DELETE FROM idempotencia WHERE clave = $1', {
-          bind: [claveIdempotencia],
-        });
+        await liberarClave(this.conexion, peticionIdempotente.clave);
       }
     }
     return resultado;
@@ -392,92 +378,6 @@ export class ClaveSupervisorService {
         }
       },
       { actor: { sistema: 'autenticacion' } },
-    );
-  }
-
-  // ---- Idempotencia (criterio 85) -----------------------------------------------------------------
-
-  /**
-   * Reserva la clave en esta transacción. Devuelve `null` si es nueva; si ya se usó con la misma petición,
-   * la respuesta guardada; si se usó con otra, 422 `CLAVE_IDEMPOTENCIA_REUTILIZADA`. Si otra transacción la
-   * tiene reservada, el `INSERT` espera a que termine.
-   */
-  private async reservarClave(
-    empresaId: string,
-    clave: string,
-    huella: string,
-    ahora: Date,
-  ): Promise<Resultado | null> {
-    await this.conexion.query('DELETE FROM idempotencia WHERE creado_en < $1', {
-      bind: [new Date(ahora.getTime() - RETENCION_IDEMPOTENCIA_MS)],
-    });
-    const actor = `usuario:${this.sesion.principal().usuarioId}`;
-    const nuevas = await this.conexion.query<{ id: string }>(
-      `INSERT INTO idempotencia (empresa_id, clave, ruta, actor, huella_entrada, estado, creado_en)
-       VALUES ($1, $2, $3, $4, $5, 'en_curso', $6)
-       ON CONFLICT (empresa_id, clave) DO NOTHING
-       RETURNING id`,
-      { bind: [empresaId, clave, RUTA, actor, huella, ahora], type: QueryTypes.SELECT },
-    );
-    if (nuevas.length > 0) return null;
-
-    const filas = await this.conexion.query<{
-      huella_entrada: string;
-      ruta: string;
-      actor: string;
-      estado: string;
-      respuesta: AutorizacionRespuesta;
-    }>('SELECT huella_entrada, ruta, actor, estado, respuesta FROM idempotencia WHERE clave = $1', {
-      bind: [clave],
-      type: QueryTypes.SELECT,
-    });
-    const fila = filas[0];
-    if (
-      fila === undefined ||
-      fila.huella_entrada !== huella ||
-      fila.ruta !== RUTA ||
-      fila.actor !== actor
-    ) {
-      return {
-        error: new ErrorAplicacion(
-          422,
-          'CLAVE_IDEMPOTENCIA_REUTILIZADA',
-          'La clave de idempotencia ya se usó con otra petición',
-        ),
-      };
-    }
-    if (fila.estado !== 'completada') {
-      return {
-        error: new ErrorAplicacion(409, 'CONFLICTO', 'La operación con esa clave sigue en curso'),
-      };
-    }
-    return { ok: fila.respuesta };
-  }
-
-  /** `idempotencia` no da `UPDATE`: la fila `en_curso` se reemplaza por la `completada` en la misma transacción. */
-  private async completarClave(
-    empresaId: string,
-    clave: string,
-    huella: string,
-    respuesta: AutorizacionRespuesta,
-    ahora: Date,
-  ): Promise<void> {
-    await this.conexion.query('DELETE FROM idempotencia WHERE clave = $1', { bind: [clave] });
-    await this.conexion.query(
-      `INSERT INTO idempotencia (empresa_id, clave, ruta, actor, huella_entrada, estado, estado_http,
-                                 respuesta, creado_en)
-       VALUES ($1, $2, $3, $4, $5, 'completada', 201, $6::jsonb, $7)`,
-      {
-        bind: [
-          empresaId,
-          clave,
-          RUTA,
-          `usuario:${this.sesion.principal().usuarioId}`,
-          huella,
-          JSON.stringify(respuesta),
-          ahora,
-        ],
-      },
     );
   }
 }

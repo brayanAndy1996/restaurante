@@ -8,9 +8,9 @@ que enlaza `CLAUDE.md`; las historias, en `specs/NNN-nombre/`.
 
 ## Estado
 
-Historia 001 (base del monorepo, multitenancy y aislamiento entre empresas) terminada, con la fase E incluida (fijación única del contexto, errores 4xx y modo sin superusuario para PostgreSQL administrado). Su especificación, plan y tareas están en [`specs/001-base-multitenancy/`](specs/001-base-multitenancy/). La sección 1 de los requerimientos, «Plataforma y acceso», tiene su especificación en borrador en [`specs/002-plataforma-y-acceso/`](specs/002-plataforma-y-acceso/), pendiente de aprobación.
+Historia 001 (base del monorepo, multitenancy y aislamiento entre empresas) terminada, con la fase E incluida (fijación única del contexto, errores 4xx y modo sin superusuario para PostgreSQL administrado). Su especificación, plan y tareas están en [`specs/001-base-multitenancy/`](specs/001-base-multitenancy/). La sección 1 de los requerimientos, «Plataforma y acceso», tiene su especificación aprobada en [`specs/002-plataforma-y-acceso/`](specs/002-plataforma-y-acceso/).
 
-Historia 002 (plataforma y acceso), en curso por grupos de tareas (C0 a C4). Con el grupo C0 hecho hasta T18, **toda ruta exige sesión** (`Authorization: Bearer se.<empresa>.<sesión>.<secreto>`) salvo las `@Publica()` (`GET /health`, `POST /sesiones/contrasena`, `POST /sesiones/pin`, `GET /equipo` y `POST /plataforma/sesiones`): la empresa y la persona de cada petición salen de la sesión, nunca de una cabecera. Ya funcionan el ingreso con usuario y contraseña, la sesión (`GET /sesion`, sucursal activa, cambio de contraseña, salida), los usuarios y sus accesos, los emisores y sucursales, el superadministrador (`/plataforma/*`), el soporte, la idempotencia y la trazabilidad de quién creó y cambió cada fila. Los equipos recordados y el ingreso con PIN (C2), la clave de supervisor (C3), las suscripciones (C1) y su suspensión (C4) llegan en los grupos siguientes.
+Historia 002 (plataforma y acceso): los grupos C0 a C4 y la fase D (ataque adversarial) están hechos; queda cerrar la revisión y la documentación. **Toda ruta exige sesión** (`Authorization: Bearer se.<empresa>.<sesión>.<secreto>`) salvo las `@Publica()` (`GET /health`, `POST /sesiones/contrasena`, `POST /sesiones/pin`, `GET /equipo` y `POST /plataforma/sesiones`): la empresa y la persona de cada petición salen de la sesión, nunca de una cabecera. Ya funcionan el ingreso con usuario y contraseña, la sesión (`GET /sesion`, sucursal activa, cambio de contraseña, salida), los usuarios y sus accesos, los emisores y sucursales, el superadministrador (`/plataforma/*`), el soporte, la idempotencia y la trazabilidad de quién creó y cambió cada fila, los equipos recordados y el ingreso con PIN (C2), la clave de supervisor (C3), las suscripciones (C1) y su suspensión (C4).
 
 ## Requisitos
 
@@ -356,8 +356,14 @@ Una empresa nunca ve datos de otra. La garantía la da PostgreSQL (RLS) y la ref
   ```
 - **Secretos.** Las contraseñas se guardan con scrypt, los PIN con HMAC-SHA256 y `PIN_PEPPER`, y los
   secretos de sesión con SHA-256: nada secreto está en claro en la base, en la auditoría ni en el registro.
-- **Idempotencia.** Las escrituras marcadas `@Idempotente()` (`POST /emisores`, `POST /sucursales`, las de
-  `/plataforma/empresas/:id/emisores` y `/sucursales`, y más adelante pagos y autorizaciones) aceptan la
+- **Concurrencia del scrypt.** Todo scrypt de ingreso del proceso pasa por `CupoScrypt` (reparto justo
+  entre empresas; lo que no entra a tiempo responde 429 de 1 s). Su capacidad es
+  `max(1, min(UV_THREADPOOL_SIZE - 1, núcleos - 1))`, con `UV_THREADPOOL_SIZE` en 4 si no está definida:
+  con 4 hilos y 4 núcleos son 3 cupos, y **con 2 núcleos o menos baja a 1** (sirve un ingreso a la vez por
+  proceso). Al dimensionar un servidor, sube los dos (`UV_THREADPOOL_SIZE` debe fijarse antes de arrancar
+  Node) y recuerda que cada réplica de la API lleva su propio cupo.
+- **Idempotencia.** Las escrituras marcadas `@Idempotente()` (`POST /emisores`, `POST /sucursales`, `POST /plataforma/empresas`, las de
+  `/plataforma/empresas/:id/emisores` y `/sucursales`, los pagos de suscripción y `POST /autorizaciones`) aceptan la
   cabecera `Idempotency-Key` (un UUID): repetir la petición con la misma clave y el mismo cuerpo devuelve la
   misma respuesta sin repetir el efecto; la misma clave con otro cuerpo, ruta o usuario responde 422
   `CLAVE_IDEMPOTENCIA_REUTILIZADA`. Las claves se guardan 24 horas, por empresa.
@@ -367,8 +373,9 @@ Una empresa nunca ve datos de otra. La garantía la da PostgreSQL (RLS) y la ref
 Cada migración que crea una tabla de empresa debe, en la misma migración:
 
 1. Llevar `empresa_id uuid NOT NULL REFERENCES empresa (id)` y un índice por `empresa_id`.
-2. Llamar a `sqlTablaDeEmpresa(nombre, { privilegiosApi, privilegiosPlataforma? })`
-   (`apps/api/src/migraciones/sql-tabla-de-empresa.ts`): activa **y fuerza** la RLS, crea la política
+2. Llamar a `sqlTablaDeEmpresaTrazable(nombre, opciones)`
+   (`apps/api/src/migraciones/sql-tabla-de-empresa.ts`; ver "Convención de trazabilidad" más abajo): es
+   `sqlTablaDeEmpresa(nombre, { privilegiosApi, privilegiosPlataforma? })` más las columnas de autor. Activa **y fuerza** la RLS, crea la política
    `aislamiento_empresa` con `empresa_actual()` en `USING` y `WITH CHECK`, y concede los privilegios
    explícitos. Nunca `TRUNCATE`, `REFERENCES` ni `TRIGGER` (`TRUNCATE` ignora la RLS).
 3. Si otra tabla de empresa la referencia, usar llaves foráneas **compuestas** que incluyan

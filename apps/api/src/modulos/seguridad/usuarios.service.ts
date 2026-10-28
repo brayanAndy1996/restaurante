@@ -14,6 +14,7 @@ import { ContextoEmpresa } from '../../nucleo/contexto-empresa';
 import { ErrorAplicacion } from '../../nucleo/errores/error-aplicacion';
 import { RELOJ, type Reloj } from '../../nucleo/reloj';
 import { AuditoriaService } from '../auditoria';
+import { SucursalesConsultaService } from '../plataforma/sucursales-consulta.service';
 import { Credenciales } from './credenciales';
 import { CupoScrypt } from './cupo-scrypt';
 import { EquiposService, type EquipoRevocado } from './equipos.service';
@@ -76,6 +77,7 @@ export class UsuariosService {
     @Inject(TopeDeIntentos) private readonly tope: TopeDeIntentos,
     @Inject(CupoScrypt) private readonly cupo: CupoScrypt,
     @Inject(SesionActual) private readonly sesion: SesionActual,
+    @Inject(SucursalesConsultaService) private readonly sucursales: SucursalesConsultaService,
   ) {}
 
   // ---- Scrypt fuera de la transacción ----------------------------------------------------------
@@ -450,13 +452,7 @@ export class UsuariosService {
 
   /** Falla con 422 `SUCURSAL_INVALIDA` (idéntico) si alguna sucursal no se ve en la empresa del contexto. */
   private async exigirSucursalesDeLaEmpresa(ids: string[]): Promise<void> {
-    const unicas = [...new Set(ids)];
-    if (unicas.length === 0) return;
-    const filas = await this.conexion.query<{ id: string }>(
-      'SELECT id FROM sucursal WHERE id = ANY($1::uuid[])',
-      { bind: [unicas], type: QueryTypes.SELECT },
-    );
-    if (filas.length !== unicas.length) throw sucursalInvalida();
+    if (!(await this.sucursales.existen(ids))) throw sucursalInvalida();
   }
 
   private traducirUnicidad(error: unknown): unknown {
@@ -564,15 +560,17 @@ export class UsuariosService {
       sucursal_id: string;
       rol: RolDeAcceso;
     }>(
-      `SELECT a.usuario_id, a.sucursal_id, a.rol
-         FROM acceso_sucursal a
-         JOIN sucursal s ON s.id = a.sucursal_id AND s.empresa_id = a.empresa_id
-        WHERE a.usuario_id = ANY($1::uuid[])
-        ORDER BY s.nombre, s.id`,
+      `SELECT usuario_id, sucursal_id, rol FROM acceso_sucursal WHERE usuario_id = ANY($1::uuid[])`,
       { bind: [ids], type: QueryTypes.SELECT },
     );
+    // Las sucursales (y su orden por nombre e id) las da el módulo dueño de `sucursal`.
+    const visibles = await this.sucursales.listar([...new Set(filas.map((f) => f.sucursal_id))]);
+    const posicion = new Map(visibles.map((v, i) => [v.id, i]));
+    const ordenadas = filas
+      .filter((f) => posicion.has(f.sucursal_id))
+      .sort((a, b) => posicion.get(a.sucursal_id)! - posicion.get(b.sucursal_id)!);
     const porUsuario = new Map<string, Acceso[]>();
-    for (const fila of filas) {
+    for (const fila of ordenadas) {
       const lista = porUsuario.get(fila.usuario_id) ?? [];
       lista.push({ sucursalId: fila.sucursal_id, rol: fila.rol });
       porUsuario.set(fila.usuario_id, lista);

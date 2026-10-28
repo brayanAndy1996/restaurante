@@ -100,6 +100,48 @@ export function decidirReserva(
   return { permitido: true, fallos, enCurso, desde };
 }
 
+/** Lo que devuelve contar un fallo en la fila de una cuenta (`bloqueo_intentos` o `superadministrador`). */
+export interface FilaDeFallo {
+  fallos_seguidos: number;
+  /** Bloqueo que sigue vigente tras contar (los fallos de un bloqueo vigente no suman ni lo alargan). */
+  bloqueado_hasta: Date | null;
+}
+
+/** Cómo escribe cada tabla el conteo de fallos y el bloqueo; la regla es la misma (`resolverFalloEnFila`). */
+export interface AdaptadorDeFallo {
+  /**
+   * Cuenta el fallo en la fila (con la fila ya bloqueada por quien llama) y devuelve la fila resultante. Si
+   * había un bloqueo vencido, la cuenta empieza en 1 y `bloqueado_hasta` queda `null`.
+   */
+  contar: () => Promise<FilaDeFallo>;
+  /**
+   * Pone el bloqueo hasta `hasta` solo si todavía no hay ninguno y la cuenta sigue en el umbral. Devuelve
+   * `true` si lo puso: así, con varios fallos resolviéndose a la vez, el bloqueo se pone (y se informa) una
+   * sola vez.
+   */
+  bloquear: (hasta: Date) => Promise<boolean>;
+}
+
+/**
+ * Regla de un fallo resuelto, sin saber de qué tabla es la fila: se cuenta; con un bloqueo vigente (otros
+ * fallos ya lo pusieron) o por debajo del `umbral` no se bloquea; al llegar al `umbral` se bloquea
+ * `duracionMs` desde `ahora`, una sola vez por bloqueo. La usan `BloqueosService` (personas de empresa y
+ * clave de supervisor) y el ingreso del superadministrador, cada uno con su adaptador.
+ */
+export async function resolverFalloEnFila(
+  adaptador: AdaptadorDeFallo,
+  ahora: Date,
+  opciones: { umbral: number; duracionMs: number },
+): Promise<ResultadoFallo> {
+  const { fallos_seguidos: fallosSeguidos, bloqueado_hasta: vigente } = await adaptador.contar();
+  if (vigente !== null || fallosSeguidos < opciones.umbral) {
+    return { fallosSeguidos, bloqueadoHasta: vigente, bloqueoNuevo: false };
+  }
+  const hasta = new Date(ahora.getTime() + opciones.duracionMs);
+  const nuevo = await adaptador.bloquear(hasta);
+  return { fallosSeguidos, bloqueadoHasta: nuevo ? hasta : null, bloqueoNuevo: nuevo };
+}
+
 /**
  * Cuenta de fallos seguidos y bloqueo temporal (criterios 12, 36 y 47), en la transacción de la empresa
  * en curso. Quien llama lo hace dentro de su propio `ContextoEmpresa.ejecutar` y lanza el error después
@@ -167,19 +209,18 @@ export class BloqueosService {
        RETURNING fallos_seguidos`,
       { bind: [empresaId, ambito, objetivoId, ahora], type: QueryTypes.SELECT },
     );
-    const fallosSeguidos = contados[0]!.fallos_seguidos;
-    if (fallosSeguidos < opciones.umbral) {
-      return { fallosSeguidos, bloqueadoHasta: null, bloqueoNuevo: false };
-    }
-    const hasta = new Date(ahora.getTime() + opciones.duracionMs);
-    const bloqueadas = await this.conexion.query<{ bloqueado_hasta: Date }>(
-      `UPDATE bloqueo_intentos SET bloqueado_hasta = $3, actualizado_en = $4
-        WHERE ambito = $1 AND objetivo_id = $2 AND bloqueado_hasta IS NULL AND fallos_seguidos >= $5
-        RETURNING bloqueado_hasta`,
-      { bind: [ambito, objetivoId, hasta, ahora, opciones.umbral], type: QueryTypes.SELECT },
+    return resolverFalloEnFila(
+      {
+        // Este conteo no distingue un bloqueo vigente: el `UPDATE` de `ponerBloqueo` solo actúa si no hay uno.
+        contar: async () => ({
+          fallos_seguidos: contados[0]!.fallos_seguidos,
+          bloqueado_hasta: null,
+        }),
+        bloquear: (hasta) => this.ponerBloqueo(ambito, objetivoId, hasta, ahora, opciones.umbral),
+      },
+      ahora,
+      opciones,
     );
-    const nuevo = bloqueadas[0] !== undefined;
-    return { fallosSeguidos, bloqueadoHasta: nuevo ? hasta : null, bloqueoNuevo: nuevo };
   }
 
   /**
@@ -331,19 +372,31 @@ export class BloqueosService {
        RETURNING fallos_seguidos, bloqueado_hasta`,
       { bind: [empresaId, ambito, objetivoId, ahora], type: QueryTypes.SELECT },
     );
-    const { fallos_seguidos: fallosSeguidos, bloqueado_hasta: vigente } = contados[0]!;
-    if (vigente !== null || fallosSeguidos < opciones.umbral) {
-      return { fallosSeguidos, bloqueadoHasta: vigente, bloqueoNuevo: false };
-    }
-    const hasta = new Date(ahora.getTime() + opciones.duracionMs);
+    return resolverFalloEnFila(
+      {
+        contar: async () => contados[0]!,
+        bloquear: (hasta) => this.ponerBloqueo(ambito, objetivoId, hasta, ahora, opciones.umbral),
+      },
+      ahora,
+      opciones,
+    );
+  }
+
+  /** Pone el bloqueo solo si no hay uno y la cuenta sigue en el umbral; `true` si lo puso. */
+  private async ponerBloqueo(
+    ambito: AmbitoBloqueo,
+    objetivoId: string,
+    hasta: Date,
+    ahora: Date,
+    umbral: number,
+  ): Promise<boolean> {
     const bloqueadas = await this.conexion.query<{ bloqueado_hasta: Date }>(
       `UPDATE bloqueo_intentos SET bloqueado_hasta = $3, actualizado_en = $4
         WHERE ambito = $1 AND objetivo_id = $2 AND bloqueado_hasta IS NULL AND fallos_seguidos >= $5
         RETURNING bloqueado_hasta`,
-      { bind: [ambito, objetivoId, hasta, ahora, opciones.umbral], type: QueryTypes.SELECT },
+      { bind: [ambito, objetivoId, hasta, ahora, umbral], type: QueryTypes.SELECT },
     );
-    const nuevo = bloqueadas[0] !== undefined;
-    return { fallosSeguidos, bloqueadoHasta: nuevo ? hasta : null, bloqueoNuevo: nuevo };
+    return bloqueadas[0] !== undefined;
   }
 
   /**

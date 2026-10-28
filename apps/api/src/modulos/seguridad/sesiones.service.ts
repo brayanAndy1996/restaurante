@@ -17,24 +17,16 @@ import { ErrorAplicacion } from '../../nucleo/errores/error-aplicacion';
 import type { Principal } from '../../nucleo/principal';
 import { RELOJ, type Reloj } from '../../nucleo/reloj';
 import { AuditoriaService } from '../auditoria';
+import { SucursalesConsultaService } from '../plataforma/sucursales-consulta.service';
 import { SuscripcionService } from '../plataforma/suscripcion.service';
-import {
-  BloqueosService,
-  decidirReserva,
-  segundosHasta,
-  type FilaBloqueo,
-} from './bloqueos.service';
+import { BloqueosService, decidirReserva, type FilaBloqueo } from './bloqueos.service';
 import { CupoScrypt, GRUPO_SIN_CUENTA } from './cupo-scrypt';
 import { MINUTOS_INACTIVIDAD_PIN_POR_DEFECTO } from './constantes-acceso';
 import { Credenciales } from './credenciales';
+import { bloqueoTemporal, credencialesInvalidas, errorDeReserva } from './errores-acceso';
 import { HorarioService } from './horario.service';
 import { SesionActual } from './sesion-actual';
-import {
-  TopeDeIntentos,
-  claveDeCambioContrasena,
-  claveDeIngresoUsuario,
-  demasiadosALaVez,
-} from './tope-de-intentos';
+import { TopeDeIntentos, claveDeCambioContrasena, claveDeIngresoUsuario } from './tope-de-intentos';
 import { armarTokenSesion } from './tokens';
 
 /** Inactividad de una sesión de contraseña o de soporte, en minutos (criterios 14 y 66). */
@@ -80,17 +72,9 @@ type Reserva =
   | { tipo: 'sin_cuenta' }
   | { tipo: 'reservado'; usuario: FilaUsuario };
 
-const credencialesInvalidas = () =>
-  new ErrorAplicacion(401, 'CREDENCIALES_INVALIDAS', 'Usuario o contraseña incorrectos');
-
-const bloqueoTemporal = (hasta: Date, ahora: Date) =>
-  new ErrorAplicacion(
-    429,
-    'BLOQUEO_TEMPORAL',
-    'Demasiados intentos fallidos; intenta de nuevo más tarde',
-    undefined,
-    segundosHasta(hasta, ahora),
-  );
+/** Columnas de `FilaUsuario`. */
+const COLUMNAS_USUARIO = `id, nombre, nombre_usuario, hash_contrasena, contrasena_temporal, horario,
+              es_administrador, activo`;
 
 /**
  * Sesiones de empresa de contraseña y de soporte: ingreso con contraseña, sesión actual, sucursal
@@ -111,6 +95,7 @@ export class SesionesService {
     @Inject(AuditoriaService) private readonly auditoria: AuditoriaService,
     @Inject(SesionActual) private readonly actual: SesionActual,
     @Inject(SuscripcionService) private readonly suscripciones: SuscripcionService,
+    @Inject(SucursalesConsultaService) private readonly sucursales: SucursalesConsultaService,
     @Inject(TopeDeIntentos) private readonly tope: TopeDeIntentos,
     @Inject(CupoScrypt) private readonly cupo: CupoScrypt,
   ) {}
@@ -196,7 +181,9 @@ export class SesionesService {
     enRafaga: boolean,
   ): Promise<IngresoRespuesta> {
     // La reserva solo escribe `bloqueo_intentos` (sin trazabilidad): no necesita actor.
-    const reserva = await this.contexto.ejecutar(empresaId, () => this.reservarIngreso(nombre));
+    const reserva = await this.contexto.ejecutar(empresaId, () =>
+      this.reservarPara('nombre_usuario', nombre),
+    );
     if (reserva.tipo === 'rechazo') {
       if (enRafaga && reserva.bloqueoVigente !== undefined) {
         this.tope.recordarBloqueo(clave, reserva.bloqueoVigente);
@@ -275,20 +262,50 @@ export class SesionesService {
   /**
    * Tiempo 1 (transacción corta). Bloquea la fila de la persona **activa** (`FOR NO KEY UPDATE` serializa
    * las reservas de la misma cuenta: ingresos y cambios de contraseña; no estorba a las llaves foráneas ni
-   * a otras personas) y reserva el intento. Una persona inactiva o inexistente no se bloquea ni se cuenta.
+   * a otras personas) y reserva el intento. Una persona inactiva o inexistente no se bloquea ni se cuenta. El
+   * ingreso la busca por su nombre de usuario y el cambio de contraseña por el id de la sesión.
    */
-  private async reservarIngreso(nombreUsuario: string): Promise<Reserva> {
-    const usuarios = await this.conexion.query<FilaUsuario>(
-      `SELECT id, nombre, nombre_usuario, hash_contrasena, contrasena_temporal, horario,
-              es_administrador, activo
-         FROM usuario WHERE nombre_usuario = $1 AND activo
-          FOR NO KEY UPDATE`,
-      { bind: [nombreUsuario], type: QueryTypes.SELECT },
-    );
+  private async reservarPara(por: 'nombre_usuario' | 'id', valor: string): Promise<Reserva> {
+    const usuario = await this.leerUsuario(por, valor, { soloActivo: true, bloquear: true });
     const ahora = this.reloj.ahora(); // después de esperar el turno
-    const usuario = usuarios[0];
     if (usuario === undefined) return { tipo: 'sin_cuenta' };
     return this.reservar(usuario, ahora);
+  }
+
+  /** Fila de `usuario` por nombre de usuario o por id; `bloquear` la toma con `FOR NO KEY UPDATE`. */
+  private async leerUsuario(
+    por: 'nombre_usuario' | 'id',
+    valor: string,
+    opciones: { soloActivo?: boolean; bloquear?: boolean } = {},
+  ): Promise<FilaUsuario | undefined> {
+    const filas = await this.conexion.query<FilaUsuario>(
+      `SELECT ${COLUMNAS_USUARIO}
+         FROM usuario WHERE ${por} = $1${opciones.soloActivo === true ? ' AND activo' : ''}
+         ${opciones.bloquear === true ? 'FOR NO KEY UPDATE' : ''}`,
+      { bind: [valor], type: QueryTypes.SELECT },
+    );
+    return filas[0];
+  }
+
+  /**
+   * Tiempo 3 de un ingreso o de un cambio de contraseña con la contraseña correcta: vuelve a leer a la persona
+   * con la fila bloqueada. Si la desactivaron o le cambiaron la contraseña mientras se evaluaba, la reserva
+   * termina sin contar (ni fallo ni éxito) y devuelve el error a responder; si no, la fila actual y la hora.
+   */
+  private async releerVerificado(
+    verificado: FilaUsuario,
+  ): Promise<{ usuario: FilaUsuario; ahora: Date } | { error: ErrorAplicacion }> {
+    const usuario = await this.leerUsuario('id', verificado.id, { bloquear: true });
+    const ahora = this.reloj.ahora();
+    if (
+      usuario === undefined ||
+      !usuario.activo ||
+      usuario.hash_contrasena !== verificado.hash_contrasena
+    ) {
+      await this.bloqueos.liberarReserva('CONTRASENA_USUARIO', verificado.id, ahora);
+      return { error: credencialesInvalidas() };
+    }
+    return { usuario, ahora };
   }
 
   /**
@@ -311,13 +328,10 @@ export class SesionesService {
     );
     const decision = decidirReserva(filas[0], ahora, { umbral: FALLOS_PARA_BLOQUEAR_CONTRASENA });
     if (decision.permitido) return null;
-    if (decision.motivo === 'BLOQUEO') {
-      return {
-        error: bloqueoTemporal(decision.bloqueadoHasta, ahora),
-        bloqueoVigente: decision.bloqueadoHasta,
-      };
-    }
-    return { error: demasiadosALaVez() };
+    return {
+      error: errorDeReserva(decision, ahora),
+      ...(decision.motivo === 'BLOQUEO' ? { bloqueoVigente: decision.bloqueadoHasta } : {}),
+    };
   }
 
   private async reservar(usuario: FilaUsuario, ahora: Date): Promise<Reserva> {
@@ -325,15 +339,12 @@ export class SesionesService {
       umbral: FALLOS_PARA_BLOQUEAR_CONTRASENA,
     });
     if (reserva.permitido) return { tipo: 'reservado', usuario };
-    if (reserva.motivo === 'BLOQUEO') {
-      return {
-        tipo: 'rechazo',
-        error: bloqueoTemporal(reserva.bloqueadoHasta, ahora),
-        bloqueoVigente: reserva.bloqueadoHasta,
-      };
-    }
-    // Cupo de evaluaciones en curso lleno: no se evalúa, no cuenta como fallo y no bloquea.
-    return { tipo: 'rechazo', error: demasiadosALaVez() };
+    // Cupo de evaluaciones en curso lleno (`CUPO_LLENO`): no se evalúa, no cuenta como fallo y no bloquea.
+    return {
+      tipo: 'rechazo',
+      error: errorDeReserva(reserva, ahora),
+      ...(reserva.motivo === 'BLOQUEO' ? { bloqueoVigente: reserva.bloqueadoHasta } : {}),
+    };
   }
 
   /**
@@ -382,24 +393,9 @@ export class SesionesService {
     empresaId: string,
     verificado: FilaUsuario,
   ): Promise<Resultado<IngresoRespuesta>> {
-    const usuarios = await this.conexion.query<FilaUsuario>(
-      `SELECT id, nombre, nombre_usuario, hash_contrasena, contrasena_temporal, horario,
-              es_administrador, activo
-         FROM usuario WHERE id = $1
-          FOR NO KEY UPDATE`,
-      { bind: [verificado.id], type: QueryTypes.SELECT },
-    );
-    const ahora = this.reloj.ahora();
-    const usuario = usuarios[0];
-    if (
-      usuario === undefined ||
-      !usuario.activo ||
-      usuario.hash_contrasena !== verificado.hash_contrasena
-    ) {
-      // La persona cambió mientras se evaluaba: la reserva termina sin contar ni como fallo ni como éxito.
-      await this.bloqueos.liberarReserva('CONTRASENA_USUARIO', verificado.id, ahora);
-      return { error: credencialesInvalidas() };
-    }
+    const releido = await this.releerVerificado(verificado);
+    if ('error' in releido) return releido;
+    const { usuario, ahora } = releido;
     // Ingreso correcto: la cuenta de fallos vuelve a cero; un bloqueo vigente no se toca (criterio 61).
     await this.bloqueos.resolverExito('CONTRASENA_USUARIO', usuario.id, ahora);
 
@@ -535,13 +531,7 @@ export class SesionesService {
       });
     }
 
-    const usuarios = await this.conexion.query<FilaUsuario>(
-      `SELECT id, nombre, nombre_usuario, hash_contrasena, contrasena_temporal, horario,
-              es_administrador, activo
-         FROM usuario WHERE id = $1`,
-      { bind: [principal.usuarioId], type: QueryTypes.SELECT },
-    );
-    const usuario = usuarios[0];
+    const usuario = await this.leerUsuario('id', principal.usuarioId!);
     if (usuario === undefined)
       throw new ErrorAplicacion(
         401,
@@ -565,17 +555,19 @@ export class SesionesService {
   /**
    * Quién da el soporte: la API no puede leer la tabla de superadministradores (ningún privilegio), así
    * que su nombre sale de la fila `inicio_soporte` de la auditoría de esa sesión (inmutable y visible
-   * para la empresa).
+   * para la empresa), que lee `AuditoriaService`.
    */
   private async superadministradorDeSoporte(
     principal: Principal,
   ): Promise<{ id: string; nombre: string }> {
-    const filas = await this.conexion.query<{ nombre: string | null }>(
-      `SELECT detalle -> 'superadministrador' ->> 'nombre' AS nombre
-         FROM auditoria WHERE sesion_id = $1 AND accion = 'inicio_soporte' LIMIT 1`,
-      { bind: [principal.sesionId], type: QueryTypes.SELECT },
+    const detalle = await this.auditoria.detalleDeAccionDeSesion(
+      principal.sesionId!,
+      'inicio_soporte',
     );
-    return { id: principal.superadministradorId!, nombre: filas[0]?.nombre ?? 'Soporte' };
+    const superadministrador = detalle?.superadministrador as { nombre?: unknown } | undefined;
+    const nombre =
+      typeof superadministrador?.nombre === 'string' ? superadministrador.nombre : 'Soporte';
+    return { id: principal.superadministradorId!, nombre };
   }
 
   // ---- Sucursal activa -------------------------------------------------------------------------
@@ -651,7 +643,7 @@ export class SesionesService {
     entrada: CambiarContrasenaEntrada,
   ): Promise<void> {
     const reserva = await this.contexto.ejecutar(principal.empresaId, () =>
-      this.reservarCambio(principal.usuarioId!),
+      this.reservarPara('id', principal.usuarioId!),
     );
     if (reserva.tipo === 'rechazo') throw reserva.error;
     if (reserva.tipo === 'sin_cuenta') {
@@ -677,44 +669,15 @@ export class SesionesService {
     });
   }
 
-  /** Tiempo 1 del cambio de contraseña: igual que `reservarIngreso`, pero por el id de la sesión. */
-  private async reservarCambio(usuarioId: string): Promise<Reserva> {
-    const usuarios = await this.conexion.query<FilaUsuario>(
-      `SELECT id, nombre, nombre_usuario, hash_contrasena, contrasena_temporal, horario,
-              es_administrador, activo
-         FROM usuario WHERE id = $1 AND activo
-          FOR NO KEY UPDATE`,
-      { bind: [usuarioId], type: QueryTypes.SELECT },
-    );
-    const ahora = this.reloj.ahora(); // después de esperar el turno
-    const usuario = usuarios[0];
-    if (usuario === undefined) return { tipo: 'sin_cuenta' };
-    return this.reservar(usuario, ahora);
-  }
-
   /** Tiempo 3 del cambio: la actual era correcta; aplica la nueva si la persona sigue igual que al evaluar. */
   private async aplicarCambio(
     principal: Principal,
     verificado: FilaUsuario,
     hash: string,
   ): Promise<Resultado<true>> {
-    const usuarios = await this.conexion.query<FilaUsuario>(
-      `SELECT id, nombre, nombre_usuario, hash_contrasena, contrasena_temporal, horario,
-              es_administrador, activo
-         FROM usuario WHERE id = $1
-          FOR NO KEY UPDATE`,
-      { bind: [verificado.id], type: QueryTypes.SELECT },
-    );
-    const ahora = this.reloj.ahora();
-    const usuario = usuarios[0];
-    if (
-      usuario === undefined ||
-      !usuario.activo ||
-      usuario.hash_contrasena !== verificado.hash_contrasena
-    ) {
-      await this.bloqueos.liberarReserva('CONTRASENA_USUARIO', verificado.id, ahora);
-      return { error: credencialesInvalidas() };
-    }
+    const releido = await this.releerVerificado(verificado);
+    if ('error' in releido) return releido;
+    const { usuario, ahora } = releido;
     await this.conexion.query(
       `UPDATE usuario SET hash_contrasena = $2, contrasena_temporal = false, actualizado_en = $3
         WHERE id = $1`,
@@ -772,21 +735,17 @@ export class SesionesService {
     esAdministrador: boolean,
   ): Promise<SucursalElegible[]> {
     if (esAdministrador || usuarioId === null) {
-      const filas = await this.conexion.query<{ id: string; nombre: string }>(
-        'SELECT id, nombre FROM sucursal ORDER BY nombre, id',
-        { type: QueryTypes.SELECT },
-      );
-      return filas.map((f) => ({ id: f.id, nombre: f.nombre, rol: 'ADMINISTRADOR' as const }));
+      const todas = await this.sucursales.listar(null);
+      return todas.map((s) => ({ id: s.id, nombre: s.nombre, rol: 'ADMINISTRADOR' as const }));
     }
-    const filas = await this.conexion.query<{ id: string; nombre: string; rol: Rol }>(
-      `SELECT s.id, s.nombre, a.rol
-         FROM acceso_sucursal a
-         JOIN sucursal s ON s.id = a.sucursal_id AND s.empresa_id = a.empresa_id
-        WHERE a.usuario_id = $1
-        ORDER BY s.nombre, s.id`,
+    const accesos = await this.conexion.query<{ sucursal_id: string; rol: Rol }>(
+      'SELECT sucursal_id, rol FROM acceso_sucursal WHERE usuario_id = $1',
       { bind: [usuarioId], type: QueryTypes.SELECT },
     );
-    return filas;
+    // Los nombres y el orden (nombre, id) los da el módulo dueño de `sucursal`.
+    const visibles = await this.sucursales.listar(accesos.map((a) => a.sucursal_id));
+    const rolDe = new Map(accesos.map((a) => [a.sucursal_id, a.rol]));
+    return visibles.map((s) => ({ id: s.id, nombre: s.nombre, rol: rolDe.get(s.id)! }));
   }
 
   /**

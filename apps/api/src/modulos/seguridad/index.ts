@@ -39,15 +39,30 @@ export { EquipoController } from './equipo.controller';
 export { SesionController } from './sesion.controller';
 export { SesionesController } from './sesiones.controller';
 export { UsuariosController } from './usuarios.controller';
-export { BloqueosService, VIGENCIA_RESERVA_MS, segundosHasta } from './bloqueos.service';
+export {
+  BloqueosService,
+  VIGENCIA_RESERVA_MS,
+  decidirReserva,
+  resolverFalloEnFila,
+  segundosHasta,
+} from './bloqueos.service';
 export type {
+  AdaptadorDeFallo,
   AmbitoBloqueo,
   EstadoBloqueo,
+  FilaBloqueo,
+  FilaDeFallo,
   ResultadoFallo,
   ResultadoFalloAcumulado,
   ReservaIntento,
 } from './bloqueos.service';
-export { TopeDeIntentos, claveDeIngresoUsuario, demasiadosALaVez } from './tope-de-intentos';
+export {
+  TopeDeIntentos,
+  claveDeIngresoSuperadministrador,
+  claveDeIngresoUsuario,
+  demasiadosALaVez,
+} from './tope-de-intentos';
+export { bloqueoTemporal, credencialesInvalidas, errorDeReserva } from './errores-acceso';
 export {
   CupoScrypt,
   GRUPO_PLATAFORMA,

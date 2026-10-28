@@ -28,6 +28,9 @@ export type {
   PlanDeSuscripcion,
 } from './suscripcion.service';
 export { SuscripcionModule } from './suscripcion.module';
+export { SucursalesConsultaService } from './sucursales-consulta.service';
+export type { SucursalVisible } from './sucursales-consulta.service';
+export { SucursalesConsultaModule } from './sucursales-consulta.module';
 export { SuscripcionesPlataformaService } from './suscripciones-plataforma.service';
 export { PlanesService } from './planes.service';
 export type { PlanElegido } from './planes.service';
