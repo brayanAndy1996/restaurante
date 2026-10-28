@@ -19,6 +19,7 @@ import { EquipoController } from './equipo.controller';
 import { EquiposService } from './equipos.service';
 import { HorarioService } from './horario.service';
 import { IngresoPinService } from './ingreso-pin.service';
+import { CupoScrypt } from './cupo-scrypt';
 import { TopeDeIntentos } from './tope-de-intentos';
 import { ResolutorEmpresaSesion } from './resolutor-empresa-sesion';
 import { SesionActual } from './sesion-actual';
@@ -53,6 +54,7 @@ import { UsuariosService } from './usuarios.service';
     HorarioService,
     BloqueosService,
     TopeDeIntentos,
+    CupoScrypt,
     SesionesService,
     EquiposService,
     IngresoPinService,
@@ -77,6 +79,7 @@ import { UsuariosService } from './usuarios.service';
     HorarioService,
     BloqueosService,
     TopeDeIntentos,
+    CupoScrypt,
     SesionesService,
     EquiposService,
     IngresoPinService,

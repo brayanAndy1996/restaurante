@@ -30,20 +30,21 @@ export interface ResultadoFalloAcumulado {
 
 /** Resultado de reservar un intento de ingreso (ver `BloqueosService.reservarIntento`). */
 export type ReservaIntento =
+  /** Hay un bloqueo vigente hasta `bloqueadoHasta`: no se evalúa ni se cuenta. */
+  | { permitido: false; motivo: 'BLOQUEO'; bloqueadoHasta: Date }
   /**
-   * No se puede evaluar: hay un bloqueo vigente (`vigente`) o el cupo de evaluaciones en curso ya está lleno
-   * (`vigente` falso: `bloqueadoHasta` es solo la duración completa del bloqueo que vendría).
+   * `fallos + en curso` ya llena el umbral: hay tantas evaluaciones corriendo que, si todas fallan, la cuenta
+   * se bloquea. No se evalúa, no se cuenta como fallo y no bloquea; quien llama responde 429 de 1 segundo.
    */
-  | { permitido: false; bloqueadoHasta: Date; vigente: boolean }
-  /** Se puede evaluar; el intento ya cuenta (`fallosSeguidos` incluye este). */
-  | { permitido: true; fallosSeguidos: number };
+  | { permitido: false; motivo: 'CUPO_LLENO' }
+  /** Se puede evaluar; el intento ya figura como "en curso" hasta que se resuelva. */
+  | { permitido: true };
 
 export interface OpcionesReserva {
   umbral: number;
-  duracionMs: number;
   /**
-   * Cuánto vale una reserva sin resolver: si pasó más que esto desde la última reserva y la cuenta sigue en
-   * el umbral sin bloqueo, quien la hizo murió sin resolverla y la cuenta vuelve a empezar.
+   * Cuánto vale una reserva sin resolver: si pasó más que esto desde que empezó la racha de evaluaciones en
+   * curso, quien las hizo murió sin resolverlas y la cuenta de "en curso" vuelve a cero.
    */
   vigenciaReservaMs?: number;
 }
@@ -198,18 +199,18 @@ export class BloqueosService {
   // ---- Ingresos con scrypt: reserva, evaluación fuera de la transacción y resolución --------------
 
   /**
-   * Primera mitad de un ingreso con contraseña: decide si se puede evaluar y, si se puede, **cuenta el
-   * intento de antemano** y le da su número de turno (`fallosSeguidos`). Así la evaluación (scrypt, lenta)
-   * corre fuera de toda transacción y de todo bloqueo de fila, y aun así ninguna ráfaga evalúa más de
-   * `umbral` contraseñas por bloqueo: el intento `umbral + 1` encuentra la cuenta llena y se rechaza sin
-   * evaluarse.
+   * Primera mitad de un ingreso con contraseña: decide si se puede evaluar y, si se puede, **marca el intento
+   * como "en curso"**. Así la evaluación (scrypt, lenta) corre fuera de toda transacción y de todo bloqueo de
+   * fila, y aun así ninguna ráfaga evalúa más de `umbral` contraseñas por bloqueo.
+   *
+   * `fallos_seguidos` solo cuenta fallos ya resueltos; las evaluaciones que corren se llevan aparte en
+   * `en_curso`. Un intento que llega cuando `fallos + en_curso` ya llena el umbral no se evalúa, **no cuenta
+   * como fallo y no bloquea**: hay `umbral` intentos decidiendo la cuenta, y si todos resultan correctos no
+   * habrá habido ni un fallo. Así seis ingresos correctos simultáneos nunca dejan a la persona bloqueada.
    *
    * - Bloqueo vigente: no se evalúa ni se cuenta.
-   * - Bloqueo vencido: la cuenta vuelve a empezar.
-   * - Cuenta en el umbral sin bloqueo: hay `umbral` evaluaciones en curso que todavía no se resolvieron (el
-   *   bloqueo lo pone la primera que se resuelva, `resolverFallo` / `liberarIntento`). No se evalúa, pero
-   *   **sí se cuenta**: llegó después de esas `umbral` y, si ninguna resulta correcta, habría sido un fallo
-   *   más. Se responde con la duración completa del bloqueo.
+   * - Bloqueo vencido: la cuenta de fallos vuelve a empezar.
+   * - Reservas perdidas (`en_curso` sin resolver durante `vigenciaReservaMs`): se descartan.
    *
    * Quien llama tiene bloqueada la fila de la persona (`FOR NO KEY UPDATE`), así que la lectura y la
    * escritura de aquí no se pisan con otro intento de la misma cuenta.
@@ -223,57 +224,59 @@ export class BloqueosService {
     const empresaId = this.contexto.empresaActual();
     const filas = await this.conexion.query<{
       fallos_seguidos: number;
+      en_curso: number;
+      en_curso_desde: Date | null;
       bloqueado_hasta: Date | null;
-      actualizado_en: Date;
     }>(
-      `SELECT fallos_seguidos, bloqueado_hasta, actualizado_en
+      `SELECT fallos_seguidos, en_curso, en_curso_desde, bloqueado_hasta
          FROM bloqueo_intentos WHERE ambito = $1 AND objetivo_id = $2`,
       { bind: [ambito, objetivoId], type: QueryTypes.SELECT },
     );
     const fila = filas[0];
     let fallos = 0;
+    let enCurso = 0;
+    let desde: Date | null = null;
     if (fila !== undefined) {
       if (fila.bloqueado_hasta !== null) {
         if (fila.bloqueado_hasta.getTime() > ahora.getTime()) {
-          return { permitido: false, bloqueadoHasta: fila.bloqueado_hasta, vigente: true };
+          return { permitido: false, motivo: 'BLOQUEO', bloqueadoHasta: fila.bloqueado_hasta };
         }
-        // El bloqueo venció: la cuenta empieza de cero.
+        // El bloqueo venció: la cuenta de fallos empieza de cero.
       } else {
-        const perdida =
-          fila.fallos_seguidos >= opciones.umbral &&
-          ahora.getTime() - fila.actualizado_en.getTime() >=
-            (opciones.vigenciaReservaMs ?? VIGENCIA_RESERVA_MS);
-        if (!perdida) fallos = fila.fallos_seguidos;
+        fallos = fila.fallos_seguidos;
+      }
+      const perdidas =
+        fila.en_curso > 0 &&
+        (fila.en_curso_desde === null ||
+          ahora.getTime() - fila.en_curso_desde.getTime() >=
+            (opciones.vigenciaReservaMs ?? VIGENCIA_RESERVA_MS));
+      if (!perdidas) {
+        enCurso = fila.en_curso;
+        desde = fila.en_curso_desde;
       }
     }
-    const turno = fallos + 1;
-    const evaluable = turno <= opciones.umbral;
-    // Solo un intento evaluable renueva `actualizado_en`: es la hora de la última reserva viva.
+    if (fallos + enCurso >= opciones.umbral) return { permitido: false, motivo: 'CUPO_LLENO' };
+    if (enCurso === 0) desde = null; // la racha de evaluaciones en curso empieza con esta reserva
     await this.conexion.query(
       `INSERT INTO bloqueo_intentos AS b
-         (empresa_id, ambito, objetivo_id, fallos_seguidos, ultimo_fallo_en, creado_en, actualizado_en)
-       VALUES ($1, $2, $3, $5, $4, $4, $4)
+         (empresa_id, ambito, objetivo_id, fallos_seguidos, en_curso, en_curso_desde, creado_en, actualizado_en)
+       VALUES ($1, $2, $3, $5, 1, $4, $4, $4)
        ON CONFLICT (empresa_id, ambito, objetivo_id) DO UPDATE SET
          fallos_seguidos = $5,
+         en_curso = $6::integer + 1,
+         en_curso_desde = COALESCE($7::timestamptz, $4),
          bloqueado_hasta = NULL,
-         ultimo_fallo_en = $4,
-         actualizado_en = CASE WHEN $6::boolean OR b.bloqueado_hasta IS NOT NULL THEN $4 ELSE b.actualizado_en END`,
-      { bind: [empresaId, ambito, objetivoId, ahora, turno, evaluable] },
+         actualizado_en = $4`,
+      { bind: [empresaId, ambito, objetivoId, ahora, fallos, enCurso, desde] },
     );
-    if (!evaluable) {
-      return {
-        permitido: false,
-        bloqueadoHasta: new Date(ahora.getTime() + opciones.duracionMs),
-        vigente: false,
-      };
-    }
-    return { permitido: true, fallosSeguidos: turno };
+    return { permitido: true };
   }
 
   /**
-   * Segunda mitad de un ingreso que falló: si la cuenta llegó al umbral y todavía no hay bloqueo, lo pone
-   * (una sola vez por bloqueo, también con varios fallos resolviéndose a la vez) y lo informa para que quien
-   * llama deje su fila de auditoría. El intento ya se contó en `reservarIntento`. Requiere la fila de la
+   * Segunda mitad de un ingreso que falló: la reserva deja de estar en curso y cuenta un fallo. Al llegar la
+   * cuenta al umbral sin bloqueo vigente, lo pone (una sola vez por bloqueo, también con varios fallos
+   * resolviéndose a la vez) y lo informa para que quien llama deje su fila de auditoría. Con un bloqueo
+   * vigente (puesto por otros fallos mientras este se evaluaba) no suma ni lo alarga. Requiere la fila de la
    * persona bloqueada, como `reservarIntento`.
    */
   async resolverFallo(
@@ -282,55 +285,89 @@ export class BloqueosService {
     ahora: Date,
     opciones: { umbral: number; duracionMs: number },
   ): Promise<ResultadoFallo> {
+    const empresaId = this.contexto.empresaActual();
+    const contados = await this.conexion.query<{
+      fallos_seguidos: number;
+      bloqueado_hasta: Date | null;
+    }>(
+      `INSERT INTO bloqueo_intentos AS b
+         (empresa_id, ambito, objetivo_id, fallos_seguidos, ultimo_fallo_en, creado_en, actualizado_en)
+       VALUES ($1, $2, $3, 1, $4, $4, $4)
+       ON CONFLICT (empresa_id, ambito, objetivo_id) DO UPDATE SET
+         en_curso = GREATEST(b.en_curso - 1, 0),
+         en_curso_desde = CASE WHEN b.en_curso - 1 > 0 THEN b.en_curso_desde ELSE NULL END,
+         fallos_seguidos = CASE
+           WHEN b.bloqueado_hasta IS NOT NULL AND b.bloqueado_hasta <= $4 THEN 1
+           WHEN b.bloqueado_hasta IS NOT NULL THEN b.fallos_seguidos
+           ELSE b.fallos_seguidos + 1 END,
+         bloqueado_hasta = CASE
+           WHEN b.bloqueado_hasta IS NOT NULL AND b.bloqueado_hasta <= $4 THEN NULL
+           ELSE b.bloqueado_hasta END,
+         ultimo_fallo_en = $4,
+         actualizado_en = $4
+       RETURNING fallos_seguidos, bloqueado_hasta`,
+      { bind: [empresaId, ambito, objetivoId, ahora], type: QueryTypes.SELECT },
+    );
+    const { fallos_seguidos: fallosSeguidos, bloqueado_hasta: vigente } = contados[0]!;
+    if (vigente !== null || fallosSeguidos < opciones.umbral) {
+      return { fallosSeguidos, bloqueadoHasta: vigente, bloqueoNuevo: false };
+    }
     const hasta = new Date(ahora.getTime() + opciones.duracionMs);
-    const bloqueadas = await this.conexion.query<{ fallos_seguidos: number }>(
+    const bloqueadas = await this.conexion.query<{ bloqueado_hasta: Date }>(
       `UPDATE bloqueo_intentos SET bloqueado_hasta = $3, actualizado_en = $4
         WHERE ambito = $1 AND objetivo_id = $2 AND bloqueado_hasta IS NULL AND fallos_seguidos >= $5
-        RETURNING fallos_seguidos`,
+        RETURNING bloqueado_hasta`,
       { bind: [ambito, objetivoId, hasta, ahora, opciones.umbral], type: QueryTypes.SELECT },
     );
     const nuevo = bloqueadas[0] !== undefined;
-    return {
-      fallosSeguidos: bloqueadas[0]?.fallos_seguidos ?? 0,
-      bloqueadoHasta: nuevo ? hasta : null,
-      bloqueoNuevo: nuevo,
-    };
+    return { fallosSeguidos, bloqueadoHasta: nuevo ? hasta : null, bloqueoNuevo: nuevo };
   }
 
   /**
-   * Segunda mitad de un ingreso correcto: perdona los intentos hasta su turno (los que llegaron antes que él,
-   * como un ingreso correcto antes del quinto fallo) y conserva los que llegaron después. **Nunca toca un
-   * bloqueo vigente**: un éxito no levanta el bloqueo que pusieron otros fallos (criterio 61). Devuelve
-   * `true` si los intentos posteriores ya llenan el umbral sin que haya bloqueo (todos se rechazaron sin
-   * evaluarse mientras este se evaluaba): entonces quien llama debe poner el bloqueo con `resolverFallo`.
+   * Segunda mitad de un ingreso correcto: la reserva deja de estar en curso y la cuenta de fallos vuelve a
+   * cero. **Nunca toca un bloqueo vigente**: un éxito no levanta el bloqueo que pusieron otros fallos
+   * (criterio 61). Los intentos que siguen en curso no se tocan: cada uno cuenta cuando se resuelva.
    */
-  async liberarIntento(
-    ambito: AmbitoBloqueo,
-    objetivoId: string,
-    ahora: Date,
-    turno: number,
-    umbral: number,
-  ): Promise<boolean> {
-    const filas = await this.conexion.query<{ fallos_seguidos: number }>(
+  async resolverExito(ambito: AmbitoBloqueo, objetivoId: string, ahora: Date): Promise<void> {
+    await this.conexion.query(
       `UPDATE bloqueo_intentos
-          SET fallos_seguidos = CASE WHEN bloqueado_hasta IS NOT NULL THEN 0
-                                     ELSE GREATEST(fallos_seguidos - $3, 0) END,
-              bloqueado_hasta = NULL,
-              actualizado_en = $4
-        WHERE ambito = $1 AND objetivo_id = $2 AND (bloqueado_hasta IS NULL OR bloqueado_hasta <= $4)
-        RETURNING fallos_seguidos`,
-      { bind: [ambito, objetivoId, turno, ahora], type: QueryTypes.SELECT },
+          SET en_curso = GREATEST(en_curso - 1, 0),
+              en_curso_desde = CASE WHEN en_curso - 1 > 0 THEN en_curso_desde ELSE NULL END,
+              fallos_seguidos = CASE WHEN bloqueado_hasta IS NOT NULL AND bloqueado_hasta > $3
+                                     THEN fallos_seguidos ELSE 0 END,
+              bloqueado_hasta = CASE WHEN bloqueado_hasta IS NOT NULL AND bloqueado_hasta > $3
+                                     THEN bloqueado_hasta ELSE NULL END,
+              actualizado_en = $3
+        WHERE ambito = $1 AND objetivo_id = $2`,
+      { bind: [ambito, objetivoId, ahora] },
     );
-    const quedan = filas[0]?.fallos_seguidos;
-    if (quedan === undefined) return false;
-    if (quedan === 0) {
-      await this.conexion.query(
-        `DELETE FROM bloqueo_intentos
-          WHERE ambito = $1 AND objetivo_id = $2 AND fallos_seguidos = 0 AND bloqueado_hasta IS NULL`,
-        { bind: [ambito, objetivoId] },
-      );
-    }
-    return quedan >= umbral;
+    await this.borrarSiVacia(ambito, objetivoId);
+  }
+
+  /**
+   * La reserva termina sin resultado para la cuenta (la persona dejó de estar activa o cambió su contraseña
+   * mientras se evaluaba): deja de estar en curso y no cuenta ni como fallo ni como éxito.
+   */
+  async liberarReserva(ambito: AmbitoBloqueo, objetivoId: string, ahora: Date): Promise<void> {
+    await this.conexion.query(
+      `UPDATE bloqueo_intentos
+          SET en_curso = GREATEST(en_curso - 1, 0),
+              en_curso_desde = CASE WHEN en_curso - 1 > 0 THEN en_curso_desde ELSE NULL END,
+              actualizado_en = $3
+        WHERE ambito = $1 AND objetivo_id = $2`,
+      { bind: [ambito, objetivoId, ahora] },
+    );
+    await this.borrarSiVacia(ambito, objetivoId);
+  }
+
+  /** Quita la fila de una cuenta sin fallos, sin evaluaciones en curso y sin bloqueo. */
+  private async borrarSiVacia(ambito: AmbitoBloqueo, objetivoId: string): Promise<void> {
+    await this.conexion.query(
+      `DELETE FROM bloqueo_intentos
+        WHERE ambito = $1 AND objetivo_id = $2
+          AND fallos_seguidos = 0 AND en_curso = 0 AND bloqueado_hasta IS NULL`,
+      { bind: [ambito, objetivoId] },
+    );
   }
 }
 

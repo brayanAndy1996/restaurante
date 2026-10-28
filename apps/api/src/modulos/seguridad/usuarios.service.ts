@@ -16,6 +16,7 @@ import { RELOJ, type Reloj } from '../../nucleo/reloj';
 import { AuditoriaService } from '../auditoria';
 import { Credenciales } from './credenciales';
 import { EquiposService, type EquipoRevocado } from './equipos.service';
+import { TopeDeIntentos, claveDeIngresoUsuario } from './tope-de-intentos';
 
 interface FilaUsuario {
   id: string;
@@ -69,6 +70,7 @@ export class UsuariosService {
     @Inject(Credenciales) private readonly credenciales: Credenciales,
     @Inject(AuditoriaService) private readonly auditoria: AuditoriaService,
     @Inject(EquiposService) private readonly equipos: EquiposService,
+    @Inject(TopeDeIntentos) private readonly tope: TopeDeIntentos,
   ) {}
 
   // ---- Consulta --------------------------------------------------------------------------------
@@ -134,6 +136,7 @@ export class UsuariosService {
     } catch (error) {
       throw this.traducirUnicidad(error);
     }
+    this.olvidarIngresosRecientes(nombreUsuario); // el nombre ya tiene cuenta activa
     for (const acceso of accesos) {
       await this.conexion.query(
         `INSERT INTO acceso_sucursal (empresa_id, usuario_id, sucursal_id, rol, creado_en, actualizado_en)
@@ -247,6 +250,8 @@ export class UsuariosService {
     if (huboCambioDeAccesos)
       await this.reemplazarAccesos(empresaId, id, accesosActuales, accesos, ahora);
 
+    if (!actual.activo && activo) this.olvidarIngresosRecientes(actual.nombre_usuario); // reactivado
+
     // Sesiones que ya no valen: cierre inmediato (la guarda también lo comprueba en cada petición).
     if (actual.activo && !activo) {
       await this.cerrarSesiones(id, 'USUARIO_DESACTIVADO', ahora);
@@ -324,13 +329,14 @@ export class UsuariosService {
    */
   async restablecerContrasena(id: string, contrasenaTemporal: string): Promise<void> {
     const hash = await this.credenciales.hashContrasena(contrasenaTemporal);
-    await this.bloquearUsuario(id);
+    const actual = await this.bloquearUsuario(id);
     const ahora = this.reloj.ahora();
     await this.conexion.query(
       `UPDATE usuario SET hash_contrasena = $2, contrasena_temporal = true, actualizado_en = $3
         WHERE id = $1`,
       { bind: [id, hash, ahora] },
     );
+    this.olvidarIngresosRecientes(actual.nombre_usuario);
     await this.cerrarSesiones(id, 'CONTRASENA_RESTABLECIDA', ahora);
     const equiposRevocados = await this.equipos.revocarDeUsuario(
       id,
@@ -351,6 +357,15 @@ export class UsuariosService {
   }
 
   // ---- Apoyo -----------------------------------------------------------------------------------
+
+  /**
+   * Los topes en memoria recuerdan unos segundos, en plena ráfaga, que un nombre no tiene cuenta (o tiene un
+   * bloqueo). Cuando el nombre pasa a tener cuenta activa o cambia su contraseña, se olvida después de
+   * confirmar la transacción, para que el siguiente ingreso consulte la base.
+   */
+  private olvidarIngresosRecientes(nombreUsuario: string): void {
+    this.contexto.alConfirmar(() => this.tope.olvidar(claveDeIngresoUsuario(nombreUsuario)));
+  }
 
   /** Fila del usuario bloqueada para la transacción (los cambios de un usuario se serializan); 404 si no está. */
   private async bloquearUsuario(id: string): Promise<FilaUsuario> {

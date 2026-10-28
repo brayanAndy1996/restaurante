@@ -47,7 +47,8 @@ export type {
   ResultadoFalloAcumulado,
   ReservaIntento,
 } from './bloqueos.service';
-export { TopeDeIntentos } from './tope-de-intentos';
+export { TopeDeIntentos, claveDeIngresoUsuario, demasiadosALaVez } from './tope-de-intentos';
+export { CupoScrypt, GRUPO_PLATAFORMA, GRUPO_SIN_CUENTA } from './cupo-scrypt';
 export { SesionesService } from './sesiones.service';
 export { EquiposService, equipoNoReconocido, tokenEquipoDeCabecera } from './equipos.service';
 export type { EquipoRevocado } from './equipos.service';

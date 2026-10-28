@@ -155,7 +155,7 @@ export async function desactivarSuperadministrador(datos: { usuario: string }): 
 
 /**
  * Desbloquea a un superadministrador bloqueado por intentos fallidos (decisión operativa: el bloqueo de 15
- * minutos no tiene otra salida antes de vencer). Limpia `bloqueado_hasta` y `fallos_seguidos` y deja la fila
+ * minutos no tiene otra salida antes de vencer). Limpia `bloqueado_hasta`, `fallos_seguidos` y las evaluaciones en curso y deja la fila
  * de auditoría `desbloquear_superadministrador` (actor `cli:superadmin`, sin empresa y sin datos sensibles).
  * Falla si no existe. Un superadministrador inactivo también se limpia, pero sigue sin poder entrar.
  */
@@ -171,7 +171,8 @@ export async function desbloquearSuperadministrador(datos: { usuario: string }):
       async (transaccion) => {
         const filas = await sequelizeDe(transaccion).query<{ id: string }>(
           `UPDATE superadministrador
-              SET fallos_seguidos = 0, bloqueado_hasta = NULL, actualizado_en = $2
+              SET fallos_seguidos = 0, en_curso = 0, en_curso_desde = NULL, bloqueado_hasta = NULL,
+                  actualizado_en = $2
             WHERE usuario = $1 RETURNING id`,
           { transaction: transaccion, bind: [usuario, new Date()], type: QueryTypes.SELECT },
         );

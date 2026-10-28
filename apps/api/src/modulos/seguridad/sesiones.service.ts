@@ -19,11 +19,12 @@ import { RELOJ, type Reloj } from '../../nucleo/reloj';
 import { AuditoriaService } from '../auditoria';
 import { SuscripcionService } from '../plataforma/suscripcion.service';
 import { BloqueosService, segundosHasta } from './bloqueos.service';
+import { CupoScrypt, GRUPO_SIN_CUENTA } from './cupo-scrypt';
 import { MINUTOS_INACTIVIDAD_PIN_POR_DEFECTO } from './constantes-acceso';
 import { Credenciales } from './credenciales';
 import { HorarioService } from './horario.service';
 import { SesionActual } from './sesion-actual';
-import { TopeDeIntentos } from './tope-de-intentos';
+import { TopeDeIntentos, claveDeIngresoUsuario, demasiadosALaVez } from './tope-de-intentos';
 import { armarTokenSesion } from './tokens';
 
 /** Inactividad de una sesión de contraseña o de soporte, en minutos (criterios 14 y 66). */
@@ -61,7 +62,7 @@ type Resultado<T> = { ok: T } | { error: ErrorAplicacion };
 type Reserva =
   | { tipo: 'rechazo'; error: ErrorAplicacion; bloqueoVigente?: Date }
   | { tipo: 'sin_cuenta' }
-  | { tipo: 'reservado'; usuario: FilaUsuario; turno: number };
+  | { tipo: 'reservado'; usuario: FilaUsuario };
 
 const credencialesInvalidas = () =>
   new ErrorAplicacion(401, 'CREDENCIALES_INVALIDAS', 'Usuario o contraseña incorrectos');
@@ -95,6 +96,7 @@ export class SesionesService {
     @Inject(SesionActual) private readonly actual: SesionActual,
     @Inject(SuscripcionService) private readonly suscripciones: SuscripcionService,
     @Inject(TopeDeIntentos) private readonly tope: TopeDeIntentos,
+    @Inject(CupoScrypt) private readonly cupo: CupoScrypt,
   ) {}
 
   // ---- Ingreso con contraseña ------------------------------------------------------------------
@@ -103,26 +105,31 @@ export class SesionesService {
    * `POST /sesiones/contrasena` (criterios 10 a 13 y 12b). El ingreso va en tres tiempos y ninguna
    * conexión del pool ni bloqueo de fila queda retenido mientras corre scrypt (RNF-03):
    *
+   * 0. Antes de tocar la base: tope de ingresos por nombre, turno (un ingreso a la vez por nombre) y, ya
+   *    sabida la empresa, un cupo del scrypt repartido entre empresas (`CupoScrypt`). Lo que no entra a tiempo
+   *    responde 429 de 1 s sin evaluar y sin contar como fallo.
    * 1. Transacción corta que bloquea la fila del usuario, revisa el bloqueo y **reserva el intento**
-   *    (`BloqueosService.reservarIntento`: lo cuenta como fallo de antemano). Con el bloqueo vigente, o con
-   *    el cupo de evaluaciones en curso lleno, responde 429 sin evaluar: ninguna ráfaga evalúa más de 5
-   *    contraseñas (criterio 12).
+   *    (`BloqueosService.reservarIntento`: lo marca "en curso"). Con el bloqueo vigente responde 429 de la
+   *    duración restante; con `fallos + en curso` en el umbral, 429 de 1 s: en ambos casos sin evaluar y sin
+   *    contar. Ninguna ráfaga evalúa más de 5 contraseñas (criterio 12).
    * 2. La contraseña se evalúa fuera de toda transacción.
-   * 3. Otra transacción corta aplica el resultado: si falló, pone el bloqueo cuando la cuenta llegó a 5
-   *    (con su fila de auditoría); si es correcta, vuelve a bloquear la fila, comprueba que la persona sigue
-   *    activa y con la misma contraseña, reinicia la cuenta (sin borrar un bloqueo vigente), revisa el
-   *    horario y crea la sesión.
+   * 3. Otra transacción corta aplica el resultado: si falló, cuenta el fallo y pone el bloqueo cuando la
+   *    cuenta llegó a 5 (con su fila de auditoría); si es correcta, vuelve a bloquear la fila, comprueba que
+   *    la persona sigue activa y con la misma contraseña, reinicia la cuenta de fallos (sin borrar un bloqueo
+   *    vigente), revisa el horario y crea la sesión.
    *
-   * Un nombre sin cuenta activa (inexistente o inactivo) no tiene fila que contar: lo frena
-   * `TopeDeIntentos` pone un tope a las que están en curso y, por lo demás, responde igual que una contraseña incorrecta (criterio 11).
+   * Un nombre sin cuenta activa (inexistente o inactivo) no tiene fila que contar: toma el cupo igual que los
+   * demás, gasta el mismo scrypt y responde igual que una contraseña incorrecta (criterio 11).
    */
   async ingresarConContrasena(entrada: IngresoContrasenaEntrada): Promise<IngresoRespuesta> {
     const nombre = minusculasAscii(entrada.usuario);
     // Una ráfaga contra un mismo nombre no pasa del tope: lo demás se rechaza sin tocar la base (RNF-03).
-    const clave = `contrasena:${nombre}`;
+    const clave = claveDeIngresoUsuario(nombre);
     const { soltar, enRafaga } = this.tope.entrar(clave);
     try {
-      return await this.ingresarConTope(nombre, entrada.contrasena, clave, enRafaga);
+      return await this.tope.conTurno(clave, () =>
+        this.ingresarConTope(nombre, entrada.contrasena, clave, enRafaga),
+      );
     } finally {
       soltar();
     }
@@ -134,16 +141,30 @@ export class SesionesService {
     clave: string,
     enRafaga: boolean,
   ): Promise<IngresoRespuesta> {
-    // En plena ráfaga contra un nombre que acaba de verse sin cuenta, no se vuelve a preguntar a la base.
-    if (this.tope.esSinCuentaReciente(clave)) return this.rechazarSinCuenta(nombre, contrasena);
-    const bloqueoReciente = this.tope.bloqueoReciente(clave, this.reloj.ahora());
-    if (bloqueoReciente !== null) throw bloqueoTemporal(bloqueoReciente, this.reloj.ahora());
+    // Solo en plena ráfaga (3 o más ingresos del mismo nombre a la vez) se confía en lo que se vio hace un
+    // instante; un reintento normal siempre pregunta a la base.
+    if (enRafaga) {
+      if (this.tope.esSinCuentaReciente(clave)) return this.rechazarSinCuenta(contrasena);
+      const bloqueoReciente = this.tope.bloqueoReciente(clave, this.reloj.ahora());
+      if (bloqueoReciente !== null) throw bloqueoTemporal(bloqueoReciente, this.reloj.ahora());
+    }
     const empresaId = await buscarEmpresaDeUsuario(this.conexion, nombre);
     if (empresaId === null) {
       if (enRafaga) this.tope.recordarSinCuenta(clave);
-      return this.rechazarSinCuenta(nombre, contrasena);
+      return this.rechazarSinCuenta(contrasena);
     }
+    return this.cupo.conCupo(empresaId, () =>
+      this.ingresarConCupo(empresaId, nombre, contrasena, clave, enRafaga),
+    );
+  }
 
+  private async ingresarConCupo(
+    empresaId: string,
+    nombre: string,
+    contrasena: string,
+    clave: string,
+    enRafaga: boolean,
+  ): Promise<IngresoRespuesta> {
     // La reserva solo escribe `bloqueo_intentos` (sin trazabilidad): no necesita actor.
     const reserva = await this.contexto.ejecutar(empresaId, () => this.reservarIngreso(nombre));
     if (reserva.tipo === 'rechazo') {
@@ -153,33 +174,60 @@ export class SesionesService {
       throw reserva.error;
     }
     if (reserva.tipo === 'sin_cuenta') {
+      // Inactivo: ya se tiene el cupo, se gasta el scrypt falso en él.
       if (enRafaga) this.tope.recordarSinCuenta(clave);
-      return this.rechazarSinCuenta(nombre, contrasena);
-    }
-
-    const { usuario, turno } = reserva;
-    const correcta = await this.evaluarContrasena(contrasena, usuario.hash_contrasena);
-    if (!correcta) {
-      await this.ponerBloqueoSiCorresponde(empresaId, usuario);
+      await this.credenciales.verificarContrasenaFalsa(contrasena);
       throw credencialesInvalidas();
     }
-    // Credenciales correctas: de aquí en adelante los cambios quedan a nombre de la persona.
-    const resultado = await this.contexto.ejecutar(
-      empresaId,
-      () => this.completarIngreso(empresaId, usuario, turno),
-      { actor: { usuarioId: usuario.id } },
-    );
-    if (resultado.bloquear) await this.ponerBloqueoSiCorresponde(empresaId, usuario);
-    if ('error' in resultado.resultado) throw resultado.resultado.error;
-    return resultado.resultado.ok;
+
+    const { usuario } = reserva;
+    return this.conLiberacion(empresaId, usuario.id, async () => {
+      const correcta = await this.evaluarContrasena(contrasena, usuario.hash_contrasena);
+      if (!correcta) {
+        await this.resolverFallo(empresaId, usuario);
+        throw credencialesInvalidas();
+      }
+      // Credenciales correctas: de aquí en adelante los cambios quedan a nombre de la persona.
+      const resultado = await this.contexto.ejecutar(
+        empresaId,
+        () => this.completarIngreso(empresaId, usuario),
+        { actor: { usuarioId: usuario.id } },
+      );
+      if ('error' in resultado) throw resultado.error;
+      return resultado.ok;
+    });
   }
 
   /**
-   * Nombre sin cuenta activa: gasta el mismo scrypt y responde como una contraseña incorrecta (siempre 401,
-   * nunca se bloquea); `TopeDeIntentos` solo rechaza lo que excede el tope de evaluaciones en curso.
+   * Corre el resto de un ingreso ya reservado; si algo inesperado lo corta (la base falló al resolver), la
+   * reserva se libera sin contar para que no quede "en curso" hasta que venza.
    */
-  private async rechazarSinCuenta(nombre: string, contrasena: string): Promise<never> {
-    await this.tope.conTopeFalso(`contrasena:${nombre}`, () =>
+  private async conLiberacion<T>(
+    empresaId: string,
+    usuarioId: string,
+    fn: () => Promise<T>,
+  ): Promise<T> {
+    try {
+      return await fn();
+    } catch (error) {
+      if (!(error instanceof ErrorAplicacion)) {
+        await this.contexto
+          .ejecutar(empresaId, () =>
+            this.bloqueos.liberarReserva('CONTRASENA_USUARIO', usuarioId, this.reloj.ahora()),
+          )
+          .catch(() => undefined);
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * Nombre sin cuenta (inexistente): toma un cupo del grupo de los nombres sin cuenta, gasta el mismo scrypt
+   * y responde como una contraseña incorrecta (siempre 401, nunca se bloquea). Lo que excede el cupo recibe
+   * el mismo 429 que cualquier otro ingreso, tenga o no cuenta el nombre.
+   */
+  private async rechazarSinCuenta(contrasena: string): Promise<never> {
+    await this.cupo.conCupo(GRUPO_SIN_CUENTA, () =>
       this.credenciales.verificarContrasenaFalsa(contrasena),
     );
     throw credencialesInvalidas();
@@ -239,24 +287,25 @@ export class SesionesService {
   private async reservar(usuario: FilaUsuario, ahora: Date): Promise<Reserva> {
     const reserva = await this.bloqueos.reservarIntento('CONTRASENA_USUARIO', usuario.id, ahora, {
       umbral: FALLOS_PARA_BLOQUEAR_CONTRASENA,
-      duracionMs: MINUTOS_BLOQUEO_CONTRASENA * MINUTO_MS,
     });
-    if (!reserva.permitido) {
+    if (reserva.permitido) return { tipo: 'reservado', usuario };
+    if (reserva.motivo === 'BLOQUEO') {
       return {
         tipo: 'rechazo',
         error: bloqueoTemporal(reserva.bloqueadoHasta, ahora),
-        bloqueoVigente: reserva.vigente ? reserva.bloqueadoHasta : undefined,
+        bloqueoVigente: reserva.bloqueadoHasta,
       };
     }
-    return { tipo: 'reservado', usuario, turno: reserva.fallosSeguidos };
+    // Cupo de evaluaciones en curso lleno: no se evalúa, no cuenta como fallo y no bloquea.
+    return { tipo: 'rechazo', error: demasiadosALaVez() };
   }
 
   /**
-   * Tiempo 3, contraseña incorrecta (transacción corta, actor `autenticacion`). El intento ya se contó al
-   * reservarlo; aquí solo se pone el bloqueo si la cuenta llegó a 5 y todavía no hay (una vez) y se audita.
-   * También lo usa un ingreso correcto si los intentos que llegaron después de él ya llenan el umbral.
+   * Tiempo 3, contraseña incorrecta (transacción corta, actor `autenticacion`). La reserva deja de estar en
+   * curso y cuenta un fallo; si la cuenta llegó a 5 y todavía no hay bloqueo, lo pone (una sola vez) y lo
+   * audita.
    */
-  private async ponerBloqueoSiCorresponde(
+  private async resolverFallo(
     empresaId: string,
     usuario: Pick<FilaUsuario, 'id' | 'nombre_usuario'>,
   ): Promise<void> {
@@ -296,8 +345,7 @@ export class SesionesService {
   private async completarIngreso(
     empresaId: string,
     verificado: FilaUsuario,
-    turno: number,
-  ): Promise<{ resultado: Resultado<IngresoRespuesta>; bloquear: boolean }> {
+  ): Promise<Resultado<IngresoRespuesta>> {
     const usuarios = await this.conexion.query<FilaUsuario>(
       `SELECT id, nombre, nombre_usuario, hash_contrasena, contrasena_temporal, horario,
               es_administrador, activo
@@ -312,16 +360,12 @@ export class SesionesService {
       !usuario.activo ||
       usuario.hash_contrasena !== verificado.hash_contrasena
     ) {
-      return { resultado: { error: credencialesInvalidas() }, bloquear: false };
+      // La persona cambió mientras se evaluaba: la reserva termina sin contar ni como fallo ni como éxito.
+      await this.bloqueos.liberarReserva('CONTRASENA_USUARIO', verificado.id, ahora);
+      return { error: credencialesInvalidas() };
     }
-    // Perdona los intentos hasta su turno; un bloqueo vigente no se toca (criterio 61).
-    const bloquear = await this.bloqueos.liberarIntento(
-      'CONTRASENA_USUARIO',
-      usuario.id,
-      ahora,
-      turno,
-      FALLOS_PARA_BLOQUEAR_CONTRASENA,
-    );
+    // Ingreso correcto: la cuenta de fallos vuelve a cero; un bloqueo vigente no se toca (criterio 61).
+    await this.bloqueos.resolverExito('CONTRASENA_USUARIO', usuario.id, ahora);
 
     // El horario se mira después de las credenciales y del bloqueo (criterio 107): nadie sin
     // credenciales correctas sabe si alguien tiene horario. No cuenta como fallo.
@@ -338,14 +382,11 @@ export class SesionesService {
         detalle: { usuarioId: usuario.id, nombreUsuario: usuario.nombre_usuario },
       });
       return {
-        resultado: {
-          error: new ErrorAplicacion(
-            403,
-            'FUERA_DE_HORARIO',
-            'Estás fuera de tu horario de acceso; vuelve a intentar dentro de él',
-          ),
-        },
-        bloquear,
+        error: new ErrorAplicacion(
+          403,
+          'FUERA_DE_HORARIO',
+          'Estás fuera de tu horario de acceso; vuelve a intentar dentro de él',
+        ),
       };
     }
 
@@ -384,10 +425,7 @@ export class SesionesService {
         ahora.getTime() + MINUTOS_INACTIVIDAD_CONTRASENA * MINUTO_MS,
       ),
     });
-    return {
-      resultado: { ok: { token: armarTokenSesion(empresaId, filas[0]!.id, secreto), sesion } },
-      bloquear,
-    };
+    return { ok: { token: armarTokenSesion(empresaId, filas[0]!.id, secreto), sesion } };
   }
 
   // ---- Sesión actual ---------------------------------------------------------------------------
@@ -540,8 +578,10 @@ export class SesionesService {
 
   /**
    * `PUT /sesion/contrasena` (criterio 16): solo sesiones de contraseña. La contraseña actual incorrecta
-   * cuenta para el bloqueo del criterio 12. Mismo reparto en tres tiempos que el ingreso: reserva corta,
-   * scrypt (de la actual y, si es correcta, el hash de la nueva) fuera de toda transacción y aplicación corta.
+   * cuenta para el bloqueo del criterio 12. Mismo reparto en tres tiempos que el ingreso: cupo del scrypt,
+   * reserva corta, scrypt (de la actual y, si es correcta, el hash de la nueva) fuera de toda transacción y
+   * aplicación corta. No usa el tope ni el turno por nombre: la persona ya está autenticada y la cuenta la
+   * frenan el bloqueo y el cupo de evaluaciones en curso.
    */
   async cambiarContrasena(entrada: CambiarContrasenaEntrada): Promise<void> {
     const principal = this.actual.principal();
@@ -553,6 +593,13 @@ export class SesionesService {
         { campo: 'nueva', mensaje: 'La contraseña nueva debe ser distinta de la actual' },
       ]);
     }
+    await this.cupo.conCupo(principal.empresaId, () => this.cambiarConCupo(principal, entrada));
+  }
+
+  private async cambiarConCupo(
+    principal: Principal,
+    entrada: CambiarContrasenaEntrada,
+  ): Promise<void> {
     const reserva = await this.contexto.ejecutar(principal.empresaId, () =>
       this.reservarCambio(principal.usuarioId!),
     );
@@ -562,20 +609,22 @@ export class SesionesService {
       throw credencialesInvalidas();
     }
 
-    const { usuario, turno } = reserva;
-    const correcta = await this.evaluarContrasena(entrada.actual, usuario.hash_contrasena);
-    if (!correcta) {
-      await this.ponerBloqueoSiCorresponde(principal.empresaId, usuario);
-      throw credencialesInvalidas();
-    }
-    const hash = await this.credenciales.hashContrasena(entrada.nueva);
-    const resultado = await this.contexto.ejecutar(
-      principal.empresaId,
-      () => this.aplicarCambio(principal, usuario, hash, turno),
-      { actor: { usuarioId: usuario.id, equipoId: principal.equipoId } },
-    );
-    if (resultado.bloquear) await this.ponerBloqueoSiCorresponde(principal.empresaId, usuario);
-    if ('error' in resultado.resultado) throw resultado.resultado.error;
+    const { usuario } = reserva;
+    await this.conLiberacion(principal.empresaId, usuario.id, async () => {
+      const correcta = await this.evaluarContrasena(entrada.actual, usuario.hash_contrasena);
+      if (!correcta) {
+        await this.resolverFallo(principal.empresaId, usuario);
+        throw credencialesInvalidas();
+      }
+      const hash = await this.credenciales.hashContrasena(entrada.nueva);
+      const resultado = await this.contexto.ejecutar(
+        principal.empresaId,
+        () => this.aplicarCambio(principal, usuario, hash),
+        { actor: { usuarioId: usuario.id, equipoId: principal.equipoId } },
+      );
+      if ('error' in resultado) throw resultado.error;
+      this.tope.olvidar(claveDeIngresoUsuario(usuario.nombre_usuario));
+    });
   }
 
   /** Tiempo 1 del cambio de contraseña: igual que `reservarIngreso`, pero por el id de la sesión. */
@@ -600,8 +649,7 @@ export class SesionesService {
     principal: Principal,
     verificado: FilaUsuario,
     hash: string,
-    turno: number,
-  ): Promise<{ resultado: Resultado<true>; bloquear: boolean }> {
+  ): Promise<Resultado<true>> {
     const usuarios = await this.conexion.query<FilaUsuario>(
       `SELECT id, nombre, nombre_usuario, hash_contrasena, contrasena_temporal, horario,
               es_administrador, activo
@@ -616,7 +664,8 @@ export class SesionesService {
       !usuario.activo ||
       usuario.hash_contrasena !== verificado.hash_contrasena
     ) {
-      return { resultado: { error: credencialesInvalidas() }, bloquear: false };
+      await this.bloqueos.liberarReserva('CONTRASENA_USUARIO', verificado.id, ahora);
+      return { error: credencialesInvalidas() };
     }
     await this.conexion.query(
       `UPDATE usuario SET hash_contrasena = $2, contrasena_temporal = false, actualizado_en = $3
@@ -629,21 +678,15 @@ export class SesionesService {
         WHERE usuario_id = $1 AND id <> $2 AND cerrada_en IS NULL`,
       { bind: [usuario.id, principal.sesionId, ahora] },
     );
-    // Perdona los intentos hasta su turno; un bloqueo vigente no se toca (criterio 61).
-    const bloquear = await this.bloqueos.liberarIntento(
-      'CONTRASENA_USUARIO',
-      usuario.id,
-      ahora,
-      turno,
-      FALLOS_PARA_BLOQUEAR_CONTRASENA,
-    );
+    // Contraseña actual correcta: la cuenta de fallos vuelve a cero; un bloqueo vigente no se toca (criterio 61).
+    await this.bloqueos.resolverExito('CONTRASENA_USUARIO', usuario.id, ahora);
     await this.auditoria.registrar({
       accion: 'cambiar_contrasena',
       entidad: 'usuario',
       entidadId: usuario.id,
       detalle: { usuarioId: usuario.id, eraTemporal: usuario.contrasena_temporal },
     });
-    return { resultado: { ok: true }, bloquear };
+    return { ok: true };
   }
 
   // ---- Salida ----------------------------------------------------------------------------------

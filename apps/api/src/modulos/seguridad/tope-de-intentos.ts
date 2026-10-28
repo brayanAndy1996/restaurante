@@ -3,14 +3,11 @@ import { ErrorAplicacion } from '../../nucleo/errores/error-aplicacion';
 
 /** Ingresos simultáneos que se aceptan para un mismo nombre de usuario (más que los 5 que puede evaluar un bloqueo). */
 const MAXIMO_INGRESOS_POR_NOMBRE = 10;
-/** Evaluaciones falsas simultáneas que se aceptan para un mismo nombre sin cuenta activa. */
-const MAXIMO_FALSAS_POR_NOMBRE = 1;
 /**
- * Evaluaciones falsas simultáneas en todo el proceso. El pool de hilos de libuv tiene 4 y un scrypt tarda
- * ~100 ms: con 2, las falsas ocupan como mucho la mitad de los hilos y los ingresos reales de otras
- * empresas siempre encuentran hilo libre.
+ * Cuánto espera un ingreso su turno detrás de los demás ingresos del mismo nombre. Con 10 como máximo y un
+ * ingreso de ~150 ms, la espera normal es de ~1,5 s; pasado esto algo anda mal y se responde 429 de 1 s.
  */
-const MAXIMO_FALSAS_TOTAL = 2;
+const ESPERA_TURNO_MS = 5_000;
 
 /** Ingresos simultáneos del mismo nombre desde los que se considera una ráfaga (y no un reintento normal). */
 const UMBRAL_RAFAGA = 3;
@@ -19,11 +16,11 @@ const MEMORIA_SIN_CUENTA_MS = 2_000;
 const MAXIMO_RECUERDOS = 1_000;
 
 /**
- * Lo que el servidor rechaza al instante cuando un mismo nombre recibe demasiados ingresos a la vez:
- * 429 `BLOQUEO_TEMPORAL` con `reintentarEnSegundos` de 1 (el mismo código que ya responde una cuenta
- * bloqueada, así una ráfaga solo ve 401 y 429 sea cual sea el nombre).
+ * Lo que el servidor rechaza al instante cuando hay demasiados ingresos a la vez (por nombre o en todo el
+ * proceso): 429 `BLOQUEO_TEMPORAL` con `reintentarEnSegundos` de 1 (el mismo código que ya responde una cuenta
+ * bloqueada, así una ráfaga solo ve 401 y 429 sea cual sea el nombre). **No cuenta como fallo.**
  */
-const demasiadosALaVez = () =>
+export const demasiadosALaVez = () =>
   new ErrorAplicacion(
     429,
     'BLOQUEO_TEMPORAL',
@@ -32,17 +29,29 @@ const demasiadosALaVez = () =>
     1,
   );
 
+/** Clave de los topes del ingreso con contraseña de un nombre de usuario de empresa (ya normalizado). */
+export const claveDeIngresoUsuario = (nombre: string): string => `contrasena:${nombre}`;
+
+interface TurnoPorNombre {
+  /** Quienes esperan el turno, en orden de llegada. */
+  espera: { resolver: () => void; temporizador: NodeJS.Timeout }[];
+}
+
 /**
- * Topes de **concurrencia** para los ingresos con contraseña (criterio 5, RNF-03). Una ráfaga contra un solo
- * nombre no puede dejar sin servicio a las demás empresas: lo que excede el tope se rechaza sin tocar la base
- * ni el pool de hilos, así no hace cola por delante de otros ingresos.
+ * Topes de **concurrencia** por nombre para los ingresos con contraseña (criterio 5, RNF-03). Una ráfaga contra
+ * un solo nombre no puede dejar sin servicio a las demás empresas: lo que excede el tope se rechaza sin tocar la
+ * base ni el pool de hilos, así no hace cola por delante de otros ingresos. El tope global del scrypt (real o
+ * falso) y el reparto entre empresas son de `CupoScrypt`.
  *
  * - `entrar`: tope de ingresos en curso por nombre, antes de cualquier consulta. Es holgado respecto de los 5
  *   intentos que puede evaluar una cuenta real (criterio 12, que cuenta la base de forma exacta): solo recorta
  *   las ráfagas.
- * - `conTopeFalso`: tope del scrypt que se gasta con un nombre **sin cuenta activa** (inexistente o inactivo)
- *   para igualar tiempos (criterio 11). Ese nombre no tiene fila donde contar y no se bloquea nunca, así que
- *   sin tope una ráfaga pondría cientos de scrypt en la cola del pool de hilos del proceso.
+ * - `conTurno`: los ingresos de un mismo nombre se evalúan **uno detrás de otro** dentro del proceso. Así una
+ *   cuenta no ocupa varios cupos del scrypt a la vez ni apila reservas esperando el bloqueo de su fila, y los
+ *   intentos de una ráfaga se resuelven en el orden en que llegaron (la base sigue siendo la que cuenta de
+ *   forma exacta entre procesos).
+ * - Memorias de 2 s (`esSinCuentaReciente`, `bloqueoReciente`): solo se consultan cuando el nombre está en
+ *   ráfaga y se olvidan al crear o reactivar un usuario o cambiarle la contraseña.
  *
  * Cuentan lo que está **en curso**, no los intentos: nada dura más que una petición, así que quien escribe mal
  * un nombre una y otra vez, una por una, sigue recibiendo 401. Los topes son por proceso (cada réplica de la
@@ -51,14 +60,14 @@ const demasiadosALaVez = () =>
 @Injectable()
 export class TopeDeIntentos {
   private readonly ingresos = new Map<string, number>();
-  private readonly falsas = new Map<string, number>();
-  private totalFalsas = 0;
+  private readonly turnos = new Map<string, TurnoPorNombre>();
   private readonly sinCuenta = new Map<string, number>();
   private readonly bloqueados = new Map<string, { hasta: Date; expira: number }>();
 
   /**
    * Reserva un lugar para un ingreso de `clave` (nombre normalizado con prefijo por tipo de cuenta); 429 si no
-   * hay. `enRafaga` dice si ese nombre ya tiene varios ingresos simultáneos (lo usa `recordarSinCuenta`).
+   * hay. `enRafaga` dice si ese nombre ya tiene varios ingresos simultáneos (decide si se consultan y se
+   * escriben las memorias).
    */
   entrar(clave: string): { soltar: () => void; enRafaga: boolean } {
     const propios = this.ingresos.get(clave) ?? 0;
@@ -68,9 +77,55 @@ export class TopeDeIntentos {
   }
 
   /**
+   * Corre `fn` cuando le toque el turno de `clave`: un ingreso a la vez por nombre, en orden de llegada. Si el
+   * turno tarda más de `ESPERA_TURNO_MS`, 429 de 1 s sin haber evaluado nada.
+   */
+  async conTurno<T>(clave: string, fn: () => Promise<T>): Promise<T> {
+    await this.tomarTurno(clave);
+    try {
+      return await fn();
+    } finally {
+      this.soltarTurno(clave);
+    }
+  }
+
+  private tomarTurno(clave: string): Promise<void> {
+    const turno = this.turnos.get(clave);
+    if (turno === undefined) {
+      this.turnos.set(clave, { espera: [] });
+      return Promise.resolve();
+    }
+    return new Promise<void>((resolver, rechazar) => {
+      const entrada = {
+        resolver,
+        temporizador: setTimeout(() => {
+          const posicion = turno.espera.indexOf(entrada);
+          if (posicion >= 0) turno.espera.splice(posicion, 1);
+          rechazar(demasiadosALaVez());
+        }, ESPERA_TURNO_MS),
+      };
+      entrada.temporizador.unref();
+      turno.espera.push(entrada);
+    });
+  }
+
+  private soltarTurno(clave: string): void {
+    const turno = this.turnos.get(clave);
+    if (turno === undefined) return;
+    const siguiente = turno.espera.shift();
+    if (siguiente === undefined) {
+      this.turnos.delete(clave);
+      return;
+    }
+    clearTimeout(siguiente.temporizador);
+    siguiente.resolver(); // el turno pasa a quien sigue sin quedar libre
+  }
+
+  /**
    * ¿Se vio hace un instante, en plena ráfaga, que este nombre no tiene cuenta activa? Si sí, quien llama
    * puede pasar directo al scrypt falso sin volver a preguntárselo a la base. Solo se recuerda durante una
-   * ráfaga y unos segundos (`recordarSinCuenta`): un reintento normal siempre consulta la base.
+   * ráfaga y unos segundos (`recordarSinCuenta`) y quien llama solo la consulta si la petición actual también
+   * está en ráfaga: un reintento normal siempre consulta la base.
    */
   esSinCuentaReciente(clave: string): boolean {
     const expira = this.sinCuenta.get(clave);
@@ -105,20 +160,13 @@ export class TopeDeIntentos {
     recordar(this.bloqueados, clave, { hasta, expira: Date.now() + MEMORIA_SIN_CUENTA_MS });
   }
 
-  /** Corre `evaluar` (el scrypt falso) si hay lugar; si no, 429 al instante sin evaluar. */
-  async conTopeFalso(clave: string, evaluar: () => Promise<void>): Promise<void> {
-    const propias = this.falsas.get(clave) ?? 0;
-    if (propias >= MAXIMO_FALSAS_POR_NOMBRE || this.totalFalsas >= MAXIMO_FALSAS_TOTAL) {
-      throw demasiadosALaVez();
-    }
-    this.falsas.set(clave, propias + 1);
-    this.totalFalsas += 1;
-    try {
-      await evaluar();
-    } finally {
-      this.totalFalsas -= 1;
-      soltarUno(this.falsas, clave)();
-    }
+  /**
+   * Olvida lo que se recuerda de `clave`: se llama cuando el nombre pasa a tener cuenta activa (usuario creado
+   * o reactivado) o cambia su contraseña, para que el siguiente ingreso consulte la base.
+   */
+  olvidar(clave: string): void {
+    this.sinCuenta.delete(clave);
+    this.bloqueados.delete(clave);
   }
 }
 

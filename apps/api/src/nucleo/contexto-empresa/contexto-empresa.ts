@@ -125,6 +125,17 @@ export class ContextoEmpresa {
     await this.conexion.query(SQL_FIJAR_ACTOR, { bind: argumentos, transaction: transaccion });
   }
 
+  /**
+   * Registra un efecto secundario que debe correr **después** de confirmar la transacción en curso (no corre
+   * si se revierte). Exige un contexto activo.
+   */
+  alConfirmar(efecto: () => void): void {
+    this.empresaActual(); // exige un contexto activo, como el resto de la API
+    const transaccion = estadoActual()?.transaccion;
+    if (transaccion === undefined) throw new ContextoEmpresaAusenteError();
+    transaccion.afterCommit(efecto);
+  }
+
   /** Empresa del contexto activo; lanza `ContextoEmpresaAusenteError` si no hay contexto. */
   empresaActual(): string {
     const empresaId = estadoActual()?.empresaId;
