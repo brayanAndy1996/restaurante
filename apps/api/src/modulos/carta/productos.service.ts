@@ -123,9 +123,10 @@ const ordenInvalido = () =>
  *
  * **Orden de bloqueo** (para no formar esperas cruzadas con `GruposService`, que bloquea el grupo y después
  * los productos ligados, y con el orden de una familia): familia, estación, grupos y, al final, productos
- * (varios productos, siempre ordenados por id). Un `PATCH` bloquea antes de leer el producto la familia de
- * destino, los grupos que el cuerpo menciona y, juntos y en orden de id, el producto y sus componentes
- * (`bloquearEnOrden`); un alta lee familia, estación, grupos y componentes en ese orden.
+ * (varios productos, siempre ordenados por id). Un `PATCH` toma primero un cerrojo por producto y después
+ * bloquea antes de leer el producto la familia de destino, los grupos que el cuerpo menciona y, juntos y en
+ * orden de id, el producto y sus componentes (`bloquearEnOrden`); un alta lee familia, estación, grupos y
+ * componentes en ese orden.
  */
 @Injectable()
 export class ProductosService {
@@ -620,10 +621,24 @@ export class ProductosService {
    * bloquea el grupo y luego sus productos ligados `FOR SHARE`; si este `PATCH` tomara primero el producto
    * `FOR UPDATE` y después el grupo `FOR SHARE`, dos peticiones que se esperen entre sí (un producto que es
    * el ligado de un grupo que se le asigna) formarían un abrazo mortal. Lo mismo vale para la familia, que
-   * `ordenarDeFamilia` bloquea antes que sus productos. Las lecturas previas no bloquean; si el producto no
-   * existe no se bloquea nada y el 404 sale al leerlo.
+   * `ordenarDeFamilia` bloquea antes que sus productos.
+   *
+   * **Por qué primero un cerrojo por producto.** Qué familia y qué grupos hay que bloquear depende de la
+   * familia, el estado `activo` y los grupos que el producto tiene guardados, y los tres solo los cambia otro
+   * `PATCH` del mismo producto. Si esa lectura se hiciera sin protección, otro `PATCH` podría cambiarlos entre
+   * la lectura y el bloqueo del producto, y `modificar` terminaría pidiendo la familia (o los grupos) después
+   * de tener el producto: el orden roto de arriba. Por eso lo primero es un cerrojo de transacción
+   * (`pg_advisory_xact_lock`) con la clave del producto: los `PATCH` del mismo producto se turnan, y el que
+   * entra lee lo que dejó el anterior ya confirmado, sin que nadie pueda cambiárselo hasta que termine. Este
+   * cerrojo no forma ciclos: se pide siempre primero y uno solo por petición, cuando la transacción aún no
+   * retiene nada que otra espere. (Un `SAVEPOINT` para reintentar no se puede: la guarda de la API lo rechaza.)
+   * Si el producto no existe no se bloquea más y el 404 sale al leerlo.
    */
   private async bloquearEnOrden(id: string, cambios: ProductoModificarEntrada): Promise<void> {
+    await this.conexion.query('SELECT pg_advisory_xact_lock(hashtextextended($1::uuid::text, 0))', {
+      bind: [id],
+      type: QueryTypes.SELECT,
+    });
     const previo = (
       await this.conexion.query<{ familia_id: string; activo: boolean }>(
         'SELECT familia_id, activo FROM producto WHERE id = $1',
