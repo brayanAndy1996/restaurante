@@ -1,4 +1,5 @@
 // spec: 002-plataforma-y-acceso (pruebas protegidas)
+// Ajustado por 003-carta, decisión del usuario 5 (2026-10-28): EDITAR_CARTA permitido para el Cajero.
 //
 // P6 · Criterios 44 a 53 (clave de supervisor): `POST /autorizaciones` con PIN de 6 dígitos y su
 // auditoría, PIN rechazado en cada caso del criterio 45 (con la cuenta y la auditoría guardadas
@@ -52,7 +53,7 @@ class SondaPermisoController {
   @Post('prohibido')
   @HttpCode(200)
   @RequiereSucursal()
-  @Permiso('EDITAR_CARTA')
+  @Permiso('ADMINISTRAR')
   prohibido() {
     contar('prohibido');
     return { ejecutado: true };
@@ -450,7 +451,7 @@ describe('criterio 46 · validaciones previas (no cuentan fallo)', () => {
     const token = await sesionDe(c);
     for (let i = 0; i < 6; i++) {
       esperarError(
-        await autorizar(token, supervisor.pin, { accion: 'EDITAR_CARTA' }),
+        await autorizar(token, supervisor.pin, { accion: 'ADMINISTRAR' }),
         403,
         'PROHIBIDO',
       );
@@ -870,7 +871,7 @@ describe('criterio 52 · soporte', () => {
     const antes = ejecuciones('clave');
     expect((await sonda('clave', soporte)).status).toBe(200);
     expect(ejecuciones('clave')).toBe(antes + 1);
-    // EDITAR_CARTA es permitido al Administrador, y la sesión de soporte lo es.
+    // ADMINISTRAR es permitido al Administrador, y la sesión de soporte lo es.
     expect((await sonda('prohibido', soporte)).status).toBe(200);
   });
 });

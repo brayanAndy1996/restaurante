@@ -1,4 +1,5 @@
 // spec: 002-plataforma-y-acceso (pruebas protegidas)
+// Ajustado por 003-carta, decisión del usuario 5 (2026-10-28): EDITAR_CARTA permitido para el Cajero.
 //
 // P6 · Criterios 43 y 53 (matriz) · `requisitoPermiso`, `puedeAutorizar`, `alcanceReportes` y
 // `permisosDeRol` de `packages/dominio`: una prueba por cada celda de la tabla "Roles y permisos" del
@@ -52,7 +53,7 @@ const MATRIZ: Record<Accion, Fila> = {
   GESTIONAR_DISPONIBILIDAD: [x, x, p, p, p],
   REGISTRAR_INGRESO_MERCADERIA: [x, p, x, p, p],
   AJUSTAR_STOCK: [x, x, x, p, p],
-  EDITAR_CARTA: [x, x, x, x, p],
+  EDITAR_CARTA: [x, p, x, x, p],
   ADMINISTRAR: [x, x, x, x, p],
 };
 

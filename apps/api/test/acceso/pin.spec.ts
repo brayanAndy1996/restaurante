@@ -1,4 +1,5 @@
 // spec: 002-plataforma-y-acceso (pruebas protegidas)
+// Ajustado por 003-carta, decisión del usuario 5 (2026-10-28): EDITAR_CARTA permitido para el Cajero.
 //
 // P5 · Criterios 33 a 42 (ingreso con PIN, cambio rápido e inactividad): el PIN solo sirve en equipos
 // que recuerdan a la persona, bloqueo por persona en el equipo (5.º y 10.º fallo) y olvido al 15.º,
@@ -901,7 +902,7 @@ describe('criterio 42 · GET /sesion de una sesión PIN', () => {
       COBRAR: 'permitido',
       OPERAR_CAJA: 'permitido',
       USAR_KDS: 'prohibido',
-      EDITAR_CARTA: 'prohibido',
+      EDITAR_CARTA: 'permitido',
     });
   });
 
