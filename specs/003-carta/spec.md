@@ -275,7 +275,7 @@ Cada fila lleva actor, empresa, sucursal si aplica, equipo si aplica, sesión y 
 - Un producto `SIMPLE` que no se vende solo y no es componente ni producto ligado de nada: no aparece en el comandero ni en la carta web; la edición muestra "Usado en: nada" para que quien edita la carta lo note.
 - Precio de sucursal igual al de la empresa: se guarda tal cual; si luego cambia el de la empresa, la sucursal conserva el suyo. Para volver a seguir el de la empresa se pone `null`.
 - Dos productos con nombres que solo difieren en mayúsculas o espacios en los extremos: el segundo responde 409 (los textos se recortan).
-- Foto subida y transacción que falla después: el archivo nuevo queda huérfano en el almacén (no lo apunta ningún producto); ver "Riesgos" del plan.
+- Foto subida y transacción que falla después: el producto conserva su foto anterior y la API borra el archivo nuevo (compensación). Solo queda huérfano en el almacén si el proceso muere entre la subida y la confirmación, o si ese borrado falla. Ver "Fotos" y "Riesgos" del plan.
 - Un combo con un componente que no se vende solo: válido (por ejemplo "Papas del combo"); su disponibilidad cuenta para el combo.
 - Afectación `EXONERADO` en una empresa cuyo emisor es del Nuevo RUS: se guarda; qué comprobante sale y cómo lo decide la sección 4.
 - Una cadena con sucursales en zonas con tratamiento tributario distinto (por ejemplo, la Amazonía): la afectación es por producto y no por sucursal (decisión 10).

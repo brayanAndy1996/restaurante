@@ -86,7 +86,7 @@ Fuera del módulo, `nucleo/archivos/cuerpo-binario.ts` lee el cuerpo de la foto 
 5. Las violaciones de unicidad (`23505` sobre `lower(nombre)`) se traducen a 409 `CONFLICTO`; las de llave foránea que escapen a la validación previa (carreras con una desactivación), a 422 `REFERENCIA_INVALIDA`.
 
 - **Listas que se reemplazan** (`gruposModificadores`, `componentes`, `modificadores` del grupo): se calcula la diferencia con lo guardado; en `producto_grupo` y `componente_combo` se borran las filas que salen y se insertan o actualizan las demás con su orden; en `modificador` los que salen pasan a `activo = false`.
-- **`EN_USO`:** antes de desactivar una estación, una familia o un grupo, se cuentan los productos activos que los usan, con la fila bloqueada `FOR UPDATE`, para que una creación concurrente no se cuele (la creación de un producto lee la familia y la estación con `FOR SHARE`).
+- **`EN_USO`:** antes de desactivar una estación, una familia o un grupo, se cuentan los productos activos que los usan, con la fila bloqueada `FOR UPDATE`, para que una creación concurrente no se cuele (la creación de un producto lee la familia con `FOR UPDATE`, porque además toma su orden, y la estación y los grupos con `FOR SHARE`).
 - **Orden:** `PUT …/orden` bloquea las filas de la empresa (familias) o de la familia (productos) con `FOR UPDATE`, comprueba que `ids` sea exactamente ese conjunto y reescribe `orden` = posición. Un producto o una familia nuevos toman `max(orden) + 1` con la misma fila de la familia bloqueada.
 - **Reglas sobre el resultado:** las reglas del criterio 7 se comprueban sobre el resultado de mezclar lo guardado con lo enviado, en el orden de rechazos del criterio 10.
 - **Orden de bloqueo:** familia, estación, grupos, producto y, al final, componentes. Dos transacciones que toman las mismas filas en el mismo orden se esperan pero no se bloquean mutuamente (un abrazo mortal lo corta PostgreSQL abortando una de las dos, que respondería 500). Cada paso del orden sale de quién bloquea qué:
@@ -94,11 +94,11 @@ Fuera del módulo, `nucleo/archivos/cuerpo-binario.ts` lee el cuerpo de la foto 
   - **Estación antes que producto:** desactivar una estación la bloquea `FOR UPDATE` y cuenta los productos activos sin bloquearlos; el alta lee la estación `FOR SHARE` antes de insertar. En el `PATCH` la estación se lee `FOR SHARE` después del producto, lo que no forma un ciclo porque quien tiene una estación bloqueada nunca espera a un producto.
   - **Grupos antes que producto:** `GruposService.modificar` bloquea el grupo y sus modificadores `FOR UPDATE` y después lee sus productos ligados `FOR SHARE`. Si el `PATCH` de un producto tomara primero el producto `FOR UPDATE` y después el grupo `FOR SHARE`, un producto que es el ligado de un grupo que se le asigna formaría un ciclo. Por eso `ProductosService.bloquearEnOrden` toma, antes de leer el producto, la familia de destino (si cambia o se reactiva) y los grupos del cuerpo (y los guardados, si se reactiva), ordenados por id.
   - **Componentes después del producto:** el `PATCH` de un combo bloquea el combo `FOR UPDATE` y después lee sus componentes `FOR SHARE` (`referencias.ts`). Un componente es `SIMPLE`, así que no bloquea nada más. La excepción es un cambio de tipo cruzado (X pasa a combo con Y como componente mientras Y pasa a combo con X): cada uno tiene su producto y espera al otro. Es una falla de la ronda 1 de T30 y está en corrección.
-- **Bloqueos que no frenan las llaves foráneas:** el ajuste por sucursal y el armado del menú del día bloquean el producto `FOR NO KEY UPDATE` y no `FOR UPDATE`. Así se serializan entre sí (el antes de la auditoría es exacto) y con un `PATCH` o un cambio de tipo (`FOR UPDATE`), pero no frenan las inserciones de filas hijas que solo comprueban la llave foránea del producto (`FOR KEY SHARE`), como otro ajuste en otra sucursal o un agotado.
+- **Bloqueos que no frenan las llaves foráneas:** el ajuste por sucursal y el armado del menú del día bloquean el producto `FOR NO KEY UPDATE` y no `FOR UPDATE`. Así se serializan entre sí (el antes de la auditoría es exacto) y con un `PATCH` o un cambio de tipo (`FOR UPDATE`), pero no frenan las inserciones de filas hijas que solo comprueban la llave foránea del producto (`FOR KEY SHARE`), como marcar un agotado del mismo producto.
 
 ### Cambio de tipo (criterios 10b a 10d)
 
-1. `PATCH /carta/productos/:id` bloquea el producto con `FOR UPDATE`. Si `tipo` viene y es distinto del guardado, es un cambio de tipo.
+1. `PATCH /carta/productos/:id` bloquea primero la familia y los grupos que va a validar (`bloquearEnOrden`, ver "Orden de bloqueo") y después el producto con `FOR UPDATE`. Si `tipo` viene y es distinto del guardado, es un cambio de tipo.
 2. Mezcla lo guardado con lo enviado: a `COMBO` o `MENU_DEL_DIA`, `estacion_id = null` y `se_vende_solo = true`; a `SIMPLE`, exige `estacionId` en la entrada (400 si falta) y deja `componentes` vacío. Valida el criterio 7 sobre el resultado (400).
 3. A `COMBO` o `MENU_DEL_DIA`: `cambio-tipo.ts` busca dónde se usa el producto con dos consultas (`componente_combo` por `producto_id`, con el nombre del combo; `modificador` activo por `producto_id`, con su grupo). Si hay alguna fila, 409 `EN_USO` con `usadoEn` y el mensaje armado con los nombres.
 4. Si queda `seVendeSolo: false` y hay filas de `producto_sucursal` con `precio` no nulo, 409 `CONFLICTO` (criterio 10d).
@@ -110,17 +110,30 @@ Fuera del módulo, `nucleo/archivos/cuerpo-binario.ts` lee el cuerpo de la foto 
 ### Fotos
 
 ```
-PUT /carta/productos/:id/foto  (Content-Type image/*, cuerpo binario ≤ 1 MB)
- → analizador binario propio de esta ruta (413 si excede; 415 si el tipo no es jpeg, png o webp)
- → leerImagen(buffer): formato por firma (FF D8 FF; 89 50 4E 47; RIFF....WEBP) y dimensiones
-   (SOF de JPEG, IHDR de PNG, VP8/VP8L/VP8X de WebP); sin dependencias nativas → 422 FOTO_INVALIDA
- → producto bajo RLS con FOR UPDATE (404 si no existe en la empresa)
- → clave = carta/<empresaActual>/<productoId>/<uuid>.<ext>; AlmacenArchivos.guardar(clave, buffer, tipo)
- → UPDATE producto SET foto_clave = clave; auditoría cambiar_foto_producto
- → alConfirmar: borrar la clave anterior (si había) y publicar carta.actualizada
+PUT /carta/productos/:id/foto  (@SinEmpresa(), @Permiso('EDITAR_CARTA'); Content-Type image/*, cuerpo binario ≤ 1 MB)
+ → analizadorBinarioDeFoto (nucleo/archivos/cuerpo-binario.ts), middleware de Express solo para esta ruta:
+   413 CUERPO_DEMASIADO_GRANDE si Content-Length o lo leído pasa de 1 MB (sin acumularlo);
+   415 si viene comprimido; con otro Content-Type no lee el cuerpo y el controlador responde 415
+ → 1. Validar la imagen, sin base de datos: leerImagen(buffer), formato por firma (FF D8 FF; 89 50 4E 47;
+      RIFF....WEBP) y dimensiones (SOF de JPEG, IHDR de PNG, VP8/VP8L/VP8X de WebP), sin dependencias
+      nativas; formato que no coincide con el Content-Type o lados fuera de 200 a 2048 → 422 FOTO_INVALIDA
+ → 2. Transacción corta 1 (ContextoEmpresa.ejecutar con la empresa y el actor de la sesión):
+      SELECT del producto bajo RLS → 404 si no es de la empresa. Confirma y devuelve la conexión al pool
+ → 3. Fuera de toda transacción: clave = carta/<empresa de la sesión>/<productoId>/<uuid>.<ext>;
+      AlmacenArchivos.guardar(clave, buffer, tipo)
+ → 4. Transacción corta 2: producto FOR UPDATE (404 si ya no existe) y lectura de la clave anterior;
+      UPDATE producto SET foto_clave = clave; auditoría cambiar_foto_producto (claveAnterior, claveNueva);
+      alConfirmar: borrar la clave anterior (solo si está bajo carta/<empresa>/) y publicar carta.actualizada
+ → si la transacción 2 lanza (también un COMMIT que falla): compensación, borrar la clave nueva;
+   si el borrado falla, solo se registra en el log
+ → 200 { fotoUrl }
 ```
 
-- La subida al almacén ocurre dentro de la petición y antes de confirmar: si la transacción falla después, el archivo nuevo queda huérfano (riesgo aceptado, ver "Riesgos"). El servicio intenta borrar el archivo nuevo si la operación lanza antes de devolver; un `COMMIT` fallido no tiene ese aviso.
+- **Por qué dos transacciones:** la subida a R2 puede tardar hasta 20 s. Dentro de la transacción de la petición retendría una conexión del pool todo ese tiempo, y agotar el pool afecta a todas las empresas (RNF-03). Por eso la ruta es `@SinEmpresa()` y el servicio abre dos transacciones cortas, una antes y otra después de la subida.
+- **Compensación:** si la transacción 2 falla, el producto conserva su foto anterior y el archivo nuevo se borra. Un archivo queda huérfano solo si el proceso muere entre la subida y el final de la transacción 2, o si la compensación misma falla (ver "Riesgos").
+- **Riesgo raro de la compensación:** si el `COMMIT` de la transacción 2 se aplica en el servidor pero el cliente ve un error (por ejemplo, la conexión se corta justo después), la compensación borra el archivo al que ya apunta el producto. El producto queda con una foto rota hasta que se suba otra (ver "Riesgos").
+- **Orden de los rechazos:** el analizador corre antes que la guarda de permisos de Nest, así que hoy un rol sin permiso que manda más de 1 MB recibe 413 y no 403. Es una falla de la ronda 1 de T30 y está en corrección para que el 403 salga primero.
+- `DELETE /carta/productos/:id/foto` no sube nada: corre en la transacción de la petición, bloquea el producto `FOR UPDATE`, pone `foto_clave` en nulo, audita `quitar_foto_producto` y borra la clave anterior con `alConfirmar`. Sin foto, no hace nada.
 - `AlmacenR2` usa la API compatible con S3 de R2 con firmas SigV4 (`aws4fetch`, JavaScript puro y sin dependencias nativas; se descartó `@aws-sdk/client-s3` por su tamaño). Guarda con `Cache-Control: public, max-age=31536000, immutable`: cada foto tiene una clave nueva, así que nunca hay que invalidar caché.
 - La URL pública es `ARCHIVOS_URL_PUBLICA` + clave (un dominio propio del bucket detrás de Cloudflare). El token de R2 tiene permiso solo sobre ese bucket.
 - `AlmacenEnDisco` escribe en `ARCHIVOS_DIRECTORIO` y la API lo sirve con `express.static` en `/archivos`, montado fuera de Nest, solo en `development`. `cargarEntorno` rechaza `ARCHIVOS_DRIVER=disco` fuera de `development` y exige `r2` en `production`.
@@ -129,7 +142,12 @@ PUT /carta/productos/:id/foto  (Content-Type image/*, cuerpo binario ≤ 1 MB)
 
 ### Ajustes por sucursal
 
-`producto_sucursal` guarda solo lo que difiere: `PUT` hace `INSERT … ON CONFLICT (producto_id, sucursal_id) DO UPDATE` y, si el resultado es el valor por defecto (`precio` nulo y `disponible`), deja la fila igual (no la borra, para no perder la trazabilidad del último cambio). `noDisponibleEn` del alta inserta filas con `disponible = false`. La sucursal se valida con `SucursalesConsultaService.existen` (404 si no es de la empresa) y después con `exigirAjustarSucursal` (403 para el Cajero en una sucursal donde no es Cajero, criterio 19b), antes de cualquier lectura con bloqueo o escritura.
+`producto_sucursal` guarda solo lo que difiere: `PUT` hace `INSERT … ON CONFLICT (producto_id, sucursal_id) DO UPDATE` y, si el resultado es el valor por defecto (`precio` nulo y `disponible`), deja la fila igual (no la borra, para no perder la trazabilidad del último cambio). `noDisponibleEn` del alta inserta filas con `disponible = false` (las sucursales se validan con `SucursalesConsultaService.existen`). El `PUT` sigue este orden:
+
+1. Lee el producto con `FOR NO KEY UPDATE` (404 si no es de la empresa). El bloqueo serializa dos ajustes del mismo producto y un ajuste con un `PATCH` del producto (`FOR UPDATE`), sin frenar las llaves foráneas (ver "Orden de bloqueo").
+2. Lee la sucursal con `SucursalesConsultaService.listar([sucursalId])` (404 si no es de la empresa).
+3. `exigirAjustarSucursal` (403 para el Cajero en una sucursal donde no es Cajero, criterio 19b), antes de leer o escribir `producto_sucursal`.
+4. Lee la fila de `producto_sucursal` con `FOR UPDATE`, calcula la diferencia y, si hay cambios, escribe, audita y registra `carta.actualizada` de la sucursal.
 
 ### Agotados
 
@@ -140,24 +158,32 @@ PUT /carta/productos/:id/foto  (Content-Type image/*, cuerpo binario ≤ 1 MB)
 
 ### Menú del día
 
-- `GET`: valida `dia` contra el día operativo actual (anterior, actual o siguiente), carga los productos `MENU_DEL_DIA` activos y disponibles con sus grupos y modificadores activos (`cargador-carta.ts`) y las filas de `menu_del_dia_opcion` de ese día.
-- `PUT`: bloquea el producto `FOR SHARE`, valida cada opción contra los modificadores activos de los grupos activos asignados al menú, compara con las opciones guardadas para ese día (no-op si son iguales), borra las que salen e inserta las nuevas, audita con el antes y el después, y publica `carta.actualizada` para la sucursal.
+- `GET`: valida `dia` contra el día operativo actual (anterior, actual o siguiente) y arma la respuesta con tres consultas fijas propias de `MenuDelDiaService` (no usa `cargador-carta.ts`): los productos `MENU_DEL_DIA` activos y disponibles en la sucursal; sus grupos activos con los modificadores activos y el estado del producto ligado (activo, disponible en la sucursal, agotado); y las filas de `menu_del_dia_opcion` de ese día. `disponible` de cada opción sale de `productoDisponible` de `disponibilidad-carta.ts`, la misma regla que usa la vista, evaluada con el día operativo actual aunque se consulte ayer o mañana.
+- `PUT`: bloquea el producto `FOR NO KEY UPDATE` (404 si no es un `MENU_DEL_DIA` de la empresa). Así se serializan dos armados del mismo menú, y un armado con un `PATCH` del producto (`FOR UPDATE`), que en un cambio de tipo borra las opciones. Después valida el día (hoy o mañana, 400) y valida cada opción contra los modificadores activos de los grupos activos asignados al menú, leídos `FOR SHARE` (422). Compara con las opciones guardadas para ese día (no-op si son iguales), borra las que salen e inserta las nuevas, audita con el antes y el después, y registra `carta.actualizada` para la sucursal.
+- Las filas de días pasados se quedan en la tabla: nada las borra salvo un cambio de tipo (ver "Riesgos").
 
 ### Vista de la sucursal y `prepararLinea`
 
-`cargador-carta.ts` arma la carta de una sucursal con seis consultas fijas, sin importar cuántos productos haya (criterio 50):
+Cada petición a `GET /carta/sucursal` hace siete consultas fijas, sin importar cuántos productos haya (criterio 50). La primera es la hora de corte de la sucursal, con `SucursalesConsultaService.horaCorte`: la tabla `sucursal` es del módulo de plataforma y la carta no la consulta. Con ella, `CartaVentaService` calcula el día operativo con el reloj de la API (404 si la sucursal no es de la empresa). Las otras seis son las de `cargador-carta.ts`:
 
-1. productos activos de familias activas, con `LEFT JOIN` a `producto_sucursal` y `producto_agotado` de la sucursal;
+1. todos los productos de la empresa (activos e inactivos, de cualquier familia, con `familia.activa`), con `LEFT JOIN` a `producto_sucursal` y `producto_agotado` de la sucursal. Se cargan también los inactivos porque un componente o un producto ligado inactivo cuenta para la disponibilidad de quien lo usa;
 2. familias activas en orden;
 3. estaciones activas;
-4. grupos asignados a esos productos con sus modificadores activos (`producto_grupo` + `grupo_modificadores` + `modificador`), en orden;
+4. grupos asignados con sus modificadores activos (`producto_grupo` + `grupo_modificadores` + `modificador`), en orden;
 5. componentes de los combos y menús;
 6. opciones del día de `menu_del_dia_opcion` para el día operativo actual.
 
-Los productos ligados y los componentes inactivos o no disponibles también se cargan en la consulta 1 (sin el filtro de familia activa) para calcular su disponibilidad. Con eso, `CartaVentaService` calcula `precioEfectivo`, `agotadoVigente` y `vendibilidad` de `packages/dominio` y arma `cartaSucursalRespuesta`.
+Con eso, `armador-carta.ts` (puro, sin consultas) aplica `precioEfectivo`, `agotadoVigente` y `vendibilidad` de `packages/dominio` y arma `cartaSucursalRespuesta`. Solo entran los productos activos, de familias activas y disponibles en la sucursal. La disponibilidad de un componente o de un producto ligado sale de `productoDisponible` de `disponibilidad-carta.ts`, la misma regla que usa el menú del día. En un `MENU_DEL_DIA`, cada grupo trae solo los modificadores elegidos para el día operativo actual (criterio 48): los candidatos que no se eligieron hoy no aparecen en la vista, y el conteo de `opcionesDelDia` para `vendibilidad` sale de lo que queda.
 
-- **ETag:** SHA-256 del JSON canónico de la respuesta (claves ordenadas), en base64url, como `ETag` fuerte. Con `If-None-Match` igual, 304 sin cuerpo. El día operativo forma parte de la respuesta, así que cambia al pasar la hora de corte.
-- **`prepararLinea`:** usa el mismo cargador restringido al producto pedido y a sus productos ligados y componentes, arma `grupos` para `validarSeleccion` (con `disponible` de cada modificador) y llama `calcularLinea`; con el resultado arma `lineaPreparada`. No escribe nada.
+- **ETag (`etag-carta.ts`):** SHA-256 del JSON canónico de la respuesta (claves ordenadas), en base64url y entre comillas, como `ETag` fuerte. Con `If-None-Match` igual responde 304 sin cuerpo. La comparación acepta una lista, `W/"…"` y `*`. El día operativo forma parte de la respuesta, así que el `ETag` cambia al pasar la hora de corte.
+- **`Cache-Control: private, no-cache`** en la respuesta: es una respuesta con sesión, así que el navegador la puede guardar pero la revalida con `If-None-Match` cada vez, y ninguna caché compartida la guarda.
+- **`prepararLinea`:** usa el mismo cargador restringido al producto pedido, a sus componentes y a sus productos ligados (las mismas seis consultas, con menos filas), más la hora de corte. Arma el producto con `armarProductoDeVenta`, así que la línea ve exactamente los grupos y modificadores de la vista. Orden de los rechazos:
+  1. 404 si la sucursal o el producto no existen en la empresa (un id que no es UUID, también).
+  2. 422 `PRODUCTO_NO_VENDIBLE` con `motivo` `NO_SE_VENDE_SOLO` si `seVendeSolo` es falso.
+  3. 422 `PRODUCTO_NO_VENDIBLE` con el motivo de `vendibilidad` si no es vendible.
+  4. `calcularLinea`: si solo falla por `PRODUCTO_SIN_PRECIO`, 422 `PRODUCTO_NO_VENDIBLE` con `NO_SE_VENDE_SOLO`; si no, 422 `SELECCION_INVALIDA` con los errores de `validarSeleccion`.
+
+  `ErrorProductoNoVendible` lleva el motivo en la propiedad `motivo` (para la sección 3) y en `campos` (`productoId`, con el código del motivo como mensaje). Sus motivos son los de `MOTIVOS_NO_VENDIBLE` más `NO_SE_VENDE_SOLO`, que solo existe en la API (`MotivoDeRechazo` de `errores-carta.ts`). En un menú del día, un plato candidato que no está elegido hoy no está en los grupos armados, así que `validarSeleccion` lo rechaza con `MODIFICADOR_DESCONOCIDO` (no con `MODIFICADOR_NO_DISPONIBLE`), igual que un id de otro producto o de otra empresa. `prepararLinea` no escribe nada.
 - **Prueba de consultas:** el cargador recibe un contador de consultas (gancho `logging` de Sequelize en la prueba) y la prueba compara 10 y 300 productos.
 
 ### Montos (`packages/dominio`, ruta crítica)
@@ -169,16 +195,19 @@ Los productos ligados y los componentes inactivos o no disponibles también se c
 ### Eventos
 
 - `PublicadorEventos.publicar` no tiene contexto (corre después de confirmar, criterio 27b de 001): el evento lleva su `empresaId`, que el servicio toma de `empresaActual()` al registrarlo.
-- `eventos-carta.ts` agrupa en una sola publicación los cambios de una petición (por ejemplo, un `PATCH` de producto publica un solo `carta.actualizada`).
+- `eventos-carta.ts` define `EventosCarta`, una clase inyectable con `cartaActualizada(sucursalId | null)` y `disponibilidad(datos)`. `cartaActualizada` registra a lo más un evento por sala y por operación, aunque varias partes del servicio lo pidan (por ejemplo, un `PATCH` de producto que cambia datos y grupos publica un solo `carta.actualizada`).
+- Los servicios emiten `carta.actualizada` desde C1: estaciones, familias, productos, orden y fotos ya lo registran con `alConfirmar`. Los grupos de C3, los ajustes de C2 y el menú de C4 lo agregaron al implementarse. T26 no lo introduce: comprueba con pruebas que todas las escrituras de C1 a C5 lo registran una vez y que ni las reversiones ni los no-ops publican.
 - `PublicadorNulo` es el proveedor por defecto: los eventos no van a ningún lado hasta la sección 3. Las pruebas instalan `PublicadorEnMemoria` con `crearAplicacion({ publicadorEventos })`.
 
 ### PWA
 
-- **Rutas:** `/carta` (segmento por parámetro `?ver=productos|familias|modificadores|estaciones`), `/carta/productos/nuevo`, `/carta/productos/:id`, `/carta/modificadores/nuevo`, `/carta/modificadores/:id`, `/disponibilidad` (`?ver=agotados|menu`). Cargadas bajo demanda, como la administración de 002. Guardas: `permisos.EDITAR_CARTA === 'permitido'` para `/carta` (Administrador y Cajero); `permisos.ADMINISTRAR === 'permitido'` para el segmento "Estaciones"; `permisos.GESTIONAR_DISPONIBILIDAD === 'permitido'` para `/disponibilidad`. Las guardas solo ordenan la interfaz: la API decide.
+- **Rutas:** `/carta` (segmento por parámetro `?ver=productos|familias|modificadores|estaciones`), `/carta/productos/nuevo`, `/carta/productos/:id`, `/carta/grupos/nuevo`, `/carta/grupos/:id` (el formulario de grupo vuelve a `/carta?ver=modificadores`), `/disponibilidad` (`?ver=agotados|menu`). Un `?ver=` desconocido o no permitido cae en la primera sección. Cargadas bajo demanda, como la administración de 002. Guardas: `permisos.EDITAR_CARTA === 'permitido'` para `/carta` (Administrador y Cajero); `permisos.ADMINISTRAR === 'permitido'` para el segmento "Estaciones"; `permisos.GESTIONAR_DISPONIBILIDAD === 'permitido'` para `/disponibilidad`. Las guardas solo ordenan la interfaz: la API decide.
 - **Precio por sucursal:** cada fila usa `editable` de la respuesta; las no editables se muestran solo para leer. En el alta, las casillas de "Disponible en" de las sucursales no editables quedan marcadas y bloqueadas (la PWA las calcula con `sucursales` de `GET /sesion`: editables son las de rol con `EDITAR_CARTA` permitido).
 - **Cambio de tipo:** el selector de tipo está también en la edición. Guardar manda el `PATCH` sin `confirmarPerdida`; con 409 `CONFIRMACION_REQUERIDA` abre una hoja con `seQuita` en palabras y, si se confirma, repite el mismo `PATCH` con `confirmarPerdida: true`; con 409 `EN_USO` muestra `usadoEn` con enlaces a esos combos y grupos.
-- **Vista de la sucursal:** una consulta de TanStack Query con clave por sucursal activa; `api.ts` guarda el último `ETag` por URL y manda `If-None-Match`; un 304 conserva los datos. Refresco cada 15 s con `segundoPlano: true` y al volver el foco (criterio 80).
-- **Agotados optimistas:** el interruptor cambia al instante, la escritura sale con reintentos y, si falla con un 4xx, vuelve atrás con un aviso; sin conexión, la fila muestra "Pendiente de envío". "Deshacer" manda la escritura contraria.
+- **Vista de la sucursal:** `useVistaDeSucursal(sucursalId)`, una consulta de TanStack Query con clave por sucursal activa (`['disponibilidad', 'vista', sucursalId]`), compartida por "Agotados" y "Menú del día". El `ETag` se guarda en la caché junto a la vista (`VistaEnCache`) y `consultarSiCambio` de `api.ts` lo manda como `If-None-Match`; un 304 conserva los datos. Refresco cada 15 s con `segundoPlano: true` y al volver el foco (criterio 80). Si una consulta falla, la vista anterior sigue en pantalla.
+- **Hora de corte:** la PWA la lee con `GET /sucursales/:id` (`consultarSucursal` de `disponibilidad.ts`, cualquier rol con sesión) para el aviso cerca del corte; el día operativo de "hoy" lo decide la API.
+- **Agotados optimistas:** el interruptor cambia al instante, la escritura sale por la cola de "Pendiente de envío" (una tras otra por producto) y, si el envío termina con error (4xx, 5xx o intentos agotados), la fila vuelve atrás con un aviso. "Deshacer" (dibujado por `AgotadosSeccion`, 5 s) manda la escritura contraria.
+- **"Pendiente de envío" (`lib/envios.ts`):** `enviarSinPerder` es una cola en memoria por escritura. Genera **una** `Idempotency-Key` y la reutiliza en todos los intentos, así que el servidor aplica la escritura una sola vez aunque se pierda una respuesta. `api.ts` reintenta unos 35 s; si la red no vuelve, la cola espera 15 s, 30 s y luego 60 s entre intentos (y se despierta al volver la red), hasta 40 intentos. Mientras espera, la fila o el formulario muestran "Pendiente de envío" (`PendienteDeEnvio`, `EtiquetaPendiente`, `AvisoPendiente`) y el cambio suma en el banner de "Sin conexión". Un 4xx o un 5xx terminan el envío sin reintentar. El envío pendiente se cancela si cambia la sesión o la sucursal activa (no se manda con otra identidad ni a otra sucursal), y mientras haya alguno la PWA avisa antes de salir o recargar (`beforeunload`). Lo escrito sigue en el formulario. No sobrevive a una recarga ni al cierre de la pestaña (ver "Riesgos").
 - **Montos:** campos de monto con `inputmode="decimal"`, validación con `montoSchema` / `montoNoNegativoSchema` y formato con el ayudante de 002 (`lib/formato.ts`).
 - **Formularios largos** (producto, grupo): un solo formulario por pantalla, secciones con título, acción principal fija abajo; los borradores se conservan en memoria de la pantalla ante un corte (criterio 78).
 
@@ -222,13 +251,17 @@ Privilegios de `restaurante_api`: SELECT, INSERT, UPDATE en `estacion`, `familia
 - **Pruebas protegidas de 002 que cambian.** Tres archivos protegidos de 002 afirman que el Cajero no tiene `EDITAR_CARTA` (`spec.md`, "Impacto en especificaciones anteriores"). Los ajusta test-writer en la fase B (P0), por la decisión del usuario; quien implementa no los toca. El orquestador, al revisar con `git diff`, acepta solo esos cambios en esos archivos y en la fase B.
 - **El Cajero cambia lo que es de toda la empresa.** El precio de la empresa, desactivar un producto o cambiar su tipo afectan también a las sucursales donde no es Cajero (decisión 5: "toda la carta"). Mitigación: auditoría con el autor y la sucursal activa, y el precio propio de cada sucursal protegido por el criterio 19b.
 - **Confirmación desactualizada.** Entre el 409 `CONFIRMACION_REQUERIDA` y el `PATCH` confirmado, otro usuario puede agregar componentes u opciones del día; el `PATCH` confirmado borra también esas. Se acepta: la auditoría guarda exactamente lo borrado. Si molesta, se puede exigir que `confirmarPerdida` traiga la huella de `seQuita`.
-- **Fotos huérfanas.** Si la transacción falla después de subir la foto (o el `COMMIT` falla), el archivo queda en R2 sin producto. Con fotos de unos 200 KB y fallas raras, el costo es despreciable. Remedio futuro: una tarea del worker que compare las claves del bucket con `producto.foto_clave` (fuera de alcance).
+- **Fotos huérfanas.** Si la transacción 2 de la foto falla, la compensación borra el archivo nuevo. Un archivo queda en R2 sin producto solo si el proceso muere entre la subida y el final de la transacción 2, o si la compensación misma falla (se registra en el log). Con fotos de unos 200 KB y fallas raras, el costo es despreciable. Remedio futuro: una tarea del worker que compare las claves del bucket con `producto.foto_clave` (fuera de alcance).
+- **Compensación que borra la foto vigente.** Si el `COMMIT` de la transacción 2 se aplica en el servidor pero el cliente recibe un error (la conexión se corta justo después del `COMMIT`), la compensación borra el archivo al que ya apunta el producto, y la foto aparece rota hasta que alguien suba otra. Es muy raro y no pierde datos de venta; se acepta. La misma tarea del worker podría detectar claves de `producto.foto_clave` que no existen en el bucket.
+- **Total de una línea que no cabe en `NUMERIC(10,2)`.** `calcularLinea` acepta precios de hasta 8 enteros (`99999999.99`), varios precios extra y una cantidad de hasta 999, así que `precioUnitario` y `total` pueden pasar de `99 999 999.99`, el máximo de una columna `NUMERIC(10,2)`. En esta sección no se guarda ninguna línea, pero la sección 3 (pedido) o la 4 (comprobante) debe acotar el total antes de guardarlo (rechazar la línea o usar una columna más ancha), para que no falle con un desbordamiento numérico de la base.
+- **`menu_del_dia_opcion` no se purga.** Cada día y en cada sucursal se agregan filas (una por plato elegido), y las de días pasados solo se borran si el menú cambia de tipo. Son pocas filas, y las consultas van por la llave única (sucursal, producto, día y plato), así que no se notan. Si crece, una tarea del worker puede borrar las de más de N días (fuera de alcance).
+- **La cola de "Pendiente de envío" vive en memoria.** Una recarga, el cierre de la pestaña o el sistema que mata la PWA en segundo plano pierden las escrituras que esperaban la red. Mitigación: aviso antes de salir mientras haya envíos pendientes, la etiqueta visible en cada fila y formulario, y lo escrito sigue en el formulario mientras la pantalla esté abierta. Al cambiar de sesión o de sucursal, la cola se cancela a propósito. Una cola que sobreviva a la recarga queda fuera de alcance de esta sección.
 - **Foto borrada que sigue en caché.** Al quitar o reemplazar una foto, Cloudflare puede seguir sirviendo la anterior hasta que expire su caché. Es una imagen pública de la carta; se acepta.
 - **Fotos de iPhone.** Safari entrega HEIC o JPEG según la versión; la reducción en el navegador convierte a JPEG si puede decodificarla y corrige la orientación. Si un navegador no puede, la API recibe el original y lo rechaza si no es JPEG, PNG o WebP (422 con un mensaje que pide otra foto). Verificar en la prueba manual con un iPhone real.
 - **Credenciales de R2.** Si se filtran, alguien podría reemplazar o borrar fotos de la carta. Mitigación: token de R2 limitado a un bucket, secreto de GitHub y del entorno, y las claves no se derivan de datos del cliente.
 - **Hora de corte y reloj.** Todo cálculo del día operativo usa el reloj de la API y `diaOperativo` de 001, nunca `now()` de la base; mezclar ambos daría agotados que vencen distinto en las pruebas. La revisión lo comprueba.
 - **Carreras en la configuración.** Dos administradores que editan el mismo grupo a la vez: gana el último `PATCH` y cada uno deja su auditoría. Dos que ordenan a la vez: el bloqueo `FOR UPDATE` los serializa. Se acepta sin control de versión optimista.
 - **Tamaño de la vista.** Con 300 productos y sus grupos, la respuesta puede pasar de 100 KB sin comprimir; con gzip de Cloudflare y el 304 del `ETag`, el refresco cada 15 s cuesta casi nada. Si crece, se puede paginar por familia sin cambiar los criterios.
-- **Costo del `ETag`.** Se calcula armando la vista completa: el 304 ahorra red, no base de datos. Con 30 empresas y pocos equipos de cocina por local (un refresco cada 15 s), son unas pocas consultas por segundo. Si molesta, la sección 3 puede reemplazar el refresco por el evento de Socket.IO.
+- **Costo del `ETag`.** Se calcula armando la vista completa (siete consultas): el 304 ahorra red, no base de datos. Con 30 empresas y pocos equipos de cocina por local (un refresco cada 15 s), son unas pocas consultas por segundo. Si molesta, la sección 3 puede reemplazar el refresco por el evento de Socket.IO.
 - **`decimal.js` en `packages/dominio`.** Suma unos 30 KB al paquete de la PWA, que ya lo incluye (`apps/app`); se usa la misma versión fija para no duplicarlo.
 - **Tamaño de la sección.** Cinco historias con pantallas. Mitigación: commits por historia; la vista y `prepararLinea` (C5) se pueden adelantar si la sección 3 los necesita antes.
