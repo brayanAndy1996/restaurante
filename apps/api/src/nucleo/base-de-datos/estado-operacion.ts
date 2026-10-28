@@ -21,6 +21,12 @@ export interface EstadoOperacion {
   readonly transaccion?: Transaction;
   /** Hay una operación de plataforma en curso. */
   readonly plataforma?: true;
+  /**
+   * Efectos secundarios registrados con `ContextoEmpresa.alConfirmar`. Viven en el estado de la operación
+   * dueña de la transacción (no en la `Transaction` de Sequelize, cuyo `afterCommit` corre también cuando el
+   * `COMMIT` falla) y solo corren cuando su `COMMIT` volvió sin error.
+   */
+  readonly efectos?: Array<() => void | Promise<void>>;
   /** La operación que creó este estado ya cerró su transacción: el estado equivale a ninguno. */
   terminado?: true;
 }

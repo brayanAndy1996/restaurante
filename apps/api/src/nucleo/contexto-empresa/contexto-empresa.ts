@@ -1,4 +1,4 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import { uuidSchema } from '@restaurante/contratos';
 import type { Sequelize } from 'sequelize';
 import {
@@ -31,6 +31,7 @@ import {
 export class ContextoEmpresa {
   /** Transacciones que ya tienen su actor (se fija una sola vez; la base también lo exige). */
   private readonly conActor = new WeakSet<TransaccionInterna>();
+  private readonly logger = new Logger(ContextoEmpresa.name);
 
   constructor(@Inject(CONEXION_API) private readonly conexion: Sequelize) {}
 
@@ -42,7 +43,8 @@ export class ContextoEmpresa {
    * activo: reutiliza la transacción; otra empresa: `ContextoEmpresaConflictoError`. Dentro de una
    * operación de plataforma también falla. Al terminar, el contexto termina también para el código que
    * siga corriendo con el almacén asíncrono (criterio 27b). `opciones.actor` es el actor de la
-   * transacción para la trazabilidad (historia 002, criterio 117); hasta la tarea T7 se ignora.
+   * transacción para la trazabilidad (historia 002, criterio 117). Los efectos registrados con `alConfirmar`
+   * corren al final, solo si el `COMMIT` volvió sin error (ver `alConfirmar`).
    */
   async ejecutar<T>(
     empresaId: string,
@@ -67,7 +69,9 @@ export class ContextoEmpresa {
 
     // Transacción no gestionada: no toca ningún CLS global; la guarda la toma del almacén.
     const transaccion = (await this.conexion.transaction()) as TransaccionInterna;
-    const nuevoEstado: EstadoOperacion = { empresaId: empresa, transaccion };
+    const efectos: Array<() => void | Promise<void>> = [];
+    const nuevoEstado: EstadoOperacion = { empresaId: empresa, transaccion, efectos };
+    let confirmada = false;
     try {
       // Solo esta transacción, abierta aquí sin contexto vigente, puede autorizarse (criterio 22c).
       registrarPendienteDeAutorizar(transaccion);
@@ -82,9 +86,12 @@ export class ContextoEmpresa {
         terminarEstado(nuevoEstado);
       }
       await confirmarPropia(transaccion);
+      confirmada = true;
+      await this.correrEfectos(efectos);
       return resultado;
     } catch (error) {
-      if (!transaccion.finished) {
+      // Tras la confirmación `correrEfectos` no lanza; si algo lo hiciera, no hay nada que revertir.
+      if (!confirmada && !transaccion.finished) {
         try {
           await revertirPropia(transaccion);
         } catch {
@@ -126,14 +133,38 @@ export class ContextoEmpresa {
   }
 
   /**
-   * Registra un efecto secundario que debe correr **después** de confirmar la transacción en curso (no corre
-   * si se revierte). Exige un contexto activo.
+   * Registra un efecto secundario que debe correr **después** de confirmar la transacción en curso: no corre
+   * si se revierte ni si el `COMMIT` falla (por ejemplo, una restricción diferida que se viola al confirmar).
+   * Exige un contexto activo. Los efectos se guardan en el estado de la operación y `ejecutar` los corre, en
+   * orden de registro, cuando su propio `COMMIT` vuelve sin error. Dentro de un contexto anidado (misma
+   * empresa) el efecto queda en la operación dueña de la transacción y corre cuando esta confirma.
+   *
+   * Cada efecto corre aislado: si lanza (o rechaza), el error se registra en el log y no se propaga ni
+   * impide los demás, porque la transacción ya está confirmada. Los efectos deben ser breves (encolar un
+   * trabajo, avisar), pues `ejecutar` espera a que terminen antes de devolver. Corren fuera de cualquier
+   * contexto: no pueden consultar la base con la empresa de la operación.
    */
-  alConfirmar(efecto: () => void): void {
+  alConfirmar(efecto: () => void | Promise<void>): void {
     this.empresaActual(); // exige un contexto activo, como el resto de la API
-    const transaccion = estadoActual()?.transaccion;
-    if (transaccion === undefined) throw new ContextoEmpresaAusenteError();
-    transaccion.afterCommit(efecto);
+    const estado = estadoActual();
+    if (estado?.transaccion === undefined || estado.efectos === undefined) {
+      throw new ContextoEmpresaAusenteError();
+    }
+    estado.efectos.push(efecto);
+  }
+
+  /** Corre los efectos ya confirmados, cada uno en su try/catch; nunca lanza. */
+  private async correrEfectos(efectos: Array<() => void | Promise<void>>): Promise<void> {
+    for (const efecto of efectos.splice(0)) {
+      try {
+        await efecto();
+      } catch (error) {
+        this.logger.error(
+          'Falló un efecto posterior a la confirmación; la transacción ya estaba confirmada',
+          error instanceof Error ? error.stack : String(error),
+        );
+      }
+    }
   }
 
   /** Empresa del contexto activo; lanza `ContextoEmpresaAusenteError` si no hay contexto. */

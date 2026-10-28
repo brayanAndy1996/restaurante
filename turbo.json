@@ -1,6 +1,7 @@
 {
   "$schema": "https://turbo.build/schema.json",
   "globalPassThroughEnv": [
+    "BASE_DE_PRUEBA",
     "DATABASE_*",
     "DB_*",
     "EMPRESA_POR_HEADER",
