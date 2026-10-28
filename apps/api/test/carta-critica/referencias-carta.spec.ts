@@ -633,7 +633,20 @@ describe('criterio 67 · los listados y la vista solo traen datos de A', () => {
         fallos.push(`${etiqueta}: se esperaba 200 y fue ${res.status} ${res.text.slice(0, 200)}`);
         continue;
       }
-      const ids = uuidsEn(res.text);
+      // La vista trae `fotoUrl` (criterio 47) y su clave termina en un UUID que no es el id de ninguna
+      // fila (criterio 15): se revisa aparte y se quita del texto antes de buscar ids.
+      let texto = res.text;
+      if (ruta === '/carta/sucursal') {
+        const { sinFotos, fallosFotos } = revisarFotosDeLaVista(
+          res.body,
+          m.A.empresaId,
+          m.B.empresaId,
+          idsA,
+        );
+        for (const fallo of fallosFotos) fallos.push(`${etiqueta}: foto ajena: ${fallo}`);
+        texto = sinFotos;
+      }
+      const ids = uuidsEn(texto);
       const ajenos = ids.filter((id) => idsB.has(id) || !idsA.has(id));
       if (ajenos.length > 0)
         fallos.push(`${etiqueta}: trae ids que no son de A: ${ajenos.join(', ')}`);
