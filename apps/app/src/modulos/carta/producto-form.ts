@@ -11,6 +11,12 @@ import { definicionDeTipo } from './tipos';
 /** Valor de la opción "Ninguna" de la estación (el producto no va a cocina ni a barra). */
 export const SIN_ESTACION = 'ninguna';
 
+/** Un grupo de modificadores asignado al producto (003, criterio 6): su id y su nombre, en el orden en que se muestran. */
+export interface GrupoDeProducto {
+  id: string;
+  nombre: string;
+}
+
 export interface EstadoDelProducto {
   tipo: TipoProducto;
   nombre: string;
@@ -25,6 +31,8 @@ export interface EstadoDelProducto {
   tipoControlStock: TipoControlStock | '';
   afectacionIgv: AfectacionIgv;
   aplicaIcbper: boolean;
+  /** Grupos de modificadores, en orden. */
+  grupos: GrupoDeProducto[];
   /** Por sucursal: si el producto nace disponible. Solo en el alta. */
   disponibleEn: Record<string, boolean>;
 }
@@ -36,6 +44,7 @@ export type CampoDelProducto =
   | 'precio'
   | 'estacionId'
   | 'tipoControlStock'
+  | 'gruposModificadores'
   | 'noDisponibleEn';
 
 export type ErroresDelProducto = Partial<Record<CampoDelProducto, string>>;
@@ -56,6 +65,7 @@ export function formularioVacio(sucursalIds: readonly string[]): EstadoDelProduc
     tipoControlStock: '',
     afectacionIgv: 'GRAVADO',
     aplicaIcbper: false,
+    grupos: [],
     disponibleEn: Object.fromEntries(sucursalIds.map((id) => [id, true])),
   };
 }
@@ -72,6 +82,7 @@ export function formularioDeProducto(producto: ProductoRespuesta): EstadoDelProd
     tipoControlStock: producto.tipoControlStock,
     afectacionIgv: producto.afectacionIgv,
     aplicaIcbper: producto.aplicaIcbper,
+    grupos: producto.grupos.map((g) => ({ id: g.id, nombre: g.nombre })),
     disponibleEn: {},
   };
 }
@@ -140,6 +151,7 @@ export function entradaDeCreacion(estado: EstadoDelProducto): ProductoCrearEntra
     aplicaIcbper: estado.aplicaIcbper,
     ...(campos.estacion ? { estacionId: estacionParaApi(estado) } : {}),
     tipoControlStock: estado.tipoControlStock as TipoControlStock,
+    ...(estado.grupos.length > 0 ? { gruposModificadores: estado.grupos.map((g) => g.id) } : {}),
     ...(noDisponibleEn.length > 0 ? { noDisponibleEn } : {}),
   };
 }
@@ -183,6 +195,12 @@ export function cambiosDelProducto(
   }
   if (estado.afectacionIgv !== original.afectacionIgv) cambios.afectacionIgv = estado.afectacionIgv;
   if (estado.aplicaIcbper !== original.aplicaIcbper) cambios.aplicaIcbper = estado.aplicaIcbper;
+  // La lista de grupos reemplaza a la anterior completa; el orden cuenta.
+  const grupos = estado.grupos.map((g) => g.id);
+  const guardados = original.grupos.map((g) => g.id);
+  if (grupos.length !== guardados.length || grupos.some((id, i) => id !== guardados[i])) {
+    cambios.gruposModificadores = grupos;
+  }
   return cambios;
 }
 

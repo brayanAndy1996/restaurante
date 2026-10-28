@@ -109,6 +109,8 @@ function carta(
         },
       ]),
     [`GET /carta/productos/${producto.id}`]: () => json(200, producto),
+    // El formulario del producto lee los grupos de modificadores (003, C3); su prueba está en carta-grupos.
+    'GET /carta/grupos-modificadores': () => json(200, []),
     ...extra,
   });
 }

@@ -4,17 +4,18 @@ import { useNavigate } from 'react-router-dom';
 import { Pagina } from '../../componentes/Pagina';
 import { usePermiso } from '../acceso/permisos';
 
-export type SeccionDeCarta = 'productos' | 'familias' | 'estaciones';
+export type SeccionDeCarta = 'productos' | 'familias' | 'modificadores' | 'estaciones';
 
 const SECCIONES: readonly OpcionDeSegmento<SeccionDeCarta>[] = [
   { valor: 'productos', etiqueta: 'Productos' },
   { valor: 'familias', etiqueta: 'Familias' },
+  { valor: 'modificadores', etiqueta: 'Modificadores' },
   { valor: 'estaciones', etiqueta: 'Estaciones' },
 ];
 
 /**
  * Qué secciones ve cada quien: "Estaciones" solo con `ADMINISTRAR` (las define el Administrador; el
- * Cajero las lee desde el formulario del producto, pero no las edita). "Modificadores" llega con C3.
+ * Cajero las lee desde el formulario del producto, pero no las edita). "Modificadores" lo ven los dos.
  */
 export function seccionesDeCarta(puedeAdministrar: boolean): OpcionDeSegmento<SeccionDeCarta>[] {
   return SECCIONES.filter((s) => s.valor !== 'estaciones' || puedeAdministrar);

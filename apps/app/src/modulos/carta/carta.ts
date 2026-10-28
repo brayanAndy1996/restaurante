@@ -3,6 +3,7 @@ import {
   estacionRespuestaSchema,
   familiaRespuestaSchema,
   fotoRespuestaSchema,
+  grupoRespuestaSchema,
   productoResumenSchema,
   productoRespuestaSchema,
   type AjusteSucursalEntrada,
@@ -11,6 +12,9 @@ import {
   type EstacionRespuesta,
   type FamiliaModificarEntrada,
   type FamiliaRespuesta,
+  type GrupoEntrada,
+  type GrupoModificarEntrada,
+  type GrupoRespuesta,
   type ProductoCrearEntrada,
   type ProductoModificarEntrada,
   type ProductoResumen,
@@ -25,6 +29,9 @@ export const CLAVES = {
   estaciones: ['carta', 'estaciones'] as const,
   familias: ['carta', 'familias'] as const,
   productos: ['carta', 'productos'] as const,
+  /** Todos los grupos de modificadores de la empresa (003, criterio 29). */
+  grupos: ['carta', 'grupos'] as const,
+  grupo: (id: string) => ['carta', 'grupo', id] as const,
   producto: (id: string) => ['carta', 'producto', id] as const,
   /** Una fila por sucursal con el precio y la disponibilidad del producto (003, criterio 18). */
   sucursalesDeProducto: (id: string) => ['carta', 'producto', id, 'sucursales'] as const,
@@ -94,6 +101,28 @@ export const ajustarSucursalDeProducto = (
 export const subirFotoDeProducto = (id: string, foto: Blob) =>
   api.put(`/carta/productos/${id}/foto`, foto, { esquema: fotoRespuestaSchema });
 export const quitarFotoDeProducto = (id: string) => api.delete(`/carta/productos/${id}/foto`);
+
+/** Grupos de modificadores (criterios 24 a 29): se crean, se editan y se desactivan; no se borran. */
+export const listarGrupos = (senal?: AbortSignal) =>
+  api.get('/carta/grupos-modificadores', {
+    esquema: listaDe(grupoRespuestaSchema),
+    ...conSenal(senal),
+  });
+export const obtenerGrupo = (id: string, senal?: AbortSignal) =>
+  api.get(`/carta/grupos-modificadores/${id}`, {
+    esquema: grupoRespuestaSchema,
+    ...conSenal(senal),
+  });
+export const crearGrupo = (entrada: GrupoEntrada): Promise<GrupoRespuesta> =>
+  api.post('/carta/grupos-modificadores', entrada, {
+    esquema: grupoRespuestaSchema,
+    idempotente: true,
+  });
+export const modificarGrupo = (
+  id: string,
+  cambios: GrupoModificarEntrada,
+): Promise<GrupoRespuesta> =>
+  api.patch(`/carta/grupos-modificadores/${id}`, cambios, { esquema: grupoRespuestaSchema });
 
 // --- Reglas de presentación -----------------------------------------------------------------------
 

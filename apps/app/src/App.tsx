@@ -48,6 +48,12 @@ const ProductoEditarPagina = lazy(() =>
     default: m.ProductoEditarPagina,
   })),
 );
+const GrupoNuevoPagina = lazy(() =>
+  import('./modulos/carta/GrupoFormularioPagina').then((m) => ({ default: m.GrupoNuevoPagina })),
+);
+const GrupoEditarPagina = lazy(() =>
+  import('./modulos/carta/GrupoFormularioPagina').then((m) => ({ default: m.GrupoEditarPagina })),
+);
 // Solo en desarrollo: la ruta y su código no llegan al paquete de producción.
 const ClaveSupervisorDemo = import.meta.env.DEV
   ? lazy(() =>
@@ -200,6 +206,8 @@ export function App() {
                 <Route path="/carta" element={<CartaPagina />} />
                 <Route path="/carta/productos/nuevo" element={<ProductoNuevoPagina />} />
                 <Route path="/carta/productos/:id" element={<ProductoEditarPagina />} />
+                <Route path="/carta/grupos/nuevo" element={<GrupoNuevoPagina />} />
+                <Route path="/carta/grupos/:id" element={<GrupoEditarPagina />} />
               </Route>
               <Route element={<RutaDeAdministrador />}>
                 <Route path="/administracion/usuarios" element={<UsuariosPagina />} />

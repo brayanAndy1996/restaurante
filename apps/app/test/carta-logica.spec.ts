@@ -243,9 +243,14 @@ describe('secciones de la carta', () => {
     expect(seccionesDeCarta(true).map((s) => s.valor)).toEqual([
       'productos',
       'familias',
+      'modificadores',
       'estaciones',
     ]);
-    expect(seccionesDeCarta(false).map((s) => s.valor)).toEqual(['productos', 'familias']);
+    expect(seccionesDeCarta(false).map((s) => s.valor)).toEqual([
+      'productos',
+      'familias',
+      'modificadores',
+    ]);
   });
 
   it('una sección desconocida o no permitida cae en "Productos"', () => {

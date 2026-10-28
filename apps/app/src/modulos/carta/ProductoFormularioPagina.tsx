@@ -33,6 +33,7 @@ import {
   puedeAjustarSucursal,
 } from './carta';
 import { FotoDeProducto } from './FotoDeProducto';
+import { GruposDelProducto } from './GruposDelProducto';
 import { PrecioPorSucursal } from './PrecioPorSucursal';
 import {
   ETIQUETA_DE_AFECTACION,
@@ -71,6 +72,7 @@ const CAMPOS_CON_ERROR: readonly CampoDelProducto[] = [
   'precio',
   'estacionId',
   'tipoControlStock',
+  'gruposModificadores',
   'noDisponibleEn',
 ];
 
@@ -215,6 +217,8 @@ function FormularioDeProducto({ modo, original, familias, estaciones }: PropsFor
     void clientes.invalidateQueries({ queryKey: CLAVES.productos });
     void clientes.invalidateQueries({ queryKey: CLAVES.familias });
     void clientes.invalidateQueries({ queryKey: CLAVES.estaciones });
+    // Cuántos productos usa cada grupo cambia al asignarlo o quitarlo.
+    void clientes.invalidateQueries({ queryKey: CLAVES.grupos });
   }
 
   function mostrarFalloDeLaApi(e: unknown) {
@@ -375,206 +379,220 @@ function FormularioDeProducto({ modo, original, familias, estaciones }: PropsFor
       ) : null}
 
       {estado.tipo === 'SIMPLE' ? (
-        <form
-          id="formulario-producto"
-          className="formulario formulario--secciones"
-          onSubmit={(e) => void enviar(e)}
-          noValidate
-        >
-          <section className="seccion" aria-labelledby="producto-datos">
-            <h2 className="formulario__titulo" id="producto-datos">
-              Datos
-            </h2>
-            <SelectorDeTipo valor={estado.tipo} onCambio={(tipo) => cambiar({ tipo })} />
-            <CampoTexto
-              etiqueta="Nombre"
-              value={estado.nombre}
-              onChange={(e) => {
-                cambiar({ nombre: e.target.value });
-                quitarError('nombre');
-              }}
-              error={errores.nombre}
-              autoComplete="off"
-              enterKeyHint="next"
-            />
-            <CampoAreaTexto
-              etiqueta="Descripción"
-              opcional
-              value={estado.descripcion}
-              onChange={(e) => {
-                cambiar({ descripcion: e.target.value });
-                quitarError('descripcion');
-              }}
-              error={errores.descripcion}
-              ayuda="Se ve en la carta web."
-              rows={3}
-            />
-            <CampoSeleccion
-              etiqueta="Familia"
-              value={estado.familiaId}
-              onChange={(e) => {
-                cambiar({ familiaId: e.target.value });
-                quitarError('familiaId');
-              }}
-              error={errores.familiaId}
-            >
-              <option value="" disabled>
-                Elige una familia
-              </option>
-              {familiasActivas.map((f) => (
-                <option key={f.id} value={f.id}>
-                  {f.nombre}
-                  {f.activa ? '' : ' (inactiva)'}
-                </option>
-              ))}
-            </CampoSeleccion>
-            {familiasActivas.length === 0 ? (
-              <Aviso tipo="alerta" titulo="Primero crea una familia">
-                Cada producto va en una familia, por ejemplo Entradas o Bebidas.{' '}
-                <Link to="/carta?ver=familias" className="enlace-texto">
-                  Crear una familia
-                </Link>
-              </Aviso>
-            ) : null}
-          </section>
-
-          <section className="seccion" aria-labelledby="producto-precio">
-            <h2 className="formulario__titulo" id="producto-precio">
-              Precio
-            </h2>
-            {definicion.campos.seVendeSolo ? (
-              <Interruptor
-                etiqueta="Se vende solo"
-                ayuda={
-                  estado.seVendeSolo
-                    ? 'Aparece en el comandero y en la carta web con su precio.'
-                    : 'No lleva precio ni aparece para vender: solo se usa dentro de un combo o como opción.'
-                }
-                marcado={estado.seVendeSolo}
-                onCambio={(seVendeSolo) => {
-                  cambiar({ seVendeSolo });
-                  quitarError('precio');
-                }}
-              />
-            ) : null}
-            {!definicion.campos.seVendeSolo || estado.seVendeSolo ? (
-              <CampoMonto
-                etiqueta="Precio con IGV"
-                value={estado.precio}
-                onValor={(precio) => {
-                  cambiar({ precio });
-                  quitarError('precio');
-                }}
-                error={errores.precio}
-                ayuda="Lo que paga el cliente. El IGV ya está incluido."
-              />
-            ) : null}
-          </section>
-
-          <section className="seccion" aria-labelledby="producto-cocina">
-            <h2 className="formulario__titulo" id="producto-cocina">
-              Cocina y stock
-            </h2>
-            {definicion.campos.estacion ? (
-              <CampoSeleccion
-                etiqueta="Estación"
-                value={estado.estacionId}
+        <>
+          <form
+            id="formulario-producto"
+            className="formulario formulario--secciones"
+            onSubmit={(e) => void enviar(e)}
+            noValidate
+          >
+            <section className="seccion" aria-labelledby="producto-datos">
+              <h2 className="formulario__titulo" id="producto-datos">
+                Datos
+              </h2>
+              <SelectorDeTipo valor={estado.tipo} onCambio={(tipo) => cambiar({ tipo })} />
+              <CampoTexto
+                etiqueta="Nombre"
+                value={estado.nombre}
                 onChange={(e) => {
-                  cambiar({ estacionId: e.target.value });
-                  quitarError('estacionId');
+                  cambiar({ nombre: e.target.value });
+                  quitarError('nombre');
                 }}
-                error={errores.estacionId}
-                ayuda="Dónde se prepara. Con una estación, la comanda le llega a ella."
+                error={errores.nombre}
+                autoComplete="off"
+                enterKeyHint="next"
+              />
+              <CampoAreaTexto
+                etiqueta="Descripción"
+                opcional
+                value={estado.descripcion}
+                onChange={(e) => {
+                  cambiar({ descripcion: e.target.value });
+                  quitarError('descripcion');
+                }}
+                error={errores.descripcion}
+                ayuda="Se ve en la carta web."
+                rows={3}
+              />
+              <CampoSeleccion
+                etiqueta="Familia"
+                value={estado.familiaId}
+                onChange={(e) => {
+                  cambiar({ familiaId: e.target.value });
+                  quitarError('familiaId');
+                }}
+                error={errores.familiaId}
               >
                 <option value="" disabled>
-                  Elige una estación
+                  Elige una familia
                 </option>
-                <option value={SIN_ESTACION}>Ninguna (no va a cocina ni a barra)</option>
-                {estaciones.map((e) => (
-                  <option key={e.id} value={e.id}>
-                    {e.nombre}
-                    {e.activa ? '' : ' (inactiva)'}
+                {familiasActivas.map((f) => (
+                  <option key={f.id} value={f.id}>
+                    {f.nombre}
+                    {f.activa ? '' : ' (inactiva)'}
                   </option>
                 ))}
               </CampoSeleccion>
-            ) : null}
-            <OpcionesConAyuda
-              etiqueta="Control de stock"
-              opciones={OPCIONES_DE_CONTROL}
-              valor={estado.tipoControlStock}
-              onCambio={(tipoControlStock) => {
-                cambiar({ tipoControlStock });
-                quitarError('tipoControlStock');
-              }}
-              error={errores.tipoControlStock}
-            />
-          </section>
-
-          <Plegable
-            titulo="Datos tributarios"
-            resumen={`${ETIQUETA_DE_AFECTACION[estado.afectacionIgv]} · ${
-              estado.aplicaIcbper ? 'con ICBPER' : 'sin ICBPER'
-            }`}
-            abierto={tributarioAbierto}
-            onCambio={setTributarioAbierto}
-          >
-            <CampoSeleccion
-              etiqueta="Afectación al IGV"
-              value={estado.afectacionIgv}
-              onChange={(e) =>
-                cambiar({ afectacionIgv: e.target.value as EstadoDelProducto['afectacionIgv'] })
-              }
-              ayuda="Casi todo es gravado. Cámbialo solo si tu contador te lo indicó."
-            >
-              {AFECTACIONES_IGV.map((a) => (
-                <option key={a} value={a}>
-                  {ETIQUETA_DE_AFECTACION[a]}
-                </option>
-              ))}
-            </CampoSeleccion>
-            <Interruptor
-              etiqueta="Aplica ICBPER"
-              ayuda="Solo para bolsas de plástico, que llevan el impuesto a las bolsas plásticas."
-              marcado={estado.aplicaIcbper}
-              onCambio={(aplicaIcbper) => cambiar({ aplicaIcbper })}
-            />
-          </Plegable>
-
-          {modo === 'crear' && sucursales.length > 1 ? (
-            <section className="seccion" aria-labelledby="producto-disponible">
-              <h2 className="formulario__titulo" id="producto-disponible">
-                Disponible en
-              </h2>
-              <p className="texto-ayuda">
-                El producto nace disponible en las sucursales marcadas. El resto de la carta es de
-                toda la empresa.
-              </p>
-              <div className="carta__casillas">
-                {sucursales.map((s) => (
-                  <Casilla
-                    key={s.id}
-                    etiqueta={s.nombre}
-                    marcada={s.editable ? (estado.disponibleEn[s.id] ?? true) : true}
-                    bloqueada={!s.editable}
-                    ayuda={
-                      s.editable
-                        ? undefined
-                        : 'Solo lo cambia el Administrador o un Cajero de esta sucursal.'
-                    }
-                    onCambio={(marcada) =>
-                      cambiar({ disponibleEn: { ...estado.disponibleEn, [s.id]: marcada } })
-                    }
-                  />
-                ))}
-              </div>
-              {errores.noDisponibleEn ? (
-                <p className="ui-campo__mensaje" role="alert">
-                  {errores.noDisponibleEn}
-                </p>
+              {familiasActivas.length === 0 ? (
+                <Aviso tipo="alerta" titulo="Primero crea una familia">
+                  Cada producto va en una familia, por ejemplo Entradas o Bebidas.{' '}
+                  <Link to="/carta?ver=familias" className="enlace-texto">
+                    Crear una familia
+                  </Link>
+                </Aviso>
               ) : null}
             </section>
-          ) : null}
-        </form>
+
+            <section className="seccion" aria-labelledby="producto-precio">
+              <h2 className="formulario__titulo" id="producto-precio">
+                Precio
+              </h2>
+              {definicion.campos.seVendeSolo ? (
+                <Interruptor
+                  etiqueta="Se vende solo"
+                  ayuda={
+                    estado.seVendeSolo
+                      ? 'Aparece en el comandero y en la carta web con su precio.'
+                      : 'No lleva precio ni aparece para vender: solo se usa dentro de un combo o como opción.'
+                  }
+                  marcado={estado.seVendeSolo}
+                  onCambio={(seVendeSolo) => {
+                    cambiar({ seVendeSolo });
+                    quitarError('precio');
+                  }}
+                />
+              ) : null}
+              {!definicion.campos.seVendeSolo || estado.seVendeSolo ? (
+                <CampoMonto
+                  etiqueta="Precio con IGV"
+                  value={estado.precio}
+                  onValor={(precio) => {
+                    cambiar({ precio });
+                    quitarError('precio');
+                  }}
+                  error={errores.precio}
+                  ayuda="Lo que paga el cliente. El IGV ya está incluido."
+                />
+              ) : null}
+            </section>
+
+            <section className="seccion" aria-labelledby="producto-cocina">
+              <h2 className="formulario__titulo" id="producto-cocina">
+                Cocina y stock
+              </h2>
+              {definicion.campos.estacion ? (
+                <CampoSeleccion
+                  etiqueta="Estación"
+                  value={estado.estacionId}
+                  onChange={(e) => {
+                    cambiar({ estacionId: e.target.value });
+                    quitarError('estacionId');
+                  }}
+                  error={errores.estacionId}
+                  ayuda="Dónde se prepara. Con una estación, la comanda le llega a ella."
+                >
+                  <option value="" disabled>
+                    Elige una estación
+                  </option>
+                  <option value={SIN_ESTACION}>Ninguna (no va a cocina ni a barra)</option>
+                  {estaciones.map((e) => (
+                    <option key={e.id} value={e.id}>
+                      {e.nombre}
+                      {e.activa ? '' : ' (inactiva)'}
+                    </option>
+                  ))}
+                </CampoSeleccion>
+              ) : null}
+              <OpcionesConAyuda
+                etiqueta="Control de stock"
+                opciones={OPCIONES_DE_CONTROL}
+                valor={estado.tipoControlStock}
+                onCambio={(tipoControlStock) => {
+                  cambiar({ tipoControlStock });
+                  quitarError('tipoControlStock');
+                }}
+                error={errores.tipoControlStock}
+              />
+            </section>
+          </form>
+
+          <div className="formulario formulario--secciones formulario--continuacion">
+            <GruposDelProducto
+              productoId={guardadoPrevio?.id}
+              valor={estado.grupos}
+              onCambio={(grupos) => {
+                cambiar({ grupos });
+                quitarError('gruposModificadores');
+              }}
+              error={errores.gruposModificadores}
+            />
+
+            <Plegable
+              titulo="Datos tributarios"
+              resumen={`${ETIQUETA_DE_AFECTACION[estado.afectacionIgv]} · ${
+                estado.aplicaIcbper ? 'con ICBPER' : 'sin ICBPER'
+              }`}
+              abierto={tributarioAbierto}
+              onCambio={setTributarioAbierto}
+            >
+              <CampoSeleccion
+                etiqueta="Afectación al IGV"
+                value={estado.afectacionIgv}
+                onChange={(e) =>
+                  cambiar({ afectacionIgv: e.target.value as EstadoDelProducto['afectacionIgv'] })
+                }
+                ayuda="Casi todo es gravado. Cámbialo solo si tu contador te lo indicó."
+              >
+                {AFECTACIONES_IGV.map((a) => (
+                  <option key={a} value={a}>
+                    {ETIQUETA_DE_AFECTACION[a]}
+                  </option>
+                ))}
+              </CampoSeleccion>
+              <Interruptor
+                etiqueta="Aplica ICBPER"
+                ayuda="Solo para bolsas de plástico, que llevan el impuesto a las bolsas plásticas."
+                marcado={estado.aplicaIcbper}
+                onCambio={(aplicaIcbper) => cambiar({ aplicaIcbper })}
+              />
+            </Plegable>
+
+            {modo === 'crear' && sucursales.length > 1 ? (
+              <section className="seccion" aria-labelledby="producto-disponible">
+                <h2 className="formulario__titulo" id="producto-disponible">
+                  Disponible en
+                </h2>
+                <p className="texto-ayuda">
+                  El producto nace disponible en las sucursales marcadas. El resto de la carta es de
+                  toda la empresa.
+                </p>
+                <div className="carta__casillas">
+                  {sucursales.map((s) => (
+                    <Casilla
+                      key={s.id}
+                      etiqueta={s.nombre}
+                      marcada={s.editable ? (estado.disponibleEn[s.id] ?? true) : true}
+                      bloqueada={!s.editable}
+                      ayuda={
+                        s.editable
+                          ? undefined
+                          : 'Solo lo cambia el Administrador o un Cajero de esta sucursal.'
+                      }
+                      onCambio={(marcada) =>
+                        cambiar({ disponibleEn: { ...estado.disponibleEn, [s.id]: marcada } })
+                      }
+                    />
+                  ))}
+                </div>
+                {errores.noDisponibleEn ? (
+                  <p className="ui-campo__mensaje" role="alert">
+                    {errores.noDisponibleEn}
+                  </p>
+                ) : null}
+              </section>
+            ) : null}
+          </div>
+        </>
       ) : null}
 
       {modo === 'editar' && guardadoPrevio ? (

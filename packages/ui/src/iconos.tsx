@@ -56,6 +56,7 @@ export {
   ChefHat as IconoEstacion,
   Layers as IconoFamilia,
   ChevronUp as IconoArriba,
+  ListChecks as IconoGrupo,
 } from 'lucide-react';
 
 interface PropsIcono {
