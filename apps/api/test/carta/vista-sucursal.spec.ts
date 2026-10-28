@@ -308,10 +308,6 @@ describe('criterios 47 y 48 · la vista y qué entra', () => {
     expect(ids).toContain(activa.id);
     expect(ids).toContain(base.estacionId);
     expect(ids).not.toContain(inactiva.id);
-    const nombres = v.estaciones.map((x) => x.nombre);
-    expect(nombres).toEqual(
-      [...nombres].sort((a, b) => a.localeCompare(b, 'es')).length ? nombres : nombres,
-    );
     expect(v.estaciones.find((x) => x.id === activa.id)).toEqual({
       id: activa.id,
       nombre: activa.nombre,
@@ -825,6 +821,36 @@ describe('criterio 49 · ETag', () => {
         'restaurar',
       );
     }
+  });
+
+  it('CORS permite If-None-Match y expone ETag al origen de la PWA', async () => {
+    const origen = 'http://localhost:5173';
+    const preflight = await ctx
+      .http()
+      .options('/carta/sucursal')
+      .set('Origin', origen)
+      .set('Access-Control-Request-Method', 'GET')
+      .set('Access-Control-Request-Headers', 'authorization,if-none-match');
+    expect(preflight.status).toBeLessThan(300);
+    expect(preflight.headers['access-control-allow-headers']?.toLowerCase()).toContain(
+      'if-none-match',
+    );
+    const res = await ctx
+      .http()
+      .get('/carta/sucursal')
+      .set({ Authorization: `Bearer ${adminS1}` })
+      .set('Origin', origen);
+    expect(res.status).toBe(200);
+    expect(res.headers['access-control-expose-headers']?.toLowerCase()).toContain('etag');
+    const etag = res.headers['etag'] as string;
+    const cond = await ctx
+      .http()
+      .get('/carta/sucursal')
+      .set({ Authorization: `Bearer ${adminS1}` })
+      .set('Origin', origen)
+      .set('If-None-Match', etag);
+    expect(cond.status).toBe(304);
+    expect(cond.headers['access-control-expose-headers']?.toLowerCase()).toContain('etag');
   });
 
   it('no cambia con una escritura que no cambia nada', async () => {

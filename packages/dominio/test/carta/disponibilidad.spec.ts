@@ -83,16 +83,18 @@ describe('vendibilidad (criterio 59)', () => {
       motivo: 'NO_DISPONIBLE',
     });
     expect(vendibilidad(con({ agotado: true }))).toEqual({ vendible: false, motivo: 'AGOTADO' });
-    expect(vendibilidad(con({ componentes: [{ disponible: true }, { disponible: false }] }))).toEqual(
-      { vendible: false, motivo: 'COMPONENTE_NO_DISPONIBLE' },
-    );
+    expect(
+      vendibilidad(con({ componentes: [{ disponible: true }, { disponible: false }] })),
+    ).toEqual({ vendible: false, motivo: 'COMPONENTE_NO_DISPONIBLE' });
     expect(vendibilidad(con({ tipo: 'MENU_DEL_DIA', opcionesDelDia: 0 }))).toEqual({
       vendible: false,
       motivo: 'MENU_SIN_ARMAR',
     });
     expect(
       vendibilidad(
-        con({ grupos: [{ minimo: 1, modificadores: [{ disponible: false }, { disponible: false }] }] }),
+        con({
+          grupos: [{ minimo: 1, modificadores: [{ disponible: false }, { disponible: false }] }],
+        }),
       ),
     ).toEqual({ vendible: false, motivo: 'OPCIONES_INSUFICIENTES' });
   });
@@ -129,9 +131,9 @@ describe('vendibilidad (criterio 59)', () => {
     });
 
     it('agotado gana a un componente no disponible', () => {
-      expect(vendibilidad(con({ agotado: true, componentes: [{ disponible: false }] })).motivo).toBe(
-        'AGOTADO',
-      );
+      expect(
+        vendibilidad(con({ agotado: true, componentes: [{ disponible: false }] })).motivo,
+      ).toBe('AGOTADO');
     });
 
     it('un componente no disponible gana a un menú sin armar', () => {
