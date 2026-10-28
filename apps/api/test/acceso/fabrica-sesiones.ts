@@ -15,12 +15,13 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { createHash, randomInt, randomUUID } from 'node:crypto';
 import type { INestApplication, Type } from '@nestjs/common';
-import { validarRuc, type TramoHorario } from '@restaurante/dominio';
+import type { TramoHorario } from '@restaurante/dominio';
 import request from 'supertest';
 import { expect } from 'vitest';
 import { crearSuperadministrador } from '../../scripts/lib/superadministrador';
 import { crearAplicacion } from '../../src/aplicacion';
 import { RelojManual } from '../../src/nucleo/reloj';
+import { generarRucUnico } from '../aislamiento/ruc-unico';
 import { conCliente, fijarEntornoDePrueba } from '../utilidades';
 
 // ---------------------------------------------------------------------------------------------
@@ -52,17 +53,9 @@ export type RolDeAcceso = 'MOZO' | 'CAJERO' | 'COCINA_BARRA' | 'SUPERVISOR';
 // Datos aleatorios
 // ---------------------------------------------------------------------------------------------
 
-const FACTORES_RUC = [5, 4, 3, 2, 7, 6, 5, 4, 3, 2];
-
-/** RUC válido y aleatorio (único entre archivos paralelos). */
+/** RUC válido y único entre archivos paralelos (bloques reservados por proceso, ver `ruc-unico.ts`). */
 export function rucAleatorio(): string {
-  const cuerpo = '20' + String(randomInt(0, 100_000_000)).padStart(8, '0');
-  let suma = 0;
-  for (let i = 0; i < FACTORES_RUC.length; i++) suma += Number(cuerpo[i]) * FACTORES_RUC[i]!;
-  const resto = 11 - (suma % 11);
-  const ruc = cuerpo + String(resto >= 10 ? resto - 10 : resto);
-  if (!validarRuc(ruc)) throw new Error(`El ayudante generó un RUC inválido: ${ruc}`);
-  return ruc;
+  return generarRucUnico();
 }
 
 /** Texto único por llamada. */

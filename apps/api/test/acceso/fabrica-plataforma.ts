@@ -120,7 +120,8 @@ export interface SuperadminDePrueba {
   token: string;
 }
 
-export const usuarioUnico = (prefijo: string) => `${prefijo}-${randomUUID().slice(0, 10)}`;
+export const usuarioUnico = (prefijo: string) =>
+  `${prefijo}-${randomUUID().replace(/-/g, '').slice(0, 16)}`;
 export const contrasenaUnica = () => `Clave-${randomUUID()}`;
 
 /** Crea un superadministrador con la función pública (actor `cli:superadmin`) y abre su sesión. */

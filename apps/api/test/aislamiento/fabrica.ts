@@ -10,22 +10,16 @@
 // rechaza la escritura con 42501 "contexto de actor ausente", igual que un rechazo de RLS tiene 42501.
 // Por eso las pruebas de rechazo por RLS fijan el actor y comprueban el mensaje de la política.
 import { randomInt, randomUUID } from 'node:crypto';
-import { validarRuc } from '@restaurante/dominio';
 import type { RegistrarEmpresaEntrada } from '@restaurante/contratos';
 import type { Client, DatabaseError } from 'pg';
+import { generarRucUnico, type PrefijoRuc } from './ruc-unico';
 
-const FACTORES_RUC = [5, 4, 3, 2, 7, 6, 5, 4, 3, 2];
-
-/** RUC válido (prefijo 20 por defecto, dígito verificador calculado) y aleatorio: único entre archivos paralelos. */
-export function rucAleatorio(prefijo: '10' | '15' | '16' | '17' | '20' = '20'): string {
-  const cuerpo = prefijo + String(randomInt(0, 100_000_000)).padStart(8, '0');
-  let suma = 0;
-  for (let i = 0; i < FACTORES_RUC.length; i++)
-    suma += Number(cuerpo[i]) * (FACTORES_RUC[i] as number);
-  const resto = 11 - (suma % 11);
-  const ruc = cuerpo + String(resto >= 10 ? resto - 10 : resto);
-  if (!validarRuc(ruc)) throw new Error(`El ayudante generó un RUC inválido: ${ruc}`);
-  return ruc;
+/**
+ * RUC válido (prefijo 20 por defecto, dígito verificador calculado) y único entre archivos paralelos:
+ * los cuerpos se reparten por bloques reservados por proceso (ver `ruc-unico.ts`), sin sorteo que choque.
+ */
+export function rucAleatorio(prefijo: PrefijoRuc = '20'): string {
+  return generarRucUnico(prefijo);
 }
 
 /** Texto único por llamada (nombres de empresa, sucursal, actor, motivo…). */

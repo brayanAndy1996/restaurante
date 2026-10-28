@@ -5,13 +5,13 @@
 // `@restaurante/contratos`, `crearSuperadministrador`, `crearAplicacion` y `RelojManual`) y, para
 // inspeccionar filas, un cliente administrador de PostgreSQL (que salta la RLS; solo se lee).
 import type { INestApplication, LogLevel, Type } from '@nestjs/common';
-import { randomBytes, randomInt, randomUUID } from 'node:crypto';
-import { validarRuc } from '@restaurante/dominio';
+import { randomBytes, randomUUID } from 'node:crypto';
 import request from 'supertest';
 import { expect } from 'vitest';
 import { crearSuperadministrador } from '../../scripts/lib/superadministrador';
 import { crearAplicacion } from '../../src/aplicacion';
 import { RelojManual } from '../../src/nucleo/reloj';
+import { generarRucUnico } from '../aislamiento/ruc-unico';
 import { conCliente, fijarEntornoDePrueba } from '../utilidades';
 
 /** Lunes 2 de noviembre de 2026, 10:00 en Lima (sin horarios de acceso en estas pruebas). */
@@ -124,21 +124,13 @@ export function contienePin(texto: string, pin: string): boolean {
 // Datos de prueba
 // ---------------------------------------------------------------------------------------------
 
-const FACTORES_RUC = [5, 4, 3, 2, 7, 6, 5, 4, 3, 2];
-
+/** RUC válido y único entre archivos paralelos (bloques reservados por proceso, ver `ruc-unico.ts`). */
 export function rucAleatorio(): string {
-  const cuerpo = '20' + String(randomInt(0, 100_000_000)).padStart(8, '0');
-  let suma = 0;
-  for (let i = 0; i < FACTORES_RUC.length; i++)
-    suma += Number(cuerpo[i]) * (FACTORES_RUC[i] as number);
-  const resto = 11 - (suma % 11);
-  const ruc = cuerpo + String(resto >= 10 ? resto - 10 : resto);
-  if (!validarRuc(ruc)) throw new Error(`RUC inválido generado: ${ruc}`);
-  return ruc;
+  return generarRucUnico();
 }
 
 export function sufijo(): string {
-  return randomUUID().replace(/-/g, '').slice(0, 10);
+  return randomUUID().replace(/-/g, '').slice(0, 16);
 }
 
 export function nombreDeUsuarioUnico(prefijo = 'u'): string {
