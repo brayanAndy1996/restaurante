@@ -2,7 +2,7 @@
 
 - **Historias y requerimientos:** HU-05, HU-06, HU-07, HU-08, HU-09; RF-14 a RF-20 (RF-19 solo en lo que toca a definir las estaciones; su asociación a una impresora o a un KDS va en la sección 3). RF-21 (importar desde Excel) queda para después (decisión 3). RF-13 en lo que toca a los cambios de configuración de la carta. RNF que aplican: RNF-03, RNF-06, RNF-09, RNF-10, RNF-11, RNF-13, RNF-14, RNF-17, RNF-18, RNF-20. Fuente de negocio: `fuentes.md` de esta carpeta (extracto de los documentos compartidos, rev. 18 y 17), "Decisiones del usuario" (que mandan sobre `fuentes.md` donde lo cambian: el Cajero edita la carta y el tipo de producto se puede cambiar) y, para el contexto general, `specs/002-plataforma-y-acceso/fuentes.md`.
 - **Ruta crítica:** sí, en parte (decidida por el orquestador el 2026-10-28: P1 montos, P2 permisos y auditoría con el Cajero, P3 aislamiento; el resto no es crítico). Ver "Clasificación de ruta crítica".
-- **Estado:** aprobada (2026-10-28)
+- **Estado:** terminada (2026-10-28)
 
 ## Objetivo
 

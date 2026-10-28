@@ -21,7 +21,18 @@ La sección 1 de los requerimientos, «Plataforma y acceso» (historia 002), est
 
 **Toda ruta exige sesión** (`Authorization: Bearer se.<empresa>.<sesión>.<secreto>`) salvo las `@Publica()` (`GET /health`, `POST /sesiones/contrasena`, `POST /sesiones/pin`, `GET /equipo` y `POST /plataforma/sesiones`): la empresa y la persona de cada petición salen de la sesión, nunca de una cabecera.
 
-La siguiente es la sección 2 (Carta).
+La sección 2 de los requerimientos, «Carta» (especificación 003, historias HU-05 a HU-09), está terminada: su especificación, plan y tareas están en [`specs/003-carta/`](specs/003-carta/). Incluye la revisión y dos rondas de ataque adversarial sobre las partes críticas (montos, permisos y aislamiento). Lo construido:
+
+- **Estaciones, familias y productos** (RF-14 y RF-19): alta, edición y orden manual de familias y productos; productos simples, combos y menús del día. El tipo de un producto se puede cambiar, y lo que deja de aplicar se quita solo con confirmación. Afectación tributaria, estación (o ninguna), tipo de control de stock y «se vende solo».
+- **Fotos de producto**: JPEG, PNG o WebP de hasta 1 MB, comprobadas por su contenido, en el almacén que elige `ARCHIVOS_DRIVER` (disco en desarrollo, Cloudflare R2 en producción).
+- **Precio y disponibilidad por sucursal** (RF-15): el Administrador los cambia en todas las sucursales y el Cajero, solo donde es Cajero. El Administrador y el Cajero editan el resto de la carta; las estaciones siguen siendo solo del Administrador.
+- **Grupos de modificadores** (RF-16), reutilizables, con mínimo, máximo y producto ligado; **combos** (RF-17), con componentes y opciones; y **menú del día** (RF-18), cuyas opciones se eligen cada día en cada sucursal.
+- **Agotado (86)** (RF-20) hasta el fin del día operativo o hasta reactivarlo. La vista de la sucursal lleva `ETag`, y Disponibilidad la refresca cada 15 segundos y al volver a la pestaña.
+- **Auditoría**: cada cambio de precio queda con quién lo hizo. Los eventos `carta.disponibilidad` y `carta.actualizada` se registran al confirmar; el transporte en tiempo real llega en la sección 3.
+
+Lo que la Carta deja a las secciones siguientes: **Salón** (3) muestra la carta con `GET /carta/sucursal` y arma cada línea de venta con `CartaVentaService.prepararLinea` (precio, modificadores, componentes y estaciones); **Caja** (4) toma de esa línea `afectacionIgv` y `aplicaIcbper`; **Pedidos web** (5) publica la misma vista con `cartaDeSucursal` y vuelve a validar con `prepararLinea` al confirmar; **Inventario** (6) lee el `tipoControlStock` de cada producto y marca agotados con origen `SIN_STOCK`.
+
+La siguiente es la sección 3 (Salón, Cocina e Impresión básica).
 
 ## Requisitos
 
@@ -210,7 +221,7 @@ código fuente), `packages/contratos` para hablar con la API y `packages/dominio
   semilla (el superadministrador de demostración; cambia `E2E_SUPERADMIN_USUARIO` y
   `E2E_SUPERADMIN_CONTRASENA` si usas otro) y las variables de la API. Si ya corren la API (3000) y la PWA
   (5173) con `pnpm dev`, las reutiliza; si no, las levanta. Cada corrida crea su propia empresa con
-  nombres únicos. La primera vez: `pnpm --filter @restaurante/app exec playwright install chromium`.
+  nombres únicos. `e2e/carta.spec.ts` recorre la carta y la disponibilidad con cinco personas de una empresa nueva (a 360 px, y en una tableta). La primera vez: `pnpm --filter @restaurante/app exec playwright install chromium`.
   Mientras otra persona recompila `packages/*`, el servidor de desarrollo de Vite puede recargar módulos
   a medio camino y la app falla con "useSesion debe usarse dentro de SesionProvider"; si pasa, reinicia
   `pnpm dev` (o sirve el `build` con `pnpm --filter @restaurante/app preview`).
@@ -254,6 +265,10 @@ utilidades están en `apps/api/test/README.md`. Las pruebas de `packages/*` no u
 | `ARCHIVOS_DRIVER`                                                        | Dónde se guardan las fotos de la carta: `memoria` (pruebas), `disco` (solo `NODE_ENV=development`; la API sirve la carpeta en `/archivos/*`) o `r2` (Cloudflare R2). Por defecto `disco` en desarrollo y `memoria` en pruebas; **en producción es obligatorio `r2`**                                                                                              |
 | `ARCHIVOS_DIRECTORIO`, `ARCHIVOS_URL_PUBLICA`                            | Carpeta del almacén en disco (por defecto `./archivos`, ignorada por git) y URL base pública de los archivos (con `disco`, por defecto `http://localhost:<PORT>/archivos`; con `r2`, el dominio público del bucket y obligatoria)                                                                                                                                 |
 | `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET` | Credenciales del bucket de R2; obligatorias con `ARCHIVOS_DRIVER=r2`. El token debe tener permiso solo sobre ese bucket                                                                                                                                                                                                                                           |
+
+### Ver las fotos de la carta en desarrollo
+
+Con `NODE_ENV=development` (el valor de `.env.example`), `ARCHIVOS_DRIVER` vale `disco` por defecto: la API guarda las fotos en `ARCHIVOS_DIRECTORIO` (`./archivos`, dentro de `apps/api`, que git ignora) y las sirve en `http://localhost:3000/archivos/*`, en la dirección de `ARCHIVOS_URL_PUBLICA`. La PWA usa la URL que la API da en cada producto (`fotoUrl`), así que con `pnpm dev` basta para verlas. Con `memoria` (pruebas) no se ven, y en producción las fotos van a Cloudflare R2. Detalles en [`apps/app/README.md`](apps/app/README.md#ver-las-fotos-de-los-productos-en-desarrollo).
 
 ## Aislamiento entre empresas: reglas para quien programa
 

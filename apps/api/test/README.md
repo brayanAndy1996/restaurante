@@ -682,6 +682,13 @@ Símbolos nuevos entre módulos: `SucursalesConsultaService` (`src/modulos/plata
 `bloqueoTemporal`, `credencialesInvalidas`, `errorDeReserva` y `claveDeIngresoSuperadministrador` (`src/modulos/seguridad`).
 `DatosAdministradorInicial` recibe `hashContrasena` (calculado antes de abrir la transacción) en lugar de la contraseña.
 
+## Historia 003 · carpetas de pruebas
+
+- `carta-critica/` (protegida): `permisos-carta.spec.ts` y `cajero-carta.spec.ts` (P2: permisos, auditoría y el Cajero), `rls-carta.spec.ts` y `referencias-carta.spec.ts` (P3: aislamiento), `linea-preparada.spec.ts` (P1: `prepararLinea`), `ataque-ronda1.spec.ts` (ronda 1 adversarial) y la fábrica `fabrica-permisos-carta.ts`. Las reglas puras de montos (P1) están en `packages/dominio/test/carta/precios.spec.ts`, también protegida. `test-writer` las escribió antes de la implementación.
+- `referencias-carta.spec.ts` cambió dos veces después de la fase B, en commits de `test-writer` hechos entre el backend de C5 (`598ac95`) y su E2E (`5dbf672`): los criterios 67 y 69 quitan `fotoUrl` antes de buscar ids ajenos y revisan la clave de la foto aparte, porque la clave lleva un UUID que no es id de ninguna fila. El chequeo de ids del resto de la respuesta no cambió (commits `98a43f6` y `966dfa4`).
+- `carta/` (no protegida, del desarrollador): las pruebas de cada grupo de C1 a C5 y de las correcciones de las rondas, descritas abajo. `packages/dominio/test/carta/disponibilidad.spec.ts` también es no protegida.
+- Las pruebas protegidas de 002 que ajustó 003 (P0) están en `acceso/pin.spec.ts`, `acceso/clave-supervisor.spec.ts` y `packages/dominio/test/permisos.spec.ts`.
+
 ## Historia 003 · grupo C1 (T6 a T10): estaciones, familias, productos simples y fotos
 
 Pruebas del desarrollador (no protegidas) en `apps/api/test/carta/` y `packages/dominio/test/`; no tocan ninguna
@@ -751,7 +758,7 @@ la fábrica de `carta-critica/fabrica-permisos-carta.ts` (a través de `carta/ay
 
 El E2E de la carta contra la API real (Playwright) vive en `apps/app/e2e/carta.spec.ts`, no aquí.
 
-## Historia 003 · ronda 1 adversarial y revisión T31
+## Historia 003 · rondas 1 y 2 adversariales y revisión T31
 
 La primera ronda adversarial (`adversarial` recibió la especificación y el código, no las notas de quien implementó)
 dejó una prueba protegida nueva y cuatro hallazgos:
@@ -776,6 +783,7 @@ dejó una prueba protegida nueva y cuatro hallazgos:
     producto no puede ser componente de sí mismo con la URL en mayúsculas (422, no 500 por el `CHECK`).
   - Revisión T31: los menús del día de una familia inactiva no salen en la consulta del menú del día (ni en la
     vista) y la foto responde 403 antes que 415 a quien no puede editar la carta.
+- **Ronda 2** (sin fallas en lo crítico): una no crítica, el abrazo mortal en el `PATCH` de un producto cuando una lectura sin protección de su familia o de sus grupos quedaba vieja. Corrección: `bloquearEnOrden` toma primero un cerrojo de transacción por producto (`pg_advisory_xact_lock`), así los `PATCH` del mismo producto se turnan. Dos observaciones, también corregidas: el cuerpo de una foto rechazada se descarta y, si no llegó entero, la conexión se cierra; y una subida cortada responde 400 `PETICION_INVALIDA` con un aviso en el log. Pruebas no protegidas: `carta/abrazo-patch-producto.spec.ts` y `carta/foto-cierre-conexion.spec.ts`.
 
 ## Estado actual de la historia 003
 
@@ -784,8 +792,7 @@ dejó una prueba protegida nueva y cuatro hallazgos:
   queda nada en rojo por falta de implementación.
 - La suite completa de la API pasa en dos corridas seguidas contra PostgreSQL 16 (`BASE_DE_PRUEBA` propio por
   corrida para no pisar otras).
-- Pendiente de rondas siguientes: lo que encuentre `adversarial` en la ronda 2 se convierte en pruebas protegidas
-  nuevas escritas por `test-writer`.
+- Las rondas 1 y 2 del ataque adversarial están corregidas y no queda ninguna falla abierta. Cada falla es una prueba: protegida en `ataque-ronda1.spec.ts`, o no protegida en `correcciones-ronda1.spec.ts`, `abrazo-patch-producto.spec.ts` y `foto-cierre-conexion.spec.ts`.
 
 ## Pendientes menores
 

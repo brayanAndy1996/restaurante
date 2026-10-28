@@ -24,6 +24,10 @@ Solo la PWA: `pnpm --filter @restaurante/app dev`. Llama a la API que diga `VITE
 | `pnpm --filter @restaurante/app presupuesto` | Peso del paquete inicial (gzip) contra el límite; correr después del build |
 | `pnpm --filter @restaurante/app e2e`         | Playwright a 360 px contra la API real (ver el README de la raíz)          |
 
+## E2E de la carta
+
+`e2e/carta.spec.ts` tiene siete pruebas, en serie, que recorren la carta y la disponibilidad con cinco personas de una empresa nueva en un celular de 360 px: el Administrador arma la carta con una foto, un combo y un menú del día; Cocina/Barra arma el menú de hoy y marca un plato agotado solo por hoy; un Cajero cambia un precio y ve la sucursal 2 solo para leer; el Administrador convierte el combo en simple; y un Mozo no ve la carta. Otras dos miran el diseño: a 360 px no hay desplazamiento lateral y los controles miden 44 px o más, y en una tableta la lista pasa a tabla. La API que levanta Playwright corre con `NODE_ENV=development`, así que las fotos de prueba se guardan en disco (`ARCHIVOS_DRIVER=disco`; la CI lo fija).
+
 ## "Pendiente de envío"
 
 Las escrituras de la carta y de Disponibilidad no se pierden por un microcorte. `src/lib/envios.ts`
