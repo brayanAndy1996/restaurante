@@ -41,7 +41,10 @@ export function reglasDelTipo(p: ProductoParaReglas): CampoError[] {
   const falla = (campo: string, mensaje: string) => campos.push({ campo, mensaje });
   if (p.tipo === 'SIMPLE') {
     if (p.faltaEstacion) {
-      falla('estacionId', 'Elige la estación o indica que no tiene (null) al pasar a producto simple');
+      falla(
+        'estacionId',
+        'Elige la estación o indica que no tiene (null) al pasar a producto simple',
+      );
     }
     if (p.componentesEnviados > 0) falla('componentes', 'Un producto simple no lleva componentes');
     if (p.seVendeSolo && p.precio === null) {
@@ -176,9 +179,7 @@ export async function calcularSeQuita(
 
 /** `true` si el cambio de tipo quitaría algo (y por lo tanto pide confirmación). */
 export const hayQueQuitar = (seQuita: SeQuita): boolean =>
-  seQuita.estacion !== null ||
-  seQuita.componentes.length > 0 ||
-  seQuita.opcionesDelDia.length > 0;
+  seQuita.estacion !== null || seQuita.componentes.length > 0 || seQuita.opcionesDelDia.length > 0;
 
 /** El mensaje del 409 `CONFIRMACION_REQUERIDA`, con lo que se quitaría en palabras. */
 export function mensajeDeConfirmacion(seQuita: SeQuita): string {
@@ -222,7 +223,11 @@ export async function borrarOpcionesDelDia(
   const grupos = new Map<string, OpcionesBorradas>();
   for (const f of filas) {
     const clave = `${f.sucursal_id}|${f.dia}`;
-    const grupo = grupos.get(clave) ?? { sucursalId: f.sucursal_id, dia: f.dia, modificadorIds: [] };
+    const grupo = grupos.get(clave) ?? {
+      sucursalId: f.sucursal_id,
+      dia: f.dia,
+      modificadorIds: [],
+    };
     grupo.modificadorIds.push(f.modificador_id);
     grupos.set(clave, grupo);
   }

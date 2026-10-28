@@ -463,10 +463,7 @@ export class ProductosService {
     });
     // Grupos (criterios 8 y 9): la lista enviada reemplaza a la guardada; solo los que se agregan deben estar
     // activos (los que ya tenía se conservan), y todos al reactivar el producto.
-    const gruposAntes =
-      cambios.gruposModificadores !== undefined || reactiva
-        ? (await this.gruposDe(id)).map((g) => g.id)
-        : [];
+    const gruposAntes = (await this.gruposDe(id)).map((g) => g.id);
     const gruposDespues = cambios.gruposModificadores?.map((g) => g.toLowerCase()) ?? gruposAntes;
     const guardadosGrupos = new Set(gruposAntes);
     fallan.push(

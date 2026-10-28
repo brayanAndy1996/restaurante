@@ -16,6 +16,7 @@ import { FotosProductoService } from './fotos-producto.service';
 import { GruposController } from './grupos.controller';
 import { GruposService } from './grupos.service';
 import { MenuDelDiaController } from './menu-del-dia.controller';
+import { MenuDelDiaService } from './menu-del-dia.service';
 import { PermisosCarta } from './permisos-carta';
 import { ProductosController } from './productos.controller';
 import { ProductosService } from './productos.service';
@@ -25,7 +26,7 @@ import { VistaSucursalController } from './vista-sucursal.controller';
  * Carta (historia 003): dueño de `estacion`, `familia`, `producto`, `producto_sucursal`,
  * `producto_agotado`, `grupo_modificadores`, `modificador`, `producto_grupo`, `componente_combo` y
  * `menu_del_dia_opcion` (las tablas llegan con las migraciones de la fase C: `estacion`, `familia` y
- * `producto` con el grupo C1, `producto_sucursal` con C2 y los grupos con C3). Importa `AuditoriaModule` (una fila por escritura) y `SeguridadModule`
+ * `producto` con el grupo C1, `producto_sucursal` con C2, los grupos con C3 y `componente_combo` y `menu_del_dia_opcion` con C4). Importa `AuditoriaModule` (una fila por escritura) y `SeguridadModule`
  * para conocer el rol de una persona en cada sucursal (criterio 19b). Exporta solo los dos servicios que
  * usan las secciones 3, 5 y 6.
  */
@@ -51,6 +52,7 @@ import { VistaSucursalController } from './vista-sucursal.controller';
     FotosProductoService,
     AjustesSucursalService,
     GruposService,
+    MenuDelDiaService,
     CartaVentaService,
     CartaDisponibilidadService,
   ],

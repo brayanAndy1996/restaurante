@@ -687,6 +687,7 @@ export type GrupoRespuesta = z.infer<typeof grupoRespuestaSchema>;
 export type ProductoDeVenta = z.infer<typeof productoDeVentaSchema>;
 export type CartaSucursalRespuesta = z.infer<typeof cartaSucursalRespuestaSchema>;
 export type LineaPreparada = z.infer<typeof lineaPreparadaSchema>;
+export type MenuDelDiaConsulta = z.input<typeof menuDelDiaConsultaSchema>;
 export type MenuDelDiaEntrada = z.input<typeof menuDelDiaEntradaSchema>;
 export type MenuDelDiaRespuesta = z.infer<typeof menuDelDiaRespuestaSchema>;
 export type AgotadoEntrada = z.input<typeof agotadoEntradaSchema>;

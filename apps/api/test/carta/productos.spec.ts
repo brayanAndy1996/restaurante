@@ -1,8 +1,7 @@
 // Historia 003, grupo C1 · productos simples (criterios 6 a 12): pruebas del desarrollador (no protegidas).
-// Los tipos COMBO y MENU_DEL_DIA, el cambio de tipo y los componentes llegan en C4: aquí se comprueba que
-// mientras tanto responden 400 y no cambian nada. Los grupos de modificadores (C3) están en
-// `grupos-modificadores.spec.ts`. `noDisponibleEn` y el criterio 10d (grupo C2)
-// están en `ajustes-sucursal.spec.ts`.
+// Los combos, el menú del día y el cambio de tipo (grupo C4) están en `combos.spec.ts` y `cambio-tipo.spec.ts`;
+// los grupos de modificadores (C3), en `grupos-modificadores.spec.ts`; `noDisponibleEn` y el criterio 10d
+// (grupo C2), en `ajustes-sucursal.spec.ts`.
 import type { Client } from 'pg';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { abrirCliente } from '../utilidades';
@@ -163,31 +162,34 @@ describe('criterio 6 · crear un producto simple', () => {
     }
   });
 
-  it('en esta versión COMBO, MENU_DEL_DIA y componentes responden 400 sin crear nada', async () => {
+  it('un simple no admite componentes (400) y un combo o un menú con ids que no existen responde 422', async () => {
     const antes = await instantaneaCarta(admin, e.A.empresaId);
-    const casos: [string, Record<string, unknown>][] = [
-      [
-        'combo',
-        {
-          tipo: 'COMBO',
-          estacionId: undefined,
-          componentes: [{ productoId: crypto.randomUUID(), cantidad: 1 }],
-        },
-      ],
-      [
-        'menú del día',
-        { tipo: 'MENU_DEL_DIA', estacionId: undefined, gruposModificadores: [crypto.randomUUID()] },
-      ],
-      [
-        'componentes en un simple',
-        { componentes: [{ productoId: crypto.randomUUID(), cantidad: 1 }] },
-      ],
-    ];
-    for (const [nombre, extra] of casos) {
-      const res = await post(tokenA, productoSimple(base, extra));
-      expect(res.status, nombre).toBe(400);
-      expect(res.body.codigo, nombre).toBe('DATOS_INVALIDOS');
-    }
+    esperarError(
+      await post(
+        tokenA,
+        productoSimple(base, { componentes: [{ productoId: crypto.randomUUID(), cantidad: 1 }] }),
+      ),
+      400,
+      'DATOS_INVALIDOS',
+    );
+    const combo = await post(
+      tokenA,
+      productoSimple(base, {
+        tipo: 'COMBO',
+        estacionId: undefined,
+        componentes: [{ productoId: crypto.randomUUID(), cantidad: 1 }],
+      }),
+    );
+    esperarError(combo, 422, 'REFERENCIA_INVALIDA');
+    const menu = await post(
+      tokenA,
+      productoSimple(base, {
+        tipo: 'MENU_DEL_DIA',
+        estacionId: undefined,
+        gruposModificadores: [crypto.randomUUID()],
+      }),
+    );
+    esperarError(menu, 422, 'REFERENCIA_INVALIDA');
     expect(await instantaneaCarta(admin, e.A.empresaId)).toEqual(antes);
   });
 
