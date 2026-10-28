@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import type { Request } from 'express';
 import type { ActorTransaccion, ResolutorEmpresa } from '../../nucleo/contexto-empresa';
-import type { PeticionConPrincipal } from '../../nucleo/principal';
+import type { PeticionConPrincipal, Principal } from '../../nucleo/principal';
 
 /**
  * Resolutor de empresa por sesión: la empresa y el actor salen del principal que dejó el guard de
@@ -11,6 +11,23 @@ import type { PeticionConPrincipal } from '../../nucleo/principal';
  * Actor (criterio 117): sesión de contraseña o PIN, el usuario y, si la sesión tiene equipo recordado, su
  * equipo; sesión de soporte, el superadministrador; principal de prueba, el sistema `prueba`.
  */
+/** Actor de trazabilidad de un principal (ver `ResolutorEmpresaSesion`); `null` si no tiene. */
+export function actorDePrincipal(principal: Principal): ActorTransaccion | null {
+  switch (principal.tipo) {
+    case 'CONTRASENA':
+    case 'PIN':
+      return principal.usuarioId === null
+        ? null
+        : { usuarioId: principal.usuarioId, equipoId: principal.equipoId };
+    case 'SOPORTE':
+      return principal.superadministradorId === null
+        ? null
+        : { superadministradorId: principal.superadministradorId };
+    case 'PRUEBA':
+      return { sistema: 'prueba' };
+  }
+}
+
 @Injectable()
 export class ResolutorEmpresaSesion implements ResolutorEmpresa {
   async resolver(peticion: Request): Promise<string | null> {
@@ -19,19 +36,6 @@ export class ResolutorEmpresaSesion implements ResolutorEmpresa {
 
   async actor(peticion: Request): Promise<ActorTransaccion | null> {
     const principal = (peticion as PeticionConPrincipal).principal;
-    if (principal === undefined) return null;
-    switch (principal.tipo) {
-      case 'CONTRASENA':
-      case 'PIN':
-        return principal.usuarioId === null
-          ? null
-          : { usuarioId: principal.usuarioId, equipoId: principal.equipoId };
-      case 'SOPORTE':
-        return principal.superadministradorId === null
-          ? null
-          : { superadministradorId: principal.superadministradorId };
-      case 'PRUEBA':
-        return { sistema: 'prueba' };
-    }
+    return principal === undefined ? null : actorDePrincipal(principal);
   }
 }

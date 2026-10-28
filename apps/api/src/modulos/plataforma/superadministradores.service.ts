@@ -13,6 +13,7 @@ import {
   Credenciales,
   CupoScrypt,
   GRUPO_PLATAFORMA,
+  GRUPO_SIN_CUENTA_PLATAFORMA,
   TopeDeIntentos,
   VIGENCIA_RESERVA_MS,
   demasiadosALaVez,
@@ -93,9 +94,11 @@ export class SuperadministradoresService {
    * `POST /plataforma/sesiones` (criterio 61). Va en tres tiempos y ninguna conexión ni bloqueo de fila queda
    * retenido mientras corre scrypt (mismo diseño que el ingreso de las personas de empresa):
    *
-   * 0. Antes de tocar la base: tope de ingresos por nombre, turno (uno a la vez por nombre) y un cupo del
-   *    scrypt (`CupoScrypt`, grupo de plataforma). Lo que no entra a tiempo responde 429 de 1 s, sin evaluar,
-   *    sin contar como fallo y sin usar el pool de plataforma (de pocas conexiones).
+   * 0. Tope de ingresos por nombre, turno (uno a la vez por nombre), una lectura corta que dice si el nombre es
+   *    de un superadministrador **activo** y un cupo del scrypt (`CupoScrypt`): los activos van al grupo
+   *    `plataforma` y los demás (nombres inventados) a su propio grupo `sin-cuenta-plataforma`, así una
+   *    inundación de nombres inexistentes no llena la cola donde espera el superadministrador real (criterio
+   *    61). Lo que no entra a tiempo responde 429 de 1 s, sin evaluar y sin contar como fallo.
    * 1. Operación corta que bloquea la fila del superadministrador activo (`FOR NO KEY UPDATE`), revisa el
    *    bloqueo y **reserva el intento** (lo marca "en curso"). Con el bloqueo vigente responde 429 de la
    *    duración restante; con `fallos + en curso` en el umbral, 429 de 1 s: sin evaluar, sin contar y sin
@@ -116,14 +119,39 @@ export class SuperadministradoresService {
     const clave = `superadministrador:${usuario}`;
     const { soltar } = this.tope.entrar(clave);
     try {
-      return await this.tope.conTurno(clave, () =>
-        this.cupo.conCupo(GRUPO_PLATAFORMA, () =>
-          this.ingresarConCupo(usuario, entrada.contrasena),
-        ),
-      );
+      return await this.tope.conTurno(clave, async () => {
+        if (await this.hayActivo(usuario)) {
+          return this.cupo.conCupo(GRUPO_PLATAFORMA, () =>
+            this.ingresarConCupo(usuario, entrada.contrasena),
+          );
+        }
+        // Sin superadministrador activo: mismo scrypt y misma respuesta que una contraseña mala, en su grupo.
+        return this.cupo.conCupo(GRUPO_SIN_CUENTA_PLATAFORMA, () =>
+          this.rechazarSinCuenta(entrada.contrasena),
+        );
+      });
     } finally {
       soltar();
     }
+  }
+
+  /**
+   * Lectura corta y sin bloqueo de fila (solo lectura, sin auditoría): ¿hay un superadministrador activo con
+   * ese nombre? Decide el grupo del cupo; la reserva definitiva la vuelve a comprobar con la fila bloqueada.
+   */
+  private async hayActivo(usuario: string): Promise<boolean> {
+    return this.operacion.consultar(async (transaccion) => {
+      const filas = await sequelizeDe(transaccion).query<{ id: string }>(
+        'SELECT id FROM superadministrador WHERE usuario = $1 AND activo',
+        { transaction: transaccion, bind: [usuario], type: QueryTypes.SELECT },
+      );
+      return filas.length > 0;
+    });
+  }
+
+  private async rechazarSinCuenta(contrasena: string): Promise<never> {
+    await this.credenciales.verificarContrasenaFalsa(contrasena);
+    throw credencialesInvalidas();
   }
 
   private async ingresarConCupo(
@@ -132,9 +160,8 @@ export class SuperadministradoresService {
   ): Promise<IngresoSuperadministradorRespuesta> {
     const reserva = await this.reservarIntento(usuario);
     if (reserva === null) {
-      // Sin superadministrador activo: mismo scrypt y misma respuesta que una contraseña mala.
-      await this.credenciales.verificarContrasenaFalsa(contrasena);
-      throw credencialesInvalidas();
+      // Lo desactivaron entre la lectura previa y la reserva: se trata como un nombre sin cuenta.
+      return this.rechazarSinCuenta(contrasena);
     }
     if ('error' in reserva) throw reserva.error;
 

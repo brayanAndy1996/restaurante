@@ -32,6 +32,10 @@ export const demasiadosALaVez = () =>
 /** Clave de los topes del ingreso con contraseña de un nombre de usuario de empresa (ya normalizado). */
 export const claveDeIngresoUsuario = (nombre: string): string => `contrasena:${nombre}`;
 
+/** Clave de los topes del cambio de la propia contraseña (`PUT /sesion/contrasena`), por usuario. */
+export const claveDeCambioContrasena = (usuarioId: string): string =>
+  `cambio-contrasena:${usuarioId}`;
+
 interface TurnoPorNombre {
   /** Quienes esperan el turno, en orden de llegada. */
   espera: { resolver: () => void; temporizador: NodeJS.Timeout }[];
@@ -51,7 +55,9 @@ interface TurnoPorNombre {
  *   intentos de una ráfaga se resuelven en el orden en que llegaron (la base sigue siendo la que cuenta de
  *   forma exacta entre procesos).
  * - Memorias de 2 s (`esSinCuentaReciente`, `bloqueoReciente`): solo se consultan cuando el nombre está en
- *   ráfaga y se olvidan al crear o reactivar un usuario o cambiarle la contraseña.
+ *   ráfaga y se olvidan al crear, reactivar o desactivar un usuario o cambiarle la contraseña.
+ * - `entrar` y `conTurno` también cubren el cambio de la propia contraseña (clave por usuario), de modo que una
+ *   sesión no puede ocupar varios lugares de la cola de scrypt de su empresa.
  *
  * Cuentan lo que está **en curso**, no los intentos: nada dura más que una petición, así que quien escribe mal
  * un nombre una y otra vez, una por una, sigue recibiendo 401. Los topes son por proceso (cada réplica de la

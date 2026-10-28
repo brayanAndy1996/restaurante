@@ -52,6 +52,54 @@ export interface OpcionesReserva {
 /** Una reserva que nadie resolvió en este tiempo se da por perdida (el proceso murió a media evaluación). */
 export const VIGENCIA_RESERVA_MS = 60_000;
 
+/** Fila de `bloqueo_intentos` (o del superadministrador) que decide si un intento puede reservarse. */
+export interface FilaBloqueo {
+  fallos_seguidos: number;
+  en_curso: number;
+  en_curso_desde: Date | null;
+  bloqueado_hasta: Date | null;
+}
+
+/**
+ * Regla de la reserva, sin tocar la base: un bloqueo vigente o `fallos + en curso` en el umbral la rechazan;
+ * un bloqueo vencido reinicia la cuenta de fallos; las reservas perdidas (`vigenciaReservaMs`) se descartan.
+ * La usan la reserva definitiva (`reservarIntento`, con la fila bloqueada) y la comprobación previa de los
+ * ingresos (una lectura corta y sin bloqueo de fila que se hace antes de pedir cupo de scrypt).
+ */
+export function decidirReserva(
+  fila: FilaBloqueo | undefined,
+  ahora: Date,
+  opciones: OpcionesReserva,
+):
+  | { permitido: false; motivo: 'BLOQUEO'; bloqueadoHasta: Date }
+  | { permitido: false; motivo: 'CUPO_LLENO' }
+  | { permitido: true; fallos: number; enCurso: number; desde: Date | null } {
+  let fallos = 0;
+  let enCurso = 0;
+  let desde: Date | null = null;
+  if (fila !== undefined) {
+    if (fila.bloqueado_hasta !== null) {
+      if (fila.bloqueado_hasta.getTime() > ahora.getTime()) {
+        return { permitido: false, motivo: 'BLOQUEO', bloqueadoHasta: fila.bloqueado_hasta };
+      }
+      // El bloqueo venció: la cuenta de fallos empieza de cero.
+    } else {
+      fallos = fila.fallos_seguidos;
+    }
+    const perdidas =
+      fila.en_curso > 0 &&
+      (fila.en_curso_desde === null ||
+        ahora.getTime() - fila.en_curso_desde.getTime() >=
+          (opciones.vigenciaReservaMs ?? VIGENCIA_RESERVA_MS));
+    if (!perdidas) {
+      enCurso = fila.en_curso;
+      desde = fila.en_curso_desde;
+    }
+  }
+  if (fallos + enCurso >= opciones.umbral) return { permitido: false, motivo: 'CUPO_LLENO' };
+  return { permitido: true, fallos, enCurso, desde };
+}
+
 /**
  * Cuenta de fallos seguidos y bloqueo temporal (criterios 12, 36 y 47), en la transacción de la empresa
  * en curso. Quien llama lo hace dentro de su propio `ContextoEmpresa.ejecutar` y lanza el error después
@@ -222,40 +270,15 @@ export class BloqueosService {
     opciones: OpcionesReserva,
   ): Promise<ReservaIntento> {
     const empresaId = this.contexto.empresaActual();
-    const filas = await this.conexion.query<{
-      fallos_seguidos: number;
-      en_curso: number;
-      en_curso_desde: Date | null;
-      bloqueado_hasta: Date | null;
-    }>(
+    const filas = await this.conexion.query<FilaBloqueo>(
       `SELECT fallos_seguidos, en_curso, en_curso_desde, bloqueado_hasta
          FROM bloqueo_intentos WHERE ambito = $1 AND objetivo_id = $2`,
       { bind: [ambito, objetivoId], type: QueryTypes.SELECT },
     );
-    const fila = filas[0];
-    let fallos = 0;
-    let enCurso = 0;
-    let desde: Date | null = null;
-    if (fila !== undefined) {
-      if (fila.bloqueado_hasta !== null) {
-        if (fila.bloqueado_hasta.getTime() > ahora.getTime()) {
-          return { permitido: false, motivo: 'BLOQUEO', bloqueadoHasta: fila.bloqueado_hasta };
-        }
-        // El bloqueo venció: la cuenta de fallos empieza de cero.
-      } else {
-        fallos = fila.fallos_seguidos;
-      }
-      const perdidas =
-        fila.en_curso > 0 &&
-        (fila.en_curso_desde === null ||
-          ahora.getTime() - fila.en_curso_desde.getTime() >=
-            (opciones.vigenciaReservaMs ?? VIGENCIA_RESERVA_MS));
-      if (!perdidas) {
-        enCurso = fila.en_curso;
-        desde = fila.en_curso_desde;
-      }
-    }
-    if (fallos + enCurso >= opciones.umbral) return { permitido: false, motivo: 'CUPO_LLENO' };
+    const decision = decidirReserva(filas[0], ahora, opciones);
+    if (!decision.permitido) return decision;
+    const { fallos, enCurso } = decision;
+    let { desde } = decision;
     if (enCurso === 0) desde = null; // la racha de evaluaciones en curso empieza con esta reserva
     await this.conexion.query(
       `INSERT INTO bloqueo_intentos AS b

@@ -3,17 +3,32 @@ import { availableParallelism } from 'node:os';
 import { demasiadosALaVez } from './tope-de-intentos';
 
 /**
- * Grupo del scrypt falso de los nombres que no tienen cuenta (inexistentes): no se sabe de qué empresa
- * son. Se reparte como una empresa más.
+ * Grupo del scrypt falso de los nombres que no tienen cuenta (inexistentes) en `/sesiones/contrasena`: no se
+ * sabe de qué empresa son. Se reparte como una empresa más.
  */
 export const GRUPO_SIN_CUENTA = 'sin-cuenta';
-/** Grupo del ingreso del superadministrador (`/plataforma/sesiones`), con o sin cuenta. */
+/**
+ * Grupo del ingreso de un superadministrador **activo** (`/plataforma/sesiones`). Solo entra quien tiene
+ * cuenta (se comprueba antes de pedir cupo), y el turno por nombre deja a lo sumo una espera por cada uno:
+ * ningún nombre inventado puede llenar esta cola.
+ */
 export const GRUPO_PLATAFORMA = 'plataforma';
+/**
+ * Grupo del scrypt falso de los nombres de `/plataforma/sesiones` sin superadministrador activo. Es **propio**
+ * (no se comparte con `sin-cuenta`) para que una inundación de nombres inventados contra la plataforma no
+ * altere la respuesta de los nombres inexistentes de `/sesiones/contrasena` frente a los que tienen cuenta
+ * (criterio 11), ni al revés.
+ */
+export const GRUPO_SIN_CUENTA_PLATAFORMA = 'sin-cuenta-plataforma';
 
 /** Lo más que espera un ingreso por un cupo antes de responder 429 de 1 s (sin evaluar y sin contar). */
 const ESPERA_MAXIMA_MS = 2_000;
-/** Ingresos de un mismo grupo que pueden esperar cupo a la vez; el resto recibe 429 al instante. */
-const COLA_MAXIMA_POR_GRUPO = 20;
+/**
+ * Tope de memoria de la cola de un grupo (no es el que reparte: ver `CupoScrypt`). Con 3 cupos de ~100 ms, en
+ * `ESPERA_MAXIMA_MS` se despachan unas 60 esperas: más allá ya no se servirían a tiempo y el temporizador las
+ * rechazaría igual. Pasado este número, el que llega recibe 429 al instante.
+ */
+const COLA_MAXIMA_POR_GRUPO = 64;
 
 /**
  * Cuántos scrypt pueden correr a la vez en el proceso: siempre menos que los hilos del pool de libuv (para
@@ -39,9 +54,15 @@ interface Espera {
  * de una empresa llena la cola del pool y los de otra esperan segundos. Aquí:
  *
  * - Hay `capacidad` cupos (menos que los hilos). Quien llega con un cupo libre lo toma y sigue.
- * - Si no, espera en la cola de **su grupo**, de tamaño acotado: lo que no cabe, o espera más de
- *   `ESPERA_MAXIMA_MS`, responde 429 `BLOQUEO_TEMPORAL` de 1 s. Como el cupo se toma **antes** de reservar el
- *   intento en la base, esa respuesta no evalúa nada, no cuenta como fallo y no retiene ninguna conexión.
+ * - Si no, espera en la cola de **su grupo**: lo que espera más de `ESPERA_MAXIMA_MS` (o no cabe en el tope
+ *   de memoria `COLA_MAXIMA_POR_GRUPO`) responde 429 `BLOQUEO_TEMPORAL` de 1 s. Como el cupo se toma **antes** de
+ *   reservar el intento en la base, esa respuesta no evalúa nada, no cuenta como fallo y no retiene ninguna
+ *   conexión.
+ * - **Reparto justo por nombre dentro del grupo.** Quien llama pasa antes por el turno por nombre de
+ *   `TopeDeIntentos.conTurno`, así que cada nombre (o cada cuenta, en el cambio de contraseña) tiene como
+ *   máximo una espera en la cola: la cola nunca es más larga que los nombres distintos que hay en curso, y un
+ *   solo nombre, real o inventado, no puede llenarla. Por eso el tope de la cola no deja fuera a un nombre
+ *   que no tiene ninguna espera propia mientras la cola de su grupo no esté realmente saturada.
  * - Al liberarse un cupo pasa al primer grupo con espera y ese grupo se manda al final de la ronda: los grupos
  *   se turnan, así que una empresa que llena su cola no hace esperar a otra más que un turno.
  *

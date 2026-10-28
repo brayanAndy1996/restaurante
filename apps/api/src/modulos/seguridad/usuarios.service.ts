@@ -15,7 +15,10 @@ import { ErrorAplicacion } from '../../nucleo/errores/error-aplicacion';
 import { RELOJ, type Reloj } from '../../nucleo/reloj';
 import { AuditoriaService } from '../auditoria';
 import { Credenciales } from './credenciales';
+import { CupoScrypt } from './cupo-scrypt';
 import { EquiposService, type EquipoRevocado } from './equipos.service';
+import { actorDePrincipal } from './resolutor-empresa-sesion';
+import { SesionActual } from './sesion-actual';
 import { TopeDeIntentos, claveDeIngresoUsuario } from './tope-de-intentos';
 
 interface FilaUsuario {
@@ -71,7 +74,49 @@ export class UsuariosService {
     @Inject(AuditoriaService) private readonly auditoria: AuditoriaService,
     @Inject(EquiposService) private readonly equipos: EquiposService,
     @Inject(TopeDeIntentos) private readonly tope: TopeDeIntentos,
+    @Inject(CupoScrypt) private readonly cupo: CupoScrypt,
+    @Inject(SesionActual) private readonly sesion: SesionActual,
   ) {}
+
+  // ---- Scrypt fuera de la transacción ----------------------------------------------------------
+
+  /**
+   * Hash de una contraseña temporal por el cupo de scrypt de la empresa de quien llama, **sin transacción ni
+   * conexión del pool tomadas** (RNF-03): el alta y el restablecimiento no pueden saturar los hilos del pool de
+   * libuv por encima de los ingresos ni retener una conexión mientras esperan o calculan. Si la cola de la
+   * empresa está saturada responde 429 `BLOQUEO_TEMPORAL` de 1 s.
+   */
+  private hashConCupo(empresaId: string, contrasena: string): Promise<string> {
+    return this.cupo.conCupo(empresaId, () => this.credenciales.hashContrasena(contrasena));
+  }
+
+  /**
+   * Corre `fn` en la transacción de la empresa de la sesión, con su actor. Las rutas que calculan scrypt son
+   * `@SinEmpresa()` (el interceptor no abre la transacción antes de tiempo) y llaman a estos métodos, que
+   * calculan el hash primero y abren la transacción después.
+   */
+  private enTransaccionDeLaSesion<T>(fn: () => Promise<T>): Promise<T> {
+    const principal = this.sesion.principal();
+    const actor = actorDePrincipal(principal);
+    return this.contexto.ejecutar(principal.empresaId, fn, actor === null ? {} : { actor });
+  }
+
+  /** `POST /usuarios`: hash por el cupo, antes de abrir la transacción; el resto es `crear`. */
+  async crearDesdeSesion(entrada: UsuarioCrearEntrada): Promise<UsuarioCreadoRespuesta> {
+    const hash = await this.hashConCupo(
+      this.sesion.principal().empresaId,
+      entrada.contrasenaTemporal,
+    );
+    return this.enTransaccionDeLaSesion(() => this.crear(entrada, hash));
+  }
+
+  /** `POST /usuarios/:id/contrasena`: hash por el cupo, antes de abrir la transacción; el resto es `restablecerContrasena`. */
+  async restablecerDesdeSesion(id: string, contrasenaTemporal: string): Promise<void> {
+    const hash = await this.hashConCupo(this.sesion.principal().empresaId, contrasenaTemporal);
+    return this.enTransaccionDeLaSesion(() =>
+      this.restablecerContrasena(id, contrasenaTemporal, hash),
+    );
+  }
 
   // ---- Consulta --------------------------------------------------------------------------------
 
@@ -94,8 +139,15 @@ export class UsuariosService {
 
   // ---- Alta ------------------------------------------------------------------------------------
 
-  /** `POST /usuarios` (criterios 18 a 21): crea al usuario con su PIN (único, del largo de sus roles). */
-  async crear(entrada: UsuarioCrearEntrada): Promise<UsuarioCreadoRespuesta> {
+  /**
+   * `POST /usuarios` (criterios 18 a 21): crea al usuario con su PIN (único, del largo de sus roles). Corre en
+   * el contexto de empresa en curso; `hashPrecalculado` es el de `contrasenaTemporal`, calculado antes de abrir
+   * la transacción (`crearDesdeSesion`); sin él se calcula aquí (semilla y scripts).
+   */
+  async crear(
+    entrada: UsuarioCrearEntrada,
+    hashPrecalculado?: string,
+  ): Promise<UsuarioCreadoRespuesta> {
     const empresaId = this.contexto.empresaActual();
     const nombreUsuario = minusculasAscii(entrada.nombreUsuario);
     const horario = entrada.horario ?? null;
@@ -107,7 +159,8 @@ export class UsuariosService {
       roles: accesos.map((a) => a.rol),
     });
     const { pin, huella } = await this.generarPin(empresaId, largo);
-    const hash = await this.credenciales.hashContrasena(entrada.contrasenaTemporal);
+    const hash =
+      hashPrecalculado ?? (await this.credenciales.hashContrasena(entrada.contrasenaTemporal));
     const ahora = this.reloj.ahora();
 
     let id: string;
@@ -250,7 +303,8 @@ export class UsuariosService {
     if (huboCambioDeAccesos)
       await this.reemplazarAccesos(empresaId, id, accesosActuales, accesos, ahora);
 
-    if (!actual.activo && activo) this.olvidarIngresosRecientes(actual.nombre_usuario); // reactivado
+    // Reactivado o desactivado: lo que se recordaba del nombre (sin cuenta, bloqueo) deja de valer.
+    if (actual.activo !== activo) this.olvidarIngresosRecientes(actual.nombre_usuario);
 
     // Sesiones que ya no valen: cierre inmediato (la guarda también lo comprueba en cada petición).
     if (actual.activo && !activo) {
@@ -327,8 +381,12 @@ export class UsuariosService {
    * del usuario y revoca todos sus equipos recordados (criterio 32b): la persona vuelve a entrar con la
    * contraseña temporal en cada equipo.
    */
-  async restablecerContrasena(id: string, contrasenaTemporal: string): Promise<void> {
-    const hash = await this.credenciales.hashContrasena(contrasenaTemporal);
+  async restablecerContrasena(
+    id: string,
+    contrasenaTemporal: string,
+    hashPrecalculado?: string,
+  ): Promise<void> {
+    const hash = hashPrecalculado ?? (await this.credenciales.hashContrasena(contrasenaTemporal));
     const actual = await this.bloquearUsuario(id);
     const ahora = this.reloj.ahora();
     await this.conexion.query(

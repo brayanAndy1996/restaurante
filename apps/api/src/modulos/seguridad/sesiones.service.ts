@@ -18,13 +18,23 @@ import type { Principal } from '../../nucleo/principal';
 import { RELOJ, type Reloj } from '../../nucleo/reloj';
 import { AuditoriaService } from '../auditoria';
 import { SuscripcionService } from '../plataforma/suscripcion.service';
-import { BloqueosService, segundosHasta } from './bloqueos.service';
+import {
+  BloqueosService,
+  decidirReserva,
+  segundosHasta,
+  type FilaBloqueo,
+} from './bloqueos.service';
 import { CupoScrypt, GRUPO_SIN_CUENTA } from './cupo-scrypt';
 import { MINUTOS_INACTIVIDAD_PIN_POR_DEFECTO } from './constantes-acceso';
 import { Credenciales } from './credenciales';
 import { HorarioService } from './horario.service';
 import { SesionActual } from './sesion-actual';
-import { TopeDeIntentos, claveDeIngresoUsuario, demasiadosALaVez } from './tope-de-intentos';
+import {
+  TopeDeIntentos,
+  claveDeCambioContrasena,
+  claveDeIngresoUsuario,
+  demasiadosALaVez,
+} from './tope-de-intentos';
 import { armarTokenSesion } from './tokens';
 
 /** Inactividad de una sesión de contraseña o de soporte, en minutos (criterios 14 y 66). */
@@ -58,9 +68,15 @@ interface FilaUsuario {
 
 type Resultado<T> = { ok: T } | { error: ErrorAplicacion };
 
+/** Rechazo que se responde sin evaluar: el error y, si es un bloqueo vigente, hasta cuándo. */
+interface Rechazo {
+  error: ErrorAplicacion;
+  bloqueoVigente?: Date;
+}
+
 /** Resultado del tiempo 1 (reserva): rechazar ya, tratar como nombre sin cuenta, o evaluar a esta persona. */
 type Reserva =
-  | { tipo: 'rechazo'; error: ErrorAplicacion; bloqueoVigente?: Date }
+  | ({ tipo: 'rechazo' } & Rechazo)
   | { tipo: 'sin_cuenta' }
   | { tipo: 'reservado'; usuario: FilaUsuario };
 
@@ -105,10 +121,13 @@ export class SesionesService {
    * `POST /sesiones/contrasena` (criterios 10 a 13 y 12b). El ingreso va en tres tiempos y ninguna
    * conexión del pool ni bloqueo de fila queda retenido mientras corre scrypt (RNF-03):
    *
-   * 0. Antes de tocar la base: tope de ingresos por nombre, turno (un ingreso a la vez por nombre) y, ya
-   *    sabida la empresa, un cupo del scrypt repartido entre empresas (`CupoScrypt`). Lo que no entra a tiempo
+   * 0. Antes de reservar: tope de ingresos por nombre, turno (un ingreso a la vez por nombre), la empresa del
+   *    nombre y una **comprobación previa** (lectura corta, sin bloquear la fila y antes de pedir cupo): con
+   *    un bloqueo vigente o con `fallos + en curso` en el umbral responde 429 sin entrar en ninguna cola. Solo
+   *    entonces toma un cupo del scrypt repartido entre empresas (`CupoScrypt`). Lo que no entra a tiempo
    *    responde 429 de 1 s sin evaluar y sin contar como fallo.
-   * 1. Transacción corta que bloquea la fila del usuario, revisa el bloqueo y **reserva el intento**
+   * 1. Transacción corta que bloquea la fila del usuario, vuelve a revisar el bloqueo (ahora con la fila
+   *    bloqueada, que es la comprobación definitiva) y **reserva el intento**
    *    (`BloqueosService.reservarIntento`: lo marca "en curso"). Con el bloqueo vigente responde 429 de la
    *    duración restante; con `fallos + en curso` en el umbral, 429 de 1 s: en ambos casos sin evaluar y sin
    *    contar. Ninguna ráfaga evalúa más de 5 contraseñas (criterio 12).
@@ -152,6 +171,17 @@ export class SesionesService {
     if (empresaId === null) {
       if (enRafaga) this.tope.recordarSinCuenta(clave);
       return this.rechazarSinCuenta(contrasena);
+    }
+    // Una cuenta ya bloqueada (o con 5 evaluaciones decidiéndola) responde 429 aquí, sin ocupar la cola de su
+    // empresa: atacar con nombres reales no llena la cola de A (criterios 10 y 11).
+    const previo = await this.contexto.ejecutar(empresaId, () =>
+      this.comprobarPrevio('u.nombre_usuario', nombre),
+    );
+    if (previo !== null) {
+      if (enRafaga && previo.bloqueoVigente !== undefined) {
+        this.tope.recordarBloqueo(clave, previo.bloqueoVigente);
+      }
+      throw previo.error;
     }
     return this.cupo.conCupo(empresaId, () =>
       this.ingresarConCupo(empresaId, nombre, contrasena, clave, enRafaga),
@@ -248,10 +278,6 @@ export class SesionesService {
    * a otras personas) y reserva el intento. Una persona inactiva o inexistente no se bloquea ni se cuenta.
    */
   private async reservarIngreso(nombreUsuario: string): Promise<Reserva> {
-    // Camino rápido: un bloqueo vigente se ve sin esperar turno (lectura sin bloquear la fila), así una
-    // ráfaga contra una cuenta ya bloqueada se despacha en paralelo y no hace cola por su fila.
-    const previo = await this.bloqueoVigente('u.nombre_usuario', nombreUsuario);
-    if (previo !== null) return previo;
     const usuarios = await this.conexion.query<FilaUsuario>(
       `SELECT id, nombre, nombre_usuario, hash_contrasena, contrasena_temporal, horario,
               es_administrador, activo
@@ -265,23 +291,33 @@ export class SesionesService {
     return this.reservar(usuario, ahora);
   }
 
-  /** Rechazo por bloqueo vigente de la persona activa que cumple `columna = valor`, sin bloquear su fila. */
-  private async bloqueoVigente(
+  /**
+   * Comprobación previa al cupo (lectura corta, **sin bloquear la fila**): rechazo si la persona activa que
+   * cumple `columna = valor` tiene un bloqueo vigente o `fallos + en curso >= 5`; `null` si puede seguir (también
+   * si no tiene cuenta activa o fila de intentos). Es una pista que ahorra la cola: la reserva definitiva sigue
+   * haciéndose después, dentro del cupo y con la fila bloqueada.
+   */
+  private async comprobarPrevio(
     columna: 'u.nombre_usuario' | 'u.id',
     valor: string,
-  ): Promise<Reserva | null> {
+  ): Promise<Rechazo | null> {
     const ahora = this.reloj.ahora();
-    const filas = await this.conexion.query<{ bloqueado_hasta: Date }>(
-      `SELECT b.bloqueado_hasta
+    const filas = await this.conexion.query<FilaBloqueo>(
+      `SELECT b.fallos_seguidos, b.en_curso, b.en_curso_desde, b.bloqueado_hasta
          FROM usuario u
          JOIN bloqueo_intentos b ON b.objetivo_id = u.id AND b.ambito = 'CONTRASENA_USUARIO'
-        WHERE ${columna} = $1 AND u.activo AND b.bloqueado_hasta > $2`,
-      { bind: [valor, ahora], type: QueryTypes.SELECT },
+        WHERE ${columna} = $1 AND u.activo`,
+      { bind: [valor], type: QueryTypes.SELECT },
     );
-    const hasta = filas[0]?.bloqueado_hasta;
-    return hasta === undefined
-      ? null
-      : { tipo: 'rechazo', error: bloqueoTemporal(hasta, ahora), bloqueoVigente: hasta };
+    const decision = decidirReserva(filas[0], ahora, { umbral: FALLOS_PARA_BLOQUEAR_CONTRASENA });
+    if (decision.permitido) return null;
+    if (decision.motivo === 'BLOQUEO') {
+      return {
+        error: bloqueoTemporal(decision.bloqueadoHasta, ahora),
+        bloqueoVigente: decision.bloqueadoHasta,
+      };
+    }
+    return { error: demasiadosALaVez() };
   }
 
   private async reservar(usuario: FilaUsuario, ahora: Date): Promise<Reserva> {
@@ -578,10 +614,11 @@ export class SesionesService {
 
   /**
    * `PUT /sesion/contrasena` (criterio 16): solo sesiones de contraseña. La contraseña actual incorrecta
-   * cuenta para el bloqueo del criterio 12. Mismo reparto en tres tiempos que el ingreso: cupo del scrypt,
-   * reserva corta, scrypt (de la actual y, si es correcta, el hash de la nueva) fuera de toda transacción y
-   * aplicación corta. No usa el tope ni el turno por nombre: la persona ya está autenticada y la cuenta la
-   * frenan el bloqueo y el cupo de evaluaciones en curso.
+   * cuenta para el bloqueo del criterio 12. Mismo orden que el ingreso: tope y turno por usuario (clave
+   * `cambio-contrasena:<usuario>`: una sesión no ocupa varios lugares a la vez), comprobación previa del
+   * bloqueo sin entrar en la cola, cupo del scrypt, reserva corta, scrypt (de la actual y, si es correcta, el
+   * hash de la nueva) fuera de toda transacción y aplicación corta. Sin la comprobación y el turno, un mozo
+   * con sesión llenaba la cola de su empresa (criterios 10, 11 y 16).
    */
   async cambiarContrasena(entrada: CambiarContrasenaEntrada): Promise<void> {
     const principal = this.actual.principal();
@@ -593,7 +630,20 @@ export class SesionesService {
         { campo: 'nueva', mensaje: 'La contraseña nueva debe ser distinta de la actual' },
       ]);
     }
-    await this.cupo.conCupo(principal.empresaId, () => this.cambiarConCupo(principal, entrada));
+    const usuarioId = principal.usuarioId;
+    const clave = claveDeCambioContrasena(usuarioId);
+    const { soltar } = this.tope.entrar(clave);
+    try {
+      await this.tope.conTurno(clave, async () => {
+        const previo = await this.contexto.ejecutar(principal.empresaId, () =>
+          this.comprobarPrevio('u.id', usuarioId),
+        );
+        if (previo !== null) throw previo.error;
+        await this.cupo.conCupo(principal.empresaId, () => this.cambiarConCupo(principal, entrada));
+      });
+    } finally {
+      soltar();
+    }
   }
 
   private async cambiarConCupo(
@@ -629,8 +679,6 @@ export class SesionesService {
 
   /** Tiempo 1 del cambio de contraseña: igual que `reservarIngreso`, pero por el id de la sesión. */
   private async reservarCambio(usuarioId: string): Promise<Reserva> {
-    const previo = await this.bloqueoVigente('u.id', usuarioId);
-    if (previo !== null) return previo;
     const usuarios = await this.conexion.query<FilaUsuario>(
       `SELECT id, nombre, nombre_usuario, hash_contrasena, contrasena_temporal, horario,
               es_administrador, activo

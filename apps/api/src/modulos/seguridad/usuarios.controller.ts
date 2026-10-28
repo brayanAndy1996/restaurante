@@ -22,6 +22,7 @@ import {
   type UsuarioModificarEntrada,
   type UsuarioRespuesta,
 } from '@restaurante/contratos';
+import { SinEmpresa } from '../../nucleo/contexto-empresa';
 import { PipeUuid, PipeZod } from '../../nucleo/errores/pipes';
 import { SoloAdministrador } from './decoradores';
 import { EquiposService } from './equipos.service';
@@ -48,10 +49,11 @@ export class UsuariosController {
 
   /** 201 con el `pin` (única vez que se muestra); 400; 409 `CONFLICTO`; 422 `SUCURSAL_INVALIDA`. */
   @Post()
+  @SinEmpresa() // el servicio calcula el scrypt (por el cupo) y recién después abre la transacción
   async crear(
     @Body(new PipeZod(usuarioCrearEntradaSchema)) entrada: UsuarioCrearEntrada,
   ): Promise<UsuarioCreadoRespuesta> {
-    return this.usuarios.crear(entrada);
+    return this.usuarios.crearDesdeSesion(entrada);
   }
 
   /** 200; trae `pin` solo si cambió su largo (criterio 21b); 409 `ULTIMO_ADMINISTRADOR`. */
@@ -72,12 +74,13 @@ export class UsuariosController {
 
   /** 204: contraseña temporal nueva; cierra sesiones y revoca equipos. */
   @Post(':id/contrasena')
+  @SinEmpresa() // el servicio calcula el scrypt (por el cupo) y recién después abre la transacción
   @HttpCode(204)
   async restablecerContrasena(
     @Param('id', PipeUuid) id: string,
     @Body(new PipeZod(restablecerContrasenaEntradaSchema)) entrada: RestablecerContrasenaEntrada,
   ): Promise<void> {
-    return this.usuarios.restablecerContrasena(id, entrada.contrasenaTemporal);
+    return this.usuarios.restablecerDesdeSesion(id, entrada.contrasenaTemporal);
   }
 
   /** 200 `equipoRecordadoRespuesta[]`; 404. */
