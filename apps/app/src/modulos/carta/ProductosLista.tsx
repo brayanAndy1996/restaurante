@@ -23,6 +23,8 @@ import {
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useMemo, useState, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
+import { AvisoPendiente } from '../../componentes/PendienteDeEnvio';
+import { useEnvioPendiente } from '../../lib/envios';
 import { ErrorApi, mensajeDeError } from '../../lib/errores';
 import { montoEnSoles, paraBuscar } from '../../lib/formato';
 import {
@@ -95,6 +97,7 @@ export function ProductosLista() {
     [estaciones.data],
   );
 
+  const envio = useEnvioPendiente();
   const [busqueda, setBusqueda] = useState('');
   const [verInactivos, setVerInactivos] = useState(false);
   const [borrador, setBorrador] = useState<Record<string, string[]> | null>(null);
@@ -153,7 +156,8 @@ export function ProductosLista() {
       // Una familia a la vez: si una falla, las que ya se guardaron quedan y el resto sigue en el borrador.
       for (const familiaId of familiasCambiadas()) {
         const ids = borrador[familiaId];
-        if (ids) await ordenarProductosDeFamilia(familiaId, ids);
+        // Una escritura sin red no se pierde: queda "Pendiente de envío" y sale sola al volver, con su clave.
+        if (ids) await envio.enviar((extra) => ordenarProductosDeFamilia(familiaId, ids, extra));
       }
       await clientes.invalidateQueries({ queryKey: CLAVES.productos });
       setBorrador(null);
@@ -245,6 +249,7 @@ export function ProductosLista() {
           <span className="ui-solo-lectores" role="status" aria-live="polite">
             {anuncio}
           </span>
+          <AvisoPendiente pendiente={envio.pendiente} />
           {errorOrden ? (
             <Aviso tipo="error" titulo="No pudimos guardar el orden">
               {errorOrden}

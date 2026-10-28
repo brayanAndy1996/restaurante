@@ -96,7 +96,7 @@ export const ordenarProductosDeFamilia = (
   api.put(
     `/carta/familias/${familiaId}/productos/orden`,
     { ids },
-    { esquema: listaDe(productoResumenSchema), ...extra },
+    { esquema: listaDe(productoResumenSchema), idempotente: true, ...extra },
   );
 
 /** Una fila por sucursal de la empresa, con lo que quien consulta puede cambiar (`editable`). */
@@ -121,10 +121,18 @@ export const ajustarSucursalDeProducto = (
     ...extra,
   });
 
-/** Sube la foto ya reducida (cuerpo binario con su `Content-Type`). */
-export const subirFotoDeProducto = (id: string, foto: Blob) =>
-  api.put(`/carta/productos/${id}/foto`, foto, { esquema: fotoRespuestaSchema });
-export const quitarFotoDeProducto = (id: string) => api.delete(`/carta/productos/${id}/foto`);
+/**
+ * Sube la foto ya reducida (cuerpo binario con su `Content-Type`). Lleva la clave de idempotencia: la
+ * pantalla usa la misma para repetir la subida de una misma foto.
+ */
+export const subirFotoDeProducto = (id: string, foto: Blob, extra?: ExtraDeEscritura) =>
+  api.put(`/carta/productos/${id}/foto`, foto, {
+    esquema: fotoRespuestaSchema,
+    idempotente: true,
+    ...extra,
+  });
+export const quitarFotoDeProducto = (id: string, extra?: ExtraDeEscritura) =>
+  api.delete(`/carta/productos/${id}/foto`, { idempotente: true, ...extra });
 
 /** Grupos de modificadores (criterios 24 a 29): se crean, se editan y se desactivan; no se borran. */
 export const listarGrupos = (senal?: AbortSignal) =>

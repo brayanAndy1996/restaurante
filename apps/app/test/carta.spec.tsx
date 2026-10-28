@@ -305,6 +305,12 @@ describe('lista de productos', () => {
     expect(s.de('PUT', `/carta/familias/${FAM_ENTRADAS}/productos/orden`)[0]?.cuerpo).toEqual({
       ids: [P_AJI, P_CEVICHE],
     });
+    // Como toda escritura de la carta, lleva su clave de idempotencia (lo comprueba el E2E contra la API real).
+    expect(
+      s
+        .de('PUT', `/carta/familias/${FAM_ENTRADAS}/productos/orden`)[0]
+        ?.cabeceras.get('Idempotency-Key'),
+    ).toBeTruthy();
     expect(s.de('PUT', `/carta/familias/${FAM_FONDOS}/productos/orden`)).toHaveLength(0);
     await waitFor(() => expect(screen.queryByRole('button', { name: 'Guardar orden' })).toBeNull());
   });
@@ -865,6 +871,7 @@ describe('foto del producto', () => {
     expect(llamada?.binario).toBe(reducida);
     expect(llamada?.cabeceras.get('Content-Type')).toBe('image/jpeg');
     expect(llamada?.cabeceras.get('Authorization')).toContain('Bearer');
+    expect(llamada?.cabeceras.get('Idempotency-Key')).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Cambiar foto' })).toBeInTheDocument();
   });
 
@@ -919,6 +926,10 @@ describe('foto del producto', () => {
     );
     expect(s.de('PUT', `${ruta}/foto`).length).toBe(intentos + 1);
     expect(imagen.reducirFoto).toHaveBeenCalledTimes(1);
+    // "Reintentar" repite la misma escritura: la misma clave de idempotencia en todos los envíos.
+    expect(
+      new Set(s.de('PUT', `${ruta}/foto`).map((l) => l.cabeceras.get('Idempotency-Key'))).size,
+    ).toBe(1);
   });
 
   it('una foto que la API rechaza dice qué hacer y no ofrece reintentar lo mismo', async () => {
@@ -959,6 +970,7 @@ describe('foto del producto', () => {
     expect(s.de('DELETE', `${ruta}/foto`)).toHaveLength(0);
     await userEvent.click(within(hoja).getByRole('button', { name: 'Quitar foto' }));
     await waitFor(() => expect(s.de('DELETE', `${ruta}/foto`)).toHaveLength(1));
+    expect(s.de('DELETE', `${ruta}/foto`)[0]?.cabeceras.get('Idempotency-Key')).toBeTruthy();
     await waitFor(() =>
       expect(screen.queryByRole('img', { name: 'Foto de Ceviche mixto' })).toBeNull(),
     );

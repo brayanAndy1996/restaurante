@@ -1,5 +1,6 @@
 import { DialogoConfirmacion, SelectorDeFoto, type EstadoDeFoto } from '@restaurante/ui';
 import { useEffect, useRef, useState } from 'react';
+import { nuevaClaveDeIdempotencia } from '../../lib/api';
 import { ErrorApi, mensajeDeError } from '../../lib/errores';
 import { ErrorDeFoto, reducirFoto } from '../../lib/imagen';
 import { quitarFotoDeProducto, subirFotoDeProducto } from './carta';
@@ -45,6 +46,9 @@ export function FotoDeProducto({ productoId, nombre, fotoUrl, onCambio }: Props)
   useEffect(() => {
     actual.current = pendiente;
   });
+  // Una foto elegida es una sola escritura: "Reintentar" la repite con la misma clave de idempotencia, así
+  // que si la primera sí llegó y solo se perdió la respuesta, la API no la aplica dos veces.
+  const claveDeSubida = useRef<string | null>(null);
 
   // La vista previa es una URL del navegador: se libera al reemplazarla y al salir.
   useEffect(
@@ -63,13 +67,20 @@ export function FotoDeProducto({ productoId, nombre, fotoUrl, onCambio }: Props)
     setEstado('subiendo');
     setError(undefined);
     try {
-      const respuesta = await subirFotoDeProducto(productoId, blob);
+      claveDeSubida.current ??= nuevaClaveDeIdempotencia();
+      const respuesta = await subirFotoDeProducto(productoId, blob, {
+        idempotente: claveDeSubida.current,
+      });
+      claveDeSubida.current = null;
       descartarPendiente();
       setEstado('reposo');
       onCambio(respuesta.fotoUrl);
     } catch (e) {
       const sinReintento = e instanceof ErrorApi && SIN_REINTENTO.has(e.codigo);
-      if (sinReintento) descartarPendiente();
+      if (sinReintento) {
+        descartarPendiente();
+        claveDeSubida.current = null;
+      }
       setPuedeReintentar(!sinReintento && e instanceof ErrorApi && e.codigo !== 'PROHIBIDO');
       setError(
         e instanceof ErrorApi && (e.sinConexion || e.estado >= 500)
@@ -95,6 +106,7 @@ export function FotoDeProducto({ productoId, nombre, fotoUrl, onCambio }: Props)
       return;
     }
     descartarPendiente();
+    claveDeSubida.current = nuevaClaveDeIdempotencia();
     setPendiente({ blob, url: URL.createObjectURL(blob) });
     await subir(blob);
   }
