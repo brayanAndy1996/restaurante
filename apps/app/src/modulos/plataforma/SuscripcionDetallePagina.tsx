@@ -14,11 +14,12 @@ import {
   IconoPago,
 } from '@restaurante/ui';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import Decimal from 'decimal.js';
 import { useState, type FormEvent } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { Pagina } from '../../componentes/Pagina';
 import { ErrorApi, mensajeDeCampo, mensajeDeError, erroresPorCampo } from '../../lib/errores';
-import { fechaLarga, formatearFecha } from '../../lib/formato';
+import { fechaLarga, formatearFecha, formatearMonto } from '../../lib/formato';
 import { useClaveDeEscritura } from './claves';
 import { validarFechaOpcional, validarMotivo, type Errores } from './empresa-form';
 import {
@@ -37,7 +38,7 @@ const FORMATO_MONTO = /^\d{1,8}(\.\d{1,2})?$/;
 /** Monto escrito por una persona ("120", "120.5", "120,50") como texto decimal de la API; `null` si no vale. */
 export function montoNormalizado(texto: string): string | null {
   const t = texto.trim().replace(',', '.');
-  if (!FORMATO_MONTO.test(t) || Number(t) <= 0) return null;
+  if (!FORMATO_MONTO.test(t) || new Decimal(t).lte(0)) return null;
   return t;
 }
 
@@ -279,7 +280,7 @@ function HojaPago({
       );
       clave.soltar();
       onListo(
-        `Pago de S/ ${Number(montoTexto).toFixed(2)} registrado. La suscripción vence el ${fechaLarga(vencimientoNuevo)}.`,
+        `Pago de S/ ${formatearMonto(montoTexto) ?? montoTexto} registrado. La suscripción vence el ${fechaLarga(vencimientoNuevo)}.`,
       );
     } catch (e) {
       const error = comoErrorApi(e);

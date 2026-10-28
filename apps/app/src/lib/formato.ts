@@ -1,4 +1,5 @@
 import type { Rol } from '@restaurante/dominio';
+import Decimal from 'decimal.js';
 
 const ROLES: Record<Rol, string> = {
   MOZO: 'Mozo',
@@ -97,4 +98,35 @@ export function fechaHoraDeLima(instante: string, ahora: Date = new Date()): str
   if (dia === hoy) return `hoy ${hora}`;
   if (dia === ayer) return `ayer ${hora}`;
   return `${fechaDeLima(instante)} ${hora}`;
+}
+
+/** Texto decimal de una persona o de la API ("120", "0.10") como `Decimal`; `null` si no es un número finito. */
+export function comoDecimal(valor: string): Decimal | null {
+  const texto = valor.trim();
+  if (texto === '') return null;
+  try {
+    const d = new Decimal(texto);
+    return d.isFinite() ? d : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * "1,234.50" a partir de un monto en texto decimal, sin pasar por números de coma flotante.
+ * Redondea medio hacia arriba a `maxDecimales` y rellena con ceros hasta `minDecimales`.
+ * Devuelve `null` si el texto no es un número.
+ */
+export function formatearMonto(
+  valor: string,
+  { minDecimales = 2, maxDecimales = 2 }: { minDecimales?: number; maxDecimales?: number } = {},
+): string | null {
+  const d = comoDecimal(valor);
+  if (d === null) return null;
+  const redondeado = d.toDecimalPlaces(maxDecimales, Decimal.ROUND_HALF_UP);
+  const [entera = '0', fraccion = ''] = redondeado.abs().toFixed(maxDecimales).split('.');
+  const util = fraccion.replace(/0+$/, '').padEnd(minDecimales, '0');
+  const signo = redondeado.isNegative() && !redondeado.isZero() ? '-' : '';
+  const miles = entera.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+  return `${signo}${miles}${util ? `.${util}` : ''}`;
 }

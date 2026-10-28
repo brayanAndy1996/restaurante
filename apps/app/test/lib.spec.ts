@@ -20,9 +20,12 @@ import {
   etiquetaDeRol,
   fechaLarga,
   formatearFecha,
+  formatearMonto,
   pluralSucursales,
   relojDeCuenta,
 } from '../src/lib/formato';
+import { textoDePrecio } from '../src/modulos/plataforma/plataforma';
+import { montoNormalizado } from '../src/modulos/plataforma/SuscripcionDetallePagina';
 
 const error = (codigo: string, extra: Partial<ConstructorParameters<typeof ErrorApi>[0]> = {}) =>
   new ErrorApi({ estado: 400, codigo, mensaje: 'x', ...extra });
@@ -142,5 +145,56 @@ describe('formato', () => {
     expect(relojDeCuenta(-5)).toBe('0:00');
     expect(pluralSucursales(1)).toBe('1 sucursal');
     expect(pluralSucursales(3)).toBe('3 sucursales');
+  });
+});
+
+describe('montos sin coma flotante', () => {
+  it('redondea medio hacia arriba lo que un número de coma flotante deja abajo', () => {
+    // Number(1.005).toFixed(2) da "1.00" y Number(1234.005).toFixed(2) da "1234.00".
+    expect(formatearMonto('1.005')).toBe('1.01');
+    expect(formatearMonto('1234.005')).toBe('1,234.01');
+    expect(formatearMonto('8.345')).toBe('8.35');
+  });
+
+  it('rellena con ceros y agrupa miles', () => {
+    expect(formatearMonto('120')).toBe('120.00');
+    expect(formatearMonto('0.1')).toBe('0.10');
+    expect(formatearMonto('12345678.9')).toBe('12,345,678.90');
+    expect(formatearMonto(' 0.30 ')).toBe('0.30');
+  });
+
+  it('no pierde dígitos en montos que un número de coma flotante no representa', () => {
+    expect(formatearMonto('9007199254740993.10')).toBe('9,007,199,254,740,993.10');
+  });
+
+  it('admite un mínimo y un máximo de decimales distintos', () => {
+    const precio = { minDecimales: 2, maxDecimales: 4 };
+    expect(formatearMonto('0.0500', precio)).toBe('0.05');
+    expect(formatearMonto('0.12345', precio)).toBe('0.1235');
+    expect(formatearMonto('1.5', precio)).toBe('1.50');
+  });
+
+  it('no deja un cero negativo y conserva el signo del resto', () => {
+    expect(formatearMonto('-0.001')).toBe('0.00');
+    expect(formatearMonto('-1234.5')).toBe('-1,234.50');
+  });
+
+  it('devuelve null si no es un número finito', () => {
+    for (const texto of ['', '  ', 'abc', 'S/ 10', 'NaN', 'Infinity']) {
+      expect(formatearMonto(texto)).toBeNull();
+    }
+  });
+
+  it('el precio de un plan usa el mismo formato y deja el texto raro como llegó', () => {
+    expect(textoDePrecio('1234.005')).toBe('S/ 1,234.005');
+    expect(textoDePrecio('1.00005')).toBe('S/ 1.0001');
+    expect(textoDePrecio('sin precio')).toBe('sin precio');
+  });
+
+  it('el monto de un pago solo acepta importes positivos, también los casi cero', () => {
+    expect(montoNormalizado('0.01')).toBe('0.01');
+    expect(montoNormalizado('0.0')).toBeNull();
+    expect(montoNormalizado('0,00')).toBeNull();
+    expect(montoNormalizado('1234.005')).toBeNull();
   });
 });

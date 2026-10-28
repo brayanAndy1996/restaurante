@@ -20,6 +20,7 @@ import {
 import type { Modulo, RegimenTributario } from '@restaurante/dominio';
 import type { TonoEtiqueta } from '@restaurante/ui';
 import { api, listaDe } from '../../lib/api';
+import { formatearMonto } from '../../lib/formato';
 
 /** Todas las consultas del panel cuelgan de `['plataforma', …]`: salir del panel las borra juntas. */
 export const CLAVES = {
@@ -150,9 +151,8 @@ export const NOMBRE_DE_MEDIO: Record<string, string> = {
 /** "S/ 120.00" a partir del texto decimal de la API; sin precio, "Sin definir". */
 export function textoDePrecio(valor: string | null): string {
   if (valor === null) return 'Sin definir';
-  const n = Number(valor);
-  if (Number.isNaN(n)) return valor;
-  return `S/ ${n.toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 4 })}`;
+  const texto = formatearMonto(valor, { minDecimales: 2, maxDecimales: 4 });
+  return texto === null ? valor : `S/ ${texto}`;
 }
 
 /** "120 de 500" con cuota; sin cuota, solo la cantidad emitida. */
