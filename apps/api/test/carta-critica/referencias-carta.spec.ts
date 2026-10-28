@@ -860,6 +860,48 @@ describe('criterio 68 · las fotos y los eventos son de su empresa', () => {
   });
 });
 
+interface VistaConFotos {
+  familias?: { productos?: { id: string; fotoUrl: string | null }[] }[];
+}
+
+/**
+ * Devuelve el texto de la vista sin los valores de `fotoUrl` y los fallos de cada foto: su clave debe ser
+ * `carta/<empresa propia>/<id del producto>/<uuid>.<ext>`, el producto debe ser de la empresa propia y la
+ * URL nunca debe contener el id de la otra empresa.
+ */
+function revisarFotosDeLaVista(
+  cuerpo: unknown,
+  empresaPropia: string,
+  empresaAjena: string,
+  idsPropios: Set<string>,
+): { sinFotos: string; fallosFotos: string[] } {
+  const copia = structuredClone(cuerpo) as VistaConFotos;
+  const fallosFotos: string[] = [];
+  const forma = new RegExp(
+    `(^|/)carta/${empresaPropia}/([0-9a-f-]{36})/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\\.[a-z0-9]+$`,
+    'i',
+  );
+  for (const familia of copia.familias ?? []) {
+    for (const producto of familia.productos ?? []) {
+      const url = producto.fotoUrl;
+      if (url === null || url === undefined) continue;
+      const coincide = forma.exec(url);
+      if (!coincide) {
+        fallosFotos.push(`${producto.id} con fotoUrl ${url}`);
+      } else if (coincide[2]!.toLowerCase() !== producto.id.toLowerCase()) {
+        fallosFotos.push(`${producto.id} con la foto de otro producto: ${url}`);
+      } else if (!idsPropios.has(producto.id.toLowerCase())) {
+        fallosFotos.push(`${producto.id} no es un producto de la empresa propia`);
+      }
+      if (url.toLowerCase().includes(empresaAjena.toLowerCase())) {
+        fallosFotos.push(`${producto.id} con el id de la otra empresa en ${url}`);
+      }
+      producto.fotoUrl = null;
+    }
+  }
+  return { sinFotos: JSON.stringify(copia), fallosFotos };
+}
+
 // ------------------------------------------------------------------------------------------------
 // 69 · Concurrencia con el pool de 2 conexiones
 // ------------------------------------------------------------------------------------------------
@@ -900,7 +942,17 @@ describe('criterio 69 · 100 peticiones concurrentes alternando A y B con un poo
             return problemas;
           }
           if (res.body.sucursalId !== sucursal) problemas.push(`#${i} vista con otra sucursal`);
-          const intrusos = uuidsEn(res.text).filter((id) => ajenos.has(id) || !propios.has(id));
+          // El UUID final de la clave de una foto (criterio 15) no es el id de ninguna fila: se revisa
+          // aparte, exigiendo la clave `carta/<empresa propia>/<producto propio>/<uuid>.<ext>`, y se
+          // quita del texto antes de buscar ids para no tomarlo por intruso.
+          const { sinFotos, fallosFotos } = revisarFotosDeLaVista(
+            res.body,
+            esA ? m.A.empresaId : m.B.empresaId,
+            esA ? m.B.empresaId : m.A.empresaId,
+            propios,
+          );
+          for (const fallo of fallosFotos) problemas.push(`#${i} vista con foto ajena: ${fallo}`);
+          const intrusos = uuidsEn(sinFotos).filter((id) => ajenos.has(id) || !propios.has(id));
           if (intrusos.length > 0)
             problemas.push(`#${i} vista con ids ajenos: ${intrusos.join(',')}`);
         } else {
