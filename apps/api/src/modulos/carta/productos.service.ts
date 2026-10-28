@@ -24,8 +24,8 @@ import {
 } from './errores-carta';
 import { EventosCarta } from './eventos-carta';
 import { PermisosCarta } from './permisos-carta';
-import { validarFamiliaYEstacion } from './referencias';
-import { aIso, diferencias, sinCambioDeOrden } from './util-carta';
+import { gruposActivos, validarFamiliaYEstacion } from './referencias';
+import { aIso, diferencias, sinCambioDeOrden, type Cambio } from './util-carta';
 
 /** Fila de `producto` tal como la leen las consultas de este servicio. */
 interface FilaProducto {
@@ -99,10 +99,10 @@ const ordenInvalido = () =>
   datosInvalidos([{ campo: 'ids', mensaje: 'Debe contener exactamente una vez cada producto' }]);
 
 /**
- * Productos de la carta (HU-05, RF-14, criterios 6 a 13). En la historia 003 grupo C1 solo hay productos
- * `SIMPLE` y "que no se vende solo"; los tipos `COMBO` y `MENU_DEL_DIA`, el cambio de tipo, los grupos de
- * modificadores y los componentes (criterios 10b a 10d, 24 a 33) llegan en los grupos C3 y C4: mientras
- * tanto, enviarlos responde 400. Todo corre dentro de la transacción de la petición y deja su fila de
+ * Productos de la carta (HU-05, RF-14, criterios 6 a 13). Hasta el grupo C3 solo hay productos `SIMPLE` y
+ * "que no se vende solo", con sus grupos de modificadores asignados (criterios 6, 8, 9 y 10); los tipos
+ * `COMBO` y `MENU_DEL_DIA`, el cambio de tipo y los componentes (criterios 10b a 10d, 30 a 33) llegan en el
+ * grupo C4: mientras tanto, enviarlos responde 400. Todo corre dentro de la transacción de la petición y deja su fila de
  * auditoría en ella, con el antes y el después de cada cambio (los precios como texto exacto).
  */
 @Injectable()
@@ -163,14 +163,76 @@ export class ProductosService {
       descripcion: f.descripcion,
       afectacionIgv: f.afectacion_igv,
       aplicaIcbper: f.aplica_icbper,
-      // Los grupos asignados, los componentes y `usadoEn` salen de tablas que llegan con los grupos C3 y
-      // C4 (`producto_grupo`, `componente_combo`, `modificador`): hasta entonces no hay ninguno.
-      grupos: [],
+      grupos: await this.gruposDe(id),
+      // Los componentes y los combos que usan el producto salen de `componente_combo`, que llega con C4.
       componentes: [],
-      usadoEn: { combos: [], modificadores: [] },
+      usadoEn: { combos: [], modificadores: await this.modificadoresQueLoUsan(id) },
       creadoEn: aIso(f.creado_en),
       actualizadoEn: aIso(f.actualizado_en),
     };
+  }
+
+  /** Los grupos asignados al producto, en su orden (criterio 12). */
+  private async gruposDe(productoId: string): Promise<{ id: string; nombre: string }[]> {
+    return this.conexion.query<{ id: string; nombre: string }>(
+      `SELECT g.id, g.nombre FROM producto_grupo pg JOIN grupo_modificadores g ON g.id = pg.grupo_id
+        WHERE pg.producto_id = $1 ORDER BY pg.orden, g.id`,
+      { bind: [productoId], type: QueryTypes.SELECT },
+    );
+  }
+
+  /**
+   * Dónde se usa el producto como producto ligado (criterios 10c y 12): los modificadores activos que lo
+   * apuntan, de un grupo activo o no.
+   */
+  private async modificadoresQueLoUsan(
+    productoId: string,
+  ): Promise<{ id: string; nombre: string; grupoId: string; grupoNombre: string }[]> {
+    return this.conexion.query<{
+      id: string;
+      nombre: string;
+      grupoId: string;
+      grupoNombre: string;
+    }>(
+      `SELECT m.id, m.nombre, g.id AS "grupoId", g.nombre AS "grupoNombre"
+         FROM modificador m JOIN grupo_modificadores g ON g.id = m.grupo_id
+        WHERE m.producto_id = $1 AND m.activo ORDER BY lower(g.nombre), g.id, m.orden, m.id`,
+      { bind: [productoId], type: QueryTypes.SELECT },
+    );
+  }
+
+  /**
+   * Los grupos de `ids` que no se pueden asignar (no existen, son de otra empresa o están inactivos), con
+   * `FOR SHARE`: quien desactiva un grupo lo bloquea `FOR UPDATE`, así que se serializan (criterio 29).
+   */
+  private async gruposNoAsignables(ids: readonly string[]): Promise<CampoError[]> {
+    if (ids.length === 0) return [];
+    const activos = await gruposActivos(this.conexion, ids, 'SHARE');
+    return ids.some((id) => !activos.has(id.toLowerCase()))
+      ? [{ campo: 'gruposModificadores', mensaje: 'Uno de los grupos no existe o está inactivo' }]
+      : [];
+  }
+
+  /** Escribe la lista de grupos del producto con su orden (borra los que salen, inserta o reordena el resto). */
+  private async escribirGrupos(
+    productoId: string,
+    ids: readonly string[],
+    ahora: Date,
+  ): Promise<void> {
+    await this.conexion.query(
+      'DELETE FROM producto_grupo WHERE producto_id = $1 AND grupo_id <> ALL($2::uuid[])',
+      { bind: [productoId, [...ids]] },
+    );
+    if (ids.length === 0) return;
+    await this.conexion.query(
+      `INSERT INTO producto_grupo (empresa_id, producto_id, grupo_id, orden, creado_en, actualizado_en)
+       SELECT $1, $2, v.grupo_id, v.orden, $4, $4
+         FROM unnest($3::uuid[]) WITH ORDINALITY AS v(grupo_id, orden)
+       ON CONFLICT (producto_id, grupo_id)
+       DO UPDATE SET orden = EXCLUDED.orden, actualizado_en = EXCLUDED.actualizado_en
+        WHERE producto_grupo.orden <> EXCLUDED.orden`,
+      { bind: [this.contexto.empresaActual(), productoId, [...ids], ahora] },
+    );
   }
 
   // ---- Alta ------------------------------------------------------------------------------------
@@ -198,6 +260,8 @@ export class ProductosService {
         mensaje: 'Una de las sucursales no existe',
       });
     }
+    const grupos = (entrada.gruposModificadores ?? []).map((id) => id.toLowerCase());
+    fallan.push(...(await this.gruposNoAsignables(grupos)));
     if (fallan.length > 0) throw referenciaInvalida(fallan);
     await this.permisos.exigirAjustarSucursales(noDisponibleEn);
 
@@ -233,6 +297,7 @@ export class ProductosService {
         },
       );
       id = filas[0]!.id;
+      await this.escribirGrupos(id, grupos, ahora);
       if (noDisponibleEn.length > 0) {
         await this.conexion.query(
           `INSERT INTO producto_sucursal (empresa_id, producto_id, sucursal_id, precio, disponible,
@@ -259,6 +324,7 @@ export class ProductosService {
         aplicaIcbper: entrada.aplicaIcbper,
         estacionId: entrada.estacionId ?? null,
         tipoControlStock: entrada.tipoControlStock,
+        ...(grupos.length > 0 ? { gruposModificadores: grupos } : {}),
         ...(noDisponibleEn.length > 0 ? { noDisponibleEn } : {}),
       },
     });
@@ -309,13 +375,29 @@ export class ProductosService {
       familiaId: cambiaFamilia || reactiva ? despues.familiaId : undefined,
       estacionId: cambiaEstacion || reactiva ? despues.estacionId : undefined,
     });
+    // Grupos (criterios 8 y 9): la lista enviada reemplaza a la guardada; solo los que se agregan deben estar
+    // activos (los que ya tenía se conservan), y todos al reactivar el producto.
+    const gruposAntes =
+      cambios.gruposModificadores !== undefined || reactiva
+        ? (await this.gruposDe(id)).map((g) => g.id)
+        : [];
+    const gruposDespues = cambios.gruposModificadores?.map((g) => g.toLowerCase()) ?? gruposAntes;
+    const guardadosGrupos = new Set(gruposAntes);
+    fallan.push(
+      ...(await this.gruposNoAsignables(
+        gruposDespues.filter((g) => reactiva || !guardadosGrupos.has(g)),
+      )),
+    );
     if (fallan.length > 0) throw referenciaInvalida(fallan);
 
     const reglas = this.reglasDelTipoSimple(despues);
     if (reglas.length > 0) throw datosInvalidos(reglas);
     if (!despues.seVendeSolo) await this.exigirSinPreciosDeSucursal(id);
 
-    const diff = diferencias(antes, despues, CAMPOS_AUDITADOS);
+    const diff: Record<string, Cambio> = diferencias(antes, despues, CAMPOS_AUDITADOS);
+    const cambiaGrupos =
+      cambios.gruposModificadores !== undefined && !sinCambioDeOrden(gruposAntes, gruposDespues);
+    if (cambiaGrupos) diff.gruposModificadores = { antes: gruposAntes, despues: gruposDespues };
     if (Object.keys(diff).length === 0) return this.obtener(id);
 
     const ahora = this.reloj.ahora();
@@ -346,6 +428,7 @@ export class ProductosService {
           ],
         },
       );
+      if (cambiaGrupos) await this.escribirGrupos(id, gruposDespues, ahora);
     } catch (error) {
       throw this.traducir(error);
     }
@@ -410,13 +493,12 @@ export class ProductosService {
   // ---- Reglas ----------------------------------------------------------------------------------
 
   /**
-   * Lo que todavía no se puede enviar en esta versión (grupos C1 y C2): otro tipo que `SIMPLE`, cambiar el
-   * tipo, grupos de modificadores y componentes. Una lista vacía no cambia nada y se acepta.
+   * Lo que todavía no se puede enviar en esta versión (hasta el grupo C3): otro tipo que `SIMPLE`, cambiar el
+   * tipo y componentes. Una lista vacía no cambia nada y se acepta.
    */
   private exigirLoDeEstaVersion(
     entrada: {
       tipo?: string;
-      gruposModificadores?: readonly string[];
       componentes?: readonly unknown[];
     },
     tipoGuardado?: string,
@@ -426,12 +508,6 @@ export class ProductosService {
       campos.push({
         campo: 'tipo',
         mensaje: 'Por ahora solo se pueden crear productos simples',
-      });
-    }
-    if ((entrada.gruposModificadores?.length ?? 0) > 0) {
-      campos.push({
-        campo: 'gruposModificadores',
-        mensaje: 'Los grupos de modificadores todavía no están disponibles',
       });
     }
     if ((entrada.componentes?.length ?? 0) > 0) {
@@ -486,6 +562,14 @@ export class ProductosService {
         return nombreRepetido('un producto');
       case SQLSTATE.VIOLACION_LLAVE_FORANEA: {
         const restriccion = restriccionDe(error) ?? '';
+        if (restriccion.includes('grupo')) {
+          return referenciaInvalida([
+            {
+              campo: 'gruposModificadores',
+              mensaje: 'Uno de los grupos no existe o está inactivo',
+            },
+          ]);
+        }
         const campo = restriccion.includes('estacion') ? 'estacionId' : 'familiaId';
         return referenciaInvalida([
           {

@@ -25,6 +25,12 @@ const SQL_FAMILIAS = (bloqueo: Bloqueo) =>
   `SELECT id, activa FROM familia WHERE id = ANY($1::uuid[]) ORDER BY id ${CLAUSULA[bloqueo]}`;
 const SQL_ESTACIONES = (bloqueo: Bloqueo) =>
   `SELECT id, activa FROM estacion WHERE id = ANY($1::uuid[]) ORDER BY id ${CLAUSULA[bloqueo]}`;
+const SQL_GRUPOS = (bloqueo: Bloqueo) =>
+  `SELECT id, activo AS activa FROM grupo_modificadores WHERE id = ANY($1::uuid[]) ORDER BY id ${CLAUSULA[bloqueo]}`;
+/** Producto ligado de un modificador (y, en C4, componente de un combo): simple y activo. */
+const SQL_SIMPLES = (bloqueo: Bloqueo) =>
+  `SELECT id, activo AS activa FROM producto WHERE id = ANY($1::uuid[]) AND tipo = 'SIMPLE'
+    ORDER BY id ${CLAUSULA[bloqueo]}`;
 
 async function activasDe(
   conexion: Sequelize,
@@ -55,6 +61,32 @@ export function estacionesActivas(
   bloqueo: Bloqueo,
 ): Promise<Set<string>> {
   return activasDe(conexion, SQL_ESTACIONES(bloqueo), ids);
+}
+
+/**
+ * Los ids de grupos de modificadores de la empresa que existen y están activos (las filas quedan bloqueadas).
+ * Quien desactiva un grupo lo bloquea `FOR UPDATE` y cuenta los productos activos que lo usan; quien lo asigna
+ * a un producto lo lee `FOR SHARE`, así que se serializan (criterio 29).
+ */
+export function gruposActivos(
+  conexion: Sequelize,
+  ids: readonly string[],
+  bloqueo: Bloqueo,
+): Promise<Set<string>> {
+  return activasDe(conexion, SQL_GRUPOS(bloqueo), ids);
+}
+
+/**
+ * Los ids de productos de la empresa que son `SIMPLE` y están activos (las filas quedan bloqueadas). Es lo que
+ * puede ser producto ligado de un modificador (criterio 26). Se lee `FOR SHARE`: un cambio de tipo concurrente
+ * del producto lo bloquea `FOR UPDATE` y se serializan (criterio 10c).
+ */
+export function productosSimplesActivos(
+  conexion: Sequelize,
+  ids: readonly string[],
+  bloqueo: Bloqueo,
+): Promise<Set<string>> {
+  return activasDe(conexion, SQL_SIMPLES(bloqueo), ids);
 }
 
 /**
