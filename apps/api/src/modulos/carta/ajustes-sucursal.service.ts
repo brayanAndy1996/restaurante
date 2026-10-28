@@ -7,6 +7,7 @@ import { ContextoEmpresa } from '../../nucleo/contexto-empresa';
 import { RELOJ, type Reloj } from '../../nucleo/reloj';
 import { AuditoriaService } from '../auditoria';
 import { SucursalesConsultaService } from '../plataforma';
+import { CartaDisponibilidadService } from './carta-disponibilidad.service';
 import { datosInvalidos, noEncontrado } from './errores-carta';
 import { EventosCarta } from './eventos-carta';
 import { PermisosCarta } from './permisos-carta';
@@ -41,6 +42,7 @@ export class AjustesSucursalService {
     @Inject(EventosCarta) private readonly eventos: EventosCarta,
     @Inject(SucursalesConsultaService) private readonly sucursales: SucursalesConsultaService,
     @Inject(PermisosCarta) private readonly permisos: PermisosCarta,
+    @Inject(CartaDisponibilidadService) private readonly agotados: CartaDisponibilidadService,
   ) {}
 
   /**
@@ -57,12 +59,14 @@ export class AjustesSucursalService {
     );
     const porSucursal = new Map(ajustes.map((a) => [a.sucursal_id, a]));
     const ajustables = await this.permisos.sucursalesAjustables();
+    const agotadas = await this.agotados.sucursalesAgotadas(productoId);
     return sucursales.map((s) =>
       this.aRespuesta(
         producto,
         s,
         porSucursal.get(s.id) ?? POR_DEFECTO,
         ajustables === 'todas' || ajustables.has(s.id.toLowerCase()),
+        agotadas.has(s.id),
       ),
     );
   }
@@ -136,7 +140,8 @@ export class AjustesSucursalService {
       this.eventos.cartaActualizada(sucursal.id);
     }
     // Si llegó hasta aquí, puede ajustar esa sucursal.
-    return this.aRespuesta(producto, sucursal, despues, true);
+    const agotadas = await this.agotados.sucursalesAgotadas(productoId);
+    return this.aRespuesta(producto, sucursal, despues, true, agotadas.has(sucursal.id));
   }
 
   // ---- Apoyo -----------------------------------------------------------------------------------
@@ -159,6 +164,7 @@ export class AjustesSucursalService {
     sucursal: { id: string; nombre: string },
     ajuste: FilaAjuste,
     editable: boolean,
+    agotado: boolean,
   ): AjusteSucursalRespuesta {
     return {
       sucursalId: sucursal.id,
@@ -166,8 +172,7 @@ export class AjustesSucursalService {
       precio: ajuste.precio,
       precioEfectivo: precioEfectivo(producto.precio, ajuste.precio),
       disponible: ajuste.disponible,
-      // Los agotados (tabla `producto_agotado`) llegan con el grupo C5: hasta entonces ninguno está agotado.
-      agotado: false,
+      agotado,
       editable,
     };
   }

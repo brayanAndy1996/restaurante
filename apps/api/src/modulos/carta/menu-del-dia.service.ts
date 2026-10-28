@@ -4,7 +4,7 @@ import type {
   MenuDelDiaEntrada,
   MenuDelDiaRespuesta,
 } from '@restaurante/contratos';
-import { diaOperativo, precioEfectivo } from '@restaurante/dominio';
+import { diaOperativo, precioEfectivo, type HastaAgotado } from '@restaurante/dominio';
 import { QueryTypes, type Sequelize } from 'sequelize';
 import { CONEXION_API } from '../../nucleo/base-de-datos';
 import { ContextoEmpresa } from '../../nucleo/contexto-empresa';
@@ -12,6 +12,7 @@ import { RELOJ, type Reloj } from '../../nucleo/reloj';
 import { AuditoriaService } from '../auditoria';
 import { SucursalesConsultaService } from '../plataforma';
 import { SesionActual } from '../seguridad';
+import { productoDisponible } from './disponibilidad-carta';
 import { datosInvalidos, noEncontrado, referenciaInvalida } from './errores-carta';
 import { EventosCarta } from './eventos-carta';
 import { sinCambioDeOrden, sumarDias } from './util-carta';
@@ -34,7 +35,10 @@ interface FilaOpcion {
   precio_extra: string;
   ligado_id: string | null;
   ligado_nombre: string | null;
-  ligado_disponible: boolean | null;
+  ligado_activo: boolean | null;
+  ligado_en_sucursal: boolean | null;
+  ligado_agotado_dia: string | null;
+  ligado_agotado_hasta: HastaAgotado | null;
 }
 
 /** El día y el menú sobre los que se trabaja: la sucursal activa y su día operativo actual. */
@@ -51,8 +55,9 @@ interface Contexto {
  * corte de la sucursal, nunca con `now()` de la base. Las opciones de un día solo valen ese día: al pasar la
  * hora de corte empieza un día sin opciones.
  *
- * `disponible` de una opción dice si su producto ligado (si lo tiene) está activo y disponible en la sucursal.
- * Los agotados (`producto_agotado`) llegan con el grupo C5 y se suman a esa condición.
+ * `disponible` de una opción dice si su producto ligado (si lo tiene) está activo, se ofrece en la sucursal y no
+ * tiene un agotado vigente: es la misma regla de la vista de la sucursal (`productoDisponible`), evaluada con el
+ * día operativo actual aunque se consulte el de ayer o el de mañana.
  */
 @Injectable()
 export class MenuDelDiaService {
@@ -102,16 +107,18 @@ export class MenuDelDiaService {
         ORDER BY f.orden, f.id, p.orden, p.id`,
       { bind: [sucursalId], type: QueryTypes.SELECT },
     );
-    return this.construir(sucursalId, dia, menus);
+    return this.construir(sucursalId, dia, hoy, menus);
   }
 
   /**
    * Arma la respuesta de los menús dados con tres consultas fijas (menús ya leídos, tiempos con sus platos y
-   * opciones elegidas), sin importar cuántos menús ni platos haya.
+   * opciones elegidas), sin importar cuántos menús ni platos haya. `hoy` es el día operativo actual, con el que
+   * se evalúa el agotado de cada producto ligado.
    */
   private async construir(
     sucursalId: string,
     dia: string,
+    hoy: string,
     menus: readonly FilaMenu[],
   ): Promise<MenuDelDiaRespuesta[]> {
     if (menus.length === 0) return [];
@@ -119,14 +126,15 @@ export class MenuDelDiaService {
     const opciones = await this.conexion.query<FilaOpcion>(
       `SELECT pg.producto_id, g.id AS grupo_id, g.nombre AS grupo_nombre, g.minimo, g.maximo,
               m.id AS modificador_id, m.nombre, m.precio_extra,
-              l.id AS ligado_id, l.nombre AS ligado_nombre,
-              CASE WHEN l.id IS NULL THEN NULL ELSE (l.activo AND coalesce(pl.disponible, true)) END
-                AS ligado_disponible
+              l.id AS ligado_id, l.nombre AS ligado_nombre, l.activo AS ligado_activo,
+              coalesce(pl.disponible, true) AS ligado_en_sucursal,
+              al.dia_operativo::text AS ligado_agotado_dia, al.hasta AS ligado_agotado_hasta
          FROM producto_grupo pg
          JOIN grupo_modificadores g ON g.id = pg.grupo_id AND g.activo
          JOIN modificador m ON m.grupo_id = g.id AND m.activo
          LEFT JOIN producto l ON l.id = m.producto_id
          LEFT JOIN producto_sucursal pl ON pl.producto_id = l.id AND pl.sucursal_id = $2
+         LEFT JOIN producto_agotado al ON al.producto_id = l.id AND al.sucursal_id = $2
         WHERE pg.producto_id = ANY($1::uuid[])
         ORDER BY pg.producto_id, pg.orden, g.id, m.orden, m.id`,
       { bind: [ids, sucursalId], type: QueryTypes.SELECT },
@@ -158,7 +166,19 @@ export class MenuDelDiaService {
           producto:
             o.ligado_id === null ? null : { id: o.ligado_id, nombre: o.ligado_nombre ?? '' },
           elegida: elegida.has(`${menu.id}|${o.modificador_id}`),
-          disponible: o.ligado_disponible ?? true,
+          disponible:
+            o.ligado_id === null ||
+            productoDisponible(
+              {
+                activo: o.ligado_activo ?? false,
+                disponible: o.ligado_en_sucursal ?? true,
+                agotado:
+                  o.ligado_agotado_dia === null || o.ligado_agotado_hasta === null
+                    ? null
+                    : { diaOperativo: o.ligado_agotado_dia, hasta: o.ligado_agotado_hasta },
+              },
+              hoy,
+            ),
         });
       }
       return {
@@ -261,6 +281,6 @@ export class MenuDelDiaService {
       });
       this.eventos.cartaActualizada(sucursalId);
     }
-    return (await this.construir(sucursalId, dia, [menu]))[0]!;
+    return (await this.construir(sucursalId, dia, hoy, [menu]))[0]!;
   }
 }

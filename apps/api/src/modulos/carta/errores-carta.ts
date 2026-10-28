@@ -1,14 +1,6 @@
 import type { CampoError, SeQuita, UsadoEn } from '@restaurante/contratos';
+import type { ErrorSeleccion, MotivoNoVendible } from '@restaurante/dominio';
 import { ErrorAplicacion } from '../../nucleo/errores/error-aplicacion';
-
-/**
- * Marca de las firmas de la fase A de la historia 003: la ruta o el método existe pero todavía no hace
- * nada. Cada tarea de la fase C reemplaza el `throw` por la lógica. Es un error común (no un
- * `ErrorAplicacion`), así que el filtro global lo responde como 500 `ERROR_INTERNO`.
- */
-export function noImplementado(): Error {
-  return new Error('No implementado');
-}
 
 /**
  * 404 con un mensaje fijo por entidad. Un id de otra empresa y uno inexistente dan exactamente el mismo
@@ -58,3 +50,47 @@ export const enUsoPorCambioDeTipo = (mensaje: string, usadoEn: UsadoEn): ErrorAp
 /** 409 `CONFIRMACION_REQUERIDA` (criterio 10b): el cambio de tipo quitaría algo; lleva `seQuita`. */
 export const confirmacionRequerida = (mensaje: string, seQuita: SeQuita): ErrorAplicacion =>
   new ErrorAplicacion(409, 'CONFIRMACION_REQUERIDA', mensaje, undefined, undefined, { seQuita });
+
+/** Por qué `prepararLinea` rechaza un producto: un motivo de `vendibilidad` o que no se vende solo. */
+export type MotivoDeRechazo = MotivoNoVendible | 'NO_SE_VENDE_SOLO';
+
+const MENSAJES_DE_MOTIVO: Record<MotivoDeRechazo, string> = {
+  INACTIVO: 'El producto está desactivado',
+  NO_DISPONIBLE: 'El producto no está disponible en esta sucursal',
+  AGOTADO: 'El producto está agotado',
+  COMPONENTE_NO_DISPONIBLE: 'Un componente del producto no está disponible',
+  MENU_SIN_ARMAR: 'El menú del día no está armado',
+  OPCIONES_INSUFICIENTES: 'No hay suficientes opciones disponibles',
+  NO_SE_VENDE_SOLO: 'El producto no se vende solo',
+};
+
+/**
+ * 422 `PRODUCTO_NO_VENDIBLE` de `prepararLinea` (criterio 52). El motivo viaja en `motivo` (para quien llama
+ * desde el código, como la sección 3) y en `campos` (`productoId` con el código del motivo como mensaje).
+ */
+export class ErrorProductoNoVendible extends ErrorAplicacion {
+  constructor(readonly motivo: MotivoDeRechazo) {
+    super(422, 'PRODUCTO_NO_VENDIBLE', MENSAJES_DE_MOTIVO[motivo], [
+      { campo: 'productoId', mensaje: motivo },
+    ]);
+  }
+}
+
+/**
+ * 422 `SELECCION_INVALIDA` de `prepararLinea` (criterio 52). Los errores de `validarSeleccion` viajan tal
+ * cual en `errores` y en `campos` (`modificadorIds` o `grupos.<id>`, con el código como mensaje).
+ */
+export class ErrorSeleccionInvalida extends ErrorAplicacion {
+  constructor(readonly errores: readonly ErrorSeleccion[]) {
+    super(
+      422,
+      'SELECCION_INVALIDA',
+      'La selección de modificadores no es válida',
+      errores.map((e): CampoError =>
+        'modificadorId' in e
+          ? { campo: 'modificadorIds', mensaje: `${e.codigo}: ${e.modificadorId}` }
+          : { campo: `grupos.${e.grupoId}`, mensaje: e.codigo },
+      ),
+    );
+  }
+}

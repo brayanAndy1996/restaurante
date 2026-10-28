@@ -1,4 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
+import type { HastaAgotado, OrigenAgotado } from '@restaurante/dominio';
 import { ContextoEmpresa } from '../../nucleo/contexto-empresa';
 import { estadoActual, type EstadoOperacion } from '../../nucleo/base-de-datos';
 import { PUBLICADOR_EVENTOS, type PublicadorEventos } from '../../nucleo/eventos';
@@ -42,6 +43,29 @@ export class EventosCarta {
         sala: sucursalId === null ? { tipo: 'empresa' } : { tipo: 'sucursal', sucursalId },
         nombre: 'carta.actualizada',
         datos: { sucursalId },
+      }),
+    );
+  }
+
+  /**
+   * `carta.disponibilidad` (criterios 46 y 53): un producto se agotó, cambió su agotado o se reactivó. Va en la
+   * sala de la sucursal. `hasta` y `origen` son `null` al reactivar. Un evento por cambio real: quien llama
+   * no lo registra en un no-op.
+   */
+  disponibilidad(datos: {
+    sucursalId: string;
+    productoId: string;
+    agotado: boolean;
+    hasta: HastaAgotado | null;
+    origen: OrigenAgotado | null;
+  }): void {
+    const empresaId = this.contexto.empresaActual();
+    this.contexto.alConfirmar(() =>
+      this.publicador.publicar({
+        empresaId,
+        sala: { tipo: 'sucursal', sucursalId: datos.sucursalId },
+        nombre: 'carta.disponibilidad',
+        datos,
       }),
     );
   }
