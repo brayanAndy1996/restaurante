@@ -1,9 +1,12 @@
 import {
+  ajusteSucursalRespuestaSchema,
   estacionRespuestaSchema,
   familiaRespuestaSchema,
   fotoRespuestaSchema,
   productoResumenSchema,
   productoRespuestaSchema,
+  type AjusteSucursalEntrada,
+  type AjusteSucursalRespuesta,
   type EstacionModificarEntrada,
   type EstacionRespuesta,
   type FamiliaModificarEntrada,
@@ -23,6 +26,8 @@ export const CLAVES = {
   familias: ['carta', 'familias'] as const,
   productos: ['carta', 'productos'] as const,
   producto: (id: string) => ['carta', 'producto', id] as const,
+  /** Una fila por sucursal con el precio y la disponibilidad del producto (003, criterio 18). */
+  sucursalesDeProducto: (id: string) => ['carta', 'producto', id, 'sucursales'] as const,
 };
 
 // --- Llamadas a la API ----------------------------------------------------------------------------
@@ -64,6 +69,26 @@ export const ordenarProductosDeFamilia = (familiaId: string, ids: string[]) =>
     { ids },
     { esquema: listaDe(productoResumenSchema) },
   );
+
+/** Una fila por sucursal de la empresa, con lo que quien consulta puede cambiar (`editable`). */
+export const listarSucursalesDeProducto = (id: string, senal?: AbortSignal) =>
+  api.get(`/carta/productos/${id}/sucursales`, {
+    esquema: listaDe(ajusteSucursalRespuestaSchema),
+    ...conSenal(senal),
+  });
+/**
+ * Guarda el precio y la disponibilidad de una sola sucursal. Lleva clave de idempotencia (se reutiliza
+ * en los reintentos por un corte): repetir el mismo ajuste no repite el efecto.
+ */
+export const ajustarSucursalDeProducto = (
+  id: string,
+  sucursalId: string,
+  ajuste: AjusteSucursalEntrada,
+): Promise<AjusteSucursalRespuesta> =>
+  api.put(`/carta/productos/${id}/sucursales/${sucursalId}`, ajuste, {
+    esquema: ajusteSucursalRespuestaSchema,
+    idempotente: true,
+  });
 
 /** Sube la foto ya reducida (cuerpo binario con su `Content-Type`). */
 export const subirFotoDeProducto = (id: string, foto: Blob) =>

@@ -33,6 +33,7 @@ import {
   puedeAjustarSucursal,
 } from './carta';
 import { FotoDeProducto } from './FotoDeProducto';
+import { PrecioPorSucursal } from './PrecioPorSucursal';
 import {
   ETIQUETA_DE_AFECTACION,
   SIN_ESTACION,
@@ -273,6 +274,8 @@ function FormularioDeProducto({ modo, original, familias, estaciones }: PropsFor
         const actualizado = await modificarProducto(guardadoPrevio.id, cambios);
         clientes.setQueryData(CLAVES.producto(actualizado.id), actualizado);
         refrescarListas();
+        // El precio efectivo de las sucursales sin precio propio depende del precio de la empresa.
+        void clientes.invalidateQueries({ queryKey: CLAVES.sucursalesDeProducto(actualizado.id) });
         setGuardadoPrevio(actualizado);
         setEstado(formularioDeProducto(actualizado));
         setGuardado(true);
@@ -587,6 +590,12 @@ function FormularioDeProducto({ modo, original, familias, estaciones }: PropsFor
               onCambio={alCambiarFoto}
             />
           </section>
+
+          <PrecioPorSucursal
+            productoId={guardadoPrevio.id}
+            precioEmpresa={guardadoPrevio.precio}
+            seVendeSolo={guardadoPrevio.seVendeSolo}
+          />
 
           {enUso > 0 || !guardadoPrevio.seVendeSolo ? (
             <section className="seccion" aria-labelledby="producto-uso">

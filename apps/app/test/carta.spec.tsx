@@ -136,6 +136,9 @@ function carta(sesion: SesionRespuesta, extra: Parameters<typeof servidor>[0] = 
     'GET /carta/familias': () => json(200, FAMILIAS),
     'GET /carta/estaciones': () => json(200, ESTACIONES),
     'GET /carta/productos': () => json(200, PRODUCTOS),
+    // La edición de un producto también lee sus sucursales (003, C2); su prueba está en carta-sucursales.
+    [`GET /carta/productos/${P_CEVICHE}/sucursales`]: () => json(200, []),
+    [`GET /carta/productos/${P_AJI}/sucursales`]: () => json(200, []),
     ...extra,
   });
 }

@@ -545,3 +545,122 @@ body,
   justify-content: space-between;
   gap: var(--espacio-md);
 }
+
+/* Precio por sucursal (003, HU-06): una fila por sucursal, separadas por juntas */
+.sucursales {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.sucursal {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espacio-md);
+  padding-block: var(--espacio-lg);
+  border-top: 1px solid var(--color-junta);
+}
+
+.sucursal:first-child {
+  border-top: 0;
+  padding-top: var(--espacio-xs);
+}
+
+.sucursal__encabezado {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--espacio-sm) var(--espacio-md);
+}
+
+.sucursal__nombre {
+  margin: 0;
+  font-size: 1.125rem;
+  line-height: 1.5rem;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.sucursal__precio {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--espacio-xs) var(--espacio-sm);
+  margin: 0;
+}
+
+.sucursal__monto {
+  font-size: 1.0625rem;
+  line-height: 1.5rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.sucursal__nota {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--espacio-sm);
+  margin: 0;
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+  color: var(--color-tinta-suave);
+}
+
+.sucursal__nota > .ui-icono {
+  flex: none;
+  margin-top: 2px;
+}
+
+.sucursal__formulario {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espacio-md);
+}
+
+.sucursal__acciones {
+  display: flex;
+  align-items: center;
+  gap: var(--espacio-md);
+}
+
+.sucursal__acciones > .ui-boton {
+  flex: none;
+  min-width: 8rem;
+}
+
+.sucursal__guardada {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--espacio-xs);
+  font-weight: 600;
+  color: var(--color-exito);
+}
+
+/* Con la columna de 720 px, el nombre y el precio van a la izquierda y los controles a la derecha */
+@media (min-width: 768px) {
+  .sucursal {
+    display: grid;
+    grid-template-columns: 11rem minmax(0, 1fr);
+    grid-template-rows: auto 1fr;
+    column-gap: var(--espacio-xl);
+    align-items: start;
+  }
+  .sucursal > .sucursal__encabezado {
+    grid-column: 1;
+    flex-direction: column;
+    align-items: flex-start;
+    justify-content: flex-start;
+  }
+  .sucursal > .sucursal__precio {
+    grid-column: 1;
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  .sucursal > .sucursal__formulario,
+  .sucursal > .sucursal__nota {
+    grid-column: 2;
+    grid-row: 1 / span 2;
+  }
+}

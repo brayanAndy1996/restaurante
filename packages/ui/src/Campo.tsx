@@ -326,6 +326,11 @@ interface PropsInterruptor {
   onCambio: (marcado: boolean) => void;
   icono?: ReactNode;
   disabled?: boolean;
+  /**
+   * Nombre para lectores de pantalla cuando varios interruptores comparten la misma etiqueta visible
+   * ("Disponible" en cada sucursal): debe empezar por la etiqueta visible.
+   */
+  nombreAccesible?: string;
 }
 
 /** Interruptor de 52 x 32 px con rol `switch`; el estado se dice también con la posición, no solo con el color. */
@@ -336,6 +341,7 @@ export function Interruptor({
   onCambio,
   icono,
   disabled,
+  nombreAccesible,
 }: PropsInterruptor) {
   const id = useId();
   return (
@@ -350,6 +356,7 @@ export function Interruptor({
           type="button"
           role="switch"
           aria-checked={marcado}
+          aria-label={nombreAccesible}
           aria-describedby={ayuda ? `${id}-ayuda` : undefined}
           className="ui-interruptor__pista"
           disabled={disabled}
