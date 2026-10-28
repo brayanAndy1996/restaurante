@@ -1,4 +1,4 @@
-# Pruebas de la API (historias 001 y 002)
+# Pruebas de la API (historias 001, 002 y 003)
 
 Pruebas de integración contra **PostgreSQL real** (sin mocks de la base). Vitest + SWC.
 Los archivos van en `apps/api/test/**/*.spec.ts`; las pruebas protegidas de la historia 001 van en
@@ -703,11 +703,10 @@ fábrica de `carta-critica/fabrica-permisos-carta.ts` (aplicación con `RelojMan
 `fijarEntornoDePrueba` da ahora `ARCHIVOS_DRIVER=r2` con credenciales falsas cuando `nodeEnv` es `production`
 (la API exige `r2` para arrancar en producción; ninguna prueba sale a la red) y `memoria` en los demás casos.
 
-Qué sigue en rojo de las pruebas protegidas de la historia 003 y por qué: `rls-carta.spec.ts` (la siembra inserta en
-las diez tablas, y faltan siete hasta C5), `linea-preparada.spec.ts` (`prepararLinea`, C5), `referencias-carta.spec.ts`
-(`sembrarCarta` necesita grupos, combos y menú, y la vista y los agotados son de C5) y, en `cajero-carta.spec.ts` y
-`permisos-carta.spec.ts`, todo lo que usa `sembrarCarta` (C4) o toca ajustes por sucursal (C2), grupos (C3), menú del
-día (C4) o agotados (C5).
+Estado de las pruebas protegidas de la historia 003 al terminar C1: varias seguían en rojo (`rls-carta.spec.ts`
+necesitaba las diez tablas, `linea-preparada.spec.ts` esperaba `prepararLinea`, y `referencias-carta.spec.ts`,
+`cajero-carta.spec.ts` y `permisos-carta.spec.ts` dependían de `sembrarCarta`, de ajustes, grupos, menú del día y
+agotados). **Con C5 todas están en verde**; ver "Estado actual de la historia 003" al final de esta sección.
 
 ## Historia 003 · grupo C2 (T13): ajuste por sucursal
 
@@ -729,8 +728,64 @@ Qué parte de las pruebas protegidas `cajero-carta.spec.ts` y `permisos-carta.sp
 criterio 19b (el `GET` con `editable` solo en S1, el ajuste de S1, los 403 de S2 y S3 con sesión de contraseña y de
 PIN antes y después de ajustar S1, el 404 de una sucursal de B o inexistente, `noDisponibleEn` con S2 y S3, el rol
 perdido, el Cajero de dos sucursales, el Cajero y Supervisor, y el Administrador con o sin sucursal activa) y la de la
-auditoría del ajuste del criterio 62. El resto sigue en rojo por `sembrarCarta` o por rutas de C3 (grupos), C4
-(combos, menú del día y cambio de tipo) y C5 (agotados y vista).
+auditoría del ajuste del criterio 62. El resto estaba en rojo por `sembrarCarta` o por rutas de C3 (grupos), C4
+(combos, menú del día y cambio de tipo) y C5 (agotados y vista); hoy pasa completo.
+
+## Historia 003 · grupos C3 a C5: modificadores, combos, menú del día, agotados y vista
+
+Pruebas del desarrollador (no protegidas) en `apps/api/test/carta/`; no tocan ninguna prueba protegida. Siguen usando
+la fábrica de `carta-critica/fabrica-permisos-carta.ts` (a través de `carta/ayudas.ts`) y, desde C4,
+`carta/ayudas-combos.ts` (`crearSimple`, `crearLigable`, `crearGrupo`, `crearProducto`, `cuerpoCombo`, `cuerpoMenu`,
+`pedir`, `camposDe`).
+
+| Archivo                              | Qué prueba                                                                                                                                                                                                             |
+| ------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `carta/grupos-modificadores.spec.ts` | C3, criterios 24 a 29: mínimo, máximo y obligatorio, reemplazo de la lista de modificadores, producto ligado, `EN_USO`, asignación a productos, auditoría y eventos                                                    |
+| `carta/combos.spec.ts`               | C4, criterios 6 a 12 y 30 a 33 en lo que toca a combos y menús como productos: componentes, referencias, reglas del criterio 7 y 400/422                                                                               |
+| `carta/cambio-tipo.spec.ts`          | C4, criterios 10, 10b, 10c, 10d, 27 y 32: cada transición, lo que se quita y su confirmación, `EN_USO`, el orden de los rechazos, la carrera con una referencia nueva y el orden de bloqueo frente a `PATCH` de grupos |
+| `carta/menu-del-dia.spec.ts`         | C4, criterios 34 a 38: consulta por día, armado, cambio de día a la hora de corte, armado de la víspera, opciones por sucursal, 422, no-op y auditoría (con el reloj de la API)                                        |
+| `carta/agotados.spec.ts`             | C5, criterios 39 a 44 y 53: forma de la respuesta, no-op, vigencia con la hora de corte, auditoría con su antes y su después, evento, origen `SIN_STOCK` y trazabilidad                                                |
+| `carta/vista-sucursal.spec.ts`       | C5, criterios 45 y 47 a 52 y 58: qué entra en la vista, efecto de un agotado en combos, modificadores y menú, `ETag` y 304, número fijo de consultas con 10 y 300 productos y los errores de `prepararLinea`           |
+| `carta/etag-carta.spec.ts`           | Criterio 49: el JSON canónico y la comparación con `If-None-Match` (funciones puras)                                                                                                                                   |
+| `carta/eventos-carta.spec.ts`        | Criterios 46, 53 y 54 (T26): un solo evento por petición, después de confirmar, ninguno si se revierte, se rechaza o no cambia nada; la forma de cada evento contra los contratos                                      |
+
+El E2E de la carta contra la API real (Playwright) vive en `apps/app/e2e/carta.spec.ts`, no aquí.
+
+## Historia 003 · ronda 1 adversarial y revisión T31
+
+La primera ronda adversarial (`adversarial` recibió la especificación y el código, no las notas de quien implementó)
+dejó una prueba protegida nueva y cuatro hallazgos:
+
+- **Protegida** `carta-critica/ataque-ronda1.spec.ts` (siete pruebas, con un pool de 6 conexiones; las carreras son
+  probabilísticas, así que se repiten por pareja y basta una mala para fallar):
+  - **R1-F1** (criterios 40, 46 y 62): dos personas marcan agotado el mismo producto a la vez, sobre un producto que
+    nunca estuvo agotado, después de una reactivación (la fila se borró) y `FIN_DEL_DIA` contra `REACTIVAR`. Cada
+    cambio real deja exactamente una fila de auditoría y un evento, y la segunda fila parte de lo que dejó la
+    primera. Corrección: `CartaDisponibilidadService.preparar` bloquea el producto `FOR NO KEY UPDATE` antes de leer
+    `producto_agotado`.
+  - **R1-F4** (criterio 61): en `PUT /carta/productos/:id/foto` el 401 y el 403 van antes que el 413, aunque el
+    cuerpo pase de 1 MB, y en ningún caso se guarda nada. Corrección: el cuerpo binario lo lee el controlador
+    (`leerCuerpoDeFoto`), después del guard y del `PermisoInterceptor`; ya no hay un analizador global.
+    `descartarCuerpoDeFotoAlResponder` descarta lo que falte si se responde sin leerlo.
+- **No protegida** `carta/correcciones-ronda1.spec.ts`:
+  - **R1-F2**: dos `PATCH` cruzados que pasan a combo (A con B de componente y B con A) ya no dan 500 por abrazo
+    mortal: uno gana y el otro responde 422 `REFERENCIA_INVALIDA` o 409 `EN_USO`; queda un solo combo. Corrección:
+    `bloquearEnOrden` bloquea el producto y sus componentes en una sola consulta ordenada por id. Además, el filtro
+    global traduce `40P01` y `40001` a 409 `CONFLICTO` (`filtro-errores.spec.ts`).
+  - **R1-F3**: un id de ruta en mayúsculas es el mismo recurso (`PipeUuid` devuelve el UUID en minúsculas) y un
+    producto no puede ser componente de sí mismo con la URL en mayúsculas (422, no 500 por el `CHECK`).
+  - Revisión T31: los menús del día de una familia inactiva no salen en la consulta del menú del día (ni en la
+    vista) y la foto responde 403 antes que 415 a quien no puede editar la carta.
+
+## Estado actual de la historia 003
+
+- Todas las pruebas protegidas de `carta-critica/` pasan (`ataque-ronda1.spec.ts`, `cajero-carta.spec.ts`,
+  `linea-preparada.spec.ts`, `permisos-carta.spec.ts`, `referencias-carta.spec.ts` y `rls-carta.spec.ts`); ya no
+  queda nada en rojo por falta de implementación.
+- La suite completa de la API pasa en dos corridas seguidas contra PostgreSQL 16 (`BASE_DE_PRUEBA` propio por
+  corrida para no pisar otras).
+- Pendiente de rondas siguientes: lo que encuentre `adversarial` en la ronda 2 se convierte en pruebas protegidas
+  nuevas escritas por `test-writer`.
 
 ## Pendientes menores
 

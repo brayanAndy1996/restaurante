@@ -247,6 +247,9 @@ describe('criterio 40 · repetir', () => {
     exigirEstado(await marcar(producto.id), 200, 'marcar');
     await asentar();
     ctx.publicador.limpiar();
+    // El reloj de la API es manual: sin avanzarlo las dos filas de auditoría comparten `ocurrido_en` y el orden
+    // por (instante, id) dependería del uuid al azar.
+    ctx.reloj.avanzar(60_000);
     const res = await marcar(producto.id, { hasta: 'REACTIVAR' });
     exigirEstado(res, 200, 'cambiar el hasta');
     expect(res.body.hasta).toBe('REACTIVAR');

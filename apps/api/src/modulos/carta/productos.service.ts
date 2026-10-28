@@ -653,7 +653,10 @@ export class ProductosService {
     // (`40P01`). Con un solo orden global por id, el segundo espera al primero, ve el tipo nuevo y responde
     // 422 `REFERENCIA_INVALIDA` (el componente ya no es simple) o 409 `EN_USO`.
     if (cambios.componentes !== undefined && cambios.componentes.length > 0) {
-      const productos = new Set([id, ...cambios.componentes.map((c) => c.productoId.toLowerCase())]);
+      const productos = new Set([
+        id,
+        ...cambios.componentes.map((c) => c.productoId.toLowerCase()),
+      ]);
       await this.conexion.query(
         'SELECT id FROM producto WHERE id = ANY($1::uuid[]) ORDER BY id FOR UPDATE',
         { bind: [[...productos]], type: QueryTypes.SELECT },

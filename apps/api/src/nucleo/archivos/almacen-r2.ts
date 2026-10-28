@@ -13,8 +13,9 @@ export interface OpcionesAlmacenR2 {
 }
 
 /**
- * Tiempo máximo de cada llamada a R2. La subida ocurre dentro de la transacción de la petición y la conexión
- * de la API se cierra tras 30 s inactiva dentro de una transacción: es mejor fallar antes que perderla.
+ * Tiempo máximo de cada llamada a R2. La subida de una foto ocurre fuera de toda transacción (no retiene una
+ * conexión del pool, RNF-03), pero el borrado del archivo anterior corre al confirmar la transacción de quien lo
+ * pidió: es mejor fallar a los 20 s que dejar colgada la petición.
  */
 export const TIEMPO_LIMITE_R2_MS = 20_000;
 

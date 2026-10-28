@@ -3,6 +3,7 @@ import { diaOperativo } from '@restaurante/dominio';
 import { QueryTypes, type Sequelize } from 'sequelize';
 import type { Reloj } from '../../nucleo/reloj';
 import type { SucursalesConsultaService } from '../plataforma';
+import { noEncontrado } from './errores-carta';
 
 /**
  * Lo que depende del tipo de un producto (`SIMPLE`, `COMBO`, `MENU_DEL_DIA`): las reglas del criterio 7, dónde

@@ -2,7 +2,7 @@ import { IconoEstacion } from '@restaurante/ui';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useMemo } from 'react';
 import { Navigate } from 'react-router-dom';
-import { useEnvioPendiente } from '../../lib/envios';
+import { MUTACION_SIN_PAUSA, useEnvioPendiente } from '../../lib/envios';
 import { usePermiso } from '../acceso/permisos';
 import {
   CLAVES,
@@ -63,10 +63,12 @@ export function EstacionesLista() {
   // Una escritura sin red no se pierde: queda "Pendiente de envío" y sale sola al volver (criterio 78).
   const envio = useEnvioPendiente();
   const crear = useMutation({
+    ...MUTACION_SIN_PAUSA,
     mutationFn: (nombre: string) => envio.enviar((extra) => crearEstacion(nombre, extra)),
     onSuccess: refrescar,
   });
   const modificar = useMutation({
+    ...MUTACION_SIN_PAUSA,
     mutationFn: (datos: { id: string; cambios: { nombre?: string; activa?: boolean } }) =>
       envio.enviar((extra) => modificarEstacion(datos.id, datos.cambios, extra)),
     onSuccess: refrescar,

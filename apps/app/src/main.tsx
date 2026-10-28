@@ -14,6 +14,8 @@ const clienteDeConsultas = new QueryClient({
       refetchOnWindowFocus: false,
       staleTime: 30_000,
     },
+    // Las escrituras reintentan solas en lib/api.ts y lib/envios.ts: TanStack no las pausa sin red.
+    mutations: { networkMode: 'always' },
   },
 });
 

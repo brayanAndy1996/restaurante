@@ -36,6 +36,14 @@ export class EnvioCancelado extends ErrorApi {
   }
 }
 
+/**
+ * Opciones de `useMutation` para toda escritura que pasa por `enviarSinPerder`. Por defecto TanStack Query
+ * pausa una mutación mientras el navegador dice que no hay red (`navigator.onLine` en falso): la pantalla
+ * se quedaría en "Guardando…" sin llegar nunca a "Pendiente de envío". Con `always` la mutación corre, el
+ * intento falla por la red y `enviarSinPerder` la sigue reintentando con la misma clave hasta que vuelve.
+ */
+export const MUTACION_SIN_PAUSA = { networkMode: 'always' } as const;
+
 /** Espera entre los intentos que siguen a `api.ts` (que ya reintenta unos 35 s): 15 s, 30 s y luego 60 s. */
 const ESPERAS_DE_ENVIO_MS = [15_000, 30_000, 60_000] as const;
 /** Intentos máximos antes de rendirse y avisar (unos 35 minutos); evita un bucle sin fin. */

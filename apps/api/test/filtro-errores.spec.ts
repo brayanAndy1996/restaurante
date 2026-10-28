@@ -8,9 +8,9 @@ import { FiltroGlobalErrores } from '../src/nucleo/errores/filtro-global-errores
 
 function responder(excepcion: unknown) {
   const filtro = new FiltroGlobalErrores();
-  const registrado = vi
-    .spyOn((filtro as unknown as { logger: { error: () => void } }).logger, 'error')
-    .mockImplementation(() => undefined);
+  const logger = (filtro as unknown as { logger: { error: () => void; warn: () => void } }).logger;
+  vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
+  const registrado = vi.spyOn(logger, 'error').mockImplementation(() => undefined);
   let estado = 0;
   let cuerpo: unknown;
   const respuesta = {
@@ -82,6 +82,33 @@ describe('criterio 40d · qué es un 4xx de la petición', () => {
     ['expose falso', Object.assign(new Error('x'), { status: 403, expose: false })],
   ])('%s (cliente HTTP saliente) responde 500 y se registra', (_n, error) => {
     const { estado, cuerpo, registrado } = responder(error);
+    expect(estado).toBe(500);
+    expect(cuerpo).toEqual({ codigo: 'ERROR_INTERNO', mensaje: 'Error interno del servidor' });
+    expect(registrado).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('abrazo mortal y falla de serialización (R1-F2 de la ronda 1 de 003)', () => {
+  // Sequelize envuelve el error de `pg` en `parent`; el de `pg` llega a veces sin envolver.
+  const errorPg = (code: string) =>
+    Object.assign(new Error('deadlock detected'), { parent: { code } });
+
+  it.each([
+    ['40P01 envuelto por Sequelize', errorPg('40P01')],
+    ['40001 envuelto por Sequelize', errorPg('40001')],
+    ['40P01 de pg sin envolver', Object.assign(new Error('deadlock'), { code: '40P01' })],
+  ])('%s responde 409 CONFLICTO (no 500) sin registrarse como error', (_n, error) => {
+    const { estado, cuerpo, registrado } = responder(error);
+    expect(estado).toBe(409);
+    expect(cuerpo).toEqual({
+      codigo: 'CONFLICTO',
+      mensaje: 'Otra operación se estaba aplicando a los mismos datos. Intenta de nuevo',
+    });
+    expect(registrado).not.toHaveBeenCalled();
+  });
+
+  it('otro SQLSTATE sigue siendo 500', () => {
+    const { estado, cuerpo, registrado } = responder(errorPg('23514'));
     expect(estado).toBe(500);
     expect(cuerpo).toEqual({ codigo: 'ERROR_INTERNO', mensaje: 'Error interno del servidor' });
     expect(registrado).toHaveBeenCalledTimes(1);

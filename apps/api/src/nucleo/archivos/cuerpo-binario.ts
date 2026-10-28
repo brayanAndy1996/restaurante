@@ -98,6 +98,8 @@ export function leerCuerpoDeFoto(req: Request): Promise<CuerpoDeFoto> {
     });
     req.once('error', terminar);
     // El cliente cortó antes de terminar de enviar: no hay cuerpo completo que devolver.
-    req.once('close', () => terminar(new Error('La petición se cerró antes de recibir todo el cuerpo')));
+    req.once('close', () =>
+      terminar(new Error('La petición se cerró antes de recibir todo el cuerpo')),
+    );
   });
 }

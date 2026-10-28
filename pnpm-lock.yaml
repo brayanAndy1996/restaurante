@@ -36,7 +36,7 @@ importers:
         specifier: workspace:*
         version: link:../../packages/dominio
       aws4fetch:
-        specifier: ^1.0.20
+        specifier: 1.0.20
         version: 1.0.20
       pg:
         specifier: ^8.23.1

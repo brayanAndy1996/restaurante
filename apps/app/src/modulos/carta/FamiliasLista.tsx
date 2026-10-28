@@ -1,7 +1,7 @@
 import { IconoFamilia } from '@restaurante/ui';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useMemo } from 'react';
-import { useEnvioPendiente } from '../../lib/envios';
+import { MUTACION_SIN_PAUSA, useEnvioPendiente } from '../../lib/envios';
 import {
   CLAVES,
   crearFamilia,
@@ -58,15 +58,18 @@ export function FamiliasLista() {
   // Una escritura sin red no se pierde: queda "Pendiente de envío" y sale sola al volver (criterio 78).
   const envio = useEnvioPendiente();
   const crear = useMutation({
+    ...MUTACION_SIN_PAUSA,
     mutationFn: (nombre: string) => envio.enviar((extra) => crearFamilia(nombre, extra)),
     onSuccess: refrescar,
   });
   const modificar = useMutation({
+    ...MUTACION_SIN_PAUSA,
     mutationFn: (datos: { id: string; cambios: { nombre?: string; activa?: boolean } }) =>
       envio.enviar((extra) => modificarFamilia(datos.id, datos.cambios, extra)),
     onSuccess: refrescar,
   });
   const ordenar = useMutation({
+    ...MUTACION_SIN_PAUSA,
     mutationFn: (ids: string[]) => envio.enviar((extra) => ordenarFamilias(ids, extra)),
     onSuccess: (lista) => {
       clientes.setQueryData(CLAVES.familias, lista);

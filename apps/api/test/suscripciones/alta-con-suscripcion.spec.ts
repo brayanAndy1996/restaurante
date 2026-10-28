@@ -70,10 +70,18 @@ const suscripcionesDe = async (sucursalIds: string[]): Promise<FilaSuscripcion[]
     )
   ).rows;
 
+/**
+ * Código de establecimiento único dentro del proceso: el índice único es por (emisor, código) y todas las
+ * sucursales de este archivo usan el mismo emisor, así que un número al azar podía repetirse (colisión rara
+ * pero real). Se parte de un punto al azar (por si otra corrida dejó datos) y se avanza de uno en uno.
+ */
+let proximoCodigo = 3000 + randomInt(0, 3000);
+const codigoUnico = (): string => String(proximoCodigo++);
+
 const cuerpoDeSucursal = (e: EmpresaDePrueba, extra: Record<string, unknown> = {}) => ({
   rucEmisor: e.emisores[0]!.ruc,
   nombre: textoUnico('Sucursal-nueva'),
-  codigoEstablecimiento: String(3000 + randomInt(0, 6000)),
+  codigoEstablecimiento: codigoUnico(),
   direccion: 'Av. Nueva 100',
   ...extra,
 });

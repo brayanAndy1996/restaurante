@@ -19,7 +19,7 @@ export interface OpcionesAppModule {
   reloj?: Reloj;
   /** Publicador de eventos en tiempo real (`PUBLICADOR_EVENTOS`); por defecto el `PublicadorNulo`. */
   publicadorEventos?: PublicadorEventos;
-  /** Almacén de archivos (`ALMACEN_ARCHIVOS`); por defecto el de memoria hasta la tarea T10. */
+  /** Almacén de archivos (`ALMACEN_ARCHIVOS`); por defecto el que elige el entorno (`ARCHIVOS_DRIVER`: memoria, disco o R2). */
   almacenArchivos?: AlmacenArchivos;
 }
 
