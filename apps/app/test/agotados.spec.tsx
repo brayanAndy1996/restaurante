@@ -8,9 +8,10 @@ import { permisosDeRol, type Rol } from '@restaurante/dominio';
 import { act, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { guardarTokenDeSesion } from '../src/lib/almacen';
+import { guardarTokenDeEquipo, guardarTokenDeSesion, tokenDeSesion } from '../src/lib/almacen';
 import { espera } from '../src/lib/api';
-import { ID, json, renderApp, servidor, sesionDe } from './ayudas';
+import { avisosDeEnvio } from '../src/lib/envios-cancelados';
+import { equipoCon, ID, json, renderApp, servidor, sesionDe, TOKEN_EQUIPO } from './ayudas';
 
 const TOKEN =
   'se.11111111-1111-4111-8111-111111111111.22222222-2222-4222-8222-222222222222.secreto';
@@ -729,6 +730,121 @@ describe('Agotados: marcar y reactivar', () => {
     );
     expect(claves.size).toBe(1);
     expect(s.de('PUT', RUTA_AGOTADO(P_CEVICHE)).length).toBeGreaterThan(2);
+  });
+});
+
+describe('Agotados: un cambio pendiente no sale con otra sesión (trazabilidad de autor)', () => {
+  /** Cocina/Barra con dos sucursales: la barra de la sesión deja cambiar de una a otra. */
+  const sesionConDosSucursales = (activa: 'A' | 'B' = 'A') =>
+    sesionDe({
+      ...sesionCocina(),
+      sucursal:
+        activa === 'A'
+          ? { id: ID.sucursalA, nombre: 'Miraflores' }
+          : { id: ID.sucursalB, nombre: 'Surco' },
+      sucursales: [
+        { id: ID.sucursalA, nombre: 'Miraflores', rol: 'COCINA_BARRA' },
+        { id: ID.sucursalB, nombre: 'Surco', rol: 'COCINA_BARRA' },
+      ],
+    });
+
+  /** Sin red hasta la espera larga del envío (la 7.ª): ahí la prueba cambia la sesión y luego la libera. */
+  function conEnvioPendiente(extra: Record<string, () => Response> = {}) {
+    let rondas = 0;
+    let liberar!: () => void;
+    const compuerta = new Promise<void>((resolver) => (liberar = resolver));
+    vi.spyOn(espera, 'dormir').mockImplementation(async () => {
+      if (++rondas === 7) await compuerta;
+    });
+    const s = carta(() => vista(), {
+      'GET /sesion': () => json(200, sesionConDosSucursales()),
+      [`PUT ${RUTA_AGOTADO(P_CEVICHE)}`]: () => {
+        throw new TypeError('Failed to fetch');
+      },
+      ...extra,
+    });
+    return { s, liberar };
+  }
+
+  async function marcarCevicheSinRed() {
+    renderApp('/disponibilidad');
+    const fila = await filaDe('Ceviche mixto');
+    await userEvent.click(within(fila).getByRole('switch'));
+    await userEvent.click(
+      within(await screen.findByRole('dialog')).getByRole('button', {
+        name: 'Marcar como agotado',
+      }),
+    );
+    expect(await within(fila).findByText('Pendiente de envío')).toBeInTheDocument();
+    return fila;
+  }
+
+  it('si cambia de sucursal mientras espera, no se envía y la pantalla lo dice', async () => {
+    const { s, liberar } = conEnvioPendiente({
+      'PUT /sesion/sucursal': () => json(200, sesionConDosSucursales('B')),
+    });
+    const fila = await marcarCevicheSinRed();
+    const antes = s.de('PUT', RUTA_AGOTADO(P_CEVICHE)).length;
+
+    await userEvent.click(screen.getByRole('button', { name: /Miraflores/ }));
+    const hoja = await screen.findByRole('dialog', { name: 'Elige tu sucursal' });
+    await userEvent.click(within(hoja).getByRole('button', { name: /Surco/ }));
+    await waitFor(() => expect(s.de('PUT', '/sesion/sucursal')).toHaveLength(1));
+    liberar();
+
+    const aviso = (await screen.findByText('No pudimos guardar el cambio')).closest(
+      '[role="alert"]',
+    )!;
+    expect(aviso).toHaveTextContent(
+      'Ceviche mixto: No se envió: cambiaste de sucursal. Lo dejamos como estaba.',
+    );
+    // No salió ni un intento más, y la pantalla sigue ahí: no hace falta el aviso global.
+    expect(s.de('PUT', RUTA_AGOTADO(P_CEVICHE))).toHaveLength(antes);
+    expect(avisosDeEnvio.leer()).toBeNull();
+    expect(within(fila).queryByText('Pendiente de envío')).not.toBeInTheDocument();
+  });
+
+  it('si la persona cambia de usuario mientras espera, no se envía y el aviso global lo dice en la pantalla de PIN', async () => {
+    guardarTokenDeEquipo(ID.empresa, TOKEN_EQUIPO);
+    const { s, liberar } = conEnvioPendiente({
+      'DELETE /sesion': () => json(204),
+      'GET /equipo': () =>
+        json(
+          200,
+          equipoCon([{ nombre: 'Marta Pérez' }, { usuarioId: ID.otro, nombre: 'Lucía Torres' }]),
+        ),
+    });
+    await marcarCevicheSinRed();
+    const antes = s.de('PUT', RUTA_AGOTADO(P_CEVICHE)).length;
+
+    await userEvent.click(screen.getByRole('button', { name: 'Sesión de Marta Pérez' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Cambiar usuario' }));
+    expect(await screen.findByRole('heading', { name: '¿Quién eres?' })).toBeInTheDocument();
+    expect(tokenDeSesion()).toBeNull();
+    liberar();
+
+    const aviso = await screen.findByRole('dialog', {
+      name: 'No se envió: cambiaste de usuario.',
+    });
+    expect(aviso).toHaveTextContent('Hay que volver a hacer ese cambio.');
+    expect(s.de('PUT', RUTA_AGOTADO(P_CEVICHE))).toHaveLength(antes);
+    await userEvent.click(within(aviso as HTMLElement).getByRole('button', { name: 'Entendido' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(avisosDeEnvio.leer()).toBeNull();
+  });
+
+  it('si la sesión se cierra (Salir) mientras espera, el aviso global dice que no se envió', async () => {
+    const { s, liberar } = conEnvioPendiente({ 'DELETE /sesion': () => json(204) });
+    await marcarCevicheSinRed();
+    const antes = s.de('PUT', RUTA_AGOTADO(P_CEVICHE)).length;
+
+    await userEvent.click(screen.getByRole('button', { name: 'Sesión de Marta Pérez' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Salir' }));
+    expect(await screen.findByRole('heading', { name: 'Ingresa' })).toBeInTheDocument();
+    liberar();
+
+    expect(await screen.findByText('No se envió: se cerró la sesión.')).toBeInTheDocument();
+    expect(s.de('PUT', RUTA_AGOTADO(P_CEVICHE))).toHaveLength(antes);
   });
 });
 

@@ -42,6 +42,38 @@ describe('recordatorio automático después del ingreso con contraseña (criteri
     expect(await screen.findByRole('button', { name: 'Cambiar usuario' })).toBeInTheDocument();
   });
 
+  it('si la persona elige sucursal mientras se relee la sesión, la lectura vieja no la devuelve a "Elige tu sucursal"', async () => {
+    let lecturas = 0;
+    let soltarLecturaVieja!: () => void;
+    const vieja = new Promise<void>((resolver) => (soltarLecturaVieja = resolver));
+    const s = servidor({
+      'GET /sesion': async () => {
+        lecturas += 1;
+        // La primera lectura es la de entrar; la segunda es la que sigue a recordar el equipo y sale
+        // antes de que la persona elija: llega tarde, con la sucursal todavía sin elegir.
+        if (lecturas === 2) await vieja;
+        return json(200, sesionDe({ sucursal: null, equipo: null }));
+      },
+      'POST /sesion/equipo': () =>
+        json(201, {
+          equipo: { id: ID.equipo, nombre: 'Chrome · Linux' },
+          tokenEquipo: NUEVO_TOKEN,
+        }),
+      'PUT /sesion/sucursal': () =>
+        json(200, sesionDe({ sucursal: { id: ID.sucursalB, nombre: 'Surco' } })),
+    });
+    renderApp('/');
+    await screen.findByRole('heading', { name: 'Elige tu sucursal' });
+    await waitFor(() => expect(lecturas).toBe(2));
+    await userEvent.click(screen.getByRole('button', { name: /Surco/ }));
+    expect(await screen.findByText('Hola, Marta')).toBeInTheDocument();
+    soltarLecturaVieja();
+    await waitFor(() => expect(s.de('GET', '/sesion')).toHaveLength(2));
+    await new Promise((resolver) => setTimeout(resolver, 50));
+    expect(screen.getByText('Hola, Marta')).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Elige tu sucursal' })).not.toBeInTheDocument();
+  });
+
   it('con un token de equipo ya guardado lo manda y conserva el mismo si no llega uno nuevo', async () => {
     guardarTokenDeEquipo(ID.empresa, TOKEN_EQUIPO);
     const s = servidor({

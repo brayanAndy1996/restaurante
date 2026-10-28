@@ -297,3 +297,122 @@ export function fotoDePrueba(): Buffer {
     trozo('IEND', Buffer.alloc(0)),
   ]);
 }
+
+// --- Pantalla de 360 px (criterio 79 de 003) ------------------------------------------------------------
+
+/** Alto mínimo táctil (el proyecto pide 44 px; lo ideal son 48). */
+const ALTO_MINIMO_TACTIL = 44;
+
+export interface MedidaDePantalla {
+  /** `document.documentElement.scrollWidth` y `clientWidth`: si el primero es mayor, hay desplazamiento lateral. */
+  scrollWidth: number;
+  clientWidth: number;
+  /** Controles visibles que miden menos de 44 px de alto, con su nombre y su medida. */
+  chicos: string[];
+  /** Cuántos controles interactivos visibles se midieron (para que "no hay chicos" no sea "no miré nada"). */
+  medidos: number;
+  /** Elementos que se salen por la derecha de la pantalla, para encontrar el culpable de un desborde. */
+  salidos: string[];
+}
+
+/**
+ * Mide la pantalla abierta: si se desplaza de lado y qué controles táctiles visibles miden menos de 44 px de alto.
+ *
+ * - Un control es un enlace, botón, campo, selector, interruptor, casilla u opción. Si es una casilla o una opción
+ *   escondida detrás de su etiqueta (`<input>` de 1 px), se mide la etiqueta, que es lo que se toca.
+ * - Un enlace dentro de una frase (`inline`) no cuenta: es texto y su zona táctil es la línea. Todo lo demás sí.
+ * - Lo que no se ve (`display: none`, cerrado, fuera de pantalla como el enlace "Saltar al contenido") no se mide.
+ */
+export async function medirPantalla(page: Page): Promise<MedidaDePantalla> {
+  return page.evaluate((minimo) => {
+    const selector = [
+      'a[href]',
+      'button',
+      'input:not([type="hidden"])',
+      'select',
+      'textarea',
+      'summary',
+      '[role="button"]',
+      '[role="switch"]',
+      '[role="checkbox"]',
+      '[role="radio"]',
+      '[role="tab"]',
+      '[role="link"]',
+    ].join(',');
+    const nombre = (el: Element): string => {
+      const etiqueta =
+        el.getAttribute('aria-label') ??
+        (el as HTMLInputElement).labels?.[0]?.textContent ??
+        el.textContent ??
+        el.getAttribute('placeholder') ??
+        '';
+      return etiqueta.replace(/\s+/g, ' ').trim().slice(0, 40);
+    };
+    const visible = (el: Element): boolean => {
+      const estilo = getComputedStyle(el);
+      if (estilo.display === 'none' || estilo.visibility === 'hidden') return false;
+      if (el.closest('[hidden], [inert], [aria-hidden="true"], dialog:not([open]), .saltar')) {
+        return false;
+      }
+      return true;
+    };
+    const enUnaFrase = (el: Element): boolean =>
+      el.tagName === 'A' &&
+      getComputedStyle(el).display === 'inline' &&
+      ['P', 'LI', 'SPAN', 'DIV', 'B', 'SMALL'].includes(el.parentElement?.tagName ?? '') &&
+      Array.from(el.parentNode?.childNodes ?? []).some(
+        (n) => n.nodeType === Node.TEXT_NODE && (n.textContent ?? '').trim() !== '',
+      );
+    const chicos: string[] = [];
+    let medidos = 0;
+    for (const el of Array.from(document.querySelectorAll(selector))) {
+      if (!visible(el)) continue;
+      let objetivo: Element = el;
+      let caja = el.getBoundingClientRect();
+      // Casilla u opción escondida detrás de su etiqueta: lo que se toca es la etiqueta.
+      if (caja.height < 4 || caja.width < 4) {
+        const etiqueta = (el as HTMLInputElement).labels?.[0] ?? el.closest('label');
+        if (!etiqueta) continue;
+        objetivo = etiqueta;
+        caja = etiqueta.getBoundingClientRect();
+      }
+      if (caja.width === 0 || caja.height === 0 || !visible(objetivo)) continue;
+      if (enUnaFrase(objetivo)) continue;
+      medidos += 1;
+      if (caja.height < minimo - 0.5) {
+        chicos.push(
+          `${objetivo.tagName.toLowerCase()}${objetivo.className ? `.${String(objetivo.className).split(' ')[0]}` : ''} «${nombre(el)}» ${Math.round(caja.width)}x${caja.height.toFixed(1)}`,
+        );
+      }
+    }
+    const ancho = document.documentElement.clientWidth;
+    const salidos = Array.from(document.body.querySelectorAll('*'))
+      .filter((el) => visible(el) && el.getBoundingClientRect().right > ancho + 1)
+      .slice(0, 8)
+      .map(
+        (el) =>
+          `${el.tagName.toLowerCase()}.${String(el.className).split(' ')[0]} → ${Math.round(el.getBoundingClientRect().right)}px`,
+      );
+    return {
+      scrollWidth: document.documentElement.scrollWidth,
+      clientWidth: ancho,
+      chicos,
+      medidos,
+      salidos,
+    };
+  }, ALTO_MINIMO_TACTIL);
+}
+
+/**
+ * Afirma que la pantalla abierta cabe a lo ancho (sin desplazamiento horizontal) y que todos sus controles
+ * táctiles visibles miden 44 px o más de alto. `donde` dice qué pantalla es, para el mensaje de la falla.
+ */
+export async function afirmarPantallaDeCelular(page: Page, donde: string): Promise<void> {
+  const medida = await medirPantalla(page);
+  expect(medida.medidos, `${donde}: se midió algún control`).toBeGreaterThan(0);
+  expect(
+    medida.scrollWidth,
+    `${donde}: sin desplazamiento horizontal (se salen: ${medida.salidos.join('; ') || 'nada visible'})`,
+  ).toBeLessThanOrEqual(medida.clientWidth);
+  expect(medida.chicos, `${donde}: controles de menos de 44 px de alto`).toEqual([]);
+}

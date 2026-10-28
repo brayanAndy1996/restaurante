@@ -23,10 +23,12 @@ export function MarcoDeDisponibilidad({
   children: ReactNode;
 }) {
   const navegar = useNavigate();
-  const opciones: OpcionDeSegmento<SeccionDeDisponibilidad>[] = SECCIONES_DE_DISPONIBILIDAD.map((s) => ({
-    valor: s.valor,
-    etiqueta: s.etiqueta,
-  }));
+  const opciones: OpcionDeSegmento<SeccionDeDisponibilidad>[] = SECCIONES_DE_DISPONIBILIDAD.map(
+    (s) => ({
+      valor: s.valor,
+      etiqueta: s.etiqueta,
+    }),
+  );
   return (
     <Pagina titulo="Disponibilidad" ancho="ancho" {...(pie ? { pie } : {})}>
       <div className="carta__secciones">

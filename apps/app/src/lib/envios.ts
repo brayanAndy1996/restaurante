@@ -105,7 +105,8 @@ export async function enviarSinPerder<T>(
     if (control.signal.aborted) return;
     const motivo = cambioDeIdentidad(origen);
     // Un cierre que la persona pidió como "Cambiar usuario" se dice así.
-    if (motivo) control.abort(new EnvioCancelado(motivo === 'cierre' && sugerido ? sugerido : motivo));
+    if (motivo)
+      control.abort(new EnvioCancelado(motivo === 'cierre' && sugerido ? sugerido : motivo));
   };
   const dejarDeOir = alCambiarLaIdentidad(vigilar);
 

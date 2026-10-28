@@ -124,6 +124,7 @@ export const SECCIONES_DE_DISPONIBILIDAD: readonly DefinicionDeSeccion[] = [
 
 /** La sección que pide la dirección (`?ver=`); una desconocida cae en la primera. */
 export function seccionDeDisponibilidadPedida(valor: string | null): SeccionDeDisponibilidad {
-  return (SECCIONES_DE_DISPONIBILIDAD.find((s) => s.valor === valor) ?? SECCIONES_DE_DISPONIBILIDAD[0]!)
-    .valor;
+  return (
+    SECCIONES_DE_DISPONIBILIDAD.find((s) => s.valor === valor) ?? SECCIONES_DE_DISPONIBILIDAD[0]!
+  ).valor;
 }

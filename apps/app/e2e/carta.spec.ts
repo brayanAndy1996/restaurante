@@ -9,6 +9,7 @@ import {
 import { CELULAR, llamarApi, tokenDeSesion } from './ayudas';
 import {
   afirmarClavesDeIdempotencia,
+  afirmarPantallaDeCelular,
   crearEscenarioDeCarta,
   entrarEnCelular,
   fotoDePrueba,
@@ -25,8 +26,10 @@ import {
  *    queda sin poder venderse;
  * 3. un Cajero de S1 cambia un precio, le pone precio propio en S1 y ve la fila de S2 solo para leer;
  * 4. el Administrador convierte el combo en un producto simple y confirma lo que se quita;
- * 5. un Mozo no ve ni la Carta ni la Disponibilidad;
- * 6. en una tableta, la lista de productos y la de agotados pasan a tabla.
+ * 5. a 360 px de ancho, las pantallas principales de la carta y de Disponibilidad no se desplazan de lado y
+ *    todos sus controles táctiles miden 44 px o más de alto (criterio 79);
+ * 6. un Mozo no ve ni la Carta ni la Disponibilidad;
+ * 7. en una tableta, la lista de productos y la de agotados pasan a tabla.
  *
  * Cada paso depende del anterior, así que los pasos corren en serie. Los datos de cada corrida son de una
  * empresa nueva: se puede repetir sobre la misma base. Toda escritura de la carta debe llevar su clave de
@@ -590,6 +593,81 @@ test('el Administrador cambia el combo a simple y confirma la hoja que lista lo 
   await expect(page.getByLabel('Estación')).toHaveValue(/.+/);
 
   afirmarClavesDeIdempotencia(escrituras, ['PATCH']);
+});
+
+test('a 360 px de ancho, las pantallas de la carta y de Disponibilidad no se desplazan de lado y sus controles miden 44 px o más', async ({
+  browser,
+}) => {
+  const { contexto, page } = await entrarEnCelular(browser, e.administrador, e.s1.nombre);
+  abiertos.push(contexto);
+  expect(page.viewportSize()?.width, 'el celular de la prueba mide 360 px').toBe(360);
+
+  await test.step('Carta: las cuatro secciones', async () => {
+    await destino(page, 'Carta').click();
+    await expect(familia(page)).toBeVisible();
+    await afirmarPantallaDeCelular(page, 'Carta > Productos');
+    for (const nombre of ['Familias', 'Estaciones', 'Modificadores']) {
+      await seccionDeCarta(page, nombre).click();
+      await expect(seccionDeCarta(page, nombre)).toHaveAttribute('aria-pressed', 'true');
+      await afirmarPantallaDeCelular(page, `Carta > ${nombre}`);
+    }
+  });
+
+  await test.step('Carta: la lista de productos al ordenar', async () => {
+    await seccionDeCarta(page, 'Productos').click();
+    await page.getByRole('button', { name: 'Ordenar' }).click();
+    await expect(page.getByRole('button', { name: 'Guardar orden' })).toBeVisible();
+    await afirmarPantallaDeCelular(page, 'Carta > Productos (ordenando)');
+    await page.getByRole('button', { name: 'Cancelar' }).first().click();
+  });
+
+  await test.step('Carta: ficha de un producto con su precio por sucursal', async () => {
+    await familia(page).getByRole('link', { name: ARROZ }).first().click();
+    await expect(page.getByRole('heading', { name: ARROZ, exact: true })).toBeVisible();
+    await expect(filaDeSucursal(page, e.s2.nombre)).toBeVisible();
+    await afirmarPantallaDeCelular(page, 'Carta > ficha de un producto');
+  });
+
+  await test.step('Carta: producto nuevo (simple, combo y menú del día)', async () => {
+    await destino(page, 'Carta').click();
+    await page.getByRole('link', { name: 'Nuevo producto' }).last().click();
+    await expect(page.getByRole('heading', { name: 'Nuevo producto' })).toBeVisible();
+    await afirmarPantallaDeCelular(page, 'Carta > producto nuevo (simple)');
+    for (const tipo of ['Combo', 'Menú del día']) {
+      await page
+        .getByRole('group', { name: 'Tipo de producto' })
+        .getByRole('button', { name: tipo })
+        .click();
+      await afirmarPantallaDeCelular(page, `Carta > producto nuevo (${tipo})`);
+    }
+  });
+
+  await test.step('Carta: grupo de modificadores nuevo', async () => {
+    await destino(page, 'Carta').click();
+    await seccionDeCarta(page, 'Modificadores').click();
+    await page.getByRole('link', { name: 'Nuevo grupo' }).last().click();
+    await expect(page.getByRole('heading', { name: 'Nuevo grupo' })).toBeVisible();
+    await afirmarPantallaDeCelular(page, 'Carta > grupo nuevo');
+  });
+
+  await test.step('Disponibilidad: Agotados, su hoja y Menú del día', async () => {
+    await destino(page, 'Disponibilidad').click();
+    await expect(page.getByRole('heading', { name: 'Disponibilidad', level: 1 })).toBeVisible();
+    await expect(page.getByRole('switch', { name: `Agotado: ${ARROZ}` })).toBeVisible();
+    await afirmarPantallaDeCelular(page, 'Disponibilidad > Agotados');
+
+    await page.getByRole('switch', { name: `Agotado: ${ARROZ}` }).click();
+    const hoja = page.getByRole('dialog', { name: `Marcar «${ARROZ}» como agotado` });
+    await expect(hoja).toBeVisible();
+    await page.waitForTimeout(400); // la hoja termina de subir
+    await afirmarPantallaDeCelular(page, 'Disponibilidad > hoja de agotado');
+    await hoja.getByRole('button', { name: 'Cancelar' }).click();
+    await expect(hoja).toBeHidden();
+
+    await seccionDeDisponibilidad(page, 'Menú del día').click();
+    await expect(page.getByRole('heading', { name: MENU })).toBeVisible();
+    await afirmarPantallaDeCelular(page, 'Disponibilidad > Menú del día');
+  });
 });
 
 test('un Mozo no ve Carta ni Disponibilidad, y la API le niega ambas', async ({

@@ -35,9 +35,11 @@ if (!window.matchMedia) {
     }) as MediaQueryList;
 }
 
-// Cada prueba empieza sin sesión ni tokens guardados.
+// Cada prueba empieza sin sesión ni tokens guardados, ni avisos de envíos cancelados de la prueba anterior.
 import { beforeEach } from 'vitest';
+import { avisosDeEnvio } from '../src/lib/envios-cancelados';
 beforeEach(() => {
   sessionStorage.clear();
   localStorage.clear();
+  avisosDeEnvio.descartar();
 });

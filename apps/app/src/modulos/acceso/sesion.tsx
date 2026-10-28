@@ -208,10 +208,15 @@ export function SesionProvider({ children }: { children: ReactNode }) {
   const releer = useCallback(
     async (opciones?: { segundoPlano?: boolean }) => {
       if (tokenDeSesion() === null) return null;
+      const antes = clientes.getQueryState(CLAVE_SESION)?.dataUpdatedAt;
       const sesion = await api.get('/sesion', {
         esquema: sesionRespuestaSchema,
         ...(opciones?.segundoPlano ? { segundoPlano: true } : {}),
       });
+      // Si mientras tanto llegó una sesión más nueva (por ejemplo, la que devolvió elegir sucursal), esta
+      // lectura salió antes y ya está vieja: pisarla devolvería a la persona a la sucursal anterior.
+      const masNueva = clientes.getQueryState(CLAVE_SESION)?.dataUpdatedAt !== antes;
+      if (masNueva) return clientes.getQueryData<SesionRespuesta>(CLAVE_SESION) ?? sesion;
       clientes.setQueryData(CLAVE_SESION, sesion);
       avisarCambioDeIdentidad();
       return sesion;
