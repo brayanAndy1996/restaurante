@@ -1,5 +1,5 @@
-import type { ProductoRespuesta } from '@restaurante/contratos';
-import { AFECTACIONES_IGV, TIPOS_CONTROL_STOCK } from '@restaurante/dominio';
+import type { ProductoRespuesta, SeQuita, UsadoEn } from '@restaurante/contratos';
+import { AFECTACIONES_IGV, TIPOS_CONTROL_STOCK, type TipoProducto } from '@restaurante/dominio';
 import {
   Aviso,
   Boton,
@@ -15,13 +15,18 @@ import {
   Interruptor,
   OpcionesConAyuda,
   Plegable,
+  claseBoton,
 } from '@restaurante/ui';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState, type FormEvent } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { Pagina } from '../../componentes/Pagina';
+import { AvisoPendiente } from '../../componentes/PendienteDeEnvio';
+import { useEnvioPendiente } from '../../lib/envios';
 import { ErrorApi, erroresPorCampo, mensajeDeCampo, mensajeDeError } from '../../lib/errores';
+import { usePermiso } from '../acceso/permisos';
 import { useSesionActiva } from '../acceso/sesion';
+import { CLAVE_DISPONIBILIDAD } from '../disponibilidad/disponibilidad';
 import {
   CLAVES,
   ETIQUETA_DE_CONTROL,
@@ -32,16 +37,21 @@ import {
   obtenerProducto,
   puedeAjustarSucursal,
 } from './carta';
+import { ComponentesDelCombo } from './ComponentesDelCombo';
 import { FotoDeProducto } from './FotoDeProducto';
 import { GruposDelProducto } from './GruposDelProducto';
 import { PrecioPorSucursal } from './PrecioPorSucursal';
 import {
+  AVISO_MENU_SIN_ARMAR,
   ETIQUETA_DE_AFECTACION,
   SIN_ESTACION,
+  avisosDeCambioDeTipo,
+  cambiarDeTipo,
   cambiosDelProducto,
   entradaDeCreacion,
   formularioDeProducto,
   formularioVacio,
+  frasesDeSeQuita,
   hayCambios,
   validarProducto,
   type CampoDelProducto,
@@ -49,7 +59,8 @@ import {
   type EstadoDelProducto,
 } from './producto-form';
 import { SelectorDeTipo } from './SelectorDeTipo';
-import { definicionDeTipo } from './tipos';
+import { definicionDeTipo, tipoEnFrase } from './tipos';
+import { VistaPreviaDeCombo } from './VistaPreviaDeCombo';
 
 const AYUDA_DE_CONTROL: Record<(typeof TIPOS_CONTROL_STOCK)[number], string> = {
   UNIDADES:
@@ -73,6 +84,7 @@ const CAMPOS_CON_ERROR: readonly CampoDelProducto[] = [
   'estacionId',
   'tipoControlStock',
   'gruposModificadores',
+  'componentes',
   'noDisponibleEn',
 ];
 
@@ -176,11 +188,25 @@ interface PropsFormulario {
   estaciones: { id: string; nombre: string; activa: boolean }[];
 }
 
+/** Lo que el 409 `CONFIRMACION_REQUERIDA` pide confirmar: qué se quita y a qué tipo se pasa. */
+interface ConfirmacionDeTipo {
+  seQuita: SeQuita;
+  tipo: TipoProducto;
+}
+
+/** Lo que el 409 `EN_USO` dice: dónde se usa el producto y a qué tipo se quiso pasar. */
+interface UsoQueImpide {
+  usadoEn: UsadoEn;
+  tipo: TipoProducto;
+}
+
 function FormularioDeProducto({ modo, original, familias, estaciones }: PropsFormulario) {
   const sesion = useSesionActiva();
   const navegar = useNavigate();
   const ubicacion = useLocation();
   const clientes = useQueryClient();
+  const envio = useEnvioPendiente();
+  const puedeArmarMenu = usePermiso('GESTIONAR_DISPONIBILIDAD') === 'permitido';
 
   const [guardadoPrevio, setGuardadoPrevio] = useState<ProductoRespuesta | undefined>(original);
   const [estado, setEstado] = useState<EstadoDelProducto>(() =>
@@ -188,21 +214,42 @@ function FormularioDeProducto({ modo, original, familias, estaciones }: PropsFor
   );
   const [errores, setErrores] = useState<ErroresDelProducto>({});
   const [fallo, setFallo] = useState<string | null>(null);
-  const [guardado, setGuardado] = useState(false);
+  const [guardado, setGuardado] = useState<string | null>(null);
   const [enviando, setEnviando] = useState(false);
   const [tributarioAbierto, setTributarioAbierto] = useState(false);
   const [confirmandoDesactivar, setConfirmandoDesactivar] = useState(false);
   const [cambiandoActivo, setCambiandoActivo] = useState(false);
+  const [porConfirmar, setPorConfirmar] = useState<ConfirmacionDeTipo | null>(null);
+  const [falloDeConfirmacion, setFalloDeConfirmacion] = useState<string | null>(null);
+  const [usoQueImpide, setUsoQueImpide] = useState<UsoQueImpide | null>(null);
 
   const recienCreado = Boolean((ubicacion.state as { creado?: boolean } | null)?.creado);
   const definicion = definicionDeTipo(estado.tipo);
   const cambios = guardadoPrevio ? cambiosDelProducto(guardadoPrevio, estado) : {};
   const sinCambios = modo === 'editar' && !hayCambios(cambios);
   const familiasActivas = familias.filter((f) => f.activa || f.id === estado.familiaId);
+  const nombreDeEstacion =
+    (guardadoPrevio?.estacionId
+      ? estaciones.find((e) => e.id === guardadoPrevio.estacionId)?.nombre
+      : undefined) ?? null;
+  const avisosDeTipo =
+    modo === 'editar' && guardadoPrevio
+      ? avisosDeCambioDeTipo(guardadoPrevio, estado.tipo, nombreDeEstacion)
+      : modo === 'crear' && estado.tipo === 'MENU_DEL_DIA'
+        ? [AVISO_MENU_SIN_ARMAR]
+        : [];
 
   function cambiar(parcial: Partial<EstadoDelProducto>) {
     setEstado((e) => ({ ...e, ...parcial }));
-    setGuardado(false);
+    setGuardado(null);
+  }
+
+  function elegirTipo(tipo: TipoProducto) {
+    setEstado((e) => cambiarDeTipo(e, tipo, guardadoPrevio));
+    setGuardado(null);
+    setUsoQueImpide(null);
+    // Los errores del tipo anterior (la estación, los componentes) ya no corresponden.
+    setErrores({});
   }
 
   function quitarError(campo: CampoDelProducto) {
@@ -219,13 +266,20 @@ function FormularioDeProducto({ modo, original, familias, estaciones }: PropsFor
     void clientes.invalidateQueries({ queryKey: CLAVES.estaciones });
     // Cuántos productos usa cada grupo cambia al asignarlo o quitarlo.
     void clientes.invalidateQueries({ queryKey: CLAVES.grupos });
+    // Un menú que cambia de tipo o de grupos cambia lo que se arma en Disponibilidad.
+    void clientes.invalidateQueries({ queryKey: CLAVE_DISPONIBILIDAD });
   }
 
   function mostrarFalloDeLaApi(e: unknown) {
     const error = comoErrorApi(e);
     const campos = erroresPorCampo(error);
     if (error.codigo === 'CONFLICTO') {
-      if (modo === 'crear' && error.reintentada) {
+      if ('seVendeSolo' in campos) {
+        // Criterio 10d: dejar de venderse solo con precio propio en alguna sucursal.
+        setFallo(
+          `${error.message} Quita primero esos precios en «Precio por sucursal» y vuelve a guardar.`,
+        );
+      } else if (modo === 'crear' && error.reintentada) {
         setFallo(
           'La conexión se cortó mientras se guardaba y es posible que el producto ya se haya creado. Revisa la carta antes de intentarlo otra vez.',
         );
@@ -259,35 +313,95 @@ function FormularioDeProducto({ modo, original, familias, estaciones }: PropsFor
     );
   }
 
+  /**
+   * Guarda los cambios de un producto existente. Con `confirmarPerdida` repite el mismo `PATCH` que la API
+   * pidió confirmar (criterio 10b). Devuelve `true` si se guardó.
+   */
+  async function guardarEdicion(confirmarPerdida: boolean): Promise<boolean> {
+    if (!guardadoPrevio) return false;
+    const cuerpo = confirmarPerdida ? { ...cambios, confirmarPerdida: true } : cambios;
+    const tipoAnterior = guardadoPrevio.tipo;
+    try {
+      const actualizado = await envio.enviar((extra) =>
+        modificarProducto(guardadoPrevio.id, cuerpo, extra),
+      );
+      clientes.setQueryData(CLAVES.producto(actualizado.id), actualizado);
+      refrescarListas();
+      // El precio efectivo de las sucursales sin precio propio depende del precio de la empresa.
+      void clientes.invalidateQueries({ queryKey: CLAVES.sucursalesDeProducto(actualizado.id) });
+      if (!envio.sigueMontada()) return true;
+      setGuardadoPrevio(actualizado);
+      setEstado(formularioDeProducto(actualizado));
+      setUsoQueImpide(null);
+      setPorConfirmar(null);
+      setGuardado(
+        actualizado.tipo === tipoAnterior
+          ? 'Ya se ven en la carta de todas las sucursales.'
+          : `Ahora es ${tipoEnFrase(actualizado.tipo)}. Ya se ve así en la carta de todas las sucursales.${
+              actualizado.tipo === 'MENU_DEL_DIA' ? ` ${AVISO_MENU_SIN_ARMAR}` : ''
+            }`,
+      );
+      return true;
+    } catch (e) {
+      if (!envio.sigueMontada()) return false;
+      const error = comoErrorApi(e);
+      if (error.codigo === 'CONFIRMACION_REQUERIDA' && error.seQuita) {
+        // Primera vez, o apareció algo más desde que se mostró la lista: se vuelve a pedir confirmar.
+        setPorConfirmar({ seQuita: error.seQuita, tipo: estado.tipo });
+        setFalloDeConfirmacion(null);
+        return false;
+      }
+      if (error.codigo === 'EN_USO' && error.usadoEn) {
+        setPorConfirmar(null);
+        setUsoQueImpide({ usadoEn: error.usadoEn, tipo: estado.tipo });
+        return false;
+      }
+      if (confirmarPerdida) setPorConfirmar(null);
+      mostrarFalloDeLaApi(error);
+      return false;
+    }
+  }
+
   async function enviar(evento: FormEvent) {
     evento.preventDefault();
     if (enviando) return;
     const nuevos = validarProducto(estado);
     setErrores(nuevos);
     setFallo(null);
+    setUsoQueImpide(null);
     if (Object.keys(nuevos).length > 0) return;
 
     setEnviando(true);
     try {
       if (modo === 'crear') {
-        const creado = await crearProducto(entradaDeCreacion(estado));
-        clientes.setQueryData(CLAVES.producto(creado.id), creado);
-        refrescarListas();
-        navegar(`/carta/productos/${creado.id}`, { replace: true, state: { creado: true } });
-      } else if (guardadoPrevio) {
-        const actualizado = await modificarProducto(guardadoPrevio.id, cambios);
-        clientes.setQueryData(CLAVES.producto(actualizado.id), actualizado);
-        refrescarListas();
-        // El precio efectivo de las sucursales sin precio propio depende del precio de la empresa.
-        void clientes.invalidateQueries({ queryKey: CLAVES.sucursalesDeProducto(actualizado.id) });
-        setGuardadoPrevio(actualizado);
-        setEstado(formularioDeProducto(actualizado));
-        setGuardado(true);
+        try {
+          const creado = await envio.enviar((extra) =>
+            crearProducto(entradaDeCreacion(estado), extra),
+          );
+          clientes.setQueryData(CLAVES.producto(creado.id), creado);
+          refrescarListas();
+          if (envio.sigueMontada()) {
+            navegar(`/carta/productos/${creado.id}`, { replace: true, state: { creado: true } });
+          }
+        } catch (e) {
+          if (envio.sigueMontada()) mostrarFalloDeLaApi(e);
+        }
+      } else {
+        await guardarEdicion(false);
       }
-    } catch (e) {
-      mostrarFalloDeLaApi(e);
     } finally {
-      setEnviando(false);
+      if (envio.sigueMontada()) setEnviando(false);
+    }
+  }
+
+  async function confirmarCambioDeTipo() {
+    if (enviando) return;
+    setEnviando(true);
+    setFalloDeConfirmacion(null);
+    try {
+      await guardarEdicion(true);
+    } finally {
+      if (envio.sigueMontada()) setEnviando(false);
     }
   }
 
@@ -296,11 +410,13 @@ function FormularioDeProducto({ modo, original, familias, estaciones }: PropsFor
     setCambiandoActivo(true);
     setFallo(null);
     try {
-      const actualizado = await modificarProducto(guardadoPrevio.id, { activo });
+      const actualizado = await envio.enviar((extra) =>
+        modificarProducto(guardadoPrevio.id, { activo }, extra),
+      );
       clientes.setQueryData(CLAVES.producto(actualizado.id), actualizado);
       refrescarListas();
       setGuardadoPrevio(actualizado);
-      setGuardado(false);
+      setGuardado(null);
     } catch (e) {
       setFallo(mensajeDeError(e, { PROHIBIDO: 'No tienes permiso para cambiar este producto.' }));
     } finally {
@@ -324,6 +440,9 @@ function FormularioDeProducto({ modo, original, familias, estaciones }: PropsFor
   }));
   const usadoEn = guardadoPrevio?.usadoEn;
   const enUso = (usadoEn?.combos.length ?? 0) + (usadoEn?.modificadores.length ?? 0);
+  const esCombo = definicion.campos.componentes;
+  const tipoGuardado = guardadoPrevio?.tipo;
+  const frasesDeConfirmacion = porConfirmar ? frasesDeSeQuita(porConfirmar.seQuita) : [];
 
   return (
     <Pagina
@@ -335,7 +454,7 @@ function FormularioDeProducto({ modo, original, familias, estaciones }: PropsFor
           bloque
           type="submit"
           form="formulario-producto"
-          cargando={enviando}
+          cargando={enviando && !porConfirmar}
           textoCargando="Guardando…"
           disabled={sinCambios}
         >
@@ -364,239 +483,294 @@ function FormularioDeProducto({ modo, original, familias, estaciones }: PropsFor
       ) : null}
       {guardado ? (
         <Aviso tipo="ok" titulo="Cambios guardados">
-          Ya se ven en la carta de todas las sucursales.
+          {guardado}
         </Aviso>
       ) : null}
+      <AvisoPendiente pendiente={envio.pendiente} />
       {fallo ? (
         <Aviso tipo="error" titulo="No pudimos guardar">
           {fallo}
         </Aviso>
       ) : null}
-      {estado.tipo !== 'SIMPLE' ? (
-        <Aviso tipo="info" titulo={`Este producto es de tipo ${definicion.etiqueta}`}>
-          Su edición llega en una próxima versión.
+      {usoQueImpide ? (
+        <AvisoDeUso
+          uso={usoQueImpide}
+          alVolver={() => elegirTipo(tipoGuardado ?? 'SIMPLE')}
+          tipoGuardado={tipoGuardado}
+        />
+      ) : null}
+      {avisosDeTipo.length > 0 ? (
+        <Aviso
+          tipo={modo === 'crear' ? 'info' : 'alerta'}
+          titulo={
+            modo === 'crear'
+              ? 'Un menú del día nace sin armar'
+              : `Al guardar, pasará a ser ${tipoEnFrase(estado.tipo)}`
+          }
+        >
+          <ul className="carta__usos">
+            {avisosDeTipo.map((aviso) => (
+              <li key={aviso}>{aviso}</li>
+            ))}
+          </ul>
         </Aviso>
       ) : null}
 
-      {estado.tipo === 'SIMPLE' ? (
-        <>
-          <form
-            id="formulario-producto"
-            className="formulario formulario--secciones"
-            onSubmit={(e) => void enviar(e)}
-            noValidate
+      <form
+        id="formulario-producto"
+        className="formulario formulario--secciones"
+        onSubmit={(e) => void enviar(e)}
+        noValidate
+      >
+        <section className="seccion" aria-labelledby="producto-datos">
+          <h2 className="formulario__titulo" id="producto-datos">
+            Datos
+          </h2>
+          <SelectorDeTipo valor={estado.tipo} onCambio={elegirTipo} />
+          <CampoTexto
+            etiqueta="Nombre"
+            value={estado.nombre}
+            onChange={(e) => {
+              cambiar({ nombre: e.target.value });
+              quitarError('nombre');
+            }}
+            error={errores.nombre}
+            autoComplete="off"
+            enterKeyHint="next"
+          />
+          <CampoAreaTexto
+            etiqueta="Descripción"
+            opcional
+            value={estado.descripcion}
+            onChange={(e) => {
+              cambiar({ descripcion: e.target.value });
+              quitarError('descripcion');
+            }}
+            error={errores.descripcion}
+            ayuda="Se ve en la carta web."
+            rows={3}
+          />
+          <CampoSeleccion
+            etiqueta="Familia"
+            value={estado.familiaId}
+            onChange={(e) => {
+              cambiar({ familiaId: e.target.value });
+              quitarError('familiaId');
+            }}
+            error={errores.familiaId}
           >
-            <section className="seccion" aria-labelledby="producto-datos">
-              <h2 className="formulario__titulo" id="producto-datos">
-                Datos
-              </h2>
-              <SelectorDeTipo valor={estado.tipo} onCambio={(tipo) => cambiar({ tipo })} />
-              <CampoTexto
-                etiqueta="Nombre"
-                value={estado.nombre}
-                onChange={(e) => {
-                  cambiar({ nombre: e.target.value });
-                  quitarError('nombre');
-                }}
-                error={errores.nombre}
-                autoComplete="off"
-                enterKeyHint="next"
-              />
-              <CampoAreaTexto
-                etiqueta="Descripción"
-                opcional
-                value={estado.descripcion}
-                onChange={(e) => {
-                  cambiar({ descripcion: e.target.value });
-                  quitarError('descripcion');
-                }}
-                error={errores.descripcion}
-                ayuda="Se ve en la carta web."
-                rows={3}
-              />
-              <CampoSeleccion
-                etiqueta="Familia"
-                value={estado.familiaId}
-                onChange={(e) => {
-                  cambiar({ familiaId: e.target.value });
-                  quitarError('familiaId');
-                }}
-                error={errores.familiaId}
-              >
-                <option value="" disabled>
-                  Elige una familia
-                </option>
-                {familiasActivas.map((f) => (
-                  <option key={f.id} value={f.id}>
-                    {f.nombre}
-                    {f.activa ? '' : ' (inactiva)'}
-                  </option>
-                ))}
-              </CampoSeleccion>
-              {familiasActivas.length === 0 ? (
-                <Aviso tipo="alerta" titulo="Primero crea una familia">
-                  Cada producto va en una familia, por ejemplo Entradas o Bebidas.{' '}
-                  <Link to="/carta?ver=familias" className="enlace-texto">
-                    Crear una familia
-                  </Link>
-                </Aviso>
-              ) : null}
-            </section>
+            <option value="" disabled>
+              Elige una familia
+            </option>
+            {familiasActivas.map((f) => (
+              <option key={f.id} value={f.id}>
+                {f.nombre}
+                {f.activa ? '' : ' (inactiva)'}
+              </option>
+            ))}
+          </CampoSeleccion>
+          {familiasActivas.length === 0 ? (
+            <Aviso tipo="alerta" titulo="Primero crea una familia">
+              Cada producto va en una familia, por ejemplo Entradas o Bebidas.{' '}
+              <Link to="/carta?ver=familias" className="enlace-texto">
+                Crear una familia
+              </Link>
+            </Aviso>
+          ) : null}
+        </section>
 
-            <section className="seccion" aria-labelledby="producto-precio">
-              <h2 className="formulario__titulo" id="producto-precio">
-                Precio
-              </h2>
-              {definicion.campos.seVendeSolo ? (
-                <Interruptor
-                  etiqueta="Se vende solo"
-                  ayuda={
-                    estado.seVendeSolo
-                      ? 'Aparece en el comandero y en la carta web con su precio.'
-                      : 'No lleva precio ni aparece para vender: solo se usa dentro de un combo o como opción.'
-                  }
-                  marcado={estado.seVendeSolo}
-                  onCambio={(seVendeSolo) => {
-                    cambiar({ seVendeSolo });
-                    quitarError('precio');
-                  }}
-                />
-              ) : null}
-              {!definicion.campos.seVendeSolo || estado.seVendeSolo ? (
-                <CampoMonto
-                  etiqueta="Precio con IGV"
-                  value={estado.precio}
-                  onValor={(precio) => {
-                    cambiar({ precio });
-                    quitarError('precio');
-                  }}
-                  error={errores.precio}
-                  ayuda="Lo que paga el cliente. El IGV ya está incluido."
-                />
-              ) : null}
-            </section>
-
-            <section className="seccion" aria-labelledby="producto-cocina">
-              <h2 className="formulario__titulo" id="producto-cocina">
-                Cocina y stock
-              </h2>
-              {definicion.campos.estacion ? (
-                <CampoSeleccion
-                  etiqueta="Estación"
-                  value={estado.estacionId}
-                  onChange={(e) => {
-                    cambiar({ estacionId: e.target.value });
-                    quitarError('estacionId');
-                  }}
-                  error={errores.estacionId}
-                  ayuda="Dónde se prepara. Con una estación, la comanda le llega a ella."
-                >
-                  <option value="" disabled>
-                    Elige una estación
-                  </option>
-                  <option value={SIN_ESTACION}>Ninguna (no va a cocina ni a barra)</option>
-                  {estaciones.map((e) => (
-                    <option key={e.id} value={e.id}>
-                      {e.nombre}
-                      {e.activa ? '' : ' (inactiva)'}
-                    </option>
-                  ))}
-                </CampoSeleccion>
-              ) : null}
-              <OpcionesConAyuda
-                etiqueta="Control de stock"
-                opciones={OPCIONES_DE_CONTROL}
-                valor={estado.tipoControlStock}
-                onCambio={(tipoControlStock) => {
-                  cambiar({ tipoControlStock });
-                  quitarError('tipoControlStock');
-                }}
-                error={errores.tipoControlStock}
-              />
-            </section>
-          </form>
-
-          <div className="formulario formulario--secciones formulario--continuacion">
-            <GruposDelProducto
-              productoId={guardadoPrevio?.id}
-              valor={estado.grupos}
-              onCambio={(grupos) => {
-                cambiar({ grupos });
-                quitarError('gruposModificadores');
+        <section className="seccion" aria-labelledby="producto-precio">
+          <h2 className="formulario__titulo" id="producto-precio">
+            Precio
+          </h2>
+          {definicion.campos.seVendeSolo ? (
+            <Interruptor
+              etiqueta="Se vende solo"
+              ayuda={
+                estado.seVendeSolo
+                  ? 'Aparece en el comandero y en la carta web con su precio.'
+                  : 'No lleva precio ni aparece para vender: solo se usa dentro de un combo o como opción.'
+              }
+              marcado={estado.seVendeSolo}
+              onCambio={(seVendeSolo) => {
+                cambiar({ seVendeSolo });
+                quitarError('precio');
               }}
-              error={errores.gruposModificadores}
             />
+          ) : null}
+          {!definicion.campos.seVendeSolo || estado.seVendeSolo ? (
+            <CampoMonto
+              etiqueta={esCombo ? 'Precio base con IGV' : 'Precio con IGV'}
+              value={estado.precio}
+              onValor={(precio) => {
+                cambiar({ precio });
+                quitarError('precio');
+              }}
+              error={errores.precio}
+              ayuda={
+                esCombo
+                  ? 'Lo que paga el cliente por el combo. Las opciones con recargo se suman a este precio. El IGV ya está incluido.'
+                  : 'Lo que paga el cliente. El IGV ya está incluido.'
+              }
+            />
+          ) : null}
+        </section>
 
-            <Plegable
-              titulo="Datos tributarios"
-              resumen={`${ETIQUETA_DE_AFECTACION[estado.afectacionIgv]} · ${
-                estado.aplicaIcbper ? 'con ICBPER' : 'sin ICBPER'
-              }`}
-              abierto={tributarioAbierto}
-              onCambio={setTributarioAbierto}
+        <section className="seccion" aria-labelledby="producto-cocina">
+          <h2 className="formulario__titulo" id="producto-cocina">
+            {definicion.campos.estacion ? 'Cocina y stock' : 'Stock'}
+          </h2>
+          {definicion.campos.estacion ? (
+            <CampoSeleccion
+              etiqueta="Estación"
+              value={estado.estacionId}
+              onChange={(e) => {
+                cambiar({ estacionId: e.target.value });
+                quitarError('estacionId');
+              }}
+              error={errores.estacionId}
+              ayuda="Dónde se prepara. Con una estación, la comanda le llega a ella."
             >
-              <CampoSeleccion
-                etiqueta="Afectación al IGV"
-                value={estado.afectacionIgv}
-                onChange={(e) =>
-                  cambiar({ afectacionIgv: e.target.value as EstadoDelProducto['afectacionIgv'] })
-                }
-                ayuda="Casi todo es gravado. Cámbialo solo si tu contador te lo indicó."
-              >
-                {AFECTACIONES_IGV.map((a) => (
-                  <option key={a} value={a}>
-                    {ETIQUETA_DE_AFECTACION[a]}
-                  </option>
-                ))}
-              </CampoSeleccion>
-              <Interruptor
-                etiqueta="Aplica ICBPER"
-                ayuda="Solo para bolsas de plástico, que llevan el impuesto a las bolsas plásticas."
-                marcado={estado.aplicaIcbper}
-                onCambio={(aplicaIcbper) => cambiar({ aplicaIcbper })}
-              />
-            </Plegable>
+              <option value="" disabled>
+                Elige una estación
+              </option>
+              <option value={SIN_ESTACION}>Ninguna (no va a cocina ni a barra)</option>
+              {estaciones.map((e) => (
+                <option key={e.id} value={e.id}>
+                  {e.nombre}
+                  {e.activa ? '' : ' (inactiva)'}
+                </option>
+              ))}
+            </CampoSeleccion>
+          ) : (
+            <p className="texto-ayuda">
+              Un {tipoEnFrase(estado.tipo)} no tiene estación propia: cada componente y cada opción
+              va a la suya.
+            </p>
+          )}
+          <OpcionesConAyuda
+            etiqueta="Control de stock"
+            opciones={OPCIONES_DE_CONTROL}
+            valor={estado.tipoControlStock}
+            onCambio={(tipoControlStock) => {
+              cambiar({ tipoControlStock });
+              quitarError('tipoControlStock');
+            }}
+            error={errores.tipoControlStock}
+          />
+        </section>
+      </form>
 
-            {modo === 'crear' && sucursales.length > 1 ? (
-              <section className="seccion" aria-labelledby="producto-disponible">
-                <h2 className="formulario__titulo" id="producto-disponible">
-                  Disponible en
-                </h2>
-                <p className="texto-ayuda">
-                  El producto nace disponible en las sucursales marcadas. El resto de la carta es de
-                  toda la empresa.
-                </p>
-                <div className="carta__casillas">
-                  {sucursales.map((s) => (
-                    <Casilla
-                      key={s.id}
-                      etiqueta={s.nombre}
-                      marcada={s.editable ? (estado.disponibleEn[s.id] ?? true) : true}
-                      bloqueada={!s.editable}
-                      ayuda={
-                        s.editable
-                          ? undefined
-                          : 'Solo lo cambia el Administrador o un Cajero de esta sucursal.'
-                      }
-                      onCambio={(marcada) =>
-                        cambiar({ disponibleEn: { ...estado.disponibleEn, [s.id]: marcada } })
-                      }
-                    />
-                  ))}
-                </div>
-                {errores.noDisponibleEn ? (
-                  <p className="ui-campo__mensaje" role="alert">
-                    {errores.noDisponibleEn}
-                  </p>
-                ) : null}
-              </section>
+      <div className="formulario formulario--secciones formulario--continuacion">
+        {definicion.campos.componentes && (estado.tipo === 'COMBO' || estado.tipo === 'MENU_DEL_DIA') ? (
+          <ComponentesDelCombo
+            tipo={estado.tipo}
+            productoId={guardadoPrevio?.id}
+            valor={estado.componentes}
+            onCambio={(componentes) => {
+              cambiar({ componentes });
+              quitarError('componentes');
+            }}
+            error={errores.componentes}
+          />
+        ) : null}
+
+        <GruposDelProducto
+          tipo={estado.tipo}
+          productoId={guardadoPrevio?.id}
+          valor={estado.grupos}
+          onCambio={(grupos) => {
+            cambiar({ grupos });
+            quitarError('gruposModificadores');
+            quitarError('componentes');
+          }}
+          error={errores.gruposModificadores}
+        />
+
+        {esCombo ? <VistaPreviaDeCombo precio={estado.precio} grupos={estado.grupos} /> : null}
+
+        <Plegable
+          titulo="Datos tributarios"
+          resumen={`${ETIQUETA_DE_AFECTACION[estado.afectacionIgv]} · ${
+            estado.aplicaIcbper ? 'con ICBPER' : 'sin ICBPER'
+          }`}
+          abierto={tributarioAbierto}
+          onCambio={setTributarioAbierto}
+        >
+          <CampoSeleccion
+            etiqueta="Afectación al IGV"
+            value={estado.afectacionIgv}
+            onChange={(e) =>
+              cambiar({ afectacionIgv: e.target.value as EstadoDelProducto['afectacionIgv'] })
+            }
+            ayuda="Casi todo es gravado. Cámbialo solo si tu contador te lo indicó."
+          >
+            {AFECTACIONES_IGV.map((a) => (
+              <option key={a} value={a}>
+                {ETIQUETA_DE_AFECTACION[a]}
+              </option>
+            ))}
+          </CampoSeleccion>
+          <Interruptor
+            etiqueta="Aplica ICBPER"
+            ayuda="Solo para bolsas de plástico, que llevan el impuesto a las bolsas plásticas."
+            marcado={estado.aplicaIcbper}
+            onCambio={(aplicaIcbper) => cambiar({ aplicaIcbper })}
+          />
+        </Plegable>
+
+        {modo === 'crear' && sucursales.length > 1 ? (
+          <section className="seccion" aria-labelledby="producto-disponible">
+            <h2 className="formulario__titulo" id="producto-disponible">
+              Disponible en
+            </h2>
+            <p className="texto-ayuda">
+              El producto nace disponible en las sucursales marcadas. El resto de la carta es de
+              toda la empresa.
+            </p>
+            <div className="carta__casillas">
+              {sucursales.map((s) => (
+                <Casilla
+                  key={s.id}
+                  etiqueta={s.nombre}
+                  marcada={s.editable ? (estado.disponibleEn[s.id] ?? true) : true}
+                  bloqueada={!s.editable}
+                  ayuda={
+                    s.editable
+                      ? undefined
+                      : 'Solo lo cambia el Administrador o un Cajero de esta sucursal.'
+                  }
+                  onCambio={(marcada) =>
+                    cambiar({ disponibleEn: { ...estado.disponibleEn, [s.id]: marcada } })
+                  }
+                />
+              ))}
+            </div>
+            {errores.noDisponibleEn ? (
+              <p className="ui-campo__mensaje" role="alert">
+                {errores.noDisponibleEn}
+              </p>
             ) : null}
-          </div>
-        </>
-      ) : null}
+          </section>
+        ) : null}
+      </div>
 
       {modo === 'editar' && guardadoPrevio ? (
         <>
+          {guardadoPrevio.tipo === 'MENU_DEL_DIA' && puedeArmarMenu ? (
+            <section className="seccion" aria-labelledby="producto-menu">
+              <h2 className="formulario__titulo" id="producto-menu">
+                Menú de cada día
+              </h2>
+              <p className="texto-ayuda">
+                Cada día, en cada sucursal, se elige cuáles de sus opciones se ofrecen.
+              </p>
+              <Link to="/disponibilidad?ver=menu" className={claseBoton('secundario', true)}>
+                Armar el menú del día
+              </Link>
+            </section>
+          ) : null}
+
           <section className="seccion" aria-labelledby="producto-foto">
             <h2 className="formulario__titulo" id="producto-foto">
               Foto
@@ -689,8 +863,83 @@ function FormularioDeProducto({ modo, original, familias, estaciones }: PropsFor
               Podrás reactivarlo cuando quieras.
             </p>
           </DialogoConfirmacion>
+
+          <DialogoConfirmacion
+            abierta={porConfirmar !== null}
+            titulo={`¿Cambiar a ${tipoEnFrase(porConfirmar?.tipo ?? estado.tipo)}?`}
+            etiquetaConfirmar={`Cambiar a ${tipoEnFrase(porConfirmar?.tipo ?? estado.tipo)}`}
+            textoCargando="Cambiando…"
+            peligro
+            cargando={enviando}
+            error={
+              falloDeConfirmacion ? (
+                <Aviso tipo="error" titulo="No pudimos cambiarlo">
+                  {falloDeConfirmacion}
+                </Aviso>
+              ) : undefined
+            }
+            onConfirmar={() => void confirmarCambioDeTipo()}
+            onCancelar={() => {
+              setPorConfirmar(null);
+              setFalloDeConfirmacion(null);
+            }}
+          >
+            <p>Para cambiar el tipo hay que quitar esto. No se puede deshacer:</p>
+            <ul className="carta__usos confirmacion__lista">
+              {frasesDeConfirmacion.map((frase) => (
+                <li key={frase}>{frase}</li>
+              ))}
+            </ul>
+            <p className="texto-ayuda">
+              Las ventas que ya se hicieron no cambian. Lo demás del producto se conserva.
+            </p>
+          </DialogoConfirmacion>
         </>
       ) : null}
     </Pagina>
+  );
+}
+
+/** El 409 `EN_USO` de un cambio de tipo, con palabras y enlaces: no ofrece continuar (criterio 10c). */
+function AvisoDeUso({
+  uso,
+  tipoGuardado,
+  alVolver,
+}: {
+  uso: UsoQueImpide;
+  tipoGuardado: TipoProducto | undefined;
+  alVolver: () => void;
+}) {
+  const { combos, modificadores } = uso.usadoEn;
+  return (
+    <Aviso tipo="error" titulo={`No se puede cambiar a ${tipoEnFrase(uso.tipo)}`}>
+      <p>
+        Este producto se usa en otros lugares, y un combo o un menú no puede llevar otro combo ni un
+        menú. Quítalo de ahí antes de convertirlo en {tipoEnFrase(uso.tipo)}. Se usa en:
+      </p>
+      <ul className="carta__usos">
+        {combos.map((c) => (
+          <li key={c.id}>
+            Combo{' '}
+            <Link to={`/carta/productos/${c.id}`} className="enlace-texto">
+              {c.nombre}
+            </Link>
+          </li>
+        ))}
+        {modificadores.map((m) => (
+          <li key={m.id}>
+            Opción «{m.nombre}» del grupo{' '}
+            <Link to={`/carta/grupos/${m.grupoId}`} className="enlace-texto">
+              {m.grupoNombre}
+            </Link>
+          </li>
+        ))}
+      </ul>
+      {tipoGuardado ? (
+        <Boton variante="texto" onClick={alVolver}>
+          Dejarlo como {tipoEnFrase(tipoGuardado)}
+        </Boton>
+      ) : null}
+    </Aviso>
   );
 }

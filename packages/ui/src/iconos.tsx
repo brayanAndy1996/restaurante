@@ -57,6 +57,10 @@ export {
   Layers as IconoFamilia,
   ChevronUp as IconoArriba,
   ListChecks as IconoGrupo,
+  Minus as IconoMenos,
+  PackageCheck as IconoDisponibilidad,
+  History as IconoHistorial,
+  Hourglass as IconoPendiente,
 } from 'lucide-react';
 
 interface PropsIcono {

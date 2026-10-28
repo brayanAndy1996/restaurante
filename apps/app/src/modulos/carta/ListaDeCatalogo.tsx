@@ -18,6 +18,7 @@ import {
   type LucideIcon,
 } from '@restaurante/ui';
 import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
+import { AvisoPendiente } from '../../componentes/PendienteDeEnvio';
 import { ErrorApi, mensajeDeError } from '../../lib/errores';
 import { MarcoDeCarta, type SeccionDeCarta } from './MarcoDeCarta';
 
@@ -64,6 +65,8 @@ interface PropsListaDeCatalogo {
   cargando: boolean;
   error: unknown;
   reintentando: boolean;
+  /** Hay un cambio esperando la red (criterio 78): se dice con "Pendiente de envío". */
+  pendiente?: boolean;
   onReintentar: () => void;
   onCrear: (nombre: string) => Promise<unknown>;
   onModificar: (id: string, cambios: { nombre?: string; activa?: boolean }) => Promise<unknown>;
@@ -89,6 +92,7 @@ export function ListaDeCatalogo({
   cargando,
   error,
   reintentando,
+  pendiente = false,
   onReintentar,
   onCrear,
   onModificar,
@@ -273,6 +277,7 @@ export function ListaDeCatalogo({
         </ErrorDeCarga>
       ) : (
         <>
+          <AvisoPendiente pendiente={pendiente} />
           {agregando ? (
             <form
               id="formulario-nuevo-catalogo"

@@ -18,3 +18,4 @@ export * from './Opciones';
 export * from './Plegable';
 export * from './FilaOrdenable';
 export * from './SelectorDeFoto';
+export * from './Cantidad';

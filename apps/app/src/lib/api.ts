@@ -54,6 +54,12 @@ export interface OpcionesApi<T> {
   sinToken?: boolean;
   /** Máximo de reintentos; por defecto, la lista completa de esperas (unos 35 segundos). */
   reintentos?: number;
+  /**
+   * Se llama una sola vez, cuando el primer intento no llegó (red caída o 502/503/504) y la llamada empieza
+   * a reintentarse con la misma clave. Sirve para decir "Pendiente de envío" sin esperar a que se agoten
+   * los reintentos.
+   */
+  alReintentar?: () => void;
 }
 
 /** Espera entre intentos, en milisegundos. El primer intento sale de inmediato. */
@@ -235,6 +241,7 @@ export async function llamar<T = void>(ruta: string, opciones: OpcionesApi<T> = 
 
       // Falló por la red o por un 5xx de paso: se espera y se repite con la misma clave.
       void respuesta?.body?.cancel();
+      if (!reintentada) opciones.alReintentar?.();
       reintentada = true;
       if (metodo !== 'GET' && !contadoComoPendiente) {
         contadoComoPendiente = true;

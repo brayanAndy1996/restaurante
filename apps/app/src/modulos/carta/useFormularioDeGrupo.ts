@@ -2,6 +2,7 @@ import type { GrupoRespuesta } from '@restaurante/contratos';
 import { moverEnLista } from '@restaurante/ui';
 import { useQueryClient } from '@tanstack/react-query';
 import { useState, type FormEvent } from 'react';
+import { useEnvioPendiente } from '../../lib/envios';
 import { CLAVES, crearGrupo, modificarGrupo } from './carta';
 import {
   cambiosDelGrupo,
@@ -26,6 +27,8 @@ export interface FormularioDeGrupo {
   errores: ErroresDelGrupo;
   fallo: string | null;
   enviando: boolean;
+  /** El envío espera la red: se dice "Pendiente de envío" y sale solo al volver (criterio 78). */
+  pendiente: boolean;
   guardado: boolean;
   /** Editando y sin tocar nada: no hay nada que guardar. */
   sinCambios: boolean;
@@ -51,6 +54,7 @@ export function useFormularioDeGrupo(
   alGuardar: (grupo: GrupoRespuesta, creado: boolean) => void,
 ): FormularioDeGrupo {
   const clientes = useQueryClient();
+  const envio = useEnvioPendiente();
   const modo = original ? 'editar' : 'crear';
   const [estado, setEstado] = useState<EstadoDelGrupo>(() =>
     original ? formularioDeGrupo(original) : grupoVacio(),
@@ -141,8 +145,8 @@ export function useFormularioDeGrupo(
     setEnviando(true);
     try {
       const respuesta = original
-        ? await modificarGrupo(original.id, cambios)
-        : await crearGrupo(entradaDeGrupo(estado));
+        ? await envio.enviar((extra) => modificarGrupo(original.id, cambios, extra))
+        : await envio.enviar((extra) => crearGrupo(entradaDeGrupo(estado), extra));
       clientes.setQueryData(CLAVES.grupo(respuesta.id), respuesta);
       void clientes.invalidateQueries({ queryKey: CLAVES.grupos });
       // Los productos muestran los nombres de sus grupos y cuántos productos usa cada uno.
@@ -164,6 +168,7 @@ export function useFormularioDeGrupo(
     errores,
     fallo,
     enviando,
+    pendiente: envio.pendiente,
     guardado,
     sinCambios,
     modo,

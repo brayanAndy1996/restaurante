@@ -406,6 +406,36 @@ describe('precio por sucursal: guardar una fila', () => {
     expect(s.de('PUT', RUTA_A).length).toBeGreaterThan(1);
   });
 
+  it('si la red tarda más que los reintentos la fila queda "Pendiente de envío" y sale sola con la misma clave', async () => {
+    let sinRed = true;
+    let esperas = 0;
+    let liberar!: () => void;
+    const compuerta = new Promise<void>((resolver) => (liberar = resolver));
+    vi.spyOn(espera, 'dormir').mockImplementation(async () => {
+      if (++esperas === 7) await compuerta;
+    });
+    const s = carta(administrador(), {
+      [`GET ${RUTA_SUCURSALES}`]: () => json(200, [MIRAFLORES, SURCO]),
+      [`PUT ${RUTA_A}`]: () => {
+        if (sinRed) throw new TypeError('Failed to fetch');
+        return json(200, { ...MIRAFLORES, precio: '31.00', precioEfectivo: '31.00' });
+      },
+    });
+    renderApp(RUTA);
+    const miraflores = await filaDe('Miraflores');
+    await userEvent.type(within(miraflores).getByLabelText('Precio propio en Miraflores'), '31');
+    await userEvent.click(within(miraflores).getByRole('button', { name: 'Guardar Miraflores' }));
+    // Solo la fila que se está guardando lo dice; la otra sigue como estaba.
+    expect(await within(miraflores).findByText('Pendiente de envío')).toBeInTheDocument();
+    expect(within(await filaDe('Surco')).queryByText('Pendiente de envío')).not.toBeInTheDocument();
+    expect(within(miraflores).getByLabelText('Precio propio en Miraflores')).toHaveValue('31.00');
+    sinRed = false;
+    liberar();
+    expect(await within(miraflores).findByText('Guardado')).toBeInTheDocument();
+    expect(within(miraflores).queryByText('Pendiente de envío')).not.toBeInTheDocument();
+    expect(new Set(s.de('PUT', RUTA_A).map((l) => l.cabeceras.get('Idempotency-Key'))).size).toBe(1);
+  });
+
   it('un 400 sobre el precio lo marca en el campo', async () => {
     carta(administrador(), {
       [`GET ${RUTA_SUCURSALES}`]: () => json(200, [MIRAFLORES]),

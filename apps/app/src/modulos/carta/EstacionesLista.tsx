@@ -2,6 +2,7 @@ import { IconoEstacion } from '@restaurante/ui';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useMemo } from 'react';
 import { Navigate } from 'react-router-dom';
+import { useEnvioPendiente } from '../../lib/envios';
 import { usePermiso } from '../acceso/permisos';
 import {
   CLAVES,
@@ -59,10 +60,15 @@ export function EstacionesLista() {
     [consulta.data],
   );
   const refrescar = () => clientes.invalidateQueries({ queryKey: CLAVES.todo });
-  const crear = useMutation({ mutationFn: crearEstacion, onSuccess: refrescar });
+  // Una escritura sin red no se pierde: queda "Pendiente de envío" y sale sola al volver (criterio 78).
+  const envio = useEnvioPendiente();
+  const crear = useMutation({
+    mutationFn: (nombre: string) => envio.enviar((extra) => crearEstacion(nombre, extra)),
+    onSuccess: refrescar,
+  });
   const modificar = useMutation({
     mutationFn: (datos: { id: string; cambios: { nombre?: string; activa?: boolean } }) =>
-      modificarEstacion(datos.id, datos.cambios),
+      envio.enviar((extra) => modificarEstacion(datos.id, datos.cambios, extra)),
     onSuccess: refrescar,
   });
   if (!puedeAdministrar) return <Navigate to="/carta?ver=productos" replace />;
@@ -74,6 +80,7 @@ export function EstacionesLista() {
       cargando={consulta.isPending}
       error={consulta.isError ? consulta.error : null}
       reintentando={consulta.isFetching}
+      pendiente={envio.pendiente}
       onReintentar={() => void consulta.refetch()}
       onCrear={(nombre) => crear.mutateAsync(nombre)}
       onModificar={(id, cambios) => modificar.mutateAsync({ id, cambios })}

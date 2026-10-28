@@ -1,4 +1,5 @@
 import type { GrupoRespuesta } from '@restaurante/contratos';
+import type { TipoProducto } from '@restaurante/dominio';
 import {
   Aviso,
   Boton,
@@ -20,12 +21,36 @@ import { useFormularioDeGrupo } from './useFormularioDeGrupo';
 
 type Panel = { tipo: 'crear' } | { tipo: 'editar'; grupo: GrupoRespuesta };
 
+/** Cómo se llama la sección y qué explica según el tipo del producto (un menú del día usa un grupo por tiempo). */
+const TEXTOS_POR_TIPO: Record<TipoProducto, { titulo: string; ayuda: string; vacio: string }> = {
+  SIMPLE: {
+    titulo: 'Modificadores',
+    ayuda:
+      'Las opciones que se eligen al pedir este producto, como el término de la carne o los extras. Un grupo se puede usar en varios productos.',
+    vacio: 'Este producto no tiene grupos. Agrega uno o crea uno nuevo.',
+  },
+  COMBO: {
+    titulo: 'Grupos de opciones',
+    ayuda:
+      'Lo que elige el cliente dentro del combo, como la bebida o el acompañamiento. Cada opción puede sumar un monto al precio. Un grupo se puede usar en varios productos.',
+    vacio: 'Este combo no tiene grupos de opciones. Agrega uno o crea uno nuevo.',
+  },
+  MENU_DEL_DIA: {
+    titulo: 'Tiempos del menú',
+    ayuda:
+      'Un grupo por tiempo, como Entrada o Segundo. Sus opciones son los platos candidatos; cada día se elige cuáles se ofrecen en Disponibilidad. Un grupo se puede usar en varios productos.',
+    vacio: 'Este menú no tiene tiempos. Agrega un grupo por cada tiempo (Entrada, Segundo…) o crea uno nuevo.',
+  },
+};
+
 interface Props {
   /** El producto que se edita; sin él (alta), todos los productos que usan un grupo son "otros". */
   productoId?: string | undefined;
   valor: GrupoDeProducto[];
   onCambio: (grupos: GrupoDeProducto[]) => void;
   error?: string | undefined;
+  /** Tipo del producto: cambia el título y la explicación. Por defecto, simple. */
+  tipo?: TipoProducto;
 }
 
 /** "También lo usan 2 productos más". */
@@ -44,7 +69,14 @@ function otrosProductos(
  * ordenarlos, quitarlos, y crear o editar uno sin salir del producto. Un grupo es de todos los productos
  * que lo usan: al editarlo se avisa. Lo elegido aquí se guarda con el producto ("Guardar cambios").
  */
-export function GruposDelProducto({ productoId, valor, onCambio, error }: Props) {
+export function GruposDelProducto({
+  productoId,
+  valor,
+  onCambio,
+  error,
+  tipo = 'SIMPLE',
+}: Props) {
+  const textos = TEXTOS_POR_TIPO[tipo];
   const idBase = useId();
   const grupos = useQuery({
     queryKey: CLAVES.grupos,
@@ -90,12 +122,9 @@ export function GruposDelProducto({ productoId, valor, onCambio, error }: Props)
   return (
     <section className="seccion" aria-labelledby={`${idBase}-titulo`}>
       <h2 className="formulario__titulo" id={`${idBase}-titulo`}>
-        Modificadores
+        {textos.titulo}
       </h2>
-      <p className="texto-ayuda">
-        Las opciones que se eligen al pedir este producto, como el término de la carne o los extras.
-        Un grupo se puede usar en varios productos.
-      </p>
+      <p className="texto-ayuda">{textos.ayuda}</p>
 
       {error ? (
         <Aviso tipo="error" titulo="Revisa los grupos">
@@ -109,7 +138,7 @@ export function GruposDelProducto({ productoId, valor, onCambio, error }: Props)
       ) : null}
 
       {valor.length === 0 ? (
-        <p className="grupos__vacio">Este producto no tiene grupos. Agrega uno o crea uno nuevo.</p>
+        <p className="grupos__vacio">{textos.vacio}</p>
       ) : (
         <ul className="ui-lista" aria-label="Grupos de este producto">
           {valor.map((g, i) => {

@@ -1,12 +1,17 @@
-import type {
-  ProductoCrearEntrada,
-  ProductoModificarEntrada,
-  ProductoRespuesta,
+import {
+  MAXIMO_COMPONENTES_POR_COMBO,
+  type ComponenteEntrada,
+  type ProductoCrearEntrada,
+  type ProductoModificarEntrada,
+  type ProductoRespuesta,
+  type SeQuita,
+  type UsadoEn,
 } from '@restaurante/contratos';
+import { CANTIDAD_MAXIMA_COMPONENTE } from '@restaurante/dominio';
 import type { AfectacionIgv, TipoControlStock, TipoProducto } from '@restaurante/dominio';
 import Decimal from 'decimal.js';
-import { comoDecimal, montoComoTexto } from '../../lib/formato';
-import { definicionDeTipo } from './tipos';
+import { comoDecimal, diaConFecha, montoComoTexto } from '../../lib/formato';
+import { definicionDeTipo, tipoEnFrase } from './tipos';
 
 /** Valor de la opción "Ninguna" de la estación (el producto no va a cocina ni a barra). */
 export const SIN_ESTACION = 'ninguna';
@@ -15,6 +20,13 @@ export const SIN_ESTACION = 'ninguna';
 export interface GrupoDeProducto {
   id: string;
   nombre: string;
+}
+
+/** Un componente fijo de un combo o un menú: un producto simple y cuántas unidades lleva (1 a 99). */
+export interface ComponenteDeProducto {
+  productoId: string;
+  nombre: string;
+  cantidad: number;
 }
 
 export interface EstadoDelProducto {
@@ -33,6 +45,8 @@ export interface EstadoDelProducto {
   aplicaIcbper: boolean;
   /** Grupos de modificadores, en orden. */
   grupos: GrupoDeProducto[];
+  /** Componentes fijos (solo un combo o un menú del día), en orden. */
+  componentes: ComponenteDeProducto[];
   /** Por sucursal: si el producto nace disponible. Solo en el alta. */
   disponibleEn: Record<string, boolean>;
 }
@@ -45,6 +59,7 @@ export type CampoDelProducto =
   | 'estacionId'
   | 'tipoControlStock'
   | 'gruposModificadores'
+  | 'componentes'
   | 'noDisponibleEn';
 
 export type ErroresDelProducto = Partial<Record<CampoDelProducto, string>>;
@@ -66,6 +81,7 @@ export function formularioVacio(sucursalIds: readonly string[]): EstadoDelProduc
     afectacionIgv: 'GRAVADO',
     aplicaIcbper: false,
     grupos: [],
+    componentes: [],
     disponibleEn: Object.fromEntries(sucursalIds.map((id) => [id, true])),
   };
 }
@@ -83,6 +99,7 @@ export function formularioDeProducto(producto: ProductoRespuesta): EstadoDelProd
     afectacionIgv: producto.afectacionIgv,
     aplicaIcbper: producto.aplicaIcbper,
     grupos: producto.grupos.map((g) => ({ id: g.id, nombre: g.nombre })),
+    componentes: producto.componentes.map((c) => ({ ...c })),
     disponibleEn: {},
   };
 }
@@ -121,8 +138,23 @@ export function validarProducto(estado: EstadoDelProducto): ErroresDelProducto {
   if (estado.tipoControlStock === '') {
     errores.tipoControlStock = 'Elige cómo se controla el stock';
   }
+  if (campos.componentes) {
+    // Un combo necesita algo que ofrecer; un menú del día, al menos un tiempo (criterio 7).
+    if (estado.componentes.length > MAXIMO_COMPONENTES_POR_COMBO) {
+      errores.componentes = `Un combo admite hasta ${MAXIMO_COMPONENTES_POR_COMBO} componentes. Quita alguno.`;
+    } else if (estado.tipo === 'COMBO' && estado.componentes.length + estado.grupos.length === 0) {
+      errores.componentes = 'Agrega al menos un componente o un grupo de opciones';
+    }
+    if (estado.tipo === 'MENU_DEL_DIA' && estado.grupos.length === 0) {
+      errores.gruposModificadores =
+        'Agrega al menos un grupo: cada grupo es un tiempo del menú, como Entrada o Segundo';
+    }
+  }
   return errores;
 }
+
+const componentesParaApi = (lista: readonly ComponenteDeProducto[]): ComponenteEntrada[] =>
+  lista.map((c) => ({ productoId: c.productoId, cantidad: c.cantidad }));
 
 /** Id de la estación para la API: `null` es "ninguna". Solo se llama con la estación ya elegida. */
 function estacionParaApi(estado: EstadoDelProducto): string | null {
@@ -152,6 +184,9 @@ export function entradaDeCreacion(estado: EstadoDelProducto): ProductoCrearEntra
     ...(campos.estacion ? { estacionId: estacionParaApi(estado) } : {}),
     tipoControlStock: estado.tipoControlStock as TipoControlStock,
     ...(estado.grupos.length > 0 ? { gruposModificadores: estado.grupos.map((g) => g.id) } : {}),
+    ...(campos.componentes && estado.componentes.length > 0
+      ? { componentes: componentesParaApi(estado.componentes) }
+      : {}),
     ...(noDisponibleEn.length > 0 ? { noDisponibleEn } : {}),
   };
 }
@@ -172,6 +207,8 @@ export function cambiosDelProducto(
   estado: EstadoDelProducto,
 ): ProductoModificarEntrada {
   const cambios: ProductoModificarEntrada = {};
+  const cambiaElTipo = estado.tipo !== original.tipo;
+  if (cambiaElTipo) cambios.tipo = estado.tipo;
   const nombre = estado.nombre.trim();
   if (nombre !== original.nombre) cambios.nombre = nombre;
   const descripcion = estado.descripcion.trim() === '' ? null : estado.descripcion.trim();
@@ -188,7 +225,9 @@ export function cambiosDelProducto(
   }
   if (campos.estacion) {
     const estacion = estacionParaApi(estado);
-    if (estacion !== original.estacionId) cambios.estacionId = estacion;
+    // Al pasar a simple la estación va siempre, aunque sea "Ninguna": la API la exige para que nadie
+    // quede sin estación por omisión (criterio 10b).
+    if (estacion !== original.estacionId || cambiaElTipo) cambios.estacionId = estacion;
   }
   if (estado.tipoControlStock !== '' && estado.tipoControlStock !== original.tipoControlStock) {
     cambios.tipoControlStock = estado.tipoControlStock;
@@ -201,8 +240,116 @@ export function cambiosDelProducto(
   if (grupos.length !== guardados.length || grupos.some((id, i) => id !== guardados[i])) {
     cambios.gruposModificadores = grupos;
   }
+  // Los componentes reemplazan a los anteriores completos. Al pasar a simple no se mandan: la API los
+  // quita (y los lista en `seQuita`); un simple no lleva componentes (criterio 7).
+  if (campos.componentes) {
+    const nuevos = estado.componentes;
+    const previos = original.componentes;
+    const igual =
+      nuevos.length === previos.length &&
+      nuevos.every(
+        (c, i) => c.productoId === previos[i]?.productoId && c.cantidad === previos[i]?.cantidad,
+      );
+    if (!igual) cambios.componentes = componentesParaApi(nuevos);
+  }
   return cambios;
 }
+
+/**
+ * Lo que cambia el formulario al elegir otro tipo (criterio 72). Los datos que el tipo nuevo no usa se
+ * conservan en el formulario (volver al tipo anterior los recupera); solo la estación se pide de nuevo al
+ * pasar a simple un producto que no lo era, para que nadie quede "sin estación" por omisión (criterio 10b).
+ */
+export function cambiarDeTipo(
+  estado: EstadoDelProducto,
+  tipo: TipoProducto,
+  original?: ProductoRespuesta,
+): EstadoDelProducto {
+  if (tipo === estado.tipo) return estado;
+  const siguiente: EstadoDelProducto = { ...estado, tipo };
+  if (tipo === 'SIMPLE' && original && original.tipo !== 'SIMPLE') {
+    siguiente.estacionId = '';
+  } else if (tipo === 'SIMPLE' && original) {
+    siguiente.estacionId = original.estacionId ?? SIN_ESTACION;
+  }
+  return siguiente;
+}
+
+/**
+ * Avisos de lo que pasará al guardar un cambio de tipo, dichos antes de guardar (la hoja de confirmación
+ * dice lo mismo con los datos exactos que da la API). Vacío si el tipo no cambia o no se pierde nada.
+ */
+export function avisosDeCambioDeTipo(
+  original: ProductoRespuesta,
+  tipo: TipoProducto,
+  nombreDeEstacion: string | null,
+): string[] {
+  if (tipo === original.tipo) return [];
+  const avisos: string[] = [];
+  if (tipo === 'SIMPLE') {
+    if (original.componentes.length > 0) {
+      avisos.push(
+        original.componentes.length === 1
+          ? 'Se quitará su componente.'
+          : `Se quitarán sus ${original.componentes.length} componentes.`,
+      );
+    }
+    if (original.tipo === 'MENU_DEL_DIA') {
+      avisos.push('Se borrarán las opciones del día ya armadas en todas las sucursales.');
+    }
+    avisos.push('Elige la estación donde se prepara.');
+    return avisos;
+  }
+  if (original.tipo === 'SIMPLE') {
+    avisos.push(
+      nombreDeEstacion
+        ? `Se quitará la estación ${nombreDeEstacion}: ${tipoEnFrase(tipo)} no tiene estación propia, cada componente y cada opción va a la suya.`
+        : `Un ${tipoEnFrase(tipo)} no tiene estación propia: cada componente y cada opción va a la suya.`,
+    );
+    if (!original.seVendeSolo) avisos.push('Escribe su precio: un combo o un menú siempre se vende solo.');
+  }
+  if (original.tipo === 'MENU_DEL_DIA') {
+    avisos.push('Se borrarán las opciones del día ya armadas en todas las sucursales.');
+  }
+  if (tipo === 'MENU_DEL_DIA') avisos.push(AVISO_MENU_SIN_ARMAR);
+  return avisos;
+}
+
+/** Se dice al crear un menú del día y al pasar a él (criterio 72). */
+export const AVISO_MENU_SIN_ARMAR =
+  'No se podrá vender hasta armar sus opciones del día en cada sucursal, en Disponibilidad › Menú del día.';
+
+// --- Lo que dice la API en palabras ----------------------------------------------------------------
+
+/** "Se quitará la estación Cocina.", "Se quitarán los componentes: Hamburguesa clásica × 1." (criterio 10b). */
+export function frasesDeSeQuita(seQuita: SeQuita): string[] {
+  const frases: string[] = [];
+  if (seQuita.estacion) frases.push(`Se quitará la estación ${seQuita.estacion.nombre}.`);
+  if (seQuita.componentes.length > 0) {
+    const lista = seQuita.componentes.map((c) => `${c.nombre} × ${c.cantidad}`).join(', ');
+    frases.push(
+      seQuita.componentes.length === 1
+        ? `Se quitará el componente: ${lista}.`
+        : `Se quitarán los componentes: ${lista}.`,
+    );
+  }
+  for (const d of seQuita.opcionesDelDia) {
+    frases.push(
+      `${d.opciones === 1 ? 'Se borrará la opción' : 'Se borrarán las opciones'} del menú del ${diaConFecha(d.dia)} en ${d.sucursalNombre} (${d.opciones}).`,
+    );
+  }
+  return frases;
+}
+
+/** Lo que `EN_USO` dice que lo usa: "Combo hamburguesa", "Bebida del combo › Inca Kola" (criterio 10c). */
+export function usosDeProducto(usadoEn: UsadoEn): { combos: string[]; opciones: string[] } {
+  return {
+    combos: usadoEn.combos.map((c) => c.nombre),
+    opciones: usadoEn.modificadores.map((m) => `${m.grupoNombre} › ${m.nombre}`),
+  };
+}
+
+export { CANTIDAD_MAXIMA_COMPONENTE, MAXIMO_COMPONENTES_POR_COMBO };
 
 export function hayCambios(cambios: ProductoModificarEntrada): boolean {
   return Object.keys(cambios).length > 0;

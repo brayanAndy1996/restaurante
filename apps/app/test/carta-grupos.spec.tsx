@@ -553,6 +553,37 @@ describe('formulario de grupo: edición', () => {
     expect(await screen.findByText('Cambios guardados')).toBeInTheDocument();
     expect(s.de('PATCH', ruta)).toHaveLength(3);
   });
+
+  it('si la red tarda más que los reintentos queda "Pendiente de envío", conserva lo escrito y sale solo con la misma clave', async () => {
+    let sinRed = true;
+    let esperas = 0;
+    let liberar!: () => void;
+    const compuerta = new Promise<void>((resolver) => (liberar = resolver));
+    vi.spyOn(espera, 'dormir').mockImplementation(async () => {
+      // Las 6 esperas cortas de api.ts pasan solas; la primera espera larga del envío espera a la prueba.
+      if (++esperas === 7) await compuerta;
+    });
+    const s = carta(administrador(), {
+      [`GET ${ruta}`]: () => json(200, EXTRAS),
+      [`PATCH ${ruta}`]: () => {
+        if (sinRed) throw new TypeError('Failed to fetch');
+        return json(200, { ...EXTRAS, nombre: 'Extras nuevos' });
+      },
+    });
+    renderApp(`/carta/grupos/${G_EXTRAS}`);
+    const nombre = await screen.findByLabelText('Nombre del grupo');
+    await userEvent.clear(nombre);
+    await userEvent.type(nombre, 'Extras nuevos');
+    await userEvent.click(screen.getByRole('button', { name: 'Guardar cambios' }));
+    const aviso = (await screen.findAllByText('Pendiente de envío'))[0]!.closest('[role="status"]')!;
+    expect(aviso).toHaveTextContent('Tus cambios se enviarán solos');
+    expect(screen.getByLabelText('Nombre del grupo')).toHaveValue('Extras nuevos');
+    sinRed = false;
+    liberar();
+    expect(await screen.findByText('Cambios guardados')).toBeInTheDocument();
+    expect(screen.queryByText('Pendiente de envío')).not.toBeInTheDocument();
+    expect(new Set(s.de('PATCH', ruta).map((l) => l.cabeceras.get('Idempotency-Key'))).size).toBe(1);
+  });
 });
 
 describe('modificadores dentro del producto', () => {

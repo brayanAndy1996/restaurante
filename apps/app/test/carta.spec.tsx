@@ -387,6 +387,35 @@ describe('secciones: familias y estaciones', () => {
     expect(llamada?.cabeceras.get('Idempotency-Key')).toBeTruthy();
   });
 
+  it('crear una familia sin red queda "Pendiente de envío" y sale sola con la misma clave al volver', async () => {
+    let sinRed = true;
+    let esperas = 0;
+    let liberar!: () => void;
+    const compuerta = new Promise<void>((resolver) => (liberar = resolver));
+    vi.spyOn(espera, 'dormir').mockImplementation(async () => {
+      if (++esperas === 7) await compuerta;
+    });
+    const s = carta(administrador(), {
+      'POST /carta/familias': () => {
+        if (sinRed) throw new TypeError('Failed to fetch');
+        return json(201, familia('f3000000-0000-4000-8000-000000000003', 'Postres', 3));
+      },
+    });
+    renderApp('/carta?ver=familias');
+    await screen.findByText('Entradas');
+    await userEvent.click(screen.getByRole('button', { name: 'Agregar familia' }));
+    await userEvent.type(screen.getByLabelText('Nombre de la familia'), 'Postres');
+    await userEvent.click(screen.getByRole('button', { name: 'Crear familia' }));
+    const aviso = (await screen.findAllByText('Pendiente de envío'))[0]!.closest('[role="status"]')!;
+    expect(aviso).toHaveTextContent('Tus cambios se enviarán solos');
+    expect(screen.getByLabelText('Nombre de la familia')).toHaveValue('Postres');
+    sinRed = false;
+    liberar();
+    await waitFor(() => expect(screen.queryByText('Pendiente de envío')).not.toBeInTheDocument());
+    await waitFor(() => expect(screen.queryByLabelText('Nombre de la familia')).not.toBeInTheDocument());
+    expect(new Set(s.de('POST', '/carta/familias').map((l) => l.cabeceras.get('Idempotency-Key'))).size).toBe(1);
+  });
+
   it('un nombre repetido se dice en el campo y lo escrito se conserva', async () => {
     carta(administrador(), {
       'POST /carta/familias': () => json(409, { codigo: 'CONFLICTO', mensaje: 'x' }),

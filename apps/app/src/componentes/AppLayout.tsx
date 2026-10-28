@@ -3,6 +3,7 @@ import {
   ContenidoDeDestino,
   IconoCandado,
   IconoCarta,
+  IconoDisponibilidad,
   IconoInicio,
   IconoUsuarios,
   Navegacion,
@@ -27,9 +28,21 @@ export function AppLayout() {
   const estado = useEstadoDeCenefa();
   // "Carta" la ve quien edita la carta con su rol en la sucursal activa (Administrador y Cajero).
   const veLaCarta = usePermiso('EDITAR_CARTA') === 'permitido';
+  // "Disponibilidad" la ve quien marca agotados y arma el menú del día: Cocina/Barra, Supervisor y Administrador.
+  const veLaDisponibilidad = usePermiso('GESTIONAR_DISPONIBILIDAD') === 'permitido';
   const destinos = [
     { a: '/', etiqueta: 'Inicio', icono: IconoInicio, fin: true },
     ...(veLaCarta ? [{ a: '/carta', etiqueta: 'Carta', icono: IconoCarta, fin: false }] : []),
+    ...(veLaDisponibilidad
+      ? [
+          {
+            a: '/disponibilidad',
+            etiqueta: 'Disponibilidad',
+            icono: IconoDisponibilidad,
+            fin: false,
+          },
+        ]
+      : []),
     ...(sesion?.esAdministrador
       ? [
           { a: '/administracion/usuarios', etiqueta: 'Usuarios', icono: IconoUsuarios, fin: false },
@@ -38,7 +51,7 @@ export function AppLayout() {
       : []),
   ];
   return (
-    <div className="app">
+    <div className={veLaDisponibilidad ? 'app app--riel-ancho' : 'app'}>
       <a className="saltar" href="#contenido">
         Saltar al contenido
       </a>

@@ -22,6 +22,7 @@ import {
 } from '@restaurante/contratos';
 import { requisitoPermiso, type TipoControlStock } from '@restaurante/dominio';
 import { api, listaDe } from '../../lib/api';
+import type { ExtraDeEscritura } from '../../lib/envios';
 
 /** Claves de TanStack Query de la carta: todo lo que cuelga de `['carta']` se limpia al cerrar la sesión. */
 export const CLAVES = {
@@ -44,37 +45,62 @@ const conSenal = (senal?: AbortSignal): Senal => (senal ? { senal } : {});
 
 export const listarEstaciones = (senal?: AbortSignal) =>
   api.get('/carta/estaciones', { esquema: listaDe(estacionRespuestaSchema), ...conSenal(senal) });
-export const crearEstacion = (nombre: string) =>
+export const crearEstacion = (nombre: string, extra?: ExtraDeEscritura) =>
   api.post(
     '/carta/estaciones',
     { nombre },
-    { esquema: estacionRespuestaSchema, idempotente: true },
+    { esquema: estacionRespuestaSchema, idempotente: true, ...extra },
   );
-export const modificarEstacion = (id: string, cambios: EstacionModificarEntrada) =>
-  api.patch(`/carta/estaciones/${id}`, cambios, { esquema: estacionRespuestaSchema });
+export const modificarEstacion = (
+  id: string,
+  cambios: EstacionModificarEntrada,
+  extra?: ExtraDeEscritura,
+) => api.patch(`/carta/estaciones/${id}`, cambios, { esquema: estacionRespuestaSchema, ...extra });
 
 export const listarFamilias = (senal?: AbortSignal) =>
   api.get('/carta/familias', { esquema: listaDe(familiaRespuestaSchema), ...conSenal(senal) });
-export const crearFamilia = (nombre: string) =>
-  api.post('/carta/familias', { nombre }, { esquema: familiaRespuestaSchema, idempotente: true });
-export const modificarFamilia = (id: string, cambios: FamiliaModificarEntrada) =>
-  api.patch(`/carta/familias/${id}`, cambios, { esquema: familiaRespuestaSchema });
-export const ordenarFamilias = (ids: string[]) =>
-  api.put('/carta/familias/orden', { ids }, { esquema: listaDe(familiaRespuestaSchema) });
+export const crearFamilia = (nombre: string, extra?: ExtraDeEscritura) =>
+  api.post(
+    '/carta/familias',
+    { nombre },
+    { esquema: familiaRespuestaSchema, idempotente: true, ...extra },
+  );
+export const modificarFamilia = (
+  id: string,
+  cambios: FamiliaModificarEntrada,
+  extra?: ExtraDeEscritura,
+) => api.patch(`/carta/familias/${id}`, cambios, { esquema: familiaRespuestaSchema, ...extra });
+export const ordenarFamilias = (ids: string[], extra?: ExtraDeEscritura) =>
+  api.put(
+    '/carta/familias/orden',
+    { ids },
+    { esquema: listaDe(familiaRespuestaSchema), ...extra },
+  );
 
 export const listarProductos = (senal?: AbortSignal) =>
   api.get('/carta/productos', { esquema: listaDe(productoResumenSchema), ...conSenal(senal) });
 export const obtenerProducto = (id: string, senal?: AbortSignal) =>
   api.get(`/carta/productos/${id}`, { esquema: productoRespuestaSchema, ...conSenal(senal) });
-export const crearProducto = (entrada: ProductoCrearEntrada) =>
-  api.post('/carta/productos', entrada, { esquema: productoRespuestaSchema, idempotente: true });
-export const modificarProducto = (id: string, cambios: ProductoModificarEntrada) =>
-  api.patch(`/carta/productos/${id}`, cambios, { esquema: productoRespuestaSchema });
-export const ordenarProductosDeFamilia = (familiaId: string, ids: string[]) =>
+export const crearProducto = (entrada: ProductoCrearEntrada, extra?: ExtraDeEscritura) =>
+  api.post('/carta/productos', entrada, {
+    esquema: productoRespuestaSchema,
+    idempotente: true,
+    ...extra,
+  });
+export const modificarProducto = (
+  id: string,
+  cambios: ProductoModificarEntrada,
+  extra?: ExtraDeEscritura,
+) => api.patch(`/carta/productos/${id}`, cambios, { esquema: productoRespuestaSchema, ...extra });
+export const ordenarProductosDeFamilia = (
+  familiaId: string,
+  ids: string[],
+  extra?: ExtraDeEscritura,
+) =>
   api.put(
     `/carta/familias/${familiaId}/productos/orden`,
     { ids },
-    { esquema: listaDe(productoResumenSchema) },
+    { esquema: listaDe(productoResumenSchema), ...extra },
   );
 
 /** Una fila por sucursal de la empresa, con lo que quien consulta puede cambiar (`editable`). */
@@ -91,10 +117,12 @@ export const ajustarSucursalDeProducto = (
   id: string,
   sucursalId: string,
   ajuste: AjusteSucursalEntrada,
+  extra?: ExtraDeEscritura,
 ): Promise<AjusteSucursalRespuesta> =>
   api.put(`/carta/productos/${id}/sucursales/${sucursalId}`, ajuste, {
     esquema: ajusteSucursalRespuestaSchema,
     idempotente: true,
+    ...extra,
   });
 
 /** Sube la foto ya reducida (cuerpo binario con su `Content-Type`). */
@@ -113,16 +141,24 @@ export const obtenerGrupo = (id: string, senal?: AbortSignal) =>
     esquema: grupoRespuestaSchema,
     ...conSenal(senal),
   });
-export const crearGrupo = (entrada: GrupoEntrada): Promise<GrupoRespuesta> =>
+export const crearGrupo = (
+  entrada: GrupoEntrada,
+  extra?: ExtraDeEscritura,
+): Promise<GrupoRespuesta> =>
   api.post('/carta/grupos-modificadores', entrada, {
     esquema: grupoRespuestaSchema,
     idempotente: true,
+    ...extra,
   });
 export const modificarGrupo = (
   id: string,
   cambios: GrupoModificarEntrada,
+  extra?: ExtraDeEscritura,
 ): Promise<GrupoRespuesta> =>
-  api.patch(`/carta/grupos-modificadores/${id}`, cambios, { esquema: grupoRespuestaSchema });
+  api.patch(`/carta/grupos-modificadores/${id}`, cambios, {
+    esquema: grupoRespuestaSchema,
+    ...extra,
+  });
 
 // --- Reglas de presentación -----------------------------------------------------------------------
 

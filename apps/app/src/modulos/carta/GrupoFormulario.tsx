@@ -18,6 +18,7 @@ import {
 } from '@restaurante/ui';
 import { useQuery } from '@tanstack/react-query';
 import { useEffect, useId, useMemo, type KeyboardEvent } from 'react';
+import { AvisoPendiente } from '../../componentes/PendienteDeEnvio';
 import { mensajeDeError } from '../../lib/errores';
 import { paraBuscar } from '../../lib/formato';
 import { CLAVES, listarProductos } from './carta';
@@ -126,6 +127,7 @@ export function GrupoFormulario({ f, original, idFormulario, integrado }: Props)
             : 'Ya puedes agregarlo a un producto.'}
         </Aviso>
       ) : null}
+      <AvisoPendiente pendiente={f.pendiente} />
       {f.fallo ? (
         <Aviso tipo="error" titulo="No pudimos guardar el grupo">
           {f.fallo}

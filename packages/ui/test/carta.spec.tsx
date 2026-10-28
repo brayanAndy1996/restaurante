@@ -10,6 +10,7 @@ import {
   Miniatura,
   OpcionesConAyuda,
   Plegable,
+  SelectorDeCantidad,
   SelectorDeFoto,
   completarMontoEscrito,
   limpiarMontoEscrito,
@@ -255,5 +256,39 @@ describe('SelectorDeFoto', () => {
     expect(screen.getByRole('img', { name: 'Foto de Ceviche' })).toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: 'Reintentar' }));
     expect(alReintentar).toHaveBeenCalled();
+  });
+});
+
+describe('SelectorDeCantidad', () => {
+  function Prueba({ inicial = 2, maximo = 3 }: { inicial?: number; maximo?: number }) {
+    const [valor, setValor] = useState(inicial);
+    return <SelectorDeCantidad nombre="Papas" valor={valor} maximo={maximo} onCambio={setValor} />;
+  }
+
+  it('suma y resta de a una unidad y dice la cantidad en el grupo', async () => {
+    render(<Prueba />);
+    expect(screen.getByRole('group', { name: 'Cantidad de Papas' })).toBeInTheDocument();
+    expect(screen.getByRole('status')).toHaveTextContent('× 2');
+    await userEvent.click(screen.getByRole('button', { name: 'Agregar una unidad de Papas' }));
+    expect(screen.getByRole('status')).toHaveTextContent('× 3');
+    await userEvent.click(screen.getByRole('button', { name: 'Quitar una unidad de Papas' }));
+    expect(screen.getByRole('status')).toHaveTextContent('× 2');
+  });
+
+  it('en los extremos el botón no hace nada y queda marcado, sin perder el foco', async () => {
+    render(<Prueba inicial={3} />);
+    const mas = screen.getByRole('button', { name: 'Agregar una unidad de Papas' });
+    expect(mas).toHaveAttribute('aria-disabled', 'true');
+    expect(mas).not.toBeDisabled();
+    await userEvent.click(mas);
+    expect(screen.getByRole('status')).toHaveTextContent('× 3');
+  });
+
+  it('no baja del mínimo', async () => {
+    render(<Prueba inicial={1} />);
+    const menos = screen.getByRole('button', { name: 'Quitar una unidad de Papas' });
+    expect(menos).toHaveAttribute('aria-disabled', 'true');
+    await userEvent.click(menos);
+    expect(screen.getByRole('status')).toHaveTextContent('× 1');
   });
 });

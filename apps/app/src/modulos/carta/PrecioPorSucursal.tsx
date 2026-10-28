@@ -18,6 +18,8 @@ import {
 } from '@restaurante/ui';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState, type FormEvent } from 'react';
+import { EtiquetaPendiente } from '../../componentes/PendienteDeEnvio';
+import { useEnvioPendiente } from '../../lib/envios';
 import { ErrorApi, mensajeDeError } from '../../lib/errores';
 import { formatearMonto, montoEnSoles } from '../../lib/formato';
 import { CLAVES, ajustarSucursalDeProducto, listarSucursalesDeProducto } from './carta';
@@ -172,6 +174,7 @@ interface PropsFila {
 
 function FilaDeSucursal({ productoId, fila, precioEmpresa, seVendeSolo }: PropsFila) {
   const clientes = useQueryClient();
+  const envio = useEnvioPendiente();
   const [borrador, setBorrador] = useState<BorradorDeSucursal>(() => borradorDeSucursal(fila));
   const [errorDePrecio, setErrorDePrecio] = useState<string | undefined>();
   const [fallo, setFallo] = useState<string | null>(null);
@@ -224,10 +227,8 @@ function FilaDeSucursal({ productoId, fila, precioEmpresa, seVendeSolo }: PropsF
     setFallo(null);
     setErrorDePrecio(undefined);
     try {
-      const guardadaAhora = await ajustarSucursalDeProducto(
-        productoId,
-        fila.sucursalId,
-        ajuste.entrada,
+      const guardadaAhora = await envio.enviar((extra) =>
+        ajustarSucursalDeProducto(productoId, fila.sucursalId, ajuste.entrada, extra),
       );
       clientes.setQueryData<AjusteSucursalRespuesta[]>(
         CLAVES.sucursalesDeProducto(productoId),
@@ -292,7 +293,9 @@ function FilaDeSucursal({ productoId, fila, precioEmpresa, seVendeSolo }: PropsF
             Guardar
           </Boton>
           <span className="sucursal__guardada" role="status">
-            {guardada ? (
+            {envio.pendiente ? (
+              <EtiquetaPendiente />
+            ) : guardada ? (
               <>
                 <Icono icono={IconoExito} tamano={20} />
                 Guardado

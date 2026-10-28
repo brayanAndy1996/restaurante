@@ -1569,3 +1569,18 @@ button.ui-fila:active {
     max-width: none;
   }
 }
+
+/* ---------- Cantidad (menos, número, más) ---------- */
+.ui-cantidad {
+  display: inline-flex;
+  align-items: center;
+  flex: none;
+}
+.ui-cantidad__valor {
+  min-width: 3rem;
+  text-align: center;
+  font-size: 1.0625rem;
+  font-weight: 700;
+  line-height: 1.5rem;
+  font-variant-numeric: tabular-nums;
+}

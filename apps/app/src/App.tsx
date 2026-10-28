@@ -54,6 +54,11 @@ const GrupoNuevoPagina = lazy(() =>
 const GrupoEditarPagina = lazy(() =>
   import('./modulos/carta/GrupoFormularioPagina').then((m) => ({ default: m.GrupoEditarPagina })),
 );
+const DisponibilidadPagina = lazy(() =>
+  import('./modulos/disponibilidad/DisponibilidadPagina').then((m) => ({
+    default: m.DisponibilidadPagina,
+  })),
+);
 // Solo en desarrollo: la ruta y su código no llegan al paquete de producción.
 const ClaveSupervisorDemo = import.meta.env.DEV
   ? lazy(() =>
@@ -168,6 +173,17 @@ function RutaDeCarta() {
   return <Outlet />;
 }
 
+/**
+ * La disponibilidad (menú del día y, en C5, agotados) la gestiona quien tiene `GESTIONAR_DISPONIBILIDAD`
+ * con su rol en la sucursal activa: Cocina/Barra, Supervisor y Administrador. La guarda solo ordena la
+ * pantalla: la API decide.
+ */
+function RutaDeDisponibilidad() {
+  const permiso = usePermiso('GESTIONAR_DISPONIBILIDAD');
+  if (permiso !== 'permitido') return <Navigate to="/" replace />;
+  return <Outlet />;
+}
+
 function Cargando() {
   return <PantallaDeCarga />;
 }
@@ -208,6 +224,9 @@ export function App() {
                 <Route path="/carta/productos/:id" element={<ProductoEditarPagina />} />
                 <Route path="/carta/grupos/nuevo" element={<GrupoNuevoPagina />} />
                 <Route path="/carta/grupos/:id" element={<GrupoEditarPagina />} />
+              </Route>
+              <Route element={<RutaDeDisponibilidad />}>
+                <Route path="/disponibilidad" element={<DisponibilidadPagina />} />
               </Route>
               <Route element={<RutaDeAdministrador />}>
                 <Route path="/administracion/usuarios" element={<UsuariosPagina />} />

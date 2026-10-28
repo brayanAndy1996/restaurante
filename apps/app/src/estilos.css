@@ -405,8 +405,9 @@ body,
   }
 }
 
-/* El riel del panel de plataforma es más ancho: "Suscripciones" no cabe en 72 px */
-.app--plataforma {
+/* El riel del panel de plataforma es más ancho: "Suscripciones" no cabe en 72 px; "Disponibilidad", tampoco */
+.app--plataforma,
+.app--riel-ancho {
   --ancho-riel: 96px;
 }
 
@@ -802,4 +803,190 @@ body,
   .opcion__campos {
     grid-template-columns: minmax(0, 1.2fr) 10rem minmax(0, 1fr);
   }
+}
+
+/* Combos y menú del día (003, HU-08): componentes, vista previa del precio y confirmación del cambio de tipo */
+.componente__controles {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--espacio-sm);
+  width: 100%;
+}
+
+.componente__selector {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espacio-md);
+}
+
+.vista-previa__grupo {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espacio-sm);
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.vista-previa__grupo > legend {
+  padding: 0;
+  margin-bottom: var(--espacio-xs);
+}
+
+/* El total es lo que la persona busca: una baldosa con la cifra grande y tabular */
+.vista-previa__total {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--espacio-xs) var(--espacio-md);
+  padding: var(--espacio-md) var(--espacio-lg);
+  background: var(--color-baldosa);
+  border: 2px solid var(--color-tinta);
+  border-radius: var(--radio-baldosa);
+}
+
+.vista-previa__etiqueta {
+  font-weight: 600;
+}
+
+.vista-previa__monto {
+  font-size: 1.75rem;
+  line-height: 2rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.vista-previa__aviso {
+  color: var(--color-aviso-texto);
+  font-weight: 600;
+}
+
+.confirmacion__lista {
+  margin: var(--espacio-sm) 0 var(--espacio-md);
+  padding-left: var(--espacio-lg);
+}
+
+.pendiente-de-envio {
+  display: inline-flex;
+}
+
+/* Disponibilidad: menú del día (003, criterio 76) */
+.menu__dias {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espacio-sm);
+}
+
+.menu__dias .ui-segmentos {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+@media (min-width: 768px) {
+  .menu__dias .ui-segmentos {
+    max-width: 24rem;
+  }
+}
+
+.menu__fecha {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--espacio-xs) var(--espacio-md);
+  margin: 0;
+}
+
+.menu__herramientas {
+  display: flex;
+}
+
+.menu__lista {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espacio-xl);
+}
+
+.menu {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espacio-lg);
+}
+
+.menu + .menu {
+  padding-top: var(--espacio-xl);
+  border-top: 1px solid var(--color-junta);
+}
+
+.menu__encabezado {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espacio-sm);
+}
+
+.menu__titulo {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--espacio-xs) var(--espacio-md);
+}
+
+.menu__nombre {
+  margin: 0;
+  font-size: 1.25rem;
+  line-height: 1.625rem;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.menu__precio {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-tinta-suave);
+}
+
+.menu__tiempo {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espacio-sm);
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.menu__tiempo-nombre {
+  padding: 0;
+  margin-bottom: var(--espacio-xs);
+  font-size: 1.125rem;
+  line-height: 1.5rem;
+  font-weight: 700;
+}
+
+.menu__opciones {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espacio-sm);
+}
+
+@media (min-width: 768px) {
+  .menu__opciones {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(18rem, 1fr));
+  }
+}
+
+.menu__no-disponible {
+  color: var(--color-aviso-texto);
+}
+
+.menu__falta {
+  display: flex;
+  align-items: center;
+  gap: var(--espacio-sm);
+  margin: 0;
+  font-weight: 600;
+  color: var(--color-aviso-texto);
 }

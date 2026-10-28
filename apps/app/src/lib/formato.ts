@@ -145,6 +145,11 @@ export function montoComoTexto(valor: string, { permitirCero = false } = {}): st
   return d.toFixed(2);
 }
 
+/** `true` si el texto decimal vale cero ("0", "0.00"); `false` si vale otra cosa o no es un número. */
+export function montoEsCero(valor: string): boolean {
+  return comoDecimal(valor)?.isZero() ?? false;
+}
+
 /** "S/ 1,234.50" a partir de un monto en texto decimal; `null` si el texto no es un monto. */
 export function montoEnSoles(valor: string | null | undefined): string | null {
   if (valor === null || valor === undefined) return null;
@@ -155,4 +160,23 @@ export function montoEnSoles(valor: string | null | undefined): string | null {
 /** Mismo texto sin tildes ni mayúsculas, para buscar por nombre sin que importen. */
 export function paraBuscar(texto: string): string {
   return texto.normalize('NFD').replace(/[̀-ͯ]/g, '').toLocaleLowerCase('es-PE').trim();
+}
+
+/** Fecha sin hora (AAAA-MM-DD) más `dias` días, con aritmética de calendario (sin zonas horarias). */
+export function sumarDiasAFecha(fecha: string, dias: number): string {
+  const [anio, mes, dia] = fecha.split('-').map(Number);
+  if (!anio || !mes || !dia) return fecha;
+  const resultado = new Date(Date.UTC(anio, mes - 1, dia + dias));
+  const dosCifras = (n: number) => String(n).padStart(2, '0');
+  return `${resultado.getUTCFullYear()}-${dosCifras(resultado.getUTCMonth() + 1)}-${dosCifras(resultado.getUTCDate())}`;
+}
+
+const DIAS_DE_LA_SEMANA = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];
+
+/** "jueves 29 de octubre" a partir de "2026-10-29" (fecha sin hora: no pasa por zonas horarias). */
+export function diaConFecha(fecha: string): string {
+  const [anio, mes, dia] = fecha.split('-').map(Number);
+  if (!anio || !mes || !dia) return fecha;
+  const semana = DIAS_DE_LA_SEMANA[new Date(Date.UTC(anio, mes - 1, dia)).getUTCDay()] ?? '';
+  return `${semana} ${dia} de ${MESES[mes - 1] ?? ''}`;
 }

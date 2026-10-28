@@ -1,6 +1,7 @@
 import { IconoFamilia } from '@restaurante/ui';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useMemo } from 'react';
+import { useEnvioPendiente } from '../../lib/envios';
 import {
   CLAVES,
   crearFamilia,
@@ -54,14 +55,19 @@ export function FamiliasLista() {
   );
   // Una familia nueva, renombrada o desactivada cambia también la lista de productos (agrupada por familia).
   const refrescar = () => clientes.invalidateQueries({ queryKey: CLAVES.todo });
-  const crear = useMutation({ mutationFn: crearFamilia, onSuccess: refrescar });
+  // Una escritura sin red no se pierde: queda "Pendiente de envío" y sale sola al volver (criterio 78).
+  const envio = useEnvioPendiente();
+  const crear = useMutation({
+    mutationFn: (nombre: string) => envio.enviar((extra) => crearFamilia(nombre, extra)),
+    onSuccess: refrescar,
+  });
   const modificar = useMutation({
     mutationFn: (datos: { id: string; cambios: { nombre?: string; activa?: boolean } }) =>
-      modificarFamilia(datos.id, datos.cambios),
+      envio.enviar((extra) => modificarFamilia(datos.id, datos.cambios, extra)),
     onSuccess: refrescar,
   });
   const ordenar = useMutation({
-    mutationFn: ordenarFamilias,
+    mutationFn: (ids: string[]) => envio.enviar((extra) => ordenarFamilias(ids, extra)),
     onSuccess: (lista) => {
       clientes.setQueryData(CLAVES.familias, lista);
       return clientes.invalidateQueries({ queryKey: CLAVES.productos });
@@ -75,6 +81,7 @@ export function FamiliasLista() {
       cargando={consulta.isPending}
       error={consulta.isError ? consulta.error : null}
       reintentando={consulta.isFetching}
+      pendiente={envio.pendiente}
       onReintentar={() => void consulta.refetch()}
       onCrear={(nombre) => crear.mutateAsync(nombre)}
       onModificar={(id, cambios) => modificar.mutateAsync({ id, cambios })}

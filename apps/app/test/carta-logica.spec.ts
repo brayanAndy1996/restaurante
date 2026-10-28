@@ -232,9 +232,16 @@ describe('cambios de un producto guardado', () => {
 });
 
 describe('tipos de producto', () => {
-  it('hoy solo el simple está habilitado; el combo y el menú del día están definidos para cuando lleguen', () => {
-    expect(TIPOS_HABILITADOS.map((t) => t.valor)).toEqual(['SIMPLE']);
+  it('desde C4 los tres tipos están habilitados, en el orden del selector', () => {
+    expect(TIPOS_HABILITADOS.map((t) => t.valor)).toEqual(['SIMPLE', 'COMBO', 'MENU_DEL_DIA']);
     expect(TIPOS_DE_PRODUCTO.map((t) => t.valor)).toEqual(['SIMPLE', 'COMBO', 'MENU_DEL_DIA']);
+  });
+
+  it('solo un combo o un menú llevan componentes; ninguno lleva estación ni "se vende solo"', () => {
+    const campos = Object.fromEntries(TIPOS_DE_PRODUCTO.map((t) => [t.valor, t.campos]));
+    expect(campos.SIMPLE).toEqual({ seVendeSolo: true, estacion: true, componentes: false });
+    expect(campos.COMBO).toEqual({ seVendeSolo: false, estacion: false, componentes: true });
+    expect(campos.MENU_DEL_DIA).toEqual({ seVendeSolo: false, estacion: false, componentes: true });
   });
 });
 
