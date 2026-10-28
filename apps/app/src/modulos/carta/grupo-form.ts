@@ -189,7 +189,8 @@ export function validarGrupo(estado: EstadoDelGrupo): ErroresDelGrupo {
   }
 
   const opciones = opcionesParaEnviar(estado);
-  if (opciones.length === 0) errores.opciones = 'Agrega al menos una opción, por ejemplo «Término medio»';
+  if (opciones.length === 0)
+    errores.opciones = 'Agrega al menos una opción, por ejemplo «Término medio»';
   else if (opciones.length > MAXIMO_OPCIONES) {
     errores.opciones = `Un grupo admite hasta ${MAXIMO_OPCIONES} opciones`;
   }
