@@ -115,18 +115,15 @@ export type SeccionDeDisponibilidad = 'agotados' | 'menu';
 interface DefinicionDeSeccion {
   valor: SeccionDeDisponibilidad;
   etiqueta: string;
-  /** Si ya existe: con más de una habilitada, el destino muestra el cambio de sección. */
-  habilitada: boolean;
 }
 
 export const SECCIONES_DE_DISPONIBILIDAD: readonly DefinicionDeSeccion[] = [
-  { valor: 'agotados', etiqueta: 'Agotados', habilitada: true },
-  { valor: 'menu', etiqueta: 'Menú del día', habilitada: true },
+  { valor: 'agotados', etiqueta: 'Agotados' },
+  { valor: 'menu', etiqueta: 'Menú del día' },
 ];
 
-export const SECCIONES_HABILITADAS = SECCIONES_DE_DISPONIBILIDAD.filter((s) => s.habilitada);
-
-/** La sección que pide la dirección (`?ver=`); una desconocida o aún no construida cae en la primera habilitada. */
+/** La sección que pide la dirección (`?ver=`); una desconocida cae en la primera. */
 export function seccionDeDisponibilidadPedida(valor: string | null): SeccionDeDisponibilidad {
-  return (SECCIONES_HABILITADAS.find((s) => s.valor === valor) ?? SECCIONES_HABILITADAS[0]!).valor;
+  return (SECCIONES_DE_DISPONIBILIDAD.find((s) => s.valor === valor) ?? SECCIONES_DE_DISPONIBILIDAD[0]!)
+    .valor;
 }

@@ -174,7 +174,7 @@ function RutaDeCarta() {
 }
 
 /**
- * La disponibilidad (menú del día y, en C5, agotados) la gestiona quien tiene `GESTIONAR_DISPONIBILIDAD`
+ * La disponibilidad (agotados y menú del día) la gestiona quien tiene `GESTIONAR_DISPONIBILIDAD`
  * con su rol en la sucursal activa: Cocina/Barra, Supervisor y Administrador. La guarda solo ordena la
  * pantalla: la API decide.
  */

@@ -30,6 +30,27 @@ describe('limpiarMontoEscrito y completarMontoEscrito', () => {
     expect(limpiarMontoEscrito('12.3456')).toBe('12.34');
   });
 
+  it('al pegar un monto con miles ("1,234.50") descarta las comas de miles en vez de truncarlo', () => {
+    expect(limpiarMontoEscrito('1,234.50')).toBe('1234.50');
+    expect(limpiarMontoEscrito('S/ 1,234.5')).toBe('1234.5');
+    expect(limpiarMontoEscrito('12,345,678')).toBe('12345678');
+    expect(limpiarMontoEscrito('1,234,567.8')).toBe('1234567.8');
+  });
+
+  it('si no se sabe cuál es el decimal ("1.234,50", "1,2.50") deja el texto para que la validación avise', () => {
+    expect(limpiarMontoEscrito('1.234,50')).toBe('1.234,50');
+    expect(limpiarMontoEscrito('S/ 1,2.50')).toBe('1,2.50');
+    expect(limpiarMontoEscrito('12,34.5,6')).toBe('12,34.5,6');
+    // Lo que queda no es un monto: ni se completa a 2 decimales ni se acepta.
+    expect(completarMontoEscrito('1.234,50')).toBe('1.234,50');
+  });
+
+  it('una sola coma sigue siendo el decimal del teclado del celular', () => {
+    expect(limpiarMontoEscrito('28,5')).toBe('28.5');
+    expect(limpiarMontoEscrito('1,234')).toBe('1.23');
+    expect(limpiarMontoEscrito('28,')).toBe('28.');
+  });
+
   it('completa a 2 decimales sin pasar por números de coma flotante', () => {
     expect(completarMontoEscrito('28')).toBe('28.00');
     expect(completarMontoEscrito('28.5')).toBe('28.50');
@@ -54,6 +75,20 @@ describe('CampoMonto', () => {
     expect(screen.getByText('S/')).toBeInTheDocument();
     await userEvent.type(campo, 'a2b8,5x');
     expect(campo).toHaveValue('28.5');
+  });
+
+  it('al pegar "1,234.50" queda 1234.50; al pegar "1.234,50" queda tal cual, sin cambiar el valor', async () => {
+    render(<Prueba />);
+    const campo = screen.getByLabelText('Precio');
+    await userEvent.click(campo);
+    await userEvent.paste('1,234.50');
+    expect(campo).toHaveValue('1234.50');
+    await userEvent.clear(campo);
+    await userEvent.paste('1.234,50');
+    expect(campo).toHaveValue('1.234,50');
+    // Al salir no lo "arregla": queda para que la validación del formulario avise.
+    await userEvent.tab();
+    expect(campo).toHaveValue('1.234,50');
   });
 
   it('al salir completa los 2 decimales', async () => {

@@ -9,7 +9,6 @@ import {
 } from '@restaurante/contratos';
 import { CANTIDAD_MAXIMA_COMPONENTE } from '@restaurante/dominio';
 import type { AfectacionIgv, TipoControlStock, TipoProducto } from '@restaurante/dominio';
-import Decimal from 'decimal.js';
 import { comoDecimal, diaConFecha, montoComoTexto } from '../../lib/formato';
 import { definicionDeTipo, tipoEnFrase } from './tipos';
 
@@ -195,7 +194,7 @@ function mismoMonto(a: string | null, b: string): boolean {
   const x = a === null ? null : comoDecimal(a);
   const y = comoDecimal(b);
   if (x === null || y === null) return x === y;
-  return x.equals(new Decimal(y));
+  return x.equals(y);
 }
 
 /**

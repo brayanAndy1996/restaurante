@@ -1,5 +1,6 @@
 import type { ProductoDeVenta } from '@restaurante/contratos';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { estacionGuardada, guardarEstacion } from '../src/lib/almacen';
 import {
   afectadosPorAgotar,
   ayudaDeFila,
@@ -7,14 +8,12 @@ import {
   conAgotado,
   conIntencion,
   contar,
-  estacionRecordada,
   estacionesDe,
   etiquetaDeAgotado,
   filtrarFamilias,
   minutosParaElCorte,
   motivoDeOpcionDelMenu,
   motivoEnPalabras,
-  recordarEstacion,
   textoDeMinutos,
   vistaConIntenciones,
 } from '../src/modulos/disponibilidad/agotados';
@@ -313,11 +312,21 @@ describe('hora de corte (hora de Lima)', () => {
 
 describe('estación recordada', () => {
   it('se guarda por empresa y "todas" es null', () => {
-    expect(estacionRecordada('emp')).toBeNull();
-    recordarEstacion('emp', E2);
-    expect(estacionRecordada('emp')).toBe(E2);
-    expect(estacionRecordada('otra')).toBeNull();
-    recordarEstacion('emp', null);
-    expect(estacionRecordada('emp')).toBeNull();
+    expect(estacionGuardada('emp')).toBeNull();
+    guardarEstacion('emp', E2);
+    expect(estacionGuardada('emp')).toBe(E2);
+    expect(estacionGuardada('otra')).toBeNull();
+    guardarEstacion('emp', null);
+    expect(estacionGuardada('emp')).toBeNull();
+  });
+
+  it('un almacenamiento bloqueado no rompe nada', () => {
+    const bloqueado = () => {
+      throw new DOMException('bloqueado', 'SecurityError');
+    };
+    vi.spyOn(Storage.prototype, 'getItem').mockImplementation(bloqueado);
+    vi.spyOn(Storage.prototype, 'setItem').mockImplementation(bloqueado);
+    expect(() => guardarEstacion('emp', E2)).not.toThrow();
+    expect(estacionGuardada('emp')).toBeNull();
   });
 });

@@ -8,7 +8,7 @@ import {
 import { describe, expect, it } from 'vitest';
 import { diaConFecha, montoEsCero, sumarDiasAFecha } from '../src/lib/formato';
 import {
-  SECCIONES_HABILITADAS,
+  SECCIONES_DE_DISPONIBILIDAD,
   seccionDeDisponibilidadPedida,
 } from '../src/modulos/disponibilidad/disponibilidad';
 import {
@@ -529,11 +529,11 @@ describe('menú del día: repetir las de otro día', () => {
 });
 
 describe('secciones de Disponibilidad', () => {
-  it('con C5 están construidas "Agotados" (la primera) y el menú del día', () => {
-    expect(SECCIONES_HABILITADAS.map((s) => s.valor)).toEqual(['agotados', 'menu']);
+  it('las secciones son "Agotados" (la primera) y el menú del día', () => {
+    expect(SECCIONES_DE_DISPONIBILIDAD.map((s) => s.valor)).toEqual(['agotados', 'menu']);
   });
 
-  it('una sección desconocida o ausente cae en la primera habilitada', () => {
+  it('una sección desconocida o ausente cae en la primera', () => {
     expect(seccionDeDisponibilidadPedida(null)).toBe('agotados');
     expect(seccionDeDisponibilidadPedida('agotados')).toBe('agotados');
     expect(seccionDeDisponibilidadPedida('menu')).toBe('menu');

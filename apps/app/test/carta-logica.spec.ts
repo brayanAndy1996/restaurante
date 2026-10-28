@@ -123,6 +123,12 @@ describe('validación del formulario de producto', () => {
     expect(validarProducto(lleno({ precio: '28.5' })).precio).toBeUndefined();
   });
 
+  it('un precio pegado con coma y punto dudosos ("1.234,50") no se acepta: la validación avisa', () => {
+    expect(validarProducto(lleno({ precio: '1.234,50' })).precio).toBe(
+      'Escribe un monto válido, por ejemplo 28.50',
+    );
+  });
+
   it('si no se vende solo no pide el precio', () => {
     expect(validarProducto(lleno({ seVendeSolo: false, precio: '' })).precio).toBeUndefined();
   });

@@ -12,21 +12,24 @@
 - `apps/api`:
   - `src/modulos/carta/` (nuevo): dueño de `estacion`, `familia`, `producto`, `producto_sucursal`, `producto_agotado`, `grupo_modificadores`, `modificador`, `producto_grupo`, `componente_combo` y `menu_del_dia_opcion`. Ver "Estructura del módulo".
   - `src/nucleo/eventos/` (nuevo): `PUBLICADOR_EVENTOS`, interfaz `PublicadorEventos`, `PublicadorNulo`, `PublicadorEnMemoria`.
-  - `src/nucleo/archivos/` (nuevo): `ALMACEN_ARCHIVOS`, interfaz `AlmacenArchivos`, `AlmacenEnMemoria`, `AlmacenEnDisco`, `AlmacenR2`, y `leerImagen(buffer)` (formato y dimensiones por los primeros bytes).
+  - `src/nucleo/archivos/` (nuevo): `ALMACEN_ARCHIVOS`, interfaz `AlmacenArchivos`, `AlmacenEnMemoria`, `AlmacenEnDisco`, `AlmacenR2`, `crearAlmacenDeEntorno`, `leerImagen(buffer)` (formato y dimensiones por los primeros bytes) y `cuerpo-binario.ts` (`analizadorBinarioDeFoto`, `LIMITE_FOTO_BYTES`: el analizador de cuerpo binario de 1 MB, solo para `PUT /carta/productos/:id/foto`; ver "Fotos").
+  - `src/nucleo/errores/`: `ErrorAplicacion` gana el parámetro opcional `detalle` (`DetalleDeError`: `usadoEn` o `seQuita`), y `FiltroGlobalErrores` copia `detalle.usadoEn` y `detalle.seQuita` al cuerpo de la respuesta, como ya hacía con `reintentarEnSegundos` (criterios 10b y 10c).
   - `src/modulos/plataforma/sucursales-consulta.service.ts`: método `horaCorte(sucursalId, transaccion?)`.
   - `src/modulos/seguridad/`: sin cambios; `CartaModule` importa `SeguridadModule` para usar `SesionesService.sucursalesElegibles(usuarioId, esAdministrador)` (ya exportado), que da el rol de la persona en cada sucursal (criterio 19b).
-  - `src/aplicacion.ts`: opciones `publicadorEventos` y `almacenArchivos` de `crearAplicacion`; analizador de cuerpo binario solo para `PUT /carta/productos/:id/foto`; CORS con `If-None-Match` y `ETag`; servidor estático de `/archivos` solo en desarrollo con el almacén en disco.
+  - `src/aplicacion.ts`: opciones `publicadorEventos` y `almacenArchivos` de `crearAplicacion`; `analizadorBinarioDeFoto()` montado antes de los analizadores de JSON; CORS con `If-None-Match` y `ETag`; servidor estático de `/archivos` (Express, fuera del enrutador de Nest) solo con `NODE_ENV=development`, `ARCHIVOS_DRIVER=disco` y sin un almacén inyectado por `crearAplicacion`.
   - `src/config/entorno.ts`: `ARCHIVOS_DRIVER`, `ARCHIVOS_DIRECTORIO`, `ARCHIVOS_URL_PUBLICA`, `R2_*`.
   - `src/migraciones/`: cinco migraciones (ver "Migraciones").
   - `src/app.module.ts`: `CartaModule`.
   - `test/carta/`: pruebas no protegidas del desarrollador; las protegidas van en `test/carta-critica/` (ver `tasks.md`).
 - `apps/app`:
-  - `src/modulos/carta/` (Administrador): `CartaPagina` con segmentos, `ProductosLista`, `ProductoFormularioPagina`, `PrecioPorSucursal`, `FotoDeProducto`, `FamiliasLista`, `EstacionesLista`, `GruposLista`, `GrupoFormularioPagina`, `carta.ts` (consultas y mutaciones de TanStack Query).
-  - `src/modulos/disponibilidad/` (Cocina/Barra, Supervisor, Administrador): `DisponibilidadPagina` con segmentos "Agotados" y "Menú del día", `vista-sucursal.ts` (consulta con `ETag` y refresco cada 15 s).
-  - `src/lib/api.ts`: cuerpo binario (`Blob` con su `Content-Type`), `If-None-Match` y respuesta 304.
+  - `src/modulos/carta/` (Administrador y Cajero): `CartaPagina` y `MarcoDeCarta` (título, segmentos por `?ver=` y acción principal de cada sección), `ListaDeCatalogo` (lista común de familias y estaciones: alta, edición, desactivar y ordenar en la misma pantalla), `ProductosLista`, `ProductoFormularioPagina` (con `SelectorDeTipo`, `GruposDelProducto`, `ComponentesDelCombo` y `VistaPreviaDeCombo`, que calcula "Precio con estas opciones" con `calcularLinea`), `PrecioPorSucursal`, `FotoDeProducto`, `FamiliasLista`, `EstacionesLista`, `GruposLista`, `GrupoFormularioPagina` y `GrupoFormulario`, los ayudantes de formulario (`producto-form.ts`, `grupo-form.ts`, `sucursales-form.ts`, `useFormularioDeGrupo.ts`, `tipos.ts`) y `carta.ts` (consultas y mutaciones de TanStack Query).
+  - `src/modulos/disponibilidad/` (Cocina/Barra, Supervisor, Administrador): `DisponibilidadPagina` con segmentos "Agotados" (`AgotadosSeccion`, `agotados.ts`) y "Menú del día" (`MenuDelDiaSeccion`, `menu-del-dia.ts`); `disponibilidad.ts` (claves de consulta, llamadas a la API y hora de corte con `GET /sucursales/:id`) y `useVistaDeSucursal.ts` (la vista de la sucursal con `ETag` y refresco cada 15 s, compartida por los dos segmentos).
+  - `src/lib/api.ts`: cuerpo binario (`Blob` con su `Content-Type`), `consultarSiCambio` (`If-None-Match` y respuesta 304) e `Idempotency-Key` reutilizable entre intentos.
+  - `src/lib/envios.ts`: `enviarSinPerder` y `useEnvioPendiente`, la cola en memoria de "Pendiente de envío" (ver "PWA").
+  - `src/componentes/PendienteDeEnvio.tsx`: `EtiquetaPendiente`, `PendienteDeEnvio` y `AvisoPendiente`, el mismo texto "Pendiente de envío" en filas y formularios.
   - `src/lib/imagen.ts`: reducir una foto en el navegador.
   - `src/App.tsx` y `src/componentes/AppLayout.tsx`: rutas `/carta…` y `/disponibilidad` y sus destinos, según `permisos` (el Cajero ve "Carta"; el segmento "Estaciones", solo con `ADMINISTRAR`).
-- `packages/ui`: componentes nuevos si hacen falta, con la skill `impeccable`: `CampoMonto` (teclado decimal, `S/` delante, cifras tabulares), `FilaOrdenable` (subir y bajar de 48 px), `Casilla` grande, `SelectorDeFoto`, `AvisoDeshacer`. Se reutilizan `Interruptor`, `Segmentos`, `Hoja`, `Lista`, `Estados`, `Aviso`, `EtiquetaDeEstado`.
+- `packages/ui`: componentes nuevos con la skill `impeccable`: `CampoMonto` (teclado decimal, `S/` delante, cifras tabulares), `FilaOrdenable` (subir y bajar de 48 px), `Casilla` grande y `SelectorDeFoto`. No hay un `AvisoDeshacer`: el aviso "… está agotado · Deshacer" lo dibuja `AgotadosSeccion` en la PWA. Se reutilizan `Interruptor`, `Segmentos`, `Hoja`, `Lista`, `Estados`, `Aviso`, `EtiquetaDeEstado`.
 - `.env.example`, `README.md`: variables nuevas y cómo ver las fotos en desarrollo.
 
 ## Diseño
@@ -45,22 +48,33 @@ apps/api/src/modulos/carta/
   menu-del-dia.controller.ts / menu-del-dia.service.ts
   disponibilidad.controller.ts / carta-disponibilidad.service.ts   (agotados; exportado para la sección 6)
   vista-sucursal.controller.ts / carta-venta.service.ts   (vista, ETag y prepararLinea; exportado para 3 y 5)
-  cargador-carta.ts                                       (consultas fijas de la vista; ver abajo)
+  cargador-carta.ts                                       (las seis consultas fijas de la vista; ver abajo)
+  armador-carta.ts                                        (arma productoDeVenta y la vista con lo cargado; puro, sin consultas)
+  disponibilidad-carta.ts                                 (la única regla de "disponible como parte": vista y menú del día)
+  etag-carta.ts                                           (JSON canónico, ETag fuerte e If-None-Match)
+  util-carta.ts                                           (diferencias para la auditoría, sinCambioDeOrden, sumarDias, aIso)
   referencias.ts                                          (validación de ids de la empresa y su tipo)
-  permisos-carta.ts                                       (rol en la sucursal ajustada: puedeAjustarSucursal, exigirAjustarSucursal)
+  permisos-carta.ts                                       (clase inyectable PermisosCarta: rol en la sucursal ajustada)
   cambio-tipo.ts                                          (qué se quita y dónde se usa al cambiar el tipo; criterios 10b y 10c)
-  eventos-carta.ts                                        (arma y registra los eventos con alConfirmar)
-  errores-carta.ts
+  eventos-carta.ts                                        (clase EventosCarta: arma y registra los eventos con alConfirmar)
+  errores-carta.ts                                        (errores del módulo, incluidos ErrorProductoNoVendible y ErrorSeleccionInvalida)
 ```
+
+Fuera del módulo, `nucleo/archivos/cuerpo-binario.ts` lee el cuerpo de la foto y `aplicacion.ts` monta el servidor estático de `/archivos` solo en desarrollo (ver "Fotos").
 
 - Todo corre dentro del contexto de empresa que abre el interceptor global (002), con el actor de la sesión; los servicios usan la transacción del contexto. Ningún servicio consulta tablas de otros módulos: las sucursales se leen con `SucursalesConsultaService` (`existen`, `listar`, `horaCorte`) y la auditoría se escribe con `AuditoriaService.registrar`.
 - `CartaModule` exporta `CartaVentaService` y `CartaDisponibilidadService`; nada más.
-- Los controladores aplican `@Permiso('EDITAR_CARTA')`, `@Permiso('ADMINISTRAR')` (solo `POST` y `PATCH` de estaciones) o `@Permiso('GESTIONAR_DISPONIBILIDAD')` + `@RequiereSucursal()` según la tabla de endpoints; `GET /carta/sucursal` solo `@RequiereSucursal()`. Los `POST` llevan `@Idempotente()`. `PermisoInterceptor` (002) evalúa la acción con el rol de la sucursal activa y responde 409 `SUCURSAL_NO_ELEGIDA` si no hay rol (un Cajero sin sucursal activa); el Administrador tiene rol sin sucursal activa.
+- Los controladores aplican `@Permiso('EDITAR_CARTA')`, `@Permiso('ADMINISTRAR')` (solo `POST` y `PATCH` de estaciones) o `@Permiso('GESTIONAR_DISPONIBILIDAD')` + `@RequiereSucursal()` según la tabla de endpoints; `GET /carta/sucursal` solo `@RequiereSucursal()`. Los `POST` llevan `@Idempotente()`. `PUT /carta/productos/:id/foto` es además `@SinEmpresa()`: el interceptor no abre la transacción de la petición y el servicio abre las suyas (ver "Fotos"); `@Permiso('EDITAR_CARTA')` se evalúa igual. `PermisoInterceptor` (002) evalúa la acción con el rol de la sucursal activa y responde 409 `SUCURSAL_NO_ELEGIDA` si no hay rol (un Cajero sin sucursal activa); el Administrador tiene rol sin sucursal activa.
 
 ### Permiso por sucursal ajustada (criterio 19b, ruta crítica)
 
-- `permisos-carta.ts` expone `puedeAjustarSucursal(sucursalId)` y `exigirAjustarSucursal(sucursalId)` (403 `PROHIBIDO`). Con el principal actual: si `esAdministrador` (incluidos el soporte y el principal de prueba), sí; si no, lee el rol con `SesionesService.sucursalesElegibles(usuarioId, false)` dentro de la transacción de la petición y devuelve `requisitoPermiso(rol, 'EDITAR_CARTA') === 'permitido'` (sin rol en esa sucursal, no). La regla sale de la matriz: no hay una lista aparte de roles que ajustan precios.
-- La usan: `PUT /carta/productos/:id/sucursales/:sucursalId` (después de comprobar que el producto y la sucursal existen en la empresa, para que un id de B responda 404 igual que uno inexistente, y antes de leer o escribir `producto_sucursal`); `POST /carta/productos` para cada sucursal de `noDisponibleEn` (después de validar las referencias, 422); y `GET /carta/productos/:id/sucursales` para calcular `editable` con una sola lectura de los roles.
+- `permisos-carta.ts` define `PermisosCarta`, una clase `@Injectable()` (proveedor de `CartaModule`) que recibe `SesionActual` y `SesionesService`. Sus métodos:
+  - `sucursalesAjustables()`: `'todas'` si el principal es `esAdministrador` (incluidos el soporte y el principal de prueba); si no, el conjunto de ids (en minúsculas) de las sucursales donde `requisitoPermiso(rol, 'EDITAR_CARTA') === 'permitido'`, con el rol leído por `SesionesService.sucursalesElegibles(usuarioId, false)` dentro de la transacción de la petición. Sin usuario, conjunto vacío. Es una sola lectura de los roles.
+  - `puedeAjustarSucursal(sucursalId)`: `true` si la sucursal está en ese conjunto (o son `'todas'`). Compara en minúsculas.
+  - `exigirAjustarSucursal(sucursalId)`: 403 `PROHIBIDO` con el mensaje del criterio 19b si no puede.
+  - `exigirAjustarSucursales(sucursalIds)`: lo mismo para una lista, con una sola lectura de los roles (`noDisponibleEn` del alta).
+  La regla sale de la matriz: no hay una lista aparte de roles que ajustan precios.
+- La usan: `PUT /carta/productos/:id/sucursales/:sucursalId` (`exigirAjustarSucursal`, después de comprobar que el producto y la sucursal existen en la empresa, para que un id de B responda 404 igual que uno inexistente, y antes de leer o escribir `producto_sucursal`); `POST /carta/productos` (`exigirAjustarSucursales` con `noDisponibleEn`, después de validar las referencias, 422); y `GET /carta/productos/:id/sucursales` (`sucursalesAjustables`, para calcular `editable` con una sola lectura de los roles).
 - Se lee en cada petición, así que un cambio de rol hecho por el Administrador vale desde la siguiente (criterio 6 de 002).
 
 ### Escrituras de configuración
@@ -75,6 +89,12 @@ apps/api/src/modulos/carta/
 - **`EN_USO`:** antes de desactivar una estación, una familia o un grupo, se cuentan los productos activos que los usan, con la fila bloqueada `FOR UPDATE`, para que una creación concurrente no se cuele (la creación de un producto lee la familia y la estación con `FOR SHARE`).
 - **Orden:** `PUT …/orden` bloquea las filas de la empresa (familias) o de la familia (productos) con `FOR UPDATE`, comprueba que `ids` sea exactamente ese conjunto y reescribe `orden` = posición. Un producto o una familia nuevos toman `max(orden) + 1` con la misma fila de la familia bloqueada.
 - **Reglas sobre el resultado:** las reglas del criterio 7 se comprueban sobre el resultado de mezclar lo guardado con lo enviado, en el orden de rechazos del criterio 10.
+- **Orden de bloqueo:** familia, estación, grupos, producto y, al final, componentes. Dos transacciones que toman las mismas filas en el mismo orden se esperan pero no se bloquean mutuamente (un abrazo mortal lo corta PostgreSQL abortando una de las dos, que respondería 500). Cada paso del orden sale de quién bloquea qué:
+  - **Familia antes que producto:** `ordenarDeFamilia` bloquea la familia `FOR UPDATE` y después sus productos; el alta y el cambio de familia toman la familia `FOR UPDATE` para calcular `max(orden) + 1`.
+  - **Estación antes que producto:** desactivar una estación la bloquea `FOR UPDATE` y cuenta los productos activos sin bloquearlos; el alta lee la estación `FOR SHARE` antes de insertar. En el `PATCH` la estación se lee `FOR SHARE` después del producto, lo que no forma un ciclo porque quien tiene una estación bloqueada nunca espera a un producto.
+  - **Grupos antes que producto:** `GruposService.modificar` bloquea el grupo y sus modificadores `FOR UPDATE` y después lee sus productos ligados `FOR SHARE`. Si el `PATCH` de un producto tomara primero el producto `FOR UPDATE` y después el grupo `FOR SHARE`, un producto que es el ligado de un grupo que se le asigna formaría un ciclo. Por eso `ProductosService.bloquearEnOrden` toma, antes de leer el producto, la familia de destino (si cambia o se reactiva) y los grupos del cuerpo (y los guardados, si se reactiva), ordenados por id.
+  - **Componentes después del producto:** el `PATCH` de un combo bloquea el combo `FOR UPDATE` y después lee sus componentes `FOR SHARE` (`referencias.ts`). Un componente es `SIMPLE`, así que no bloquea nada más. La excepción es un cambio de tipo cruzado (X pasa a combo con Y como componente mientras Y pasa a combo con X): cada uno tiene su producto y espera al otro. Es una falla de la ronda 1 de T30 y está en corrección.
+- **Bloqueos que no frenan las llaves foráneas:** el ajuste por sucursal y el armado del menú del día bloquean el producto `FOR NO KEY UPDATE` y no `FOR UPDATE`. Así se serializan entre sí (el antes de la auditoría es exacto) y con un `PATCH` o un cambio de tipo (`FOR UPDATE`), pero no frenan las inserciones de filas hijas que solo comprueban la llave foránea del producto (`FOR KEY SHARE`), como otro ajuste en otra sucursal o un agotado.
 
 ### Cambio de tipo (criterios 10b a 10d)
 

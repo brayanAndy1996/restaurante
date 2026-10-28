@@ -274,25 +274,3 @@ export function cercaDelCorte(horaCorte: string, ahora: Date): boolean {
   const faltan = minutosParaElCorte(horaCorte, ahora);
   return faltan > 0 && faltan <= MINUTOS_DE_AVISO_DE_CORTE;
 }
-
-// --- Estación recordada en el equipo ------------------------------------------------------------------
-
-const prefijoDeEstacion = 'restaurante.disponibilidad.estacion.';
-
-/** La última estación elegida en este equipo para la empresa; `null` = todas. Un almacenamiento bloqueado no rompe nada. */
-export function estacionRecordada(empresaId: string): string | null {
-  try {
-    const guardada = localStorage.getItem(`${prefijoDeEstacion}${empresaId}`);
-    return guardada && guardada !== 'todas' ? guardada : null;
-  } catch {
-    return null;
-  }
-}
-
-export function recordarEstacion(empresaId: string, estacionId: string | null): void {
-  try {
-    localStorage.setItem(`${prefijoDeEstacion}${empresaId}`, estacionId ?? 'todas');
-  } catch {
-    // Almacenamiento lleno o bloqueado (modo privado): el filtro vale solo en esta pantalla.
-  }
-}

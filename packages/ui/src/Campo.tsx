@@ -234,13 +234,27 @@ export function CampoAreaTexto({
   );
 }
 
+/** Miles con coma ("1,234,567" o "1,234.50"): grupos de exactamente tres cifras y, a lo más, un punto decimal. */
+const MILES_CON_COMA = /^\d{1,3}(,\d{3})+(\.\d*)?$/;
+
 /**
  * Limpia lo que se escribe en un campo de monto: solo dígitos y un separador decimal, con la coma del
  * teclado de algunos celulares convertida en punto, hasta 8 enteros y 2 decimales. Es texto, no
  * aritmética: el valor sigue siendo el texto decimal que viaja a la API ("28.5", nunca un número).
+ *
+ * Al pegar un monto con separador de miles no se cambia su valor en silencio:
+ * - "1,234.50" y "1,234,567" (comas en grupos de tres, con punto decimal o con más de una coma) se
+ *   leen como miles y las comas se descartan ("1234.50");
+ * - si trae coma y punto de otra forma ("1.234,50", "1,2.50"), no se sabe cuál es el decimal: el texto
+ *   se deja como llegó (solo dígitos, comas y puntos) y la validación del formulario avisa.
+ * Una sola coma ("28,5", "1,234") sigue siendo el decimal del teclado del celular.
  */
 export function limpiarMontoEscrito(texto: string): string {
-  const normalizado = texto.replace(/,/g, '.').replace(/[^\d.]/g, '');
+  const crudo = texto.replace(/[^\d.,]/g, '');
+  const comas = crudo.split(',').length - 1;
+  const conMiles = MILES_CON_COMA.test(crudo) && (crudo.includes('.') || comas > 1);
+  if (!conMiles && comas > 0 && crudo.includes('.')) return crudo.slice(0, 24);
+  const normalizado = conMiles ? crudo.replace(/,/g, '') : crudo.replace(/,/g, '.');
   const primero = normalizado.indexOf('.');
   if (primero === -1) return normalizado.slice(0, 8);
   const enteros = normalizado.slice(0, primero).slice(0, 8);

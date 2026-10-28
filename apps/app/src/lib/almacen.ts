@@ -5,6 +5,7 @@
  *   del navegador: son lo que permite entrar después con PIN.
  * - Token de la sesión de empresa (`se.…`) y de superadministrador (`sa.…`): `sessionStorage`, así
  *   mueren con la pestaña.
+ * - Preferencias del equipo (la estación elegida en Disponibilidad): `localStorage`.
  *
  * La PWA nunca guarda un PIN ni una contraseña.
  */
@@ -13,6 +14,7 @@ const CLAVE_EQUIPOS = 'restaurante.equipos';
 const CLAVE_SESION = 'restaurante.sesion';
 const CLAVE_PLATAFORMA = 'restaurante.plataforma';
 const CLAVE_SOPORTE = 'restaurante.soporte';
+const PREFIJO_ESTACION = 'restaurante.disponibilidad.estacion.';
 
 export type Ambito = 'empresa' | 'plataforma';
 
@@ -138,4 +140,28 @@ export function borrarSoporteEnCurso(): void {
 /** Token según el ámbito de la petición. */
 export function tokenDe(ambito: Ambito): string | null {
   return ambito === 'plataforma' ? (sesionDePlataforma()?.token ?? null) : tokenDeSesion();
+}
+
+// --- Preferencias de este equipo -----------------------------------------------------------------------
+
+/**
+ * La última estación elegida en Disponibilidad para la empresa; `null` = todas. Es una preferencia del
+ * equipo (`localStorage`), no una credencial. Un almacenamiento bloqueado no rompe nada.
+ */
+export function estacionGuardada(empresaId: string): string | null {
+  try {
+    const guardada = local()?.getItem(`${PREFIJO_ESTACION}${empresaId}`);
+    return guardada && guardada !== 'todas' ? guardada : null;
+  } catch {
+    return null;
+  }
+}
+
+export function guardarEstacion(empresaId: string, estacionId: string | null): void {
+  // Almacenamiento lleno o bloqueado (modo privado): el filtro vale solo en esta pantalla.
+  try {
+    local()?.setItem(`${PREFIJO_ESTACION}${empresaId}`, estacionId ?? 'todas');
+  } catch {
+    // Sin almacenamiento no hay nada que recordar.
+  }
 }

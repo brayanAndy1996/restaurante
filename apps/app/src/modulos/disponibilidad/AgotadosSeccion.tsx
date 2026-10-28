@@ -26,6 +26,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useRef, useState, type ComponentType, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { EtiquetaPendiente } from '../../componentes/PendienteDeEnvio';
+import { estacionGuardada, guardarEstacion } from '../../lib/almacen';
 import { ahoraDelServidor } from '../../lib/api';
 import { useEnvioPendiente } from '../../lib/envios';
 import { ErrorApi, mensajeDeError } from '../../lib/errores';
@@ -38,12 +39,10 @@ import {
   cercaDelCorte,
   conAgotadoConfirmado,
   contar,
-  estacionRecordada,
   etiquetaDeAgotado,
   filtrarFamilias,
   minutosParaElCorte,
   motivoEnPalabras,
-  recordarEstacion,
   textoDeMinutos,
   vistaConIntenciones,
   type Intencion,
@@ -134,7 +133,7 @@ export function AgotadosSeccion({
   const corte = horaDeCorte.data ?? null;
 
   const [estacionElegida, setEstacionElegida] = useState<string | null>(() =>
-    estacionRecordada(empresaId),
+    estacionGuardada(empresaId),
   );
   const [texto, setTexto] = useState('');
   const [soloAgotados, setSoloAgotados] = useState(false);
@@ -179,7 +178,7 @@ export function AgotadosSeccion({
   function elegirEstacion(valor: string) {
     const siguiente = valor === 'todas' ? null : valor;
     setEstacionElegida(siguiente);
-    recordarEstacion(empresaId, siguiente);
+    guardarEstacion(empresaId, siguiente);
   }
 
   function ajustarPendiente(productoId: string, esperando: boolean) {

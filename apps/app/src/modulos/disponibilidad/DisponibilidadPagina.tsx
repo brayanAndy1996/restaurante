@@ -3,7 +3,7 @@ import type { ReactNode } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Pagina } from '../../componentes/Pagina';
 import {
-  SECCIONES_HABILITADAS,
+  SECCIONES_DE_DISPONIBILIDAD,
   seccionDeDisponibilidadPedida,
   type SeccionDeDisponibilidad,
 } from './disponibilidad';
@@ -11,8 +11,7 @@ import { AgotadosSeccion } from './AgotadosSeccion';
 import { MenuDelDiaSeccion } from './MenuDelDiaSeccion';
 
 /**
- * Marco del destino "Disponibilidad": título, el cambio de sección arriba (solo cuando hay más de una
- * sección) y, abajo, la acción fija de la sección (guardar el menú, deshacer un agotado).
+ * Marco del destino "Disponibilidad": título, el cambio de sección arriba y, abajo, la acción fija de la sección (guardar el menú, deshacer un agotado).
  */
 export function MarcoDeDisponibilidad({
   actual,
@@ -24,22 +23,20 @@ export function MarcoDeDisponibilidad({
   children: ReactNode;
 }) {
   const navegar = useNavigate();
-  const opciones: OpcionDeSegmento<SeccionDeDisponibilidad>[] = SECCIONES_HABILITADAS.map((s) => ({
+  const opciones: OpcionDeSegmento<SeccionDeDisponibilidad>[] = SECCIONES_DE_DISPONIBILIDAD.map((s) => ({
     valor: s.valor,
     etiqueta: s.etiqueta,
   }));
   return (
     <Pagina titulo="Disponibilidad" ancho="ancho" {...(pie ? { pie } : {})}>
-      {opciones.length > 1 ? (
-        <div className="carta__secciones">
-          <Segmentos
-            etiqueta="Secciones de disponibilidad"
-            opciones={opciones}
-            valor={actual}
-            onCambio={(valor) => navegar(`/disponibilidad?ver=${valor}`, { replace: true })}
-          />
-        </div>
-      ) : null}
+      <div className="carta__secciones">
+        <Segmentos
+          etiqueta="Secciones de disponibilidad"
+          opciones={opciones}
+          valor={actual}
+          onCambio={(valor) => navegar(`/disponibilidad?ver=${valor}`, { replace: true })}
+        />
+      </div>
       {children}
     </Pagina>
   );
