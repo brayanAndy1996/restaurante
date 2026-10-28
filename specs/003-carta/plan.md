@@ -3,16 +3,18 @@
 ## Módulos afectados
 
 - `packages/dominio`:
+  - `src/permisos.ts` (ruta crítica, decisión 5): una sola celda cambia en `MATRIZ`: `EDITAR_CARTA: [X, X, X, X, P]` pasa a `EDITAR_CARTA: [X, P, X, X, P]` (Mozo, Cajero, Cocina/Barra, Supervisor, Administrador). No se agregan acciones ni funciones; `largoPin` no cambia (el Cajero ya tiene PIN de 6). La cambia backend en la fase C (T6b), después de que test-writer ajusta las pruebas protegidas de 002 que afirman la celda anterior (P0 de `tasks.md`).
   - `src/carta/catalogos.ts`: tipos de producto, tipos de control de stock, afectaciones, selección, `HASTA_AGOTADO`, `ORIGENES_AGOTADO`, motivos de no vendible, errores de selección y límites (`CANTIDAD_MAXIMA_LINEA`, `CANTIDAD_MAXIMA_COMPONENTE`).
   - `src/carta/precios.ts` (ruta crítica): `precioEfectivo`, `validarSeleccion`, `calcularLinea`, con `decimal.js` (dependencia nueva del paquete, la misma versión fija que usa `apps/app`).
   - `src/carta/disponibilidad.ts`: `agotadoVigente`, `vendibilidad`.
   - Pruebas unitarias en `test/carta/`.
-- `packages/contratos`: `src/carta.ts` (esquemas de la sección "Contrato" de `spec.md`), `montoNoNegativoSchema` en `src/comunes.ts`, códigos nuevos en `src/errores.ts`.
+- `packages/contratos`: `src/carta.ts` (esquemas de la sección "Contrato" de `spec.md`, con `tipo?` y `confirmarPerdida?` en `productoModificarEntrada`, `editable` en `ajusteSucursalRespuesta`, y `usadoEn` y `seQuita`), `montoNoNegativoSchema` en `src/comunes.ts`, códigos nuevos en `src/errores.ts` (incluido `CONFIRMACION_REQUERIDA`) y los campos opcionales `usadoEn` y `seQuita` en `errorRespuestaSchema`.
 - `apps/api`:
   - `src/modulos/carta/` (nuevo): dueño de `estacion`, `familia`, `producto`, `producto_sucursal`, `producto_agotado`, `grupo_modificadores`, `modificador`, `producto_grupo`, `componente_combo` y `menu_del_dia_opcion`. Ver "Estructura del módulo".
   - `src/nucleo/eventos/` (nuevo): `PUBLICADOR_EVENTOS`, interfaz `PublicadorEventos`, `PublicadorNulo`, `PublicadorEnMemoria`.
   - `src/nucleo/archivos/` (nuevo): `ALMACEN_ARCHIVOS`, interfaz `AlmacenArchivos`, `AlmacenEnMemoria`, `AlmacenEnDisco`, `AlmacenR2`, y `leerImagen(buffer)` (formato y dimensiones por los primeros bytes).
   - `src/modulos/plataforma/sucursales-consulta.service.ts`: método `horaCorte(sucursalId, transaccion?)`.
+  - `src/modulos/seguridad/`: sin cambios; `CartaModule` importa `SeguridadModule` para usar `SesionesService.sucursalesElegibles(usuarioId, esAdministrador)` (ya exportado), que da el rol de la persona en cada sucursal (criterio 19b).
   - `src/aplicacion.ts`: opciones `publicadorEventos` y `almacenArchivos` de `crearAplicacion`; analizador de cuerpo binario solo para `PUT /carta/productos/:id/foto`; CORS con `If-None-Match` y `ETag`; servidor estático de `/archivos` solo en desarrollo con el almacén en disco.
   - `src/config/entorno.ts`: `ARCHIVOS_DRIVER`, `ARCHIVOS_DIRECTORIO`, `ARCHIVOS_URL_PUBLICA`, `R2_*`.
   - `src/migraciones/`: cinco migraciones (ver "Migraciones").
@@ -23,7 +25,7 @@
   - `src/modulos/disponibilidad/` (Cocina/Barra, Supervisor, Administrador): `DisponibilidadPagina` con segmentos "Agotados" y "Menú del día", `vista-sucursal.ts` (consulta con `ETag` y refresco cada 15 s).
   - `src/lib/api.ts`: cuerpo binario (`Blob` con su `Content-Type`), `If-None-Match` y respuesta 304.
   - `src/lib/imagen.ts`: reducir una foto en el navegador.
-  - `src/App.tsx` y `src/componentes/AppLayout.tsx`: rutas `/carta…` y `/disponibilidad` y sus destinos, según `permisos`.
+  - `src/App.tsx` y `src/componentes/AppLayout.tsx`: rutas `/carta…` y `/disponibilidad` y sus destinos, según `permisos` (el Cajero ve "Carta"; el segmento "Estaciones", solo con `ADMINISTRAR`).
 - `packages/ui`: componentes nuevos si hacen falta, con la skill `impeccable`: `CampoMonto` (teclado decimal, `S/` delante, cifras tabulares), `FilaOrdenable` (subir y bajar de 48 px), `Casilla` grande, `SelectorDeFoto`, `AvisoDeshacer`. Se reutilizan `Interruptor`, `Segmentos`, `Hoja`, `Lista`, `Estados`, `Aviso`, `EtiquetaDeEstado`.
 - `.env.example`, `README.md`: variables nuevas y cómo ver las fotos en desarrollo.
 
@@ -45,18 +47,26 @@ apps/api/src/modulos/carta/
   vista-sucursal.controller.ts / carta-venta.service.ts   (vista, ETag y prepararLinea; exportado para 3 y 5)
   cargador-carta.ts                                       (consultas fijas de la vista; ver abajo)
   referencias.ts                                          (validación de ids de la empresa y su tipo)
+  permisos-carta.ts                                       (rol en la sucursal ajustada: puedeAjustarSucursal, exigirAjustarSucursal)
+  cambio-tipo.ts                                          (qué se quita y dónde se usa al cambiar el tipo; criterios 10b y 10c)
   eventos-carta.ts                                        (arma y registra los eventos con alConfirmar)
   errores-carta.ts
 ```
 
 - Todo corre dentro del contexto de empresa que abre el interceptor global (002), con el actor de la sesión; los servicios usan la transacción del contexto. Ningún servicio consulta tablas de otros módulos: las sucursales se leen con `SucursalesConsultaService` (`existen`, `listar`, `horaCorte`) y la auditoría se escribe con `AuditoriaService.registrar`.
 - `CartaModule` exporta `CartaVentaService` y `CartaDisponibilidadService`; nada más.
-- Los controladores aplican `@Permiso('EDITAR_CARTA')` o `@Permiso('GESTIONAR_DISPONIBILIDAD')` + `@RequiereSucursal()` según la tabla de endpoints; `GET /carta/sucursal` solo `@RequiereSucursal()`. Los `POST` llevan `@Idempotente()`.
+- Los controladores aplican `@Permiso('EDITAR_CARTA')`, `@Permiso('ADMINISTRAR')` (solo `POST` y `PATCH` de estaciones) o `@Permiso('GESTIONAR_DISPONIBILIDAD')` + `@RequiereSucursal()` según la tabla de endpoints; `GET /carta/sucursal` solo `@RequiereSucursal()`. Los `POST` llevan `@Idempotente()`. `PermisoInterceptor` (002) evalúa la acción con el rol de la sucursal activa y responde 409 `SUCURSAL_NO_ELEGIDA` si no hay rol (un Cajero sin sucursal activa); el Administrador tiene rol sin sucursal activa.
+
+### Permiso por sucursal ajustada (criterio 19b, ruta crítica)
+
+- `permisos-carta.ts` expone `puedeAjustarSucursal(sucursalId)` y `exigirAjustarSucursal(sucursalId)` (403 `PROHIBIDO`). Con el principal actual: si `esAdministrador` (incluidos el soporte y el principal de prueba), sí; si no, lee el rol con `SesionesService.sucursalesElegibles(usuarioId, false)` dentro de la transacción de la petición y devuelve `requisitoPermiso(rol, 'EDITAR_CARTA') === 'permitido'` (sin rol en esa sucursal, no). La regla sale de la matriz: no hay una lista aparte de roles que ajustan precios.
+- La usan: `PUT /carta/productos/:id/sucursales/:sucursalId` (después de comprobar que el producto y la sucursal existen en la empresa, para que un id de B responda 404 igual que uno inexistente, y antes de leer o escribir `producto_sucursal`); `POST /carta/productos` para cada sucursal de `noDisponibleEn` (después de validar las referencias, 422); y `GET /carta/productos/:id/sucursales` para calcular `editable` con una sola lectura de los roles.
+- Se lee en cada petición, así que un cambio de rol hecho por el Administrador vale desde la siguiente (criterio 6 de 002).
 
 ### Escrituras de configuración
 
 1. El `PipeZod` valida la forma (400).
-2. El servicio valida las referencias con `referencias.ts`: una sola consulta por tipo de entidad (`SELECT id, tipo, activo FROM producto WHERE id = ANY($1)`), bajo RLS, así que un id de B no aparece y se trata igual que uno inexistente (422 `REFERENCIA_INVALIDA` con `campos`). Comprueba también el tipo (componente y producto ligado `SIMPLE`) y que estén activos.
+2. El servicio valida las referencias con `referencias.ts`: una sola consulta por tipo de entidad (`SELECT id, tipo, activo FROM producto WHERE id = ANY($1)`), bajo RLS, así que un id de B no aparece y se trata igual que uno inexistente (422 `REFERENCIA_INVALIDA` con `campos`). Comprueba también el tipo (componente y producto ligado `SIMPLE`) y que estén activos. Los productos referidos como componente o producto ligado se leen con `FOR SHARE`, para serializarse con un cambio de tipo concurrente (ver "Cambio de tipo").
 3. Lee la fila actual con `FOR UPDATE` (para el antes de la auditoría y para el no-op), aplica el cambio, y si no cambió nada responde sin auditar.
 4. Registra la auditoría con el antes y el después (los montos como texto), y el evento `carta.actualizada` con `alConfirmar`.
 5. Las violaciones de unicidad (`23505` sobre `lower(nombre)`) se traducen a 409 `CONFLICTO`; las de llave foránea que escapen a la validación previa (carreras con una desactivación), a 422 `REFERENCIA_INVALIDA`.
@@ -64,7 +74,18 @@ apps/api/src/modulos/carta/
 - **Listas que se reemplazan** (`gruposModificadores`, `componentes`, `modificadores` del grupo): se calcula la diferencia con lo guardado; en `producto_grupo` y `componente_combo` se borran las filas que salen y se insertan o actualizan las demás con su orden; en `modificador` los que salen pasan a `activo = false`.
 - **`EN_USO`:** antes de desactivar una estación, una familia o un grupo, se cuentan los productos activos que los usan, con la fila bloqueada `FOR UPDATE`, para que una creación concurrente no se cuele (la creación de un producto lee la familia y la estación con `FOR SHARE`).
 - **Orden:** `PUT …/orden` bloquea las filas de la empresa (familias) o de la familia (productos) con `FOR UPDATE`, comprueba que `ids` sea exactamente ese conjunto y reescribe `orden` = posición. Un producto o una familia nuevos toman `max(orden) + 1` con la misma fila de la familia bloqueada.
-- **Tipo inmutable:** `productoModificarEntrada` no tiene `tipo`; las reglas del criterio 7 se comprueban sobre el resultado de mezclar lo guardado con lo enviado.
+- **Reglas sobre el resultado:** las reglas del criterio 7 se comprueban sobre el resultado de mezclar lo guardado con lo enviado, en el orden de rechazos del criterio 10.
+
+### Cambio de tipo (criterios 10b a 10d)
+
+1. `PATCH /carta/productos/:id` bloquea el producto con `FOR UPDATE`. Si `tipo` viene y es distinto del guardado, es un cambio de tipo.
+2. Mezcla lo guardado con lo enviado: a `COMBO` o `MENU_DEL_DIA`, `estacion_id = null` y `se_vende_solo = true`; a `SIMPLE`, exige `estacionId` en la entrada (400 si falta) y deja `componentes` vacío. Valida el criterio 7 sobre el resultado (400).
+3. A `COMBO` o `MENU_DEL_DIA`: `cambio-tipo.ts` busca dónde se usa el producto con dos consultas (`componente_combo` por `producto_id`, con el nombre del combo; `modificador` activo por `producto_id`, con su grupo). Si hay alguna fila, 409 `EN_USO` con `usadoEn` y el mensaje armado con los nombres.
+4. Si queda `seVendeSolo: false` y hay filas de `producto_sucursal` con `precio` no nulo, 409 `CONFLICTO` (criterio 10d).
+5. Calcula `seQuita`: la estación guardada (si pasa a combo o menú y tenía), los componentes guardados (si pasa a simple) y las opciones del día (si deja de ser menú), agrupadas por sucursal y día, solo las de un día igual o posterior al día operativo actual de cada sucursal (`diaOperativo(reloj.ahora(), horaCorte)` con `SucursalesConsultaService.horaCorte`). Si no está vacío y no viene `confirmarPerdida: true`, 409 `CONFIRMACION_REQUERIDA` con `seQuita`, sin escribir nada.
+6. Aplica: `UPDATE producto` (tipo, estación, `se_vende_solo` y lo demás enviado), `DELETE FROM componente_combo WHERE combo_id = $1` si pasa a simple, `DELETE FROM menu_del_dia_opcion WHERE producto_id = $1` si deja de ser menú (todas las filas, también las de días pasados). Una sola fila de auditoría `modificar_producto` con `tipo` antes y después y `quitado` (lo realmente borrado, que puede incluir filas que no estaban en `seQuita` si alguien las agregó entre los dos pedidos). Un solo `carta.actualizada` de empresa con `alConfirmar`.
+- **Carreras con referencias nuevas:** quien agrega un componente o un producto ligado lee el producto referido con `FOR SHARE` (`referencias.ts`), y el cambio de tipo lo tiene con `FOR UPDATE`; así se serializan. Con `READ COMMITTED`, la segunda operación vuelve a leer la fila o las referencias después del bloqueo y ve el estado nuevo: un componente que ya no es simple da 422 y un producto que ya se usa da 409 `EN_USO`.
+- **Reactivaciones:** `PATCH` de un grupo que reactiva el grupo o un modificador vuelve a validar el producto ligado con `referencias.ts` (criterio 27), así un modificador inactivo que apunta a un producto que pasó a combo no vuelve a ofrecerse.
 
 ### Fotos
 
@@ -88,7 +109,7 @@ PUT /carta/productos/:id/foto  (Content-Type image/*, cuerpo binario ≤ 1 MB)
 
 ### Ajustes por sucursal
 
-`producto_sucursal` guarda solo lo que difiere: `PUT` hace `INSERT … ON CONFLICT (producto_id, sucursal_id) DO UPDATE` y, si el resultado es el valor por defecto (`precio` nulo y `disponible`), deja la fila igual (no la borra, para no perder la trazabilidad del último cambio). `noDisponibleEn` del alta inserta filas con `disponible = false`. La sucursal se valida con `SucursalesConsultaService.existen` (404 si no es de la empresa).
+`producto_sucursal` guarda solo lo que difiere: `PUT` hace `INSERT … ON CONFLICT (producto_id, sucursal_id) DO UPDATE` y, si el resultado es el valor por defecto (`precio` nulo y `disponible`), deja la fila igual (no la borra, para no perder la trazabilidad del último cambio). `noDisponibleEn` del alta inserta filas con `disponible = false`. La sucursal se valida con `SucursalesConsultaService.existen` (404 si no es de la empresa) y después con `exigirAjustarSucursal` (403 para el Cajero en una sucursal donde no es Cajero, criterio 19b), antes de cualquier lectura con bloqueo o escritura.
 
 ### Agotados
 
@@ -133,7 +154,9 @@ Los productos ligados y los componentes inactivos o no disponibles también se c
 
 ### PWA
 
-- **Rutas:** `/carta` (segmento por parámetro `?ver=productos|familias|modificadores|estaciones`), `/carta/productos/nuevo`, `/carta/productos/:id`, `/carta/modificadores/nuevo`, `/carta/modificadores/:id`, `/disponibilidad` (`?ver=agotados|menu`). Cargadas bajo demanda, como la administración de 002. Guardas: `permisos.EDITAR_CARTA === 'permitido'` para `/carta`; `permisos.GESTIONAR_DISPONIBILIDAD === 'permitido'` para `/disponibilidad`.
+- **Rutas:** `/carta` (segmento por parámetro `?ver=productos|familias|modificadores|estaciones`), `/carta/productos/nuevo`, `/carta/productos/:id`, `/carta/modificadores/nuevo`, `/carta/modificadores/:id`, `/disponibilidad` (`?ver=agotados|menu`). Cargadas bajo demanda, como la administración de 002. Guardas: `permisos.EDITAR_CARTA === 'permitido'` para `/carta` (Administrador y Cajero); `permisos.ADMINISTRAR === 'permitido'` para el segmento "Estaciones"; `permisos.GESTIONAR_DISPONIBILIDAD === 'permitido'` para `/disponibilidad`. Las guardas solo ordenan la interfaz: la API decide.
+- **Precio por sucursal:** cada fila usa `editable` de la respuesta; las no editables se muestran solo para leer. En el alta, las casillas de "Disponible en" de las sucursales no editables quedan marcadas y bloqueadas (la PWA las calcula con `sucursales` de `GET /sesion`: editables son las de rol con `EDITAR_CARTA` permitido).
+- **Cambio de tipo:** el selector de tipo está también en la edición. Guardar manda el `PATCH` sin `confirmarPerdida`; con 409 `CONFIRMACION_REQUERIDA` abre una hoja con `seQuita` en palabras y, si se confirma, repite el mismo `PATCH` con `confirmarPerdida: true`; con 409 `EN_USO` muestra `usadoEn` con enlaces a esos combos y grupos.
 - **Vista de la sucursal:** una consulta de TanStack Query con clave por sucursal activa; `api.ts` guarda el último `ETag` por URL y manda `If-None-Match`; un 304 conserva los datos. Refresco cada 15 s con `segundoPlano: true` y al volver el foco (criterio 80).
 - **Agotados optimistas:** el interruptor cambia al instante, la escritura sale con reintentos y, si falla con un 4xx, vuelve atrás con un aviso; sin conexión, la fila muestra "Pendiente de envío". "Deshacer" manda la escritura contraria.
 - **Montos:** campos de monto con `inputmode="decimal"`, validación con `montoSchema` / `montoNoNegativoSchema` y formato con el ayudante de 002 (`lib/formato.ts`).
@@ -147,13 +170,17 @@ Los productos ligados y los componentes inactivos o no disponibles también se c
 | Agotado en su propia tabla (`producto_agotado`) | Columnas en `producto_sucursal` | Permisos distintos (Cocina frente a Administrador) y trazabilidad separada: el último que tocó el precio no se pisa con el que marcó el 86 |
 | Vigencia del agotado calculada al leer con el día operativo | Tarea programada que reactiva a la hora de corte | Sin colas ni cron todavía; el cálculo es puro y probado; no hay estados intermedios si el proceso cae |
 | Ajuste por sucursal solo con lo que difiere | Una fila por producto y sucursal siempre | Una sucursal nueva y un producto nuevo funcionan sin crear filas; menos datos que mantener |
-| Puerto `PublicadorEventos` sin transporte; Socket.IO en la sección 3 | Socket.IO mínimo ahora | Pregunta 2; el comandero y la carta web todavía no existen; el aislamiento de Socket.IO se ataca una sola vez con todos sus consumidores |
+| Puerto `PublicadorEventos` sin transporte; Socket.IO en la sección 3 | Socket.IO mínimo ahora | Decisión 2; el comandero y la carta web todavía no existen; el aislamiento de Socket.IO se ataca una sola vez con todos sus consumidores |
 | Vista con `ETag` y refresco cada 15 s | Pedir la vista completa cada vez | Respuestas 304 de pocos bytes por datos móviles; funciona igual cuando llegue Socket.IO (el evento solo dispara el refresco) |
-| Fotos en R2 con conector y claves nuevas por foto | `bytea` en PostgreSQL | Pregunta 1; lo decide el documento de diseño; la base y sus respaldos no crecen; caché inmutable en Cloudflare |
+| Fotos en R2 con conector y claves nuevas por foto | `bytea` en PostgreSQL | Decisión 1; lo decide el documento de diseño; la base y sus respaldos no crecen; caché inmutable en Cloudflare |
 | Reducir la foto en el navegador; validar formato y tamaño en la API sin procesar la imagen | Procesar con `sharp` en la API | `sharp` es una dependencia nativa (002 las evita en el VPS y en CI); la reducción en el celular ahorra datos móviles |
 | `aws4fetch` para R2 | `@aws-sdk/client-s3` | JavaScript puro y liviano; solo hacen falta `PUT` y `DELETE` |
 | Ruta binaria con su propio límite de 1 MB | Subir la foto en base64 dentro de JSON | El límite global de 100 KB de 001 queda igual para todo lo demás; un tercio menos de bytes |
-| `@Permiso` con las acciones existentes en todas las rutas | `@SoloAdministrador` en la administración de la carta | La matriz de `packages/dominio` es la única fuente; si mañana cambia quién edita la carta, cambia una celda |
+| `@Permiso` con las acciones existentes en todas las rutas | `@SoloAdministrador` en la administración de la carta | La matriz de `packages/dominio` es la única fuente; cuando el usuario dio la carta al Cajero (decisión 5) cambió una sola celda |
+| Restricción del Cajero por sucursal calculada con la matriz sobre el rol en la sucursal ajustada | Una acción nueva `AJUSTAR_PRECIO_SUCURSAL`; exigir que la sucursal ajustada sea la activa | Sin acción nueva, la matriz no crece y el documento de diseño solo cambia una celda; exigir la sucursal activa le quitaría al Administrador ajustar cualquier sucursal sin elegirla (criterios 18 a 22) y obligaría al Cajero de dos sucursales a cambiar de sucursal para cada ajuste |
+| Escrituras de estaciones con `ADMINISTRAR` | Dejarlas con `EDITAR_CARTA` (el Cajero también); una acción nueva | Decisión del usuario (las define solo el Administrador); `ADMINISTRAR` ya cubre la configuración y tiene la misma fila que tenía `EDITAR_CARTA` |
+| Cambio de tipo que borra lo que deja de aplicar, con confirmación por 409 | Conservarlo desactivado; un endpoint aparte de vista previa | Las ventas guardan su copia; no hay datos ocultos que reaparezcan; la auditoría guarda lo borrado; el 409 con `seQuita` es la vista previa sin otra ruta |
+| Dejar de venderse solo con precios de sucursal responde 409 | Borrar esos precios de paso | El Cajero no puede borrar el precio de una sucursal donde no es Cajero por un camino indirecto |
 | Vista única para todos los roles | Una vista por rol (mozo, cocina, web) | Una sola consulta que optimizar y probar; cada consumidor filtra con `vendible` y `seVendeSolo` |
 | Nada se borra; se desactiva | Borrado físico con comprobación de uso | Las ventas (sección 3) y el menú del día los referencian; el historial de la auditoría sigue apuntando a algo |
 
@@ -171,7 +198,10 @@ Privilegios de `restaurante_api`: SELECT, INSERT, UPDATE en `estacion`, `familia
 
 ## Riesgos
 
-- **Pruebas que pasan por la razón equivocada** (como en 002). Una prueba de RLS que olvide fijar el actor falla con `42501` igual que un rechazo de la política. Mitigación: las pruebas del criterio 65 fijan un actor de A y comprueban el mensaje de la política.
+- **Pruebas que pasan por la razón equivocada** (como en 002). Una prueba de RLS que olvide fijar el actor falla con `42501` igual que un rechazo de la política. Mitigación: las pruebas del criterio 65 fijan un actor de A y comprueban el mensaje de la política. Lo mismo con el Cajero: un 403 en S2 debe venir de la regla del criterio 19b y no de una sesión sin sucursal activa o con S2 activa; las pruebas de P2 usan al Cajero con S1 activa y comprueban que la misma sesión sí ajusta S1.
+- **Pruebas protegidas de 002 que cambian.** Tres archivos protegidos de 002 afirman que el Cajero no tiene `EDITAR_CARTA` (`spec.md`, "Impacto en especificaciones anteriores"). Los ajusta test-writer en la fase B (P0), por la decisión del usuario; quien implementa no los toca. El orquestador, al revisar con `git diff`, acepta solo esos cambios en esos archivos y en la fase B.
+- **El Cajero cambia lo que es de toda la empresa.** El precio de la empresa, desactivar un producto o cambiar su tipo afectan también a las sucursales donde no es Cajero (decisión 5: "toda la carta"). Mitigación: auditoría con el autor y la sucursal activa, y el precio propio de cada sucursal protegido por el criterio 19b.
+- **Confirmación desactualizada.** Entre el 409 `CONFIRMACION_REQUERIDA` y el `PATCH` confirmado, otro usuario puede agregar componentes u opciones del día; el `PATCH` confirmado borra también esas. Se acepta: la auditoría guarda exactamente lo borrado. Si molesta, se puede exigir que `confirmarPerdida` traiga la huella de `seQuita`.
 - **Fotos huérfanas.** Si la transacción falla después de subir la foto (o el `COMMIT` falla), el archivo queda en R2 sin producto. Con fotos de unos 200 KB y fallas raras, el costo es despreciable. Remedio futuro: una tarea del worker que compare las claves del bucket con `producto.foto_clave` (fuera de alcance).
 - **Foto borrada que sigue en caché.** Al quitar o reemplazar una foto, Cloudflare puede seguir sirviendo la anterior hasta que expire su caché. Es una imagen pública de la carta; se acepta.
 - **Fotos de iPhone.** Safari entrega HEIC o JPEG según la versión; la reducción en el navegador convierte a JPEG si puede decodificarla y corrige la orientación. Si un navegador no puede, la API recibe el original y lo rechaza si no es JPEG, PNG o WebP (422 con un mensaje que pide otra foto). Verificar en la prueba manual con un iPhone real.
