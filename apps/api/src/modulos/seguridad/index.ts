@@ -26,7 +26,7 @@ export {
   parsearTokenSesion,
   parsearTokenSuperadministrador,
 } from './tokens';
-export { ResolutorEmpresaSesion } from './resolutor-empresa-sesion';
+export { ResolutorEmpresaSesion, actorDePrincipal } from './resolutor-empresa-sesion';
 export { SesionActual } from './sesion-actual';
 export { AutorizacionService, autorizacionInvalida } from './autorizacion.service';
 export { ClaveSupervisorService } from './clave-supervisor.service';

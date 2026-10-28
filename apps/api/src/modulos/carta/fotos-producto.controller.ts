@@ -2,6 +2,7 @@ import { Controller, Delete, HttpCode, Inject, Param, Put, Req } from '@nestjs/c
 import type { FotoRespuesta } from '@restaurante/contratos';
 import type { Request } from 'express';
 import { TIPOS_DE_IMAGEN } from '../../nucleo/archivos';
+import { SinEmpresa } from '../../nucleo/contexto-empresa';
 import { ErrorAplicacion } from '../../nucleo/errores/error-aplicacion';
 import { PipeUuid } from '../../nucleo/errores/pipes';
 import { Permiso } from '../seguridad';
@@ -22,8 +23,13 @@ const tipoNoSoportado = () =>
 export class FotosProductoController {
   constructor(@Inject(FotosProductoService) private readonly fotos: FotosProductoService) {}
 
-  /** 200 `{ fotoUrl }`; 403; 404; 413; 415; 422 `FOTO_INVALIDA`. */
+  /**
+   * 200 `{ fotoUrl }`; 403; 404; 413; 415; 422 `FOTO_INVALIDA`. `@SinEmpresa()`: el interceptor global no abre
+   * la transacción de la petición (retendría una conexión durante la subida a R2, RNF-03); el servicio abre dos
+   * transacciones cortas, antes y después de subir el archivo.
+   */
   @Put()
+  @SinEmpresa()
   @Permiso('EDITAR_CARTA')
   subir(@Param('id', PipeUuid) id: string, @Req() peticion: Request): Promise<FotoRespuesta> {
     const tipo = (peticion.headers['content-type'] ?? '').split(';')[0]!.trim().toLowerCase();

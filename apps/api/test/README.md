@@ -709,6 +709,29 @@ las diez tablas, y faltan siete hasta C5), `linea-preparada.spec.ts` (`prepararL
 `permisos-carta.spec.ts`, todo lo que usa `sembrarCarta` (C4) o toca ajustes por sucursal (C2), grupos (C3), menú del
 día (C4) o agotados (C5).
 
+## Historia 003 · grupo C2 (T13): ajuste por sucursal
+
+Pruebas del desarrollador (no protegidas): `carta/ajustes-sucursal.spec.ts` (criterios 18 a 23 y 10d: la consulta con
+todas las sucursales y `editable`, los ejemplos de los criterios 20 y 21, los valores por defecto sin fila y una
+sucursal creada después, el orden de los rechazos del `PUT` —400, 404 de producto y de sucursal con el mismo cuerpo
+para B e inexistente—, la auditoría con el antes y el después de lo que cambió y su `sucursal_id`, un solo
+`carta.actualizada` de la sala de esa sucursal, `noDisponibleEn` del alta con 422 antes que 403, y dejar de venderse
+solo con precios de sucursal, incluida la carrera con un ajuste concurrente). `carta/fotos.spec.ts` suma la subida
+fuera de la transacción: un almacén lento (`vi.spyOn` sobre `AlmacenEnMemoria.guardar` con una puerta) y el pool de 2
+conexiones del arranque de prueba, con tres subidas detenidas y otras ocho peticiones que responden y ninguna
+transacción abierta en `pg_stat_activity`; el producto que desaparece mientras se sube (404 y el archivo nuevo se
+borra); la transacción corta que falla (conserva la foto anterior, borra exactamente la nueva, sin eventos); el
+borrado de compensación que también falla (solo se registra, la respuesta es el 500 original); y dos subidas
+concurrentes del mismo producto. La parte de `producto_sucursal` de la prueba de catálogo de trazabilidad (inserta
+filas casi vacías: `precio` admite `NULL` y `disponible` tiene valor por defecto) pasa sin cambios.
+
+Qué parte de las pruebas protegidas `cajero-carta.spec.ts` y `permisos-carta.spec.ts` queda en verde con C2: las del
+criterio 19b (el `GET` con `editable` solo en S1, el ajuste de S1, los 403 de S2 y S3 con sesión de contraseña y de
+PIN antes y después de ajustar S1, el 404 de una sucursal de B o inexistente, `noDisponibleEn` con S2 y S3, el rol
+perdido, el Cajero de dos sucursales, el Cajero y Supervisor, y el Administrador con o sin sucursal activa) y la de la
+auditoría del ajuste del criterio 62. El resto sigue en rojo por `sembrarCarta` o por rutas de C3 (grupos), C4
+(combos, menú del día y cambio de tipo) y C5 (agotados y vista).
+
 ## Pendientes menores
 
 - `apps/api/test/infraestructura.spec.ts:79` fija la base auxiliar `restaurante_test_infra` sin usar `BASE_DE_PRUEBA` (la variable de entorno que elige la base de pruebas, `restaurante_test` por defecto). Por eso dos corridas simultáneas contra la misma instancia de PostgreSQL pueden pisarse: cada una recrea esa base con `prepararBaseDeDatos({ recrear: true })`. Pendiente menor: que cada corrida use su propio nombre de base auxiliar.

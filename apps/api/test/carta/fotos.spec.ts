@@ -1,7 +1,10 @@
 // Historia 003, grupo C1 · fotos de los productos (criterios 14 a 17): pruebas del desarrollador (no
 // protegidas) con imágenes de muestra (JPEG, PNG y WebP válidos, archivos truncados, firma que no coincide
 // con el `Content-Type`, lados de 199 y 2049 px, 1 MB + 1 byte y una transacción revertida que conserva la
-// foto anterior). Las claves, los permisos y el aislamiento los cubren también las pruebas protegidas.
+// foto anterior). La subida al almacén ocurre fuera de toda transacción (RNF-03): se prueba con un almacén
+// lento y un pool de 2 conexiones, y con las compensaciones (transacción revertida, producto que desaparece,
+// borrado de compensación que falla). Las claves, los permisos y el aislamiento los cubren también las
+// pruebas protegidas.
 import type { Client } from 'pg';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { abrirCliente } from '../utilidades';
@@ -386,5 +389,183 @@ describe('criterio 17 · otra empresa', () => {
     await asentar();
     expect(ctx.almacen.claves()).toContain(claveB);
     expect(await fotoClaveDe(deB)).toBe(claveB);
+  });
+});
+
+/**
+ * Hace que `guardar` del almacén espere una puerta: simula un almacén lento (R2 tarda hasta 20 s). Devuelve
+ * cuántas subidas están dentro, cómo abrir la puerta y cómo restaurar el almacén.
+ */
+function almacenLento() {
+  let abrir!: () => void;
+  const puerta = new Promise<void>((resolver) => (abrir = resolver));
+  const original = ctx.almacen.guardar.bind(ctx.almacen);
+  let dentro = 0;
+  const espia = vi.spyOn(ctx.almacen, 'guardar').mockImplementation(async (clave, datos, tipo) => {
+    dentro++;
+    await puerta;
+    return original(clave, datos, tipo);
+  });
+  return {
+    dentro: () => dentro,
+    abrir,
+    restaurar: () => {
+      abrir();
+      espia.mockRestore();
+    },
+  };
+}
+
+async function esperarHasta(condicion: () => boolean, ms = 15_000): Promise<void> {
+  const limite = Date.now() + ms;
+  while (!condicion()) {
+    if (Date.now() > limite) throw new Error('No se cumplió la condición a tiempo');
+    await new Promise((resolver) => setTimeout(resolver, 20));
+  }
+}
+
+describe('la subida no retiene una conexión del pool (RNF-03)', () => {
+  it('con un almacén lento y un pool de 2, tres subidas en curso no impiden que otras peticiones respondan', async () => {
+    const ids = [await nuevoProducto(), await nuevoProducto(), await nuevoProducto()];
+    const lento = almacenLento();
+    try {
+      const subidas = ids.map((id) => subir(id, 'image/png', pngValido()).then((r) => r));
+      await esperarHasta(() => lento.dentro() === 3);
+
+      // Con las tres subidas detenidas dentro del almacén no hay ninguna transacción abierta...
+      const abiertas = await admin.query(
+        `SELECT count(*)::int AS n FROM pg_stat_activity
+          WHERE usename = 'restaurante_api' AND state LIKE 'idle in transaction%'`,
+      );
+      expect(abiertas.rows[0].n).toBe(0);
+
+      // ...y el resto de la API responde con normalidad (el pool tiene solo 2 conexiones).
+      const inicio = Date.now();
+      const otras = await Promise.all(
+        Array.from({ length: 8 }, (_, i) =>
+          llamar(ctx, tokenA, {
+            metodo: 'get',
+            ruta: i % 2 === 0 ? '/carta/familias' : '/carta/productos',
+          }).then((r) => r),
+        ),
+      );
+      expect(otras.map((r) => r.status)).toEqual(Array(8).fill(200));
+      expect(Date.now() - inicio).toBeLessThan(10_000);
+      // Nada se confirmó todavía: ningún producto tiene foto.
+      for (const id of ids) expect(await fotoClaveDe(id)).toBeNull();
+
+      lento.abrir();
+      const respuestas = await Promise.all(subidas);
+      expect(respuestas.map((r) => r.status)).toEqual([200, 200, 200]);
+      for (const id of ids) expect(await fotoClaveDe(id)).not.toBeNull();
+    } finally {
+      lento.restaurar();
+    }
+  });
+
+  it('un producto inexistente o de B responde 404 antes de subir nada al almacén', async () => {
+    const guardar = vi.spyOn(ctx.almacen, 'guardar');
+    try {
+      const baseB = await sembrarBase(ctx, e.B.tokenAdmin);
+      const deB = await nuevoProducto(e.B.tokenAdmin, baseB);
+      for (const id of [deB, '00000000-0000-4000-8000-000000000000']) {
+        esperarError(await subir(id, 'image/png', pngValido()), 404, 'NO_ENCONTRADO');
+      }
+      expect(guardar).not.toHaveBeenCalled();
+    } finally {
+      guardar.mockRestore();
+    }
+  });
+});
+
+describe('compensación de la subida', () => {
+  it('si el producto desaparece mientras se sube, responde 404 y borra el archivo recién subido', async () => {
+    const id = await nuevoProducto();
+    const antes = ctx.almacen.claves();
+    const lento = almacenLento();
+    try {
+      const subida = subir(id, 'image/png', pngValido()).then((r) => r);
+      await esperarHasta(() => lento.dentro() === 1);
+      // Mientras el archivo "sube", el producto deja de existir (lo borra el administrador de la base).
+      await admin.query('DELETE FROM producto WHERE id = $1', [id]);
+      lento.abrir();
+      const res = await subida;
+      esperarError(res, 404, 'NO_ENCONTRADO');
+    } finally {
+      lento.restaurar();
+    }
+    await asentar();
+    expect(ctx.almacen.claves()).toEqual(antes);
+  });
+
+  it('si la transacción corta falla, el producto conserva su foto anterior, el archivo nuevo se borra y no hay eventos', async () => {
+    const id = await nuevoProducto();
+    exigirEstado(await subir(id, 'image/png', pngValido()), 200, 'primera foto');
+    const anterior = (await fotoClaveDe(id))!;
+    await asentar();
+    ctx.publicador.limpiar();
+    const borrar = vi.spyOn(ctx.almacen, 'borrar');
+    const nombre = `falla_corta_${id.replaceAll('-', '')}`;
+    await admin.query(`CREATE FUNCTION ${nombre}() RETURNS trigger LANGUAGE plpgsql AS $f$
+      BEGIN RAISE EXCEPTION 'falla de prueba'; END $f$`);
+    await admin.query(`CREATE TRIGGER ${nombre} BEFORE UPDATE OF foto_clave ON producto
+      FOR EACH ROW WHEN (NEW.id = '${id}') EXECUTE FUNCTION ${nombre}()`);
+    try {
+      expect((await subir(id, 'image/jpeg', jpegValido())).status).toBe(500);
+    } finally {
+      await admin.query(`DROP TRIGGER ${nombre} ON producto`);
+      await admin.query(`DROP FUNCTION ${nombre}()`);
+    }
+    await asentar();
+    expect(await fotoClaveDe(id)).toBe(anterior);
+    // Se borró exactamente el archivo nuevo; la anterior nunca se tocó.
+    expect(borrar).toHaveBeenCalledTimes(1);
+    const [nueva] = borrar.mock.calls[0]!;
+    expect(nueva).not.toBe(anterior);
+    expect(nueva).toMatch(new RegExp(`^carta/${e.A.empresaId}/${id}/[0-9a-f-]{36}\\.jpg$`));
+    expect(ctx.almacen.claves()).toContain(anterior);
+    expect(ctx.almacen.claves()).not.toContain(nueva);
+    expect(ctx.publicador.eventos()).toEqual([]);
+    borrar.mockRestore();
+  });
+
+  it('si el borrado de compensación también falla, solo se registra: la respuesta es el error original', async () => {
+    const id = await nuevoProducto();
+    await asentar();
+    const borrar = vi
+      .spyOn(ctx.almacen, 'borrar')
+      .mockRejectedValue(new Error('el almacén no responde'));
+    const nombre = `falla_doble_${id.replaceAll('-', '')}`;
+    await admin.query(`CREATE FUNCTION ${nombre}() RETURNS trigger LANGUAGE plpgsql AS $f$
+      BEGIN RAISE EXCEPTION 'falla de prueba'; END $f$`);
+    await admin.query(`CREATE TRIGGER ${nombre} BEFORE UPDATE OF foto_clave ON producto
+      FOR EACH ROW WHEN (NEW.id = '${id}') EXECUTE FUNCTION ${nombre}()`);
+    try {
+      const res = await subir(id, 'image/png', pngValido());
+      expect(res.status).toBe(500);
+      expect(res.body.codigo).toBe('ERROR_INTERNO');
+      expect(res.text).not.toMatch(/el almacén no responde|falla de prueba/);
+      expect(borrar).toHaveBeenCalledTimes(1);
+    } finally {
+      await admin.query(`DROP TRIGGER ${nombre} ON producto`);
+      await admin.query(`DROP FUNCTION ${nombre}()`);
+      borrar.mockRestore();
+    }
+    expect(await fotoClaveDe(id)).toBeNull();
+  });
+
+  it('el borrado de la foto anterior espera a la confirmación y la subida nueva no pisa otra concurrente del mismo producto', async () => {
+    const id = await nuevoProducto();
+    const [a, b] = await Promise.all([
+      subir(id, 'image/png', pngValido()).then((r) => r),
+      subir(id, 'image/jpeg', jpegValido()).then((r) => r),
+    ]);
+    expect([a.status, b.status]).toEqual([200, 200]);
+    await asentar();
+    // Queda una sola foto guardada para el producto: la que quedó apuntada; la otra se borró como "anterior".
+    const guardadas = ctx.almacen
+      .claves()
+      .filter((c) => c.startsWith(`carta/${e.A.empresaId}/${id}/`));
+    expect(guardadas).toEqual([(await fotoClaveDe(id))!]);
   });
 });

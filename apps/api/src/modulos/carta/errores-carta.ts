@@ -43,3 +43,7 @@ export const enUso = (mensaje: string): ErrorAplicacion =>
 /** 422 de la foto (criterio 14). */
 export const fotoInvalida = (mensaje: string): ErrorAplicacion =>
   new ErrorAplicacion(422, 'FOTO_INVALIDA', mensaje);
+
+/** 409 por un conflicto con lo guardado que no es un nombre repetido (criterio 10d). */
+export const conflicto = (mensaje: string, campos: CampoError[]): ErrorAplicacion =>
+  new ErrorAplicacion(409, 'CONFLICTO', mensaje, campos);

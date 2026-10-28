@@ -14,8 +14,16 @@ import { ALMACEN_ARCHIVOS, type AlmacenArchivos } from '../../nucleo/archivos';
 import { ContextoEmpresa } from '../../nucleo/contexto-empresa';
 import { RELOJ, type Reloj } from '../../nucleo/reloj';
 import { AuditoriaService } from '../auditoria';
-import { datosInvalidos, nombreRepetido, noEncontrado, referenciaInvalida } from './errores-carta';
+import { SucursalesConsultaService } from '../plataforma';
+import {
+  conflicto,
+  datosInvalidos,
+  nombreRepetido,
+  noEncontrado,
+  referenciaInvalida,
+} from './errores-carta';
 import { EventosCarta } from './eventos-carta';
+import { PermisosCarta } from './permisos-carta';
 import { validarFamiliaYEstacion } from './referencias';
 import { aIso, diferencias, sinCambioDeOrden } from './util-carta';
 
@@ -106,6 +114,8 @@ export class ProductosService {
     @Inject(AuditoriaService) private readonly auditoria: AuditoriaService,
     @Inject(EventosCarta) private readonly eventos: EventosCarta,
     @Inject(ALMACEN_ARCHIVOS) private readonly almacen: AlmacenArchivos,
+    @Inject(SucursalesConsultaService) private readonly sucursales: SucursalesConsultaService,
+    @Inject(PermisosCarta) private readonly permisos: PermisosCarta,
   ) {}
 
   private fotoUrl(clave: string | null): string | null {
@@ -176,7 +186,20 @@ export class ProductosService {
       familiaId: entrada.familiaId,
       estacionId: entrada.estacionId ?? null,
     });
+    // Sucursales donde el producto nace no disponible (criterio 23): deben existir en la empresa (422, mismo
+    // cuerpo para una de otra empresa y una inexistente) y, después, quien crea debe poder ajustarlas
+    // (403, criterio 19b). Sin repetidas.
+    const noDisponibleEn = [
+      ...new Set((entrada.noDisponibleEn ?? []).map((id) => id.toLowerCase())),
+    ];
+    if (noDisponibleEn.length > 0 && !(await this.sucursales.existen(noDisponibleEn))) {
+      fallan.push({
+        campo: 'noDisponibleEn',
+        mensaje: 'Una de las sucursales no existe',
+      });
+    }
     if (fallan.length > 0) throw referenciaInvalida(fallan);
+    await this.permisos.exigirAjustarSucursales(noDisponibleEn);
 
     const empresaId = this.contexto.empresaActual();
     const ahora = this.reloj.ahora();
@@ -210,6 +233,14 @@ export class ProductosService {
         },
       );
       id = filas[0]!.id;
+      if (noDisponibleEn.length > 0) {
+        await this.conexion.query(
+          `INSERT INTO producto_sucursal (empresa_id, producto_id, sucursal_id, precio, disponible,
+                                          creado_en, actualizado_en)
+           SELECT $1, $2, s, NULL, false, $4, $4 FROM unnest($3::uuid[]) AS s`,
+          { bind: [empresaId, id, noDisponibleEn, ahora] },
+        );
+      }
     } catch (error) {
       throw this.traducir(error);
     }
@@ -228,6 +259,7 @@ export class ProductosService {
         aplicaIcbper: entrada.aplicaIcbper,
         estacionId: entrada.estacionId ?? null,
         tipoControlStock: entrada.tipoControlStock,
+        ...(noDisponibleEn.length > 0 ? { noDisponibleEn } : {}),
       },
     });
     this.eventos.cartaActualizada(null);
@@ -281,6 +313,7 @@ export class ProductosService {
 
     const reglas = this.reglasDelTipoSimple(despues);
     if (reglas.length > 0) throw datosInvalidos(reglas);
+    if (!despues.seVendeSolo) await this.exigirSinPreciosDeSucursal(id);
 
     const diff = diferencias(antes, despues, CAMPOS_AUDITADOS);
     if (Object.keys(diff).length === 0) return this.obtener(id);
@@ -377,15 +410,14 @@ export class ProductosService {
   // ---- Reglas ----------------------------------------------------------------------------------
 
   /**
-   * Lo que todavía no se puede enviar en esta versión (grupo C1): otro tipo que `SIMPLE`, cambiar el tipo,
-   * grupos de modificadores, componentes y `noDisponibleEn`. Una lista vacía no cambia nada y se acepta.
+   * Lo que todavía no se puede enviar en esta versión (grupos C1 y C2): otro tipo que `SIMPLE`, cambiar el
+   * tipo, grupos de modificadores y componentes. Una lista vacía no cambia nada y se acepta.
    */
   private exigirLoDeEstaVersion(
     entrada: {
       tipo?: string;
       gruposModificadores?: readonly string[];
       componentes?: readonly unknown[];
-      noDisponibleEn?: readonly string[];
     },
     tipoGuardado?: string,
   ): void {
@@ -408,12 +440,6 @@ export class ProductosService {
         mensaje: 'Los componentes de un combo todavía no están disponibles',
       });
     }
-    if ((entrada.noDisponibleEn?.length ?? 0) > 0) {
-      campos.push({
-        campo: 'noDisponibleEn',
-        mensaje: 'Elegir las sucursales donde no se ofrece todavía no está disponible',
-      });
-    }
     if (campos.length > 0) throw datosInvalidos(campos);
   }
 
@@ -430,6 +456,27 @@ export class ProductosService {
       campos.push({ campo: 'precio', mensaje: 'Un producto que no se vende solo no lleva precio' });
     }
     return campos;
+  }
+
+  /**
+   * Criterio 10d: un producto que deja de venderse solo no puede tener precio propio en ninguna sucursal
+   * (los precios de sucursal los quita cada quien con su permiso, criterio 19b; no se borran de paso). El
+   * producto está bloqueado `FOR UPDATE`, así que un ajuste concurrente (`FOR NO KEY UPDATE`) espera y ve el
+   * estado nuevo.
+   */
+  private async exigirSinPreciosDeSucursal(productoId: string): Promise<void> {
+    const filas = await this.conexion.query<{ sucursal_id: string }>(
+      'SELECT sucursal_id FROM producto_sucursal WHERE producto_id = $1 AND precio IS NOT NULL',
+      { bind: [productoId], type: QueryTypes.SELECT },
+    );
+    if (filas.length === 0) return;
+    const nombres = (await this.sucursales.listar(filas.map((f) => f.sucursal_id))).map(
+      (s) => s.nombre,
+    );
+    throw conflicto(
+      `El producto tiene precio propio en: ${nombres.join(', ')}. Quita esos precios antes de dejar de venderlo solo`,
+      [{ campo: 'seVendeSolo', mensaje: 'Tiene precio propio en alguna sucursal' }],
+    );
   }
 
   /** 23505 sobre el nombre → 409; 23503 que escapó a la validación previa (una carrera) → 422. */

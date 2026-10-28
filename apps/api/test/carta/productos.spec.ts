@@ -1,6 +1,7 @@
 // Historia 003, grupo C1 · productos simples (criterios 6 a 12): pruebas del desarrollador (no protegidas).
 // Los tipos COMBO y MENU_DEL_DIA, el cambio de tipo, los grupos y los componentes llegan en C3 y C4: aquí se
-// comprueba que mientras tanto responden 400 y no cambian nada.
+// comprueba que mientras tanto responden 400 y no cambian nada. `noDisponibleEn` y el criterio 10d (grupo C2)
+// están en `ajustes-sucursal.spec.ts`.
 import type { Client } from 'pg';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { abrirCliente } from '../utilidades';
@@ -161,7 +162,7 @@ describe('criterio 6 · crear un producto simple', () => {
     }
   });
 
-  it('en esta versión COMBO, MENU_DEL_DIA, grupos, componentes y noDisponibleEn responden 400 sin crear nada', async () => {
+  it('en esta versión COMBO, MENU_DEL_DIA, grupos y componentes responden 400 sin crear nada', async () => {
     const antes = await instantaneaCarta(admin, e.A.empresaId);
     const casos: [string, Record<string, unknown>][] = [
       [
@@ -177,7 +178,6 @@ describe('criterio 6 · crear un producto simple', () => {
         { tipo: 'MENU_DEL_DIA', estacionId: undefined, gruposModificadores: [crypto.randomUUID()] },
       ],
       ['grupos en un simple', { gruposModificadores: [crypto.randomUUID()] }],
-      ['noDisponibleEn', { noDisponibleEn: [e.A.S2] }],
     ];
     for (const [nombre, extra] of casos) {
       const res = await post(tokenA, productoSimple(base, extra));

@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { AuditoriaModule } from '../auditoria';
 import { SeguridadModule } from '../seguridad';
 import { AjustesSucursalController } from './ajustes-sucursal.controller';
+import { AjustesSucursalService } from './ajustes-sucursal.service';
 import { CartaDisponibilidadService } from './carta-disponibilidad.service';
 import { CartaVentaService } from './carta-venta.service';
 import { DisponibilidadController } from './disponibilidad.controller';
@@ -14,6 +15,7 @@ import { FotosProductoController } from './fotos-producto.controller';
 import { FotosProductoService } from './fotos-producto.service';
 import { GruposController } from './grupos.controller';
 import { MenuDelDiaController } from './menu-del-dia.controller';
+import { PermisosCarta } from './permisos-carta';
 import { ProductosController } from './productos.controller';
 import { ProductosService } from './productos.service';
 import { VistaSucursalController } from './vista-sucursal.controller';
@@ -41,10 +43,12 @@ import { VistaSucursalController } from './vista-sucursal.controller';
   ],
   providers: [
     EventosCarta,
+    PermisosCarta,
     EstacionesService,
     FamiliasService,
     ProductosService,
     FotosProductoService,
+    AjustesSucursalService,
     CartaVentaService,
     CartaDisponibilidadService,
   ],
