@@ -77,6 +77,8 @@ export function sesionDe(parcial: Partial<SesionRespuesta> = {}): SesionRespuest
 
 export type Manejador = (pedido: {
   cuerpo: unknown;
+  /** Cuerpo binario (por ejemplo, la foto de un producto), si la petición lo trae. */
+  binario?: Blob;
   cabeceras: Headers;
   url: URL;
 }) => Response | Promise<Response>;
@@ -98,6 +100,8 @@ export interface LlamadaRegistrada {
   metodo: string;
   ruta: string;
   cuerpo: unknown;
+  /** Cuerpo binario, si la petición lo trae. */
+  binario?: Blob;
   cabeceras: Headers;
 }
 
@@ -113,7 +117,14 @@ export function servidor(manejadores: Record<string, Manejador>) {
     const metodo = (init?.method ?? 'GET').toUpperCase();
     const cabeceras = new Headers(init?.headers);
     const cuerpo = typeof init?.body === 'string' ? JSON.parse(init.body) : undefined;
-    llamadas.push({ metodo, ruta: url.pathname, cuerpo, cabeceras });
+    const binario = init?.body instanceof Blob ? init.body : undefined;
+    llamadas.push({
+      metodo,
+      ruta: url.pathname,
+      cuerpo,
+      ...(binario ? { binario } : {}),
+      cabeceras,
+    });
     const manejador = tabla[`${metodo} ${url.pathname}`];
     if (!manejador) {
       return json(501, {
@@ -121,7 +132,7 @@ export function servidor(manejadores: Record<string, Manejador>) {
         mensaje: `Sin manejador para ${metodo} ${url.pathname}`,
       });
     }
-    return manejador({ cuerpo, cabeceras, url });
+    return manejador({ cuerpo, ...(binario ? { binario } : {}), cabeceras, url });
   });
   vi.stubGlobal('fetch', simulado);
   return {

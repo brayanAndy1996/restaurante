@@ -234,6 +234,91 @@ export function CampoAreaTexto({
   );
 }
 
+/**
+ * Limpia lo que se escribe en un campo de monto: solo dígitos y un separador decimal, con la coma del
+ * teclado de algunos celulares convertida en punto, hasta 8 enteros y 2 decimales. Es texto, no
+ * aritmética: el valor sigue siendo el texto decimal que viaja a la API ("28.5", nunca un número).
+ */
+export function limpiarMontoEscrito(texto: string): string {
+  const normalizado = texto.replace(/,/g, '.').replace(/[^\d.]/g, '');
+  const primero = normalizado.indexOf('.');
+  if (primero === -1) return normalizado.slice(0, 8);
+  const enteros = normalizado.slice(0, primero).slice(0, 8);
+  const decimales = normalizado
+    .slice(primero + 1)
+    .replace(/\./g, '')
+    .slice(0, 2);
+  return `${enteros}.${decimales}`;
+}
+
+/** Completa un monto escrito a 2 decimales ("28" → "28.00", ".5" → "0.50"); si no es un monto, lo deja como está. */
+export function completarMontoEscrito(texto: string): string {
+  if (!/^\d*\.?\d*$/.test(texto) || texto === '' || texto === '.') return texto;
+  const [enteros = '', decimales = ''] = texto.split('.');
+  return `${enteros === '' ? '0' : enteros}.${decimales.padEnd(2, '0')}`;
+}
+
+export interface PropsCampoMonto
+  extends
+    PropsMarco,
+    Omit<
+      InputHTMLAttributes<HTMLInputElement>,
+      'className' | 'id' | 'type' | 'inputMode' | 'value' | 'onChange' | 'onBlur' | 'prefix'
+    > {
+  id?: string;
+  /** Texto decimal tal como se escribe ("28.5"). */
+  value: string;
+  onValor: (valor: string) => void;
+}
+
+/**
+ * Campo de monto en soles: `S/` delante, teclado decimal del celular y cifras tabulares. Solo deja
+ * escribir dígitos y un separador; al salir completa los 2 decimales. La validación (mayor que 0,
+ * obligatorio) es de quien lo usa.
+ */
+export function CampoMonto({
+  etiqueta,
+  opcional,
+  ayuda,
+  error,
+  className,
+  id,
+  value,
+  onValor,
+  ...resto
+}: PropsCampoMonto) {
+  const propio = useId();
+  const idCampo = id ?? propio;
+  return (
+    <Marco
+      id={idCampo}
+      etiqueta={etiqueta}
+      opcional={opcional}
+      ayuda={ayuda}
+      error={error}
+      className={clases('ui-campo--monto', className)}
+    >
+      <span className="ui-campo__prefijo" aria-hidden="true">
+        S/
+      </span>
+      <input
+        id={idCampo}
+        className="ui-campo__control ui-campo__control--monto"
+        type="text"
+        inputMode="decimal"
+        autoComplete="off"
+        enterKeyHint="next"
+        value={value}
+        onChange={(e) => onValor(limpiarMontoEscrito(e.target.value))}
+        onBlur={() => onValor(completarMontoEscrito(value))}
+        aria-invalid={error ? true : undefined}
+        aria-describedby={descritoPor(idCampo, ayuda, error)}
+        {...resto}
+      />
+    </Marco>
+  );
+}
+
 interface PropsInterruptor {
   etiqueta: string;
   ayuda?: ReactNode;

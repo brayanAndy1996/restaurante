@@ -130,3 +130,29 @@ export function formatearMonto(
   const miles = entera.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
   return `${signo}${miles}${util ? `.${util}` : ''}`;
 }
+
+/**
+ * Monto escrito por una persona ("28", "28.5", "S/ 28.50") como texto decimal con 2 decimales ("28.50"),
+ * el formato que acepta la API: hasta 8 enteros y 2 decimales, sin signo ni exponente. `null` si no es un
+ * monto válido. Con `permitirCero` admite 0 (un precio extra); por defecto exige más de 0 (un precio).
+ */
+export function montoComoTexto(valor: string, { permitirCero = false } = {}): string | null {
+  const limpio = valor.trim().replace(/^S\/\s*/i, '');
+  if (!/^\d{1,8}(\.\d{1,2})?$/.test(limpio)) return null;
+  const d = comoDecimal(limpio);
+  if (d === null || d.isNegative()) return null;
+  if (!permitirCero && d.isZero()) return null;
+  return d.toFixed(2);
+}
+
+/** "S/ 1,234.50" a partir de un monto en texto decimal; `null` si el texto no es un monto. */
+export function montoEnSoles(valor: string | null | undefined): string | null {
+  if (valor === null || valor === undefined) return null;
+  const formateado = formatearMonto(valor);
+  return formateado === null ? null : `S/ ${formateado}`;
+}
+
+/** Mismo texto sin tildes ni mayúsculas, para buscar por nombre sin que importen. */
+export function paraBuscar(texto: string): string {
+  return texto.normalize('NFD').replace(/[̀-ͯ]/g, '').toLocaleLowerCase('es-PE').trim();
+}

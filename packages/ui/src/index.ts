@@ -14,3 +14,7 @@ export * from './PinUnaVez';
 export * from './Estados';
 export * from './Barra';
 export * from './Segmentos';
+export * from './Opciones';
+export * from './Plegable';
+export * from './FilaOrdenable';
+export * from './SelectorDeFoto';

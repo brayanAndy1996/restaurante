@@ -1,4 +1,9 @@
-import { errorRespuestaSchema, type CampoError } from '@restaurante/contratos';
+import {
+  errorRespuestaSchema,
+  type CampoError,
+  type SeQuita,
+  type UsadoEn,
+} from '@restaurante/contratos';
 
 /** Códigos que solo existen en el cliente. */
 export type CodigoCliente = 'SIN_CONEXION' | 'RESPUESTA_INVALIDA';
@@ -9,6 +14,10 @@ export class ErrorApi extends Error {
   readonly codigo: string;
   readonly campos: CampoError[];
   readonly reintentarEnSegundos: number | undefined;
+  /** Solo en `EN_USO` de un cambio de tipo: dónde se usa el producto (003, criterio 10c). */
+  readonly usadoEn: UsadoEn | undefined;
+  /** Solo en `CONFIRMACION_REQUERIDA`: lo que el cambio de tipo quitaría (003, criterio 10b). */
+  readonly seQuita: SeQuita | undefined;
   /** La escritura se reintentó por un corte antes de fallar: pudo haberse aplicado una vez. */
   readonly reintentada: boolean;
 
@@ -18,6 +27,8 @@ export class ErrorApi extends Error {
     mensaje: string;
     campos?: CampoError[];
     reintentarEnSegundos?: number;
+    usadoEn?: UsadoEn;
+    seQuita?: SeQuita;
     reintentada?: boolean;
   }) {
     super(datos.mensaje);
@@ -26,6 +37,8 @@ export class ErrorApi extends Error {
     this.codigo = datos.codigo;
     this.campos = datos.campos ?? [];
     this.reintentarEnSegundos = datos.reintentarEnSegundos;
+    this.usadoEn = datos.usadoEn;
+    this.seQuita = datos.seQuita;
     this.reintentada = datos.reintentada ?? false;
   }
 
@@ -45,7 +58,11 @@ export function errorDeRespuesta(estado: number, cuerpo: unknown, reintentada = 
       codigo: e.codigo,
       mensaje: e.mensaje,
       campos: e.campos ?? [],
-      reintentarEnSegundos: e.reintentarEnSegundos,
+      ...(e.reintentarEnSegundos === undefined
+        ? {}
+        : { reintentarEnSegundos: e.reintentarEnSegundos }),
+      ...(e.usadoEn === undefined ? {} : { usadoEn: e.usadoEn }),
+      ...(e.seQuita === undefined ? {} : { seQuita: e.seQuita }),
       reintentada,
     });
   }
@@ -115,6 +132,18 @@ export function mensajeDeError(error: unknown, porCodigo: Record<string, string>
       return 'Esta operación ya se había enviado con otros datos. Vuelve a abrir la pantalla e inténtalo de nuevo.';
     case 'CONFLICTO':
       return 'Esto choca con algo que ya existe. Revisa los datos e inténtalo de nuevo.';
+    case 'REFERENCIA_INVALIDA':
+      return 'Algo de lo que elegiste ya no existe o está desactivado. Actualiza la pantalla e inténtalo de nuevo.';
+    case 'EN_USO':
+      return 'Esto se está usando en otro lugar. Quítalo de ahí antes de desactivarlo.';
+    case 'CONFIRMACION_REQUERIDA':
+      return 'Este cambio necesita tu confirmación antes de aplicarse.';
+    case 'FOTO_INVALIDA':
+      return 'No pudimos usar esa foto. Elige otra en JPEG, PNG o WebP, de al menos 200 píxeles de lado.';
+    case 'CUERPO_DEMASIADO_GRANDE':
+      return 'Lo que enviaste pesa demasiado. Elige un archivo más liviano.';
+    case 'TIPO_NO_SOPORTADO':
+      return 'Ese tipo de archivo no se admite.';
     default:
       return error.estado >= 500
         ? 'Algo falló de nuestro lado. Inténtalo de nuevo en un momento.'

@@ -2,12 +2,14 @@ import {
   Cenefa,
   ContenidoDeDestino,
   IconoCandado,
+  IconoCarta,
   IconoInicio,
   IconoUsuarios,
   Navegacion,
 } from '@restaurante/ui';
 import { NavLink, Outlet } from 'react-router-dom';
 import { VigilanteDeInactividad } from '../modulos/acceso/inactividad';
+import { usePermiso } from '../modulos/acceso/permisos';
 import { useSesion } from '../modulos/acceso/sesion';
 import {
   BannerDeConexion,
@@ -23,8 +25,11 @@ import {
 export function AppLayout() {
   const { sesion } = useSesion();
   const estado = useEstadoDeCenefa();
+  // "Carta" la ve quien edita la carta con su rol en la sucursal activa (Administrador y Cajero).
+  const veLaCarta = usePermiso('EDITAR_CARTA') === 'permitido';
   const destinos = [
     { a: '/', etiqueta: 'Inicio', icono: IconoInicio, fin: true },
+    ...(veLaCarta ? [{ a: '/carta', etiqueta: 'Carta', icono: IconoCarta, fin: false }] : []),
     ...(sesion?.esAdministrador
       ? [
           { a: '/administracion/usuarios', etiqueta: 'Usuarios', icono: IconoUsuarios, fin: false },

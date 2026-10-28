@@ -1,6 +1,9 @@
 import type { LucideIcon } from 'lucide-react';
 import { clases } from './utilidades';
 
+/** Tipo de un icono del vocabulario, para quien recibe uno como propiedad. */
+export type { LucideIcon };
+
 /** Vocabulario único de iconos de la app: Lucide, contorno, trazo de 1.75 px. */
 export {
   ArrowLeft as IconoVolver,
@@ -43,6 +46,16 @@ export {
   CalendarClock as IconoSuscripcion,
   Package as IconoPlan,
   Banknote as IconoPago,
+  UtensilsCrossed as IconoCarta,
+  Camera as IconoCamara,
+  Image as IconoImagen,
+  ArrowUp as IconoSubir,
+  ArrowDown as IconoBajar,
+  Trash2 as IconoBasura,
+  ArrowUpDown as IconoOrdenar,
+  ChefHat as IconoEstacion,
+  Layers as IconoFamilia,
+  ChevronUp as IconoArriba,
 } from 'lucide-react';
 
 interface PropsIcono {

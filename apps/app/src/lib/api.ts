@@ -25,6 +25,10 @@ export type Metodo = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
 
 export interface OpcionesApi<T> {
   metodo?: Metodo;
+  /**
+   * Cuerpo de la petición. Un `Blob` (por ejemplo, la foto de un producto) viaja tal cual, con su propio
+   * `Content-Type`; cualquier otra cosa se envía como JSON.
+   */
   cuerpo?: unknown;
   /** Esquema de la respuesta; sin él, se devuelve el JSON tal cual (o `undefined` si no hay cuerpo). */
   esquema?: Esquema<T>;
@@ -151,8 +155,12 @@ export async function llamar<T = void>(ruta: string, opciones: OpcionesApi<T> = 
     cabeceras['Idempotency-Key'] =
       typeof opciones.idempotente === 'string' ? opciones.idempotente : nuevaClaveDeIdempotencia();
   }
-  let cuerpo: string | undefined;
-  if (opciones.cuerpo !== undefined) {
+  let cuerpo: string | Blob | undefined;
+  if (opciones.cuerpo instanceof Blob) {
+    // Cuerpo binario: la misma carga se reenvía en cada reintento.
+    cabeceras['Content-Type'] = opciones.cuerpo.type || 'application/octet-stream';
+    cuerpo = opciones.cuerpo;
+  } else if (opciones.cuerpo !== undefined) {
     cabeceras['Content-Type'] = 'application/json';
     cuerpo = JSON.stringify(opciones.cuerpo);
   }

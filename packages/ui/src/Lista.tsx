@@ -1,6 +1,40 @@
-import type { ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
+import { Icono, IconoImagen } from './iconos';
 import { Inicial } from './Persona';
 import { clases, CONSULTA_TABLET, useCoincide } from './utilidades';
+
+/**
+ * Miniatura cuadrada de 48 px de una foto. Se carga perezosa (solo las que se ven: con datos móviles
+ * una lista larga no baja todas las fotos) y, si falta o no carga, deja una baldosa vacía en su lugar.
+ * Es decorativa: el nombre del producto va al lado.
+ */
+export function Miniatura({ url, apagada }: { url: string | null | undefined; apagada?: boolean }) {
+  const [rota, setRota] = useState<string | null>(null);
+  const hayFoto = url !== null && url !== undefined && url !== rota;
+  return (
+    <span
+      className={clases(
+        'ui-miniatura',
+        !hayFoto && 'ui-miniatura--vacia',
+        apagada && 'ui-miniatura--apagada',
+      )}
+    >
+      {hayFoto ? (
+        <img
+          src={url}
+          alt=""
+          width={48}
+          height={48}
+          loading="lazy"
+          decoding="async"
+          onError={() => setRota(url)}
+        />
+      ) : (
+        <Icono icono={IconoImagen} tamano={20} />
+      )}
+    </span>
+  );
+}
 
 /** Clase de una fila de lista: para usarla en un `<Link>` o `<button>` del router. */
 export function claseFila(apagada?: boolean): string {
@@ -10,6 +44,8 @@ export function claseFila(apagada?: boolean): string {
 interface PropsContenidoFila {
   /** Nombre cuya inicial se muestra a la izquierda; sin él, la fila no lleva inicial. */
   inicial?: string;
+  /** Otra cosa a la izquierda en lugar de la inicial (por ejemplo, la `Miniatura` de un producto). */
+  izquierda?: ReactNode;
   apagada?: boolean;
   titulo: ReactNode;
   ayuda?: ReactNode;
@@ -22,6 +58,7 @@ interface PropsContenidoFila {
 /** Interior de una fila de 72 px: inicial, título, segunda línea de ayuda y un estado a la derecha. */
 export function ContenidoDeFila({
   inicial,
+  izquierda,
   apagada,
   titulo,
   ayuda,
@@ -30,7 +67,7 @@ export function ContenidoDeFila({
 }: PropsContenidoFila) {
   return (
     <>
-      {inicial ? <Inicial nombre={inicial} apagada={apagada} /> : null}
+      {izquierda ?? (inicial ? <Inicial nombre={inicial} apagada={apagada} /> : null)}
       <span className="ui-fila__texto">
         <span className="ui-fila__titulo">{titulo}</span>
         {ayuda ? <span className="ui-fila__ayuda">{ayuda}</span> : null}

@@ -8,6 +8,7 @@ import { IngresoPagina } from './modulos/acceso/IngresoPagina';
 import { InicioPagina } from './modulos/acceso/InicioPagina';
 import { PinPagina } from './modulos/acceso/PinPagina';
 import { RecordarEquipoAutomatico } from './modulos/acceso/RecordarEquipo';
+import { usePermiso } from './modulos/acceso/permisos';
 import { useSesion } from './modulos/acceso/sesion';
 import { PlataformaIngresoPagina } from './modulos/plataforma/PlataformaIngresoPagina';
 import { PlataformaLayout } from './modulos/plataforma/PlataformaLayout';
@@ -32,6 +33,19 @@ const MisEquiposPagina = lazy(() =>
 const AccesoSucursalPagina = lazy(() =>
   import('./modulos/administracion/AccesoSucursalPagina').then((m) => ({
     default: m.AccesoSucursalPagina,
+  })),
+);
+const CartaPagina = lazy(() =>
+  import('./modulos/carta/CartaPagina').then((m) => ({ default: m.CartaPagina })),
+);
+const ProductoNuevoPagina = lazy(() =>
+  import('./modulos/carta/ProductoFormularioPagina').then((m) => ({
+    default: m.ProductoNuevoPagina,
+  })),
+);
+const ProductoEditarPagina = lazy(() =>
+  import('./modulos/carta/ProductoFormularioPagina').then((m) => ({
+    default: m.ProductoEditarPagina,
   })),
 );
 // Solo en desarrollo: la ruta y su código no llegan al paquete de producción.
@@ -138,6 +152,16 @@ function RutaDeAdministrador() {
   return <Outlet />;
 }
 
+/**
+ * La carta la edita quien tiene `EDITAR_CARTA` con su rol en la sucursal activa (Administrador y
+ * Cajero). La guarda solo ordena la pantalla: la API decide.
+ */
+function RutaDeCarta() {
+  const permiso = usePermiso('EDITAR_CARTA');
+  if (permiso !== 'permitido') return <Navigate to="/" replace />;
+  return <Outlet />;
+}
+
 function Cargando() {
   return <PantallaDeCarga />;
 }
@@ -172,6 +196,11 @@ export function App() {
               {ClaveSupervisorDemo ? (
                 <Route path="/demo/clave-supervisor" element={<ClaveSupervisorDemo />} />
               ) : null}
+              <Route element={<RutaDeCarta />}>
+                <Route path="/carta" element={<CartaPagina />} />
+                <Route path="/carta/productos/nuevo" element={<ProductoNuevoPagina />} />
+                <Route path="/carta/productos/:id" element={<ProductoEditarPagina />} />
+              </Route>
               <Route element={<RutaDeAdministrador />}>
                 <Route path="/administracion/usuarios" element={<UsuariosPagina />} />
                 <Route path="/administracion/usuarios/nuevo" element={<UsuarioNuevoPagina />} />
