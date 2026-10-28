@@ -140,7 +140,7 @@ describe('menú del día: lectura', () => {
     disponibilidad(cocina(), {
       [HOY]: [menu(HOY, [M_HUANCAINA, M_AJI], { noDisponibles: [M_SOPA] })],
     });
-    renderApp('/disponibilidad');
+    renderApp('/disponibilidad?ver=menu');
     expect(
       await screen.findByRole('status', { name: 'Cargando el menú del día' }),
     ).toBeInTheDocument();
@@ -168,19 +168,25 @@ describe('menú del día: lectura', () => {
         .getByRole('checkbox', { name: /Ají de gallina/ })
         .closest('label'),
     ).toHaveTextContent('Sin recargo');
-    // Hoy y Mañana; "Agotados" llega en C5, así que aún no hay cambio de sección.
+    // Hoy y Mañana, y el cambio de sección con "Menú del día" elegida.
     expect(screen.getByRole('button', { name: 'Hoy' })).toHaveAttribute('aria-pressed', 'true');
     expect(screen.getByRole('button', { name: 'Mañana' })).toHaveAttribute('aria-pressed', 'false');
-    expect(
-      screen.queryByRole('group', { name: 'Secciones de disponibilidad' }),
-    ).not.toBeInTheDocument();
+    const secciones = screen.getByRole('group', { name: 'Secciones de disponibilidad' });
+    expect(within(secciones).getByRole('button', { name: 'Menú del día' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+    expect(within(secciones).getByRole('button', { name: 'Agotados' })).toHaveAttribute(
+      'aria-pressed',
+      'false',
+    );
     expect(screen.queryByText(/no está armado/)).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Guardar el menú de hoy' })).toBeDisabled();
   });
 
   it('si hoy no está armado lo dice arriba y cada tiempo dice cuántos platos faltan', async () => {
     disponibilidad(cocina(), { [HOY]: [menu(HOY, [])] });
-    renderApp('/disponibilidad');
+    renderApp('/disponibilidad?ver=menu');
     const aviso = (
       await screen.findByText('El menú de hoy no está armado: no se puede vender')
     ).closest('[role="status"]')!;
@@ -199,7 +205,7 @@ describe('menú del día: lectura', () => {
         menu(HOY, [], { id: P_OTRO_MENU, nombre: 'Menú ejecutivo' }),
       ],
     });
-    renderApp('/disponibilidad');
+    renderApp('/disponibilidad?ver=menu');
     const aviso = (
       await screen.findByText('El menú de hoy no está armado: no se puede vender')
     ).closest('[role="status"]')!;
@@ -208,7 +214,7 @@ describe('menú del día: lectura', () => {
 
   it('sin menús dice por qué y, a quien edita la carta, ofrece crearlo', async () => {
     disponibilidad(administrador(), { [HOY]: [] });
-    renderApp('/disponibilidad');
+    renderApp('/disponibilidad?ver=menu');
     expect(await screen.findByText('Esta sucursal no tiene un menú del día')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Crear un menú del día' })).toHaveAttribute(
       'href',
@@ -218,7 +224,7 @@ describe('menú del día: lectura', () => {
 
   it('sin menús, Cocina/Barra sabe a quién pedírselo y no ve botones que no puede usar', async () => {
     disponibilidad(cocina(), { [HOY]: [] });
-    renderApp('/disponibilidad');
+    renderApp('/disponibilidad?ver=menu');
     expect(await screen.findByText(/Pide al Administrador o a un Cajero/)).toBeInTheDocument();
     expect(screen.queryByRole('link', { name: 'Crear un menú del día' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Guardar el menú/ })).not.toBeInTheDocument();
@@ -236,7 +242,7 @@ describe('menú del día: lectura', () => {
             : json(200, [menu(HOY, [M_HUANCAINA, M_AJI])]),
       },
     );
-    renderApp('/disponibilidad');
+    renderApp('/disponibilidad?ver=menu');
     expect(await screen.findByText('No pudimos cargar el menú del día')).toBeInTheDocument();
     falla = false;
     await userEvent.click(screen.getByRole('button', { name: 'Reintentar' }));
@@ -251,7 +257,7 @@ describe('menú del día: lectura', () => {
         throw new TypeError('Failed to fetch');
       },
     });
-    renderApp('/disponibilidad');
+    renderApp('/disponibilidad?ver=menu');
     await waitFor(() =>
       expect(
         screen.getAllByText('Sin conexión').some((e) => e.closest('[role="alert"]') !== null),
@@ -270,7 +276,7 @@ describe('menú del día: armar', () => {
         [`PUT ${RUTA}/${P_MENU}`]: () => json(200, menu(HOY, [M_SOPA, M_LOMO])),
       },
     );
-    renderApp('/disponibilidad');
+    renderApp('/disponibilidad?ver=menu');
     const bloque = await screen.findByRole('region', { name: 'Menú criollo' });
     await userEvent.click(within(bloque).getByRole('checkbox', { name: /Sopa del día/ }));
     expect(within(bloque).getByText('Sin guardar')).toBeInTheDocument();
@@ -295,7 +301,7 @@ describe('menú del día: armar', () => {
       { [HOY]: [menu(HOY, [M_HUANCAINA, M_AJI])] },
       { [`PUT ${RUTA}/${P_MENU}`]: () => json(200, menu(HOY, [])) },
     );
-    renderApp('/disponibilidad');
+    renderApp('/disponibilidad?ver=menu');
     const bloque = await screen.findByRole('region', { name: 'Menú criollo' });
     await userEvent.click(within(bloque).getByRole('checkbox', { name: /Papa a la huancaína/ }));
     await userEvent.click(within(bloque).getByRole('checkbox', { name: /Ají de gallina/ }));
@@ -313,7 +319,7 @@ describe('menú del día: armar', () => {
       { [HOY]: [menu(HOY, [M_HUANCAINA, M_AJI])], [MANANA]: [menu(MANANA, [])] },
       { [`PUT ${RUTA}/${P_MENU}`]: () => json(200, menu(MANANA, [M_SOPA, M_AJI])) },
     );
-    renderApp('/disponibilidad');
+    renderApp('/disponibilidad?ver=menu');
     await screen.findByRole('region', { name: 'Menú criollo' });
     await userEvent.click(screen.getByRole('button', { name: 'Mañana' }));
     expect(await screen.findByText('viernes 30 de octubre')).toBeInTheDocument();
@@ -338,7 +344,7 @@ describe('menú del día: armar', () => {
       [HOY]: [menu(HOY, [M_HUANCAINA, M_AJI])],
       [MANANA]: [menu(MANANA, [])],
     });
-    renderApp('/disponibilidad');
+    renderApp('/disponibilidad?ver=menu');
     const bloque = await screen.findByRole('region', { name: 'Menú criollo' });
     await userEvent.click(within(bloque).getByRole('checkbox', { name: /Sopa del día/ }));
     await userEvent.click(screen.getByRole('button', { name: 'Mañana' }));
@@ -363,7 +369,7 @@ describe('menú del día: armar', () => {
           }),
       },
     );
-    renderApp('/disponibilidad');
+    renderApp('/disponibilidad?ver=menu');
     const bloque = await screen.findByRole('region', { name: 'Menú criollo' });
     await userEvent.click(within(bloque).getByRole('checkbox', { name: /Sopa del día/ }));
     await userEvent.click(screen.getByRole('button', { name: 'Guardar el menú de hoy' }));
@@ -387,7 +393,7 @@ describe('menú del día: armar', () => {
           json(200, menu(HOY, [M_SOPA, M_AJI], { id: P_OTRO_MENU, nombre: 'Menú ejecutivo' })),
       },
     );
-    renderApp('/disponibilidad');
+    renderApp('/disponibilidad?ver=menu');
     const ejecutivo = await screen.findByRole('region', { name: 'Menú ejecutivo' });
     await userEvent.click(within(ejecutivo).getByRole('checkbox', { name: /Lomo saltado/ }));
     await userEvent.click(within(ejecutivo).getByRole('checkbox', { name: /Ají de gallina/ }));
@@ -408,7 +414,7 @@ describe('menú del día: repetir las de ayer', () => {
       { [HOY]: [menu(HOY, [])], [AYER]: [menu(AYER, [M_SOPA, M_LOMO])] },
       { [`PUT ${RUTA}/${P_MENU}`]: () => json(200, menu(HOY, [M_SOPA, M_LOMO])) },
     );
-    renderApp('/disponibilidad');
+    renderApp('/disponibilidad?ver=menu');
     const bloque = await screen.findByRole('region', { name: 'Menú criollo' });
     expect(screen.getByRole('button', { name: 'Guardar el menú de hoy' })).toBeDisabled();
     await userEvent.click(screen.getByRole('button', { name: 'Repetir las de ayer' }));
@@ -428,7 +434,7 @@ describe('menú del día: repetir las de ayer', () => {
 
   it('si ayer no había nada armado, lo dice y no marca nada', async () => {
     disponibilidad(cocina(), { [HOY]: [menu(HOY, [])], [AYER]: [menu(AYER, [])] });
-    renderApp('/disponibilidad');
+    renderApp('/disponibilidad?ver=menu');
     await screen.findByRole('region', { name: 'Menú criollo' });
     await userEvent.click(screen.getByRole('button', { name: 'Repetir las de ayer' }));
     expect(await screen.findByText(/Ayer no había opciones armadas/)).toBeInTheDocument();
@@ -440,7 +446,7 @@ describe('menú del día: repetir las de ayer', () => {
       [HOY]: [menu(HOY, [M_HUANCAINA, M_AJI])],
       [MANANA]: [menu(MANANA, [])],
     });
-    renderApp('/disponibilidad');
+    renderApp('/disponibilidad?ver=menu');
     await screen.findByRole('region', { name: 'Menú criollo' });
     await userEvent.click(screen.getByRole('button', { name: 'Mañana' }));
     await screen.findByText('viernes 30 de octubre');
@@ -461,7 +467,7 @@ describe('menú del día: repetir las de ayer', () => {
             : json(200, [menu(HOY, [])]),
       },
     );
-    renderApp('/disponibilidad');
+    renderApp('/disponibilidad?ver=menu');
     const bloque = await screen.findByRole('region', { name: 'Menú criollo' });
     await userEvent.click(within(bloque).getByRole('checkbox', { name: /Sopa del día/ }));
     await userEvent.click(screen.getByRole('button', { name: 'Repetir las de ayer' }));
@@ -489,7 +495,7 @@ describe('Pendiente de envío en el menú del día (criterio 78)', () => {
         },
       },
     );
-    renderApp('/disponibilidad');
+    renderApp('/disponibilidad?ver=menu');
     const bloque = await screen.findByRole('region', { name: 'Menú criollo' });
     await userEvent.click(within(bloque).getByRole('checkbox', { name: /Papa a la huancaína/ }));
     await userEvent.click(within(bloque).getByRole('checkbox', { name: /Ají de gallina/ }));

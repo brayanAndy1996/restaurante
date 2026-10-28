@@ -60,6 +60,13 @@ export interface OpcionesApi<T> {
    * los reintentos.
    */
   alReintentar?: () => void;
+  /**
+   * `ETag` de la última respuesta que ya se tiene (solo `GET`): va en `If-None-Match`. Si el servidor
+   * responde 304, la llamada termina sin cuerpo (ver `consultarSiCambio`, que lo expone con tipos).
+   */
+  etag?: string;
+  /** Recibe la respuesta HTTP (200 o 304) antes de leer su cuerpo; sirve para leer cabeceras como `ETag`. */
+  alRespuesta?: (respuesta: Response) => void;
 }
 
 /** Espera entre intentos, en milisegundos. El primer intento sale de inmediato. */
@@ -157,6 +164,7 @@ export async function llamar<T = void>(ruta: string, opciones: OpcionesApi<T> = 
   if (equipo) cabeceras['X-Equipo'] = equipo;
   if (opciones.autorizacion) cabeceras['X-Autorizacion'] = opciones.autorizacion;
   if (opciones.segundoPlano) cabeceras['X-Actividad'] = 'segundo-plano';
+  if (metodo === 'GET' && opciones.etag) cabeceras['If-None-Match'] = opciones.etag;
   if (metodo !== 'GET' && opciones.idempotente) {
     cabeceras['Idempotency-Key'] =
       typeof opciones.idempotente === 'string' ? opciones.idempotente : nuevaClaveDeIdempotencia();
@@ -196,7 +204,14 @@ export async function llamar<T = void>(ruta: string, opciones: OpcionesApi<T> = 
         if (fecha && !Number.isNaN(Date.parse(fecha)))
           desfaseRelojMs = Date.now() - Date.parse(fecha);
 
+        // 304: lo que ya se tiene sigue valiendo. Solo ocurre si la llamada mandó `If-None-Match`.
+        if (respuesta.status === 304 && opciones.etag) {
+          opciones.alRespuesta?.(respuesta);
+          return undefined as T;
+        }
+
         if (respuesta.ok) {
+          opciones.alRespuesta?.(respuesta);
           const texto = await respuesta.text();
           const json = leerJson(texto);
           if (!opciones.esquema) return json as T;
@@ -283,6 +298,37 @@ export const api = {
   delete: <T = void>(ruta: string, opciones: Omit<OpcionesApi<T>, 'metodo' | 'cuerpo'> = {}) =>
     llamar<T>(ruta, { ...opciones, metodo: 'DELETE' }),
 };
+
+/** Resultado de una consulta condicional: lo nuevo con su `ETag`, o "sin cambios" (304). */
+export type ConsultaCondicional<T> =
+  { cambio: true; datos: T; etag: string | null } | { cambio: false };
+
+/**
+ * `GET` con `If-None-Match`: si `etag` es el de lo que ya se tiene y el servidor no tiene nada nuevo,
+ * responde 304 y no se baja el cuerpo (ahorra datos móviles). Sin `etag` es un `GET` normal que además
+ * devuelve el `ETag` de la respuesta. Un servidor que no expone `ETag` (CORS) da `etag: null`: la
+ * próxima consulta simplemente baja todo otra vez.
+ */
+export async function consultarSiCambio<T>(
+  ruta: string,
+  opciones: Omit<OpcionesApi<T>, 'metodo' | 'cuerpo' | 'idempotente' | 'etag' | 'alRespuesta'> & {
+    etag?: string | null;
+  } = {},
+): Promise<ConsultaCondicional<T>> {
+  const { etag, ...resto } = opciones;
+  let estado = 0;
+  let etagNuevo: string | null = null;
+  const datos = await llamar<T>(ruta, {
+    ...resto,
+    metodo: 'GET',
+    ...(etag ? { etag } : {}),
+    alRespuesta: (respuesta) => {
+      estado = respuesta.status;
+      etagNuevo = respuesta.headers.get('ETag');
+    },
+  });
+  return estado === 304 ? { cambio: false } : { cambio: true, datos, etag: etagNuevo };
+}
 
 /** Esquema de una lista a partir del esquema de sus elementos (los de contratos son de un solo objeto). */
 export function listaDe<T>(elemento: Esquema<T>): Esquema<T[]> {

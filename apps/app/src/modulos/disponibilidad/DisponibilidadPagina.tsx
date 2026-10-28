@@ -7,12 +7,12 @@ import {
   seccionDeDisponibilidadPedida,
   type SeccionDeDisponibilidad,
 } from './disponibilidad';
+import { AgotadosSeccion } from './AgotadosSeccion';
 import { MenuDelDiaSeccion } from './MenuDelDiaSeccion';
 
 /**
  * Marco del destino "Disponibilidad": título, el cambio de sección arriba (solo cuando hay más de una
- * sección) y, abajo, la acción principal de la sección. "Agotados" llega en C5 (T27): se enciende en
- * `SECCIONES_DE_DISPONIBILIDAD` y su pantalla se suma en `DisponibilidadPagina`.
+ * sección) y, abajo, la acción fija de la sección (guardar el menú, deshacer un agotado).
  */
 export function MarcoDeDisponibilidad({
   actual,
@@ -45,10 +45,11 @@ export function MarcoDeDisponibilidad({
   );
 }
 
-/** `/disponibilidad`: la sección sale de `?ver=` (agotados o menu). */
+/** `/disponibilidad`: la sección sale de `?ver=` (agotados, la primera, o menu). */
 export function DisponibilidadPagina() {
   const [parametros] = useSearchParams();
   const seccion = seccionDeDisponibilidadPedida(parametros.get('ver'));
-  // T27 (C5): `if (seccion === 'agotados') return <AgotadosSeccion />;`
+  if (seccion === 'agotados')
+    return <AgotadosSeccion marco={MarcoDeDisponibilidad} actual={seccion} />;
   return <MenuDelDiaSeccion marco={MarcoDeDisponibilidad} actual={seccion} />;
 }

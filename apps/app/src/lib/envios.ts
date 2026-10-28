@@ -105,10 +105,16 @@ export function useEnvioPendiente() {
     };
   }, []);
   const enviar = useCallback(
-    <T>(ejecutar: (extra: ExtraDeEscritura) => Promise<T>) =>
+    <T>(
+      ejecutar: (extra: ExtraDeEscritura) => Promise<T>,
+      /** Aviso propio de este envío (por ejemplo, marcar la fila que espera la red). */
+      alCambiarEste?: (pendiente: boolean) => void,
+    ) =>
       enviarSinPerder(ejecutar, {
         alCambiar: (pendiente) => {
-          if (montado.current) setEsperando((n) => Math.max(0, n + (pendiente ? 1 : -1)));
+          if (!montado.current) return;
+          setEsperando((n) => Math.max(0, n + (pendiente ? 1 : -1)));
+          alCambiarEste?.(pendiente);
         },
       }),
     [],

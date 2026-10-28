@@ -15,7 +15,7 @@ import {
   claseBoton,
 } from '@restaurante/ui';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useState, type ComponentType, type ReactNode } from 'react';
+import { useMemo, useState, type ComponentType, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { EtiquetaPendiente } from '../../componentes/PendienteDeEnvio';
 import { enviarSinPerder } from '../../lib/envios';
@@ -23,6 +23,7 @@ import { ErrorApi, mensajeDeError } from '../../lib/errores';
 import { diaConFecha, montoEnSoles, montoEsCero, sumarDiasAFecha } from '../../lib/formato';
 import { usePermiso } from '../acceso/permisos';
 import { useSesionActiva } from '../acceso/sesion';
+import { motivoDeOpcionDelMenu } from './agotados';
 import {
   CLAVES_DISPONIBILIDAD,
   armarMenuDelDia,
@@ -39,6 +40,7 @@ import {
   reglaDeTiempo,
   textoDeFaltantes,
 } from './menu-del-dia';
+import { useVistaDeSucursal } from './useVistaDeSucursal';
 
 type Dia = 'hoy' | 'manana';
 
@@ -111,6 +113,28 @@ export function MenuDelDiaSeccion({
   const consulta = dia === 'hoy' ? hoyConsulta : mananaConsulta;
   const diaMostrado = dia === 'hoy' ? hoy : manana;
   const menus = consulta.data ?? [];
+
+  // Por qué un plato "no está disponible": la respuesta del menú solo dice que no lo está; el motivo sale del
+  // producto ligado en la vista de la sucursal. Se pide solo si hace falta (algún plato no disponible) y sin
+  // refrescarla: si no llega, queda el texto genérico.
+  const hayPlatosNoDisponibles = menus.some((m) =>
+    m.grupos.some((g) => g.opciones.some((o) => !o.disponible && o.producto !== null)),
+  );
+  const vista = useVistaDeSucursal(sucursalId, {
+    refrescar: false,
+    habilitada: hayPlatosNoDisponibles,
+  });
+  const productosDeLaVista = useMemo(
+    () =>
+      new Map(
+        vista.data?.vista.familias.flatMap((f) => f.productos).map((p) => [p.id, p] as const),
+      ),
+    [vista.data],
+  );
+  const motivoDeNoDisponible = (productoId: string | null): string =>
+    motivoDeOpcionDelMenu(
+      productoId === null || !vista.data ? null : (productosDeLaVista.get(productoId) ?? undefined),
+    );
 
   const marcadasDe = (menu: MenuDelDiaRespuesta): ReadonlySet<string> =>
     borradores[claveDeBorrador(menu.dia, menu.productoId)] ?? elegidasDe(menu);
@@ -420,6 +444,7 @@ export function MenuDelDiaSeccion({
                   marcadas={marcadasDe(menu)}
                   pendiente={pendientes.has(menu.productoId)}
                   sinGuardar={hayCambiosDeMenu(menu, marcadasDe(menu))}
+                  motivoDeNoDisponible={motivoDeNoDisponible}
                   onMarcar={(id, marcada) => marcar(menu, id, marcada)}
                 />
               ))}
@@ -459,10 +484,19 @@ interface PropsMenu {
   marcadas: ReadonlySet<string>;
   pendiente: boolean;
   sinGuardar: boolean;
+  /** Lo que se dice de un plato no disponible, según su producto ligado (`null` si no tiene). */
+  motivoDeNoDisponible: (productoId: string | null) => string;
   onMarcar: (modificadorId: string, marcada: boolean) => void;
 }
 
-function MenuDeUnDia({ menu, marcadas, pendiente, sinGuardar, onMarcar }: PropsMenu) {
+function MenuDeUnDia({
+  menu,
+  marcadas,
+  pendiente,
+  sinGuardar,
+  motivoDeNoDisponible,
+  onMarcar,
+}: PropsMenu) {
   const armado = !estaSinArmar(menu);
   const precio = montoEnSoles(menu.precio);
   return (
@@ -522,7 +556,9 @@ function MenuDeUnDia({ menu, marcadas, pendiente, sinGuardar, onMarcar }: PropsM
                         {opcion.disponible ? null : (
                           <>
                             {' · '}
-                            <b className="menu__no-disponible">No disponible hoy</b>
+                            <b className="menu__no-disponible">
+                              {motivoDeNoDisponible(opcion.producto?.id ?? null)}
+                            </b>
                           </>
                         )}
                       </>

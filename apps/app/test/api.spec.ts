@@ -1,7 +1,14 @@
 import { sesionRespuestaSchema } from '@restaurante/contratos';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { guardarSesionDePlataforma, guardarTokenDeSesion } from '../src/lib/almacen';
-import { api, configurarApi, espera, llamar, nuevaClaveDeIdempotencia } from '../src/lib/api';
+import {
+  api,
+  configurarApi,
+  consultarSiCambio,
+  espera,
+  llamar,
+  nuevaClaveDeIdempotencia,
+} from '../src/lib/api';
 import { conexion } from '../src/lib/conexion';
 import { ErrorApi } from '../src/lib/errores';
 import { falla, json, servidor, sesionDe } from './ayudas';
@@ -235,5 +242,57 @@ describe('respuestas', () => {
     servidor({ 'GET /algo': () => json(200, {}, { Date: adelantado }) });
     await llamar('/algo');
     expect(ahoraDelServidor() - Date.now()).toBeGreaterThan(9 * 60_000);
+  });
+});
+
+describe('consultarSiCambio: GET con ETag', () => {
+  it('sin ETag pide completo y devuelve el ETag de la respuesta', async () => {
+    const s = servidor({ 'GET /vista': () => json(200, { n: 1 }, { ETag: '"abc"' }) });
+    const r = await consultarSiCambio<{ n: number }>('/vista');
+    expect(r).toEqual({ cambio: true, datos: { n: 1 }, etag: '"abc"' });
+    expect(s.llamadas[0]?.cabeceras.has('If-None-Match')).toBe(false);
+  });
+
+  it('con ETag manda If-None-Match y un 304 devuelve "sin cambios" sin leer cuerpo', async () => {
+    const s = servidor({ 'GET /vista': () => json(304, undefined, { ETag: '"abc"' }) });
+    const esquema = { parse: vi.fn() };
+    const r = await consultarSiCambio('/vista', { etag: '"abc"', esquema, segundoPlano: true });
+    expect(r).toEqual({ cambio: false });
+    expect(s.llamadas[0]?.cabeceras.get('If-None-Match')).toBe('"abc"');
+    expect(s.llamadas[0]?.cabeceras.get('X-Actividad')).toBe('segundo-plano');
+    expect(esquema.parse).not.toHaveBeenCalled();
+  });
+
+  it('con ETag y un 200 (cambió) devuelve lo nuevo y el ETag nuevo; sin cabecera ETag da null', async () => {
+    servidor({ 'GET /vista': () => json(200, { n: 2 }, { ETag: '"def"' }) });
+    expect(await consultarSiCambio('/vista', { etag: '"abc"' })).toEqual({
+      cambio: true,
+      datos: { n: 2 },
+      etag: '"def"',
+    });
+    servidor({ 'GET /vista': () => json(200, { n: 3 }) });
+    expect(await consultarSiCambio('/vista', { etag: '"abc"' })).toEqual({
+      cambio: true,
+      datos: { n: 3 },
+      etag: null,
+    });
+  });
+
+  it('valida la respuesta con el esquema y un error de negocio sigue siendo un ErrorApi', async () => {
+    servidor({ 'GET /vista': () => json(200, { raro: true }) });
+    const error = await falla(
+      consultarSiCambio('/vista', {
+        esquema: {
+          parse: () => {
+            throw new Error('mal');
+          },
+        },
+      }),
+    );
+    expect(error.codigo).toBe('RESPUESTA_INVALIDA');
+    servidor({ 'GET /vista': () => json(409, { codigo: 'SUCURSAL_NO_ELEGIDA', mensaje: 'x' }) });
+    expect((await falla(consultarSiCambio('/vista', { etag: '"abc"' }))).codigo).toBe(
+      'SUCURSAL_NO_ELEGIDA',
+    );
   });
 });

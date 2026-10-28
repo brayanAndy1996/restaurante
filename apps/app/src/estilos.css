@@ -1007,3 +1007,121 @@ body,
 .avisos-de-guardado:empty {
   display: none;
 }
+
+/* Disponibilidad: agotados (003, criterios 77 y 78) */
+.agotados__filtros {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espacio-sm);
+}
+
+@media (min-width: 768px) {
+  .agotados__filtros .ui-segmentos {
+    max-width: 40rem;
+  }
+}
+
+/* Las columnas de todas las familias caen en el mismo sitio: se lee en vertical sin saltar de una tabla a otra */
+.agotados__familia .ui-tabla {
+  table-layout: fixed;
+}
+.agotados__familia .ui-tabla th:nth-child(1) {
+  width: 34%;
+}
+.agotados__familia .ui-tabla th:nth-child(2) {
+  width: 18%;
+}
+.agotados__familia .ui-tabla th:nth-child(3) {
+  width: 30%;
+}
+.agotados__familia .ui-tabla th:nth-child(4) {
+  width: 18%;
+}
+.agotados__familia .ui-tabla td {
+  overflow-wrap: anywhere;
+}
+
+.agotados__busqueda {
+  max-width: 360px;
+}
+
+.agotados__que-ver .ui-segmentos {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+@media (min-width: 768px) {
+  .agotados__que-ver .ui-segmentos {
+    max-width: 28rem;
+  }
+}
+
+.agotados__resumen {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--espacio-xs) var(--espacio-md);
+}
+
+.agotados__resumen p {
+  margin: 0;
+}
+
+/* Un producto agotado se ve de lejos: fondo rocoto suave, y además su etiqueta con palabras */
+.agotados__fila--agotada {
+  background: var(--color-peligro-suave);
+}
+
+.agotados__fila .ui-fila__titulo {
+  font-size: 1.0625rem;
+}
+
+/* El interruptor lleva su texto "Agotado" y no se estira: el nombre del producto es lo que cede */
+.agotados__interruptor {
+  flex: none;
+}
+
+.agotados__interruptor .ui-interruptor {
+  gap: var(--espacio-sm);
+}
+
+.agotados__interruptor .ui-interruptor__texto {
+  flex: none;
+}
+
+.agotados__estado {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--espacio-xs);
+  width: 100%;
+}
+
+.agotados__fila .agotados__estado {
+  padding-bottom: var(--espacio-xs);
+}
+
+.agotados__motivo {
+  font-size: 0.9375rem;
+  line-height: 1.375rem;
+  color: var(--color-aviso-texto);
+}
+
+.agotados__nombre {
+  font-weight: 700;
+}
+
+/* "Ceviche mixto está agotado · Deshacer" sobre la navegación, al alcance del pulgar */
+.agotados__deshacer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--espacio-md);
+  min-height: var(--alto-control);
+}
+
+.agotados__deshacer-texto {
+  min-width: 0;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}

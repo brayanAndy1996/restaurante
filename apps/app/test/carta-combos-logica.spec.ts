@@ -529,14 +529,14 @@ describe('menú del día: repetir las de otro día', () => {
 });
 
 describe('secciones de Disponibilidad', () => {
-  it('hoy solo está construido el menú del día; Agotados llega en C5', () => {
-    expect(SECCIONES_HABILITADAS.map((s) => s.valor)).toEqual(['menu']);
+  it('con C5 están construidas "Agotados" (la primera) y el menú del día', () => {
+    expect(SECCIONES_HABILITADAS.map((s) => s.valor)).toEqual(['agotados', 'menu']);
   });
 
-  it('una sección desconocida o aún no construida cae en la primera habilitada', () => {
-    expect(seccionDeDisponibilidadPedida(null)).toBe('menu');
-    expect(seccionDeDisponibilidadPedida('agotados')).toBe('menu');
+  it('una sección desconocida o ausente cae en la primera habilitada', () => {
+    expect(seccionDeDisponibilidadPedida(null)).toBe('agotados');
+    expect(seccionDeDisponibilidadPedida('agotados')).toBe('agotados');
     expect(seccionDeDisponibilidadPedida('menu')).toBe('menu');
-    expect(seccionDeDisponibilidadPedida('otra')).toBe('menu');
+    expect(seccionDeDisponibilidadPedida('otra')).toBe('agotados');
   });
 });
