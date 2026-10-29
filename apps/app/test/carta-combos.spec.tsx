@@ -230,9 +230,7 @@ describe('formulario de combo: alta', () => {
       expect.stringContaining('Lomo saltado'),
     ]);
     expect(within(ofrecidos).getByText(/No se vende solo/)).toBeInTheDocument();
-    await u.click(
-      within(ofrecidos).getByRole('button', { name: 'Agregar Hamburguesa clásica' }),
-    );
+    await u.click(within(ofrecidos).getByRole('button', { name: 'Agregar Hamburguesa clásica' }));
     const componentes = screen.getByRole('list', { name: 'Componentes de este producto' });
     expect(within(componentes).getByText('Hamburguesa clásica')).toBeInTheDocument();
     await u.click(
