@@ -681,6 +681,13 @@ describe('criterios 67 y 69 · los eventos reales llegan solo a su sala y no cam
     );
     const ordenDeB = await abrirOrden(ctx, m.tokens.B.adminS1, { mesaId: salonB.mesas[0]!.id });
     exigirEstado(ordenDeB, 201, 'abrir una mesa en B');
+    // Los eventos de la apertura llegan un instante después de la respuesta: se esperan antes de limpiar.
+    await Promise.all(
+      [c['B.adminS1']!, c['B.mozoS1']!].map(async (cliente) => {
+        await cliente.esperarEvento('salon.cambio', 3000);
+        await cliente.esperarEvento('orden.cambio', 3000);
+      }),
+    );
     for (const cliente of Object.values(c)) cliente.limpiar();
     const res = await postConClave(ctx, m.tokens.A.adminS1, `/ordenes/${ordenDeB.body.id}/envios`, {
       id: randomUUID(),
@@ -746,7 +753,8 @@ describe('criterio 69 · cada evento pesa menos de 4 KB y lleva solo ids, estado
       },
     });
     exigirEstado(largo, 201, 'crear el producto de nombre largo');
-
+    // Crear el producto publica carta.actualizada, que llega un instante después de la respuesta.
+    await cliente.esperarEvento('carta.actualizada', 3000);
     cliente.limpiar();
     const apertura = await abrirOrden(ctx, tokenS3, { mesaId: mesas[0]!.id, comensales: 99 });
     exigirEstado(apertura, 201, 'abrir la mesa');
@@ -1082,6 +1090,11 @@ describe('criterio 86 · 100 envíos concurrentes de A y de B con un pool de 2: 
       await preparar(m.e.A, m.tokens.A.adminSin, m.tokens.A.adminS1, m.cartaA),
       await preparar(m.e.B, m.tokens.B.adminSin, m.tokens.B.adminS1, m.cartaB),
     ] as const;
+    // Los eventos de la apertura llegan un instante después de la respuesta: se esperan antes de limpiar.
+    for (const cliente of [cA, cB]) {
+      await cliente.esperarEvento('salon.cambio', 3000);
+      await cliente.esperarEvento('orden.cambio', 3000);
+    }
     cA.limpiar();
     cB.limpiar();
     const enviados: [number, number] = [0, 0];
