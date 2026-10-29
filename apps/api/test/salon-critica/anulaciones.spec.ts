@@ -1158,8 +1158,12 @@ describe('criterio 38 · una comanda ANULACION por estación, con la cantidad de
     expect(anulacion.comandas).toHaveLength(2);
     expect(anulacion.comandas.map((x) => x.estacionNombre).sort()).toEqual(['Barra', 'Cocina']);
     for (const x of anulacion.comandas) {
-      expect(x).toMatchObject({ tipo: 'ANULACION', destino: 'KDS' });
+      // El ticket lleva el motivo de la anulación (criterio 38).
+      expect(x).toMatchObject({ tipo: 'ANULACION', destino: 'KDS', motivo });
     }
+    // Las comandas del envío (comanda o adición) no llevan motivo.
+    expect(o.envio.comandas.length).toBeGreaterThan(0);
+    for (const x of o.envio.comandas) expect(x.motivo, 'motivo de la comanda del envío').toBeNull();
 
     const kds = comandasDelKds(await leerCocina(ctx, cocina));
     const porEstacion = Object.fromEntries(
@@ -1175,13 +1179,13 @@ describe('criterio 38 · una comanda ANULACION por estación, con la cantidad de
     ]);
     for (const k of Object.values(porEstacion)) {
       expect(k!.tipo).toBe('ANULACION');
+      expect(k!.motivo, 'motivo en el KDS').toBe(motivo);
       expect(k!.orden.id).toBe(o.ordenId);
       expect(k!.orden.mesas.map((m) => m.id)).toEqual([o.mesa.id]);
       expect(k!.orden.mesas.map((m) => m.nombre)).toEqual([o.mesa.nombre]);
     }
 
-    // El motivo del ticket: `comandaKds` no lo trae (el contrato de la fase A no tiene `motivo`), así que se
-    // comprueba el vínculo con la anulación que lo guarda: la comanda nace de la anulación (`origen_id`).
+    // El vínculo con la anulación que guarda el motivo: la comanda nace de ella (`origen_id`).
     const filas = await comandasDeAnulacion(admin, o.ordenId);
     expect(filas.map((f) => f.id).sort()).toEqual(anulacion.comandas.map((x) => x.id).sort());
     for (const f of filas) expect(f.origen_id).toBe(cuerpo.id);
@@ -1193,6 +1197,9 @@ describe('criterio 38 · una comanda ANULACION por estación, con la cantidad de
       .filter((k) => k.tipo === 'COMANDA' && k.orden.id === o.ordenId)
       .flatMap((k) => k.lineas)
       .filter((l) => l.itemId === o.combo.id);
+    for (const k of kds.filter((k) => k.tipo === 'COMANDA' && k.orden.id === o.ordenId)) {
+      expect(k.motivo, 'una comanda normal no lleva motivo').toBeNull();
+    }
     expect(lineasComo(originales)).toEqual([
       { nombre: 'Cerveza Pilsen', cantidad: 1 },
       { nombre: 'Hamburguesa clásica', cantidad: 1 },
@@ -1278,7 +1285,11 @@ describe('criterio 38 · una comanda ANULACION por estación, con la cantidad de
     );
     exigirEstado(lomo, 201, 'anular el lomo');
     expect(lomo.body.comandas).toHaveLength(1);
-    expect(lomo.body.comandas[0]).toMatchObject({ estacionNombre: 'Cocina', tipo: 'ANULACION' });
+    expect(lomo.body.comandas[0]).toMatchObject({
+      estacionNombre: 'Cocina',
+      tipo: 'ANULACION',
+      motivo: 'El cliente no lo quiso',
+    });
     const kds = comandasDelKds(await leerCocina(ctx, cocina));
     const comanda = kds.find((k) => k.id === lomo.body.comandas[0].id)!;
     expect(lineasComo(comanda.lineas)).toEqual([{ nombre: 'Lomo saltado', cantidad: 1 }]);
@@ -1753,6 +1764,7 @@ describe('criterio 42 · anular la orden', () => {
       const k = kds.find((x) => x.id === fila.id)!;
       expect(k, `la comanda ${String(fila.id)} está en el KDS`).toBeDefined();
       expect(k.tipo).toBe('ANULACION');
+      expect(k.motivo, 'motivo en el KDS').toBe('Cierre del local');
       (lineasPorEstacion[k.estacion.nombre] ??= []).push(
         ...k.lineas.map((l) => ({ nombre: l.nombre, cantidad: l.cantidad })),
       );
