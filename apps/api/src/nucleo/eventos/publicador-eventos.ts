@@ -10,8 +10,14 @@
 /** Token de Nest del publicador de eventos. */
 export const PUBLICADOR_EVENTOS = Symbol('PUBLICADOR_EVENTOS');
 
-/** Sala a la que va un evento: toda la empresa o una sucursal. */
-export type SalaDeEvento = { tipo: 'empresa' } | { tipo: 'sucursal'; sucursalId: string };
+/**
+ * Sala a la que va un evento: toda la empresa, una sucursal o un puente de impresión (historia 004). El
+ * transporte traduce la sala a `e:<empresaId>`, `s:<empresaId>:<sucursalId>` o `p:<empresaId>:<puenteId>`.
+ */
+export type SalaDeEvento =
+  | { tipo: 'empresa' }
+  | { tipo: 'sucursal'; sucursalId: string }
+  | { tipo: 'puente'; puenteId: string };
 
 export interface EventoPublicable {
   empresaId: string;

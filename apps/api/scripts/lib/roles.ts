@@ -10,6 +10,19 @@ export const ROLES = {
 
 export type RolAplicacion = keyof typeof ROLES;
 
+/**
+ * Rol del adaptador de Socket.IO (historia 004): sin privilegios sobre `public`, solo sobre el esquema
+ * `tiempo_real`. Lo crea `db:preparar` junto con los tres de arriba, pero no forma parte de `ROLES` ni de
+ * `contrasenasDeRoles` (esos son los roles que tocan las tablas de la aplicación).
+ */
+export const ROL_TIEMPO_REAL = 'restaurante_tiempo_real';
+
+/** Rol que tiene URL derivada: los de `ROLES` y el del tiempo real. */
+export type RolConUrl = RolAplicacion | 'tiempoReal';
+
+/** Contraseña de desarrollo y pruebas del rol del tiempo real. */
+export const CONTRASENA_TIEMPO_REAL_POR_DEFECTO = 'tiempo_real_local';
+
 /** Contraseñas de desarrollo y pruebas; fuera de `NODE_ENV` development o test hay que definir `DB_PASSWORD_*`. */
 export const CONTRASENAS_POR_DEFECTO: Record<RolAplicacion, string> = {
   migrador: 'migrador_local',
@@ -39,6 +52,22 @@ export function contrasenaDeRol(rol: RolAplicacion, env: NodeJS.ProcessEnv = pro
   }
   throw new Error(
     `Falta ${VARIABLE_CONTRASENA[rol]}: solo hay contraseña por defecto con NODE_ENV=development ` +
+      'o NODE_ENV=test escritos de forma explícita',
+  );
+}
+
+/**
+ * Contraseña del rol del tiempo real: `DB_PASSWORD_TIEMPO_REAL` o, solo con `NODE_ENV` `development` o `test`
+ * explícito, la de desarrollo; si no, falla nombrando la variable (como `contrasenaDeRol`).
+ */
+export function contrasenaDeTiempoReal(env: NodeJS.ProcessEnv = process.env): string {
+  const definida = env.DB_PASSWORD_TIEMPO_REAL;
+  if (definida) return definida;
+  if (env.NODE_ENV !== undefined && ENTORNOS_CON_CONTRASENA_POR_DEFECTO.includes(env.NODE_ENV)) {
+    return CONTRASENA_TIEMPO_REAL_POR_DEFECTO;
+  }
+  throw new Error(
+    'Falta DB_PASSWORD_TIEMPO_REAL: solo hay contraseña por defecto con NODE_ENV=development ' +
       'o NODE_ENV=test escritos de forma explícita',
   );
 }
@@ -111,13 +140,13 @@ export function urlAdminDeMantenimiento(adminUrl: string, baseDeDestino: string)
 /** URL de un rol de la aplicación derivada de la del administrador (mismo servidor y puerto). */
 export function urlParaRol(
   adminUrl: string,
-  rol: RolAplicacion,
+  rol: RolConUrl,
   baseDeDatos: string,
   env: NodeJS.ProcessEnv = process.env,
 ): string {
   const url = new URL(adminUrl);
-  url.username = ROLES[rol];
-  url.password = contrasenaDeRol(rol, env);
+  url.username = rol === 'tiempoReal' ? ROL_TIEMPO_REAL : ROLES[rol];
+  url.password = rol === 'tiempoReal' ? contrasenaDeTiempoReal(env) : contrasenaDeRol(rol, env);
   url.pathname = `/${validarNombreDeBase(baseDeDatos)}`;
   return url.toString();
 }

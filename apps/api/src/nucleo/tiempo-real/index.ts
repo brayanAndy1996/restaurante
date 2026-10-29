@@ -1,0 +1,8 @@
+export { TiempoRealModule } from './tiempo-real.module';
+export { ServidorTiempoReal, INTERVALO_DE_REVISION_MS } from './servidor-tiempo-real';
+export { PublicadorSocketIo } from './publicador-socket-io';
+export { OPCIONES_TIEMPO_REAL, RUTA_TIEMPO_REAL } from './opciones';
+export type { OpcionesTiempoReal } from './opciones';
+export { VALIDADOR_DE_CONEXIONES } from './validador-de-conexiones';
+export type { SesionDeConexion, ValidadorDeConexiones } from './validador-de-conexiones';
+export { salaDeEmpresa, salaDeSesion, salaDeSucursal, salaDeSocketIo } from './salas';

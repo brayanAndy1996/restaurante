@@ -260,7 +260,7 @@ describe('sucursal y barra de la sesión', () => {
     });
     renderApp('/administracion/usuarios');
     expect(await screen.findByText('Hola, Marta')).toBeInTheDocument();
-    expect(screen.queryByRole('link', { name: 'Usuarios' })).toBeNull();
+    expect(screen.queryByRole('link', { name: 'Ajustes' })).toBeNull();
     expect(screen.queryByRole('navigation', { name: 'Principal' })).toBeNull();
   });
 

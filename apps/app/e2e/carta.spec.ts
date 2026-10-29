@@ -361,6 +361,10 @@ test('Cocina/Barra de S1 arma el menú de hoy y marca un plato agotado solo por 
     });
   });
 
+  // Cocina/Barra entra en la Cocina (criterio 87 de 004), que ya pidió la vista de la sucursal para sus filtros
+  // antes de que este oyente existiera: se recarga para que la primera lectura que se mira sea la de esta prueba.
+  await page.reload();
+  await expect(page.getByRole('heading', { name: 'Cocina', level: 1 })).toBeVisible();
   await expect(destino(page, 'Carta')).toHaveCount(0);
   await destino(page, 'Disponibilidad').click();
   await expect(page.getByRole('heading', { name: 'Disponibilidad', level: 1 })).toBeVisible();
@@ -689,8 +693,9 @@ test('un Mozo no ve Carta ni Disponibilidad, y la API le niega ambas', async ({
     '/carta/productos/nuevo',
   ]) {
     await page.goto(ruta);
-    await expect(page.getByRole('heading', { name: `Hola, ${e.mozo.primerNombre}` })).toBeVisible();
-    expect(new URL(page.url()).pathname).toBe('/');
+    // Lo que su rol no ve lo devuelve a su destino inicial: el Salón.
+    await expect(page.getByRole('heading', { name: 'Salón', level: 1 })).toBeVisible();
+    expect(new URL(page.url()).pathname).toBe('/salon');
   }
 
   // La guarda de la pantalla solo ordena: quien decide es la API.

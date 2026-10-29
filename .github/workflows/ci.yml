@@ -28,6 +28,7 @@ jobs:
       DB_PASSWORD_MIGRADOR: migrador_ci
       DB_PASSWORD_API: api_ci
       DB_PASSWORD_PLATAFORMA: plataforma_ci
+      DB_PASSWORD_TIEMPO_REAL: tiempo_real_ci
       # Valores solo para CI (no son secretos de producción).
       PIN_PEPPER: Y2ktcGluLXBlcHBlci1zb2xvLXBhcmEtcHJ1ZWJhcyEh
       ORIGENES_PERMITIDOS: http://localhost:5173
@@ -81,9 +82,11 @@ jobs:
       DB_PASSWORD_MIGRADOR: migrador_ci
       DB_PASSWORD_API: api_ci
       DB_PASSWORD_PLATAFORMA: plataforma_ci
+      DB_PASSWORD_TIEMPO_REAL: tiempo_real_ci
       DATABASE_URL: postgres://restaurante_api:api_ci@localhost:5432/restaurante
       DATABASE_PLATAFORMA_URL: postgres://restaurante_plataforma:plataforma_ci@localhost:5432/restaurante
       DATABASE_MIGRADOR_URL: postgres://restaurante_migrador:migrador_ci@localhost:5432/restaurante
+      DATABASE_TIEMPO_REAL_URL: postgres://restaurante_tiempo_real:tiempo_real_ci@localhost:5432/restaurante
       # Valores solo para CI (no son secretos de producción).
       PIN_PEPPER: Y2ktcGluLXBlcHBlci1zb2xvLXBhcmEtcHJ1ZWJhcyEh
       ORIGENES_PERMITIDOS: http://localhost:5173

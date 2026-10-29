@@ -1,4 +1,5 @@
 // spec: 002-plataforma-y-acceso (pruebas protegidas)
+// Ajustado por 004-salon-cocina, decisión 11 (2026-10-29): inactividad aparte para Cocina/Barra.
 //
 // P1 · Sesión, resolutor de empresa por sesión y rutas protegidas por defecto (criterios 1 a 9).
 // Las pruebas con etiqueta [C1], [C2] o [C3] dependen de funciones de grupos posteriores de la fase C.
@@ -813,7 +814,11 @@ describe('criterio 9 · regla de rol en emisores y sucursales', () => {
       cuerpo: { minutosInactividad: 7 },
     });
     expect(cambia.status, cambia.text).toBe(200);
-    expect(cambia.body).toEqual({ sucursalId, minutosInactividad: 7 });
+    expect(cambia.body).toEqual({
+      sucursalId,
+      minutosInactividad: 7,
+      minutosInactividadCocina: 60,
+    });
   });
 
   it('[C2] una sesión de PIN de cualquier rol no administrador recibe 403 PROHIBIDO en las rutas de escritura', async () => {

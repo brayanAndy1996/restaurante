@@ -19,9 +19,9 @@ import {
 import { useQuery } from '@tanstack/react-query';
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Pagina } from '../../componentes/Pagina';
 import { mensajeDeError } from '../../lib/errores';
 import { useSesionActiva } from '../acceso/sesion';
+import { MarcoDeAjustes } from './MarcoDeAjustes';
 import {
   CLAVE_USUARIOS,
   listarUsuarios,
@@ -71,8 +71,8 @@ export function UsuariosPagina() {
   const inactivos = todos.filter((u) => !u.activo).length;
 
   return (
-    <Pagina
-      titulo="Usuarios"
+    <MarcoDeAjustes
+      actual="usuarios"
       ancho="ancho"
       pie={
         <Link
@@ -192,6 +192,6 @@ export function UsuariosPagina() {
           )}
         </>
       )}
-    </Pagina>
+    </MarcoDeAjustes>
   );
 }

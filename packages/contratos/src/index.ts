@@ -8,3 +8,4 @@ export * from './equipos';
 export * from './autorizaciones';
 export * from './suscripciones';
 export * from './carta';
+export * from './salon';

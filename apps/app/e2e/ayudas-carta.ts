@@ -196,7 +196,9 @@ export async function entrarEnCelular(
     await expect(page.getByRole('heading', { name: 'Elige tu sucursal' })).toBeVisible();
     await page.getByRole('button', { name: new RegExp(sucursal) }).click();
   }
-  await expect(page.getByRole('heading', { name: `Hola, ${persona.primerNombre}` })).toBeVisible();
+  // Cada rol entra en su destino inicial (Salón o Cocina, criterio 87 de 004): la señal común de que entró es
+  // su nombre en la barra de la sesión.
+  await expect(page.getByRole('button', { name: `Sesión de ${persona.nombre}` })).toBeVisible();
   return { contexto, page, escrituras };
 }
 

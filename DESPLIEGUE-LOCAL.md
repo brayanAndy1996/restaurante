@@ -7,9 +7,12 @@ secciones ya aprobadas y cerradas. Hoy son:
   y con PIN, equipos recordados, horario de acceso, clave de supervisor y auditoría.
 - **Sección 2, Carta:** estaciones, familias, productos, fotos, modificadores, combos, menú del día,
   precio y disponibilidad por sucursal, y agotados.
+- **Sección 3a, Salón y Cocina:** mapa de mesas, abrir mesa, comandero, envío a cocina por estación,
+  tiempos 1 y 2, pantalla de cocina (KDS) con avisos de "Listo", anulaciones con clave, mover y unir
+  mesas, y pre-cuenta en pantalla, todo en tiempo real.
 
-Las secciones siguientes (Salón y Cocina, Caja, etc.) se trabajan en otra rama y llegan a `main`
-cuando se aprueban.
+Las secciones siguientes (impresión, caja, etc.) se trabajan en otra rama y llegan a `main` cuando se
+aprueban.
 
 ## 1. Lo que necesitas instalar
 
@@ -111,7 +114,7 @@ con el usuario `superadmin` y la contraseña `Superadmin-Demo-1`.
    de usuario con el PIN, sin escribir contraseñas.
 3. **Usuarios y acceso.** Como Administrador, en _Usuarios_, crea un trabajador, dale un rol y un
    horario, y revisa sus equipos recordados. En _Acceso_, cambia los minutos de cierre por
-   inactividad.
+   inactividad, también el de Cocina y Barra.
 4. **Carta.** Como Administrador:
    - crea las estaciones (por ejemplo, Cocina y Barra), las familias y algunos productos con foto;
    - arma un grupo de modificadores ("Término de la carne") y un combo;
@@ -127,6 +130,20 @@ con el usuario `superadmin` y la contraseña `Superadmin-Demo-1`.
 7. **Aislamiento.** Entra como `marea.admin`: no debe ver nada de El Fogón.
 8. **Plataforma.** Como `superadmin`, crea una empresa nueva (su primer Administrador recibe un PIN
    que se muestra una sola vez) y abre una sesión de soporte, que queda auditada.
+
+#### Salón y cocina (sección 3a)
+
+Hazlo después del paso 4, porque la comanda necesita productos y estaciones.
+
+1. **Mapa de mesas.** Como `fogon.admin`, en _Ajustes › Mapa de mesas_, crea una zona (por ejemplo, Salón) y tres mesas: toca una celda para crear una mesa y dale nombre, capacidad y forma.
+2. **Abrir una mesa.** Entra como `fogon.mozo`. Si te pide la sucursal, elige _El Fogón · Miraflores_. En _Salón_, toca una mesa libre y ábrela con sus comensales.
+3. **Comandar.** En la mesa, agrega un combo y un lomo en segundo tiempo, y pulsa _Enviar_.
+4. **Ver la comanda en la cocina.** Abre otra ventana (otro navegador o una ventana privada) y entra a `/cocina` como `fogon.cocina`, o como otro usuario de Cocina/Barra. El horario de `fogon.cocina` es de ejemplo: de 11:00 a 23:00, hora de Lima; fuera de él no puede ingresar. La comanda aparece sin recargar.
+5. **Marchar.** Vuelve al celular del mozo y pulsa _Marchar_ para mandar el segundo tiempo a la cocina.
+6. **Marcar listo.** En la cocina, pasa cada línea a _Preparando_ y luego a _Listo_, o usa _Todo listo_. El mozo recibe el aviso en el salón.
+7. **Pre-cuenta.** Pide la pre-cuenta: la mesa pasa a _Pre-cuenta_. Si después agregas otra adición, la pre-cuenta deja de valer y hay que pedir otra.
+8. **Anular con la clave del supervisor.** Anula un ítem, o una parte de él (1 de 2 unidades). La app pide la clave de supervisor: ingresa el PIN de `fogon.supervisor`. Queda registrado quién pidió la anulación y quién la autorizó, y la cocina la ve.
+9. **Mover y unir.** En la cuenta, usa _Mover la cuenta_ para llevarla a otra mesa libre, o _Unir mesas_ para juntar otra mesa a la cuenta.
 
 Las fotos de la carta se guardan en la carpeta `archivos/` del proyecto.
 
@@ -167,15 +184,17 @@ usuario `postgres`).
 
 ## 7. Problemas frecuentes
 
-| Problema                                                              | Qué hacer                                                                                             |
-| --------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
-| `docker: command not found`, o `local:preparar` no conecta con Docker | Abre Docker Desktop y espera a que diga que está en marcha. Luego repite el comando                   |
-| El puerto 5433, 3000 o 5173 ya está en uso                            | Cierra el programa que lo usa, o cambia el puerto en `.env` (el 5433 también en `docker-compose.yml`) |
-| `node --version` muestra una versión menor que 22                     | Instala Node 22 o superior                                                                            |
-| La app dice "No hay conexión con el servidor"                         | Revisa que `pnpm dev` siga corriendo y que http://localhost:3000/health responda                      |
-| Perdiste los PIN de demostración                                      | Borra la base y vuelve a crearla: `docker compose down -v` y luego `pnpm local:preparar`              |
-| La app muestra "useSesion debe usarse dentro de SesionProvider"       | Pasa a veces tras recompilar los paquetes: detén `pnpm dev` y vuelve a arrancarlo                     |
-| Una cuenta quedó bloqueada por 5 intentos fallidos                    | Espera 15 minutos o, si es el superadministrador, `pnpm plataforma:superadmin desbloquear superadmin` |
+| Problema                                                                                | Qué hacer                                                                                                                                                                                                                        |
+| --------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `docker: command not found`, o `local:preparar` no conecta con Docker                   | Abre Docker Desktop y espera a que diga que está en marcha. Luego repite el comando                                                                                                                                              |
+| El puerto 5433, 3000 o 5173 ya está en uso                                              | Cierra el programa que lo usa, o cambia el puerto en `.env` (el 5433 también en `docker-compose.yml`)                                                                                                                            |
+| `node --version` muestra una versión menor que 22                                       | Instala Node 22 o superior                                                                                                                                                                                                       |
+| La app dice "No hay conexión con el servidor"                                           | Revisa que `pnpm dev` siga corriendo y que http://localhost:3000/health responda                                                                                                                                                 |
+| Perdiste los PIN de demostración                                                        | Borra la base y vuelve a crearla: `docker compose down -v` y luego `pnpm local:preparar`                                                                                                                                         |
+| La app muestra "useSesion debe usarse dentro de SesionProvider"                         | Pasa a veces tras recompilar los paquetes: detén `pnpm dev` y vuelve a arrancarlo                                                                                                                                                |
+| La API no arranca: «DATABASE_TIEMPO_REAL_URL es obligatoria con TIEMPO_REAL=habilitado» | Tu `.env` es anterior a la sección 3a. Copia desde `.env.example` `DB_PASSWORD_TIEMPO_REAL`, `DATABASE_TIEMPO_REAL_URL` y `TIEMPO_REAL=habilitado`, y luego ejecuta `pnpm local:preparar` (crea el rol y aplica las migraciones) |
+| El KDS o el salón no se actualizan solos                                                | Deja la pantalla en primer plano: en un iPad o una tableta, el navegador en segundo plano corta la conexión. Sin conexión, la pantalla se refresca cada 30 segundos                                                              |
+| Una cuenta quedó bloqueada por 5 intentos fallidos                                      | Espera 15 minutos o, si es el superadministrador, `pnpm plataforma:superadmin desbloquear superadmin`                                                                                                                            |
 
 ## 8. Empezar de cero
 

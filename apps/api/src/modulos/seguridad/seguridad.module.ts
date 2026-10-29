@@ -14,7 +14,9 @@ import { AutorizacionesController } from './autorizaciones.controller';
 import { AutorizacionService } from './autorizacion.service';
 import { BloqueosService } from './bloqueos.service';
 import { ClaveSupervisorService } from './clave-supervisor.service';
+import { VALIDADOR_DE_CONEXIONES } from '../../nucleo/tiempo-real';
 import { Credenciales } from './credenciales';
+import { DesconexionDeSesiones } from './desconexion-de-sesiones';
 import { EquipoController } from './equipo.controller';
 import { EquiposService } from './equipos.service';
 import { HorarioService } from './horario.service';
@@ -26,8 +28,10 @@ import { SesionActual } from './sesion-actual';
 import { SesionController } from './sesion.controller';
 import { SesionesController } from './sesiones.controller';
 import { SesionesService } from './sesiones.service';
+import { UsuariosConsultaService } from './usuarios-consulta.service';
 import { UsuariosController } from './usuarios.controller';
 import { UsuariosService } from './usuarios.service';
+import { ValidadorDeSesion } from './validador-de-sesion';
 
 /**
  * Dueño de las tablas de acceso (`usuario`, `acceso_sucursal`, `sucursal_acceso`, `equipo`,
@@ -60,6 +64,10 @@ import { UsuariosService } from './usuarios.service';
     IngresoPinService,
     AccesoSucursalService,
     UsuariosService,
+    UsuariosConsultaService,
+    ValidadorDeSesion,
+    { provide: VALIDADOR_DE_CONEXIONES, useExisting: ValidadorDeSesion },
+    DesconexionDeSesiones,
     ResolutorEmpresaSesion,
     { provide: RESOLUTOR_EMPRESA, useExisting: ResolutorEmpresaSesion },
     {
@@ -85,6 +93,9 @@ import { UsuariosService } from './usuarios.service';
     IngresoPinService,
     AccesoSucursalService,
     UsuariosService,
+    UsuariosConsultaService,
+    ValidadorDeSesion,
+    VALIDADOR_DE_CONEXIONES,
     ResolutorEmpresaSesion,
     RESOLUTOR_EMPRESA,
     AutenticacionGuard,

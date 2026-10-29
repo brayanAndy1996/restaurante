@@ -3,6 +3,7 @@ import { AuditoriaModule } from '../auditoria';
 import { SeguridadModule } from '../seguridad';
 import { AjustesSucursalController } from './ajustes-sucursal.controller';
 import { AjustesSucursalService } from './ajustes-sucursal.service';
+import { CartaConsultaService } from './carta-consulta.service';
 import { CartaDisponibilidadService } from './carta-disponibilidad.service';
 import { CartaVentaService } from './carta-venta.service';
 import { DisponibilidadController } from './disponibilidad.controller';
@@ -28,7 +29,7 @@ import { VistaSucursalController } from './vista-sucursal.controller';
  * migración por grupo de tareas: C1 `estacion`, `familia` y `producto`; C2 `producto_sucursal`; C3 los grupos;
  * C4 `componente_combo` y `menu_del_dia_opcion`; C5 `producto_agotado`). Importa `AuditoriaModule` (una fila por
  * escritura) y `SeguridadModule` para conocer el rol de una persona en cada sucursal (criterio 19b). Exporta solo
- * los dos servicios que usan las secciones 3, 5 y 6.
+ * los servicios que usan las secciones 3, 5 y 6.
  */
 @Module({
   imports: [AuditoriaModule, SeguridadModule],
@@ -54,8 +55,9 @@ import { VistaSucursalController } from './vista-sucursal.controller';
     GruposService,
     MenuDelDiaService,
     CartaVentaService,
+    CartaConsultaService,
     CartaDisponibilidadService,
   ],
-  exports: [CartaVentaService, CartaDisponibilidadService],
+  exports: [CartaVentaService, CartaConsultaService, CartaDisponibilidadService],
 })
 export class CartaModule {}

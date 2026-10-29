@@ -32,7 +32,19 @@ La sección 2 de los requerimientos, «Carta» (especificación 003, historias H
 
 Lo que la Carta deja a las secciones siguientes: **Salón** (3) muestra la carta con `GET /carta/sucursal` y arma cada línea de venta con `CartaVentaService.prepararLinea` (precio, modificadores, componentes y estaciones); **Caja** (4) toma de esa línea `afectacionIgv` y `aplicaIcbper`; **Pedidos web** (5) publica la misma vista con `cartaDeSucursal` y vuelve a validar con `prepararLinea` al confirmar; **Inventario** (6) lee el `tipoControlStock` de cada producto y marca agotados con origen `SIN_STOCK`.
 
-La siguiente es la sección 3 (Salón, Cocina e Impresión básica).
+La sección 3a de los requerimientos, «Salón y Cocina» (especificación 004, historias HU-10 a HU-17 y HU-19), está terminada en la rama de trabajo `claude/upbeat-wright-q09k0n`; todavía no está en `main`. Su especificación, plan y tareas están en [`specs/004-salon-cocina/`](specs/004-salon-cocina/). Incluye la revisión y tres rondas de ataque adversarial sobre las partes críticas (montos, envío de comandas, permisos y aislamiento). Lo construido:
+
+- **Mapa de mesas** (RF-22): zonas y mesas diseñadas en Ajustes, con una cuadrícula. El salón las muestra por zona, en mapa o en lista, con su estado (libre, ocupada o en pre-cuenta).
+- **Abrir mesa y tiempo real** (HU-10, RF-23, RF-24): comensales y mozo responsable. Los cambios llegan a los equipos de la sucursal por Socket.IO, con el adaptador de PostgreSQL; sin conexión, la pantalla se refresca cada 30 segundos.
+- **Tomar pedido y enviar la comanda** (HU-11, HU-12, HU-14): comandero con la carta de la sucursal. Cada línea va a su estación (por ejemplo, cocina o barra), incluidas las partes de combos y modificadores. El envío es idempotente, y el borrador sobrevive a una recarga.
+- **Marchar y adiciones** (HU-13): el segundo tiempo se marcha a la cocina, y una adición es un envío nuevo de la misma cuenta.
+- **Anular y liberar** (HU-15, RF-29, RF-35): anular un ítem (en parte o entero) o la orden. Mozo y Cajero necesitan la clave de supervisor. Liberar una mesa sin consumo queda registrado.
+- **Mover, unir y pre-cuenta** (HU-16, HU-17, RF-30 a RF-32): mover la cuenta, unir mesas y pedir la pre-cuenta con su total. La impresión llega en la 3b.
+- **Pantalla de cocina y barra** (HU-19): comandas en orden de llegada, filtros por estación, tiempo transcurrido con avisos a los 10 y 20 minutos, y «Listo» con aviso al mozo.
+- **Inactividad de Cocina/Barra** (RF-11, decisión 11): la sesión de Cocina/Barra se cierra a los 60 minutos sin actividad (configurable de 1 a 720). Los demás roles no cambian.
+- **Permisos, trazabilidad y aislamiento**: quién abrió, comandó y autorizó queda registrado. Las tablas nuevas llevan RLS, y las pruebas protegidas comprueban que una empresa no ve nada de otra.
+
+La siguiente es la 3b (Impresión básica): comandas y pre-cuentas en las impresoras del local, a través del puente vinculado por QR. La app Android del puente es la 3c.
 
 ## Requisitos
 
@@ -108,6 +120,18 @@ DB_PROTECCION_CATALOGO=omitir NODE_ENV=production pnpm db:preparar
   `lo_`, `pg_stat_get_backend_`, `query_to_xml`, `cursor_to_xml`, `table_to_xml`, `schema_to_xml` o
   `database_to_xml` (criterio 38e). **Convención:** ninguna tabla, columna ni alias de la aplicación
   empieza con `lo_`.
+- Por el canal lateral de la historia 004 (criterio 70) rechazan además `pg_notify`,
+  `pg_listening_channels`, `pg_locks`, `pg_lock_status`, `pg_blocking_pids`,
+  `pg_safe_snapshot_blocking_pids`, `pg_isolation_test_session_is_blocked`,
+  `pg_notification_queue_usage`, `pg_prepared_xacts`, `pg_prepared_xact` y los cerrojos de sesión
+  `pg_advisory_lock*`, `pg_try_advisory_lock*` y `pg_advisory_unlock*` (los `*_xact_lock` siguen
+  permitidos); las vistas que enumeran sesiones por dentro (`pg_stat_ssl`, `pg_stat_gssapi`,
+  `pg_stat_replication`, `pg_stat_get_progress_info` y todo `pg_stat_progress_*`); el estado de las
+  transacciones de otras empresas (`pg_current_snapshot`, `txid_current_snapshot`, `pg_xact_status`,
+  `txid_status`, `pg_current_xact_id`, `pg_current_xact_id_if_assigned`, `txid_current`,
+  `txid_current_if_assigned`, `pg_snapshot_xmin`, `pg_snapshot_xmax`, `pg_snapshot_xip`,
+  `pg_visible_in_snapshot`, `txid_visible_in_snapshot` y todo `txid_snapshot_*`); y los contadores de la
+  base entera (`pg_stat_database`, `pg_stat_database_conflicts` y todo `pg_stat_get_db_*`).
 - Condiciones de despliegue: no instalar en la base de la aplicación extensiones como
   `pg_stat_statements`, `dblink` o `postgres_fdw` (o agregar sus nombres a la lista de la guarda), no
   dar a los roles de la aplicación membresías en `pg_monitor`, `pg_read_all_stats` ni
@@ -226,6 +250,17 @@ código fuente), `packages/contratos` para hablar con la API y `packages/dominio
   a medio camino y la app falla con "useSesion debe usarse dentro de SesionProvider"; si pasa, reinicia
   `pnpm dev` (o sirve el `build` con `pnpm --filter @restaurante/app preview`).
 
+## Salón y cocina (3a): cómo probarlo
+
+Con la rama de trabajo `claude/upbeat-wright-q09k0n`, `pnpm local:preparar` y `pnpm dev` (ver arriba). Los usuarios de demostración están en [`DESPLIEGUE-LOCAL.md`](DESPLIEGUE-LOCAL.md).
+
+- **Diseñar el mapa.** Como `fogon.admin`, en Ajustes › Mapa de mesas, crea una zona y sus mesas.
+- **Dos navegadores.** En uno, entra como `fogon.mozo` (El Fogón · Miraflores). En el otro, o en una ventana privada, entra como `fogon.cocina` y abre `/cocina`. Lo que hace el mozo (abrir la mesa, enviar, marchar, pedir la pre-cuenta) aparece en el KDS sin recargar, y el «Listo» de la cocina llega al salón.
+- **Horario de Cocina/Barra.** `fogon.cocina` tiene un horario de acceso de ejemplo, de 11:00 a 23:00 hora de Lima. Fuera de ese horario no puede ingresar.
+- **KDS en un iPad o una tableta.** Deja `/cocina` en primer plano y con la pantalla encendida. Si el navegador pasa a segundo plano o la pantalla se apaga, la conexión en vivo se corta; al volver, la pantalla se pone al día sola, y sin conexión se refresca cada 30 segundos.
+- **Inactividad de Cocina/Barra.** Una sesión de Cocina/Barra, con PIN o con contraseña, se cierra tras 60 minutos sin actividad. Los demás roles siguen con su tiempo: por defecto, 5 minutos con PIN y 30 con contraseña. El de Cocina y Barra se cambia en Ajustes › Acceso, «Cierre por inactividad de Cocina y Barra (minutos)», de 1 a 720; rige desde la siguiente petición.
+- **Pruebas automáticas.** `e2e/salon-cocina.spec.ts` recorre el salón y la cocina con tres celulares de 360 px (`pnpm --filter @restaurante/app e2e`). Ver [`apps/app/README.md`](apps/app/README.md).
+
 ## Pruebas
 
 Las pruebas de la API son de integración contra PostgreSQL real, sin mocks de la base. Necesitan
@@ -252,10 +287,13 @@ utilidades están en `apps/api/test/README.md`. Las pruebas de `packages/*` no u
 | `DATABASE_URL`                                                           | Conexión de la API (`restaurante_api`); su base es también la que usan por defecto `db:preparar` y `db:migrar`                                                                                                                                                                                                                                                    |
 | `DATABASE_PLATAFORMA_URL`                                                | Conexión de plataforma (`restaurante_plataforma`)                                                                                                                                                                                                                                                                                                                 |
 | `DATABASE_MIGRADOR_URL`                                                  | Migraciones (`restaurante_migrador`); si falta se deriva del admin                                                                                                                                                                                                                                                                                                |
+| `DATABASE_TIEMPO_REAL_URL`                                               | Conexión del adaptador de Socket.IO, con el rol `restaurante_tiempo_real`; obligatoria con `TIEMPO_REAL=habilitado`                                                                                                                                                                                                                                               |
 | `DATABASE_ADMIN_URL`                                                     | Solo `db:preparar` y las pruebas: administrador de PostgreSQL; su base es la de mantenimiento; `sslmode` en producción                                                                                                                                                                                                                                            |
 | `DB_PASSWORD_MIGRADOR`, `DB_PASSWORD_API`, `DB_PASSWORD_PLATAFORMA`      | Contraseñas que `db:preparar` asigna a los roles; obligatorias salvo con `NODE_ENV` `development` o `test`                                                                                                                                                                                                                                                        |
+| `DB_PASSWORD_TIEMPO_REAL`                                                | Contraseña que `db:preparar` asigna al rol `restaurante_tiempo_real`; obligatoria salvo con `NODE_ENV` `development` o `test`                                                                                                                                                                                                                                     |
 | `DB_PROTECCION_CATALOGO`                                                 | Solo `db:preparar`. `omitir`: sin superusuario, omite las protecciones del catálogo y avisa (producción); otro valor es un error                                                                                                                                                                                                                                  |
 | `DB_POOL_MAX`                                                            | Tamaño del pool de la API (por defecto 10)                                                                                                                                                                                                                                                                                                                        |
+| `TIEMPO_REAL`                                                            | `habilitado` o `deshabilitado`: enciende o apaga el servidor de Socket.IO (`/tiempo-real`). Por defecto `habilitado`, salvo con `NODE_ENV=test`                                                                                                                                                                                                                   |
 | `EMPRESA_POR_HEADER`                                                     | **Solo pruebas.** `habilitado` con `NODE_ENV=test` da un principal de prueba (Administrador, actor `prueba`) a las peticiones sin `Authorization` con `x-empresa-id`; la API se niega a arrancar con él en `development` y en `production`. No lo pongas en tu `.env`                                                                                             |
 | `PIN_PEPPER`                                                             | Secreto (base64, 32 bytes o más) con el que se calcula la huella de los PIN. Obligatoria en producción; con `development` o `test` hay un valor local. **Cambiarla invalida todos los PIN** (y las claves de idempotencia de las últimas 24 horas, cuya huella también se calcula con HMAC y una clave derivada de ella); nunca va en la base ni en los respaldos |
 | `ORIGENES_PERMITIDOS`                                                    | Orígenes de la PWA permitidos por CORS, separados por coma, sin ruta ni barra final. Obligatoria en producción (por defecto local: `http://localhost:5173`)                                                                                                                                                                                                       |
@@ -265,6 +303,8 @@ utilidades están en `apps/api/test/README.md`. Las pruebas de `packages/*` no u
 | `ARCHIVOS_DRIVER`                                                        | Dónde se guardan las fotos de la carta: `memoria` (pruebas), `disco` (solo `NODE_ENV=development`; la API sirve la carpeta en `/archivos/*`) o `r2` (Cloudflare R2). Por defecto `disco` en desarrollo y `memoria` en pruebas; **en producción es obligatorio `r2`**                                                                                              |
 | `ARCHIVOS_DIRECTORIO`, `ARCHIVOS_URL_PUBLICA`                            | Carpeta del almacén en disco (por defecto `./archivos`, ignorada por git) y URL base pública de los archivos (con `disco`, por defecto `http://localhost:<PORT>/archivos`; con `r2`, el dominio público del bucket y obligatoria)                                                                                                                                 |
 | `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET` | Credenciales del bucket de R2; obligatorias con `ARCHIVOS_DRIVER=r2`. El token debe tener permiso solo sobre ese bucket                                                                                                                                                                                                                                           |
+
+El tiempo real tiene su propio rol de PostgreSQL, `restaurante_tiempo_real`, sin privilegios sobre las tablas de `public`, sin `BYPASSRLS` y sin membresías. Su tabla auxiliar de Socket.IO vive en el esquema `tiempo_real`, al que solo ese rol tiene acceso, y `db:preparar` lo crea de forma idempotente. Si tu `.env` es anterior a la 3a, `pnpm local:preparar` no lo reescribe: copia desde `.env.example` las tres variables de tiempo real. Sin `DATABASE_TIEMPO_REAL_URL`, la API no arranca con el tiempo real habilitado.
 
 ### Ver las fotos de la carta en desarrollo
 

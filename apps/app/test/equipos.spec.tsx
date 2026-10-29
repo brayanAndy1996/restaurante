@@ -372,11 +372,19 @@ describe('equipos recordados en la administración de usuarios (criterios 30 y 1
   });
 });
 
-describe('acceso de la sucursal (criterio 100)', () => {
-  const acceso = (id: string, minutos: number) =>
-    json(200, { sucursalId: id, minutosInactividad: minutos });
+describe('acceso de la sucursal (criterio 100 de 002 y 63c de 004)', () => {
+  const acceso = (id: string, minutos: number, cocina = 60) =>
+    json(200, { sucursalId: id, minutosInactividad: minutos, minutosInactividadCocina: cocina });
+  /** Los dos campos de una sucursal, dentro del grupo con su nombre. */
+  const campos = (sucursal: string) => {
+    const grupo = screen.getByRole('group', { name: sucursal });
+    return {
+      general: within(grupo).getByLabelText('Cierre por inactividad (minutos)'),
+      cocina: within(grupo).getByLabelText('Cierre por inactividad de Cocina y Barra (minutos)'),
+    };
+  };
 
-  it('un rol sin permiso no ve "Acceso" ni entra por la dirección', async () => {
+  it('un rol sin permiso no ve "Ajustes" ni entra por la dirección', async () => {
     servidor({
       'GET /sesion': () =>
         json(
@@ -390,27 +398,52 @@ describe('acceso de la sucursal (criterio 100)', () => {
     });
     renderApp('/administracion/acceso');
     expect(await screen.findByText('Hola, Marta')).toBeInTheDocument();
-    expect(screen.queryByRole('link', { name: 'Acceso' })).toBeNull();
+    expect(screen.queryByRole('link', { name: 'Ajustes' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Acceso' })).toBeNull();
   });
 
-  it('muestra los minutos de cada sucursal y guarda solo las que cambiaron', async () => {
+  it('muestra los dos tiempos de cada sucursal, con su rango, y por defecto 60 para Cocina y Barra', async () => {
+    servidor({
+      'GET /sesion': () => json(200, sesionDe()),
+      [`GET /sucursales/${ID.sucursalA}/acceso`]: () => acceso(ID.sucursalA, 5),
+      [`GET /sucursales/${ID.sucursalB}/acceso`]: () => acceso(ID.sucursalB, 10, 240),
+    });
+    renderApp('/administracion/acceso');
+    await screen.findByRole('group', { name: 'Miraflores' });
+    expect(campos('Miraflores').general).toHaveValue('5');
+    expect(campos('Miraflores').cocina).toHaveValue('60');
+    expect(campos('Surco').general).toHaveValue('10');
+    expect(campos('Surco').cocina).toHaveValue('240');
+    const grupo = screen.getByRole('group', { name: 'Miraflores' });
+    expect(within(grupo).getByText('De 1 a 120 minutos. Ahora: 5.')).toBeInTheDocument();
+    expect(within(grupo).getByText('De 1 a 720 minutos. Ahora: 60.')).toBeInTheDocument();
+    // Las pantallas de Ajustes se alcanzan desde la misma pantalla.
+    expect(screen.getByRole('button', { name: 'Acceso', pressed: true })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Mapa de mesas' })).toBeInTheDocument();
+  });
+
+  it('guarda solo lo que cambió: un campo, el otro o los dos de una sucursal', async () => {
     const s = servidor({
       'GET /sesion': () => json(200, sesionDe()),
       [`GET /sucursales/${ID.sucursalA}/acceso`]: () => acceso(ID.sucursalA, 5),
       [`GET /sucursales/${ID.sucursalB}/acceso`]: () => acceso(ID.sucursalB, 10),
-      [`PATCH /sucursales/${ID.sucursalB}/acceso`]: ({ cuerpo }) =>
-        acceso(ID.sucursalB, (cuerpo as { minutosInactividad: number }).minutosInactividad),
+      [`PATCH /sucursales/${ID.sucursalA}/acceso`]: ({ cuerpo }) => {
+        const c = cuerpo as { minutosInactividad?: number; minutosInactividadCocina?: number };
+        return acceso(ID.sucursalA, c.minutosInactividad ?? 5, c.minutosInactividadCocina ?? 60);
+      },
+      [`PATCH /sucursales/${ID.sucursalB}/acceso`]: ({ cuerpo }) => {
+        const c = cuerpo as { minutosInactividad?: number; minutosInactividadCocina?: number };
+        return acceso(ID.sucursalB, c.minutosInactividad ?? 10, c.minutosInactividadCocina ?? 60);
+      },
     });
     renderApp('/administracion/acceso');
-    const miraflores = await screen.findByLabelText('Miraflores: minutos sin uso');
-    const surco = screen.getByLabelText('Surco: minutos sin uso');
-    expect(miraflores).toHaveValue('5');
-    expect(surco).toHaveValue('10');
+    await screen.findByRole('group', { name: 'Miraflores' });
     const guardar = screen.getByRole('button', { name: 'Guardar cambios' });
     expect(guardar).toBeDisabled();
 
-    await userEvent.clear(surco);
-    await userEvent.type(surco, '15');
+    // Solo el de Surco, solo el general.
+    await userEvent.clear(campos('Surco').general);
+    await userEvent.type(campos('Surco').general, '15');
     expect(guardar).toBeEnabled();
     await userEvent.click(guardar);
     expect(await screen.findByText('Cambios guardados')).toBeInTheDocument();
@@ -419,23 +452,94 @@ describe('acceso de la sucursal (criterio 100)', () => {
     });
     expect(s.de('PATCH', `/sucursales/${ID.sucursalA}/acceso`)).toHaveLength(0);
     expect(screen.getByRole('button', { name: 'Guardar cambios' })).toBeDisabled();
+
+    // Solo el de Cocina y Barra de Miraflores.
+    await userEvent.clear(campos('Miraflores').cocina);
+    await userEvent.type(campos('Miraflores').cocina, '720');
+    await userEvent.click(screen.getByRole('button', { name: 'Guardar cambios' }));
+    await waitFor(() =>
+      expect(s.de('PATCH', `/sucursales/${ID.sucursalA}/acceso`)).toHaveLength(1),
+    );
+    expect(s.de('PATCH', `/sucursales/${ID.sucursalA}/acceso`)[0]?.cuerpo).toEqual({
+      minutosInactividadCocina: 720,
+    });
+    expect(await screen.findByText('Cambios guardados')).toBeInTheDocument();
+    expect(campos('Miraflores').cocina).toHaveValue('720');
+
+    // Los dos a la vez, en una sola petición.
+    await userEvent.clear(campos('Miraflores').general);
+    await userEvent.type(campos('Miraflores').general, '8');
+    await userEvent.clear(campos('Miraflores').cocina);
+    await userEvent.type(campos('Miraflores').cocina, '90');
+    await userEvent.click(screen.getByRole('button', { name: 'Guardar cambios' }));
+    await waitFor(() =>
+      expect(s.de('PATCH', `/sucursales/${ID.sucursalA}/acceso`)).toHaveLength(2),
+    );
+    expect(s.de('PATCH', `/sucursales/${ID.sucursalA}/acceso`)[1]?.cuerpo).toEqual({
+      minutosInactividad: 8,
+      minutosInactividadCocina: 90,
+    });
   });
 
-  it('valida el rango de 1 a 120 antes de enviar', async () => {
+  it('manda la escritura con clave de idempotencia', async () => {
+    const s = servidor({
+      'GET /sesion': () => json(200, sesionDe()),
+      [`GET /sucursales/${ID.sucursalA}/acceso`]: () => acceso(ID.sucursalA, 5),
+      [`GET /sucursales/${ID.sucursalB}/acceso`]: () => acceso(ID.sucursalB, 5),
+      [`PATCH /sucursales/${ID.sucursalA}/acceso`]: () => acceso(ID.sucursalA, 5, 100),
+    });
+    renderApp('/administracion/acceso');
+    await screen.findByRole('group', { name: 'Miraflores' });
+    await userEvent.clear(campos('Miraflores').cocina);
+    await userEvent.type(campos('Miraflores').cocina, '100');
+    await userEvent.click(screen.getByRole('button', { name: 'Guardar cambios' }));
+    await screen.findByText('Cambios guardados');
+    expect(
+      s.de('PATCH', `/sucursales/${ID.sucursalA}/acceso`)[0]?.cabeceras.get('Idempotency-Key'),
+    ).toMatch(/\S/);
+  });
+
+  it('valida el rango de cada campo antes de enviar: de 1 a 120 y de 1 a 720', async () => {
     const s = servidor({
       'GET /sesion': () => json(200, sesionDe()),
       [`GET /sucursales/${ID.sucursalA}/acceso`]: () => acceso(ID.sucursalA, 5),
       [`GET /sucursales/${ID.sucursalB}/acceso`]: () => acceso(ID.sucursalB, 5),
     });
     renderApp('/administracion/acceso');
-    const campo = await screen.findByLabelText('Miraflores: minutos sin uso');
+    await screen.findByRole('group', { name: 'Miraflores' });
     for (const malo of ['0', '121', '2.5', 'abc', '']) {
-      await userEvent.clear(campo);
-      if (malo) await userEvent.type(campo, malo);
+      await userEvent.clear(campos('Miraflores').general);
+      if (malo) await userEvent.type(campos('Miraflores').general, malo);
       await userEvent.click(screen.getByRole('button', { name: 'Guardar cambios' }));
       expect(await screen.findByText('Escribe un número entero de 1 a 120')).toBeInTheDocument();
     }
+    await userEvent.clear(campos('Miraflores').general);
+    await userEvent.type(campos('Miraflores').general, '5');
+    for (const malo of ['0', '721', '1.5', '10 min', '']) {
+      await userEvent.clear(campos('Miraflores').cocina);
+      if (malo) await userEvent.type(campos('Miraflores').cocina, malo);
+      await userEvent.click(screen.getByRole('button', { name: 'Guardar cambios' }));
+      expect(await screen.findByText('Escribe un número entero de 1 a 720')).toBeInTheDocument();
+    }
     expect(s.llamadas.filter((l) => l.metodo === 'PATCH')).toHaveLength(0);
+  });
+
+  it('a Cocina y Barra le acepta valores que al otro campo no (121 a 720)', async () => {
+    const s = servidor({
+      'GET /sesion': () => json(200, sesionDe()),
+      [`GET /sucursales/${ID.sucursalA}/acceso`]: () => acceso(ID.sucursalA, 5),
+      [`GET /sucursales/${ID.sucursalB}/acceso`]: () => acceso(ID.sucursalB, 5),
+      [`PATCH /sucursales/${ID.sucursalA}/acceso`]: () => acceso(ID.sucursalA, 5, 121),
+    });
+    renderApp('/administracion/acceso');
+    await screen.findByRole('group', { name: 'Miraflores' });
+    await userEvent.clear(campos('Miraflores').cocina);
+    await userEvent.type(campos('Miraflores').cocina, '121');
+    await userEvent.click(screen.getByRole('button', { name: 'Guardar cambios' }));
+    expect(await screen.findByText('Cambios guardados')).toBeInTheDocument();
+    expect(s.de('PATCH', `/sucursales/${ID.sucursalA}/acceso`)[0]?.cuerpo).toEqual({
+      minutosInactividadCocina: 121,
+    });
   });
 
   it('si una sucursal no se pudo guardar, dice cuál y conserva lo escrito', async () => {
@@ -447,13 +551,49 @@ describe('acceso de la sucursal (criterio 100)', () => {
         json(404, { codigo: 'NO_ENCONTRADO', mensaje: 'x' }),
     });
     renderApp('/administracion/acceso');
-    const campo = await screen.findByLabelText('Miraflores: minutos sin uso');
-    await userEvent.clear(campo);
-    await userEvent.type(campo, '8');
+    await screen.findByRole('group', { name: 'Miraflores' });
+    await userEvent.clear(campos('Miraflores').cocina);
+    await userEvent.type(campos('Miraflores').cocina, '300');
     await userEvent.click(screen.getByRole('button', { name: 'Guardar cambios' }));
     expect(
       await screen.findByText(/No pudimos guardar la sucursal Miraflores/),
     ).toBeInTheDocument();
-    expect(screen.getByLabelText('Miraflores: minutos sin uso')).toHaveValue('8');
+    expect(campos('Miraflores').cocina).toHaveValue('300');
+  });
+
+  it('sin red, el cambio queda "Pendiente de envío" y sale con la misma clave al volver', async () => {
+    let sinRed = true;
+    let esperas = 0;
+    let liberar!: () => void;
+    const compuerta = new Promise<void>((resolver) => (liberar = resolver));
+    vi.spyOn(espera, 'dormir').mockImplementation(async () => {
+      if (++esperas === 7) await compuerta;
+    });
+    const s = servidor({
+      'GET /sesion': () => json(200, sesionDe()),
+      [`GET /sucursales/${ID.sucursalA}/acceso`]: () => acceso(ID.sucursalA, 5),
+      [`GET /sucursales/${ID.sucursalB}/acceso`]: () => acceso(ID.sucursalB, 5),
+      [`PATCH /sucursales/${ID.sucursalA}/acceso`]: () => {
+        if (sinRed) throw new TypeError('Failed to fetch');
+        return acceso(ID.sucursalA, 5, 45);
+      },
+    });
+    renderApp('/administracion/acceso');
+    await screen.findByRole('group', { name: 'Miraflores' });
+    await userEvent.clear(campos('Miraflores').cocina);
+    await userEvent.type(campos('Miraflores').cocina, '45');
+    await userEvent.click(screen.getByRole('button', { name: 'Guardar cambios' }));
+    expect((await screen.findAllByText('Pendiente de envío'))[0]).toBeInTheDocument();
+    // Lo escrito sigue en la pantalla mientras espera la red.
+    expect(campos('Miraflores').cocina).toHaveValue('45');
+    sinRed = false;
+    liberar();
+    expect(await screen.findByText('Cambios guardados')).toBeInTheDocument();
+    expect(screen.queryByText('Pendiente de envío')).not.toBeInTheDocument();
+    const claves = s
+      .de('PATCH', `/sucursales/${ID.sucursalA}/acceso`)
+      .map((l) => l.cabeceras.get('Idempotency-Key'));
+    expect(claves.length).toBeGreaterThan(1);
+    expect(new Set(claves).size).toBe(1);
   });
 });

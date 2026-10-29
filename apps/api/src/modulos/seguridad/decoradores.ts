@@ -1,10 +1,11 @@
 import { SetMetadata, UseInterceptors, applyDecorators } from '@nestjs/common';
 import type { Accion, Modulo } from '@restaurante/dominio';
 import { SinEmpresa } from '../../nucleo/contexto-empresa';
+import { ClaveDiferidaInterceptor, type ValidacionPrevia } from './clave-diferida.interceptor';
 import { ModuloInterceptor, REQUIERE_MODULO } from './modulo.interceptor';
-import { PERMISO, PermisoInterceptor } from './permiso.interceptor';
+import { CLAVE_DIFERIDA, PERMISO, PermisoInterceptor } from './permiso.interceptor';
 
-export { PERMISO, REQUIERE_MODULO };
+export { CLAVE_DIFERIDA, PERMISO, REQUIERE_MODULO };
 
 /**
  * Decoradores de metadatos de las rutas (historia 002). `@Publica`, `@SoloAdministrador`,
@@ -45,6 +46,29 @@ export const PermiteContrasenaTemporal = () => SetMetadata(PERMITE_CONTRASENA_TE
  */
 export const Permiso = (accion: Accion) =>
   applyDecorators(SetMetadata(PERMISO, accion), UseInterceptors(PermisoInterceptor));
+
+/**
+ * La clave del supervisor de una acción con requisito `clave` se pide **después** de la idempotencia y de validar
+ * la entrada, no al evaluar `@Permiso` (historia 004, "Contrato": 403 de rol, 409 de sucursal, 403 de módulo, 400
+ * de forma, réplica de la misma clave, 403 de clave, 404, réplica del mismo id, 409, 422). Así una réplica con la
+ * misma `Idempotency-Key` devuelve lo guardado sin consumir de nuevo la autorización y un cuerpo inválido no la
+ * consume. `validacion` repite los esquemas de la ruta (el cuerpo y los parámetros UUID).
+ *
+ * Orden: se escribe **encima** de `@IdempotenteObligatoria()`, `@RequiereModulo(…)` y `@Permiso(…)`, porque los
+ * interceptores de una ruta corren en el orden en que se aplican los decoradores, de abajo hacia arriba:
+ *
+ * ```ts
+ * @ClaveDespuesDeValidar({ cuerpo: esquema, uuids: ['id'] })
+ * @IdempotenteObligatoria()
+ * @RequiereModulo('SALON')
+ * @Permiso('ANULAR_ORDEN')
+ * ```
+ */
+export const ClaveDespuesDeValidar = (validacion: ValidacionPrevia) =>
+  applyDecorators(
+    SetMetadata(CLAVE_DIFERIDA, validacion),
+    UseInterceptors(ClaveDiferidaInterceptor),
+  );
 
 /**
  * Ruta de un módulo del plan: 403 `MODULO_NO_INCLUIDO` si la sucursal activa no lo tiene (criterio 77).

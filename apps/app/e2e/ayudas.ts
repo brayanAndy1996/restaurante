@@ -1,5 +1,6 @@
 import type { APIRequestContext, BrowserContextOptions, Page } from '@playwright/test';
 import { expect } from '@playwright/test';
+import { randomUUID } from 'node:crypto';
 
 export const APP = process.env.E2E_APP_URL ?? 'http://localhost:5173';
 export const API = process.env.E2E_API_URL ?? 'http://localhost:3000';
@@ -35,18 +36,21 @@ interface OpcionesApi {
   cuerpo?: unknown;
   token?: string;
   equipo?: string;
+  /** Manda una `Idempotency-Key` nueva (las escrituras de la carta y del salón la aceptan). */
+  idempotente?: boolean;
 }
 
 export async function llamarApi<T = unknown>(
   request: APIRequestContext,
   ruta: string,
-  { metodo = 'GET', cuerpo, token, equipo }: OpcionesApi = {},
+  { metodo = 'GET', cuerpo, token, equipo, idempotente }: OpcionesApi = {},
 ): Promise<{ estado: number; cuerpo: T }> {
   const respuesta = await request.fetch(`${API}${ruta}`, {
     method: metodo,
     headers: {
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...(equipo ? { 'X-Equipo': equipo } : {}),
+      ...(idempotente ? { 'Idempotency-Key': randomUUID() } : {}),
     },
     ...(cuerpo === undefined ? {} : { data: cuerpo }),
   });
@@ -313,4 +317,12 @@ export async function ajustarVencimiento(
     cuerpo: { vencimiento, motivo: 'Prueba E2E del aviso de suscripción' },
   });
   expect(r.estado, 'ajuste del vencimiento').toBe(200);
+}
+
+/**
+ * La barra de la sesión dice quién entró. Es la señal común a todos los roles, sea cual sea su pantalla
+ * inicial (Salón o Cocina, criterio 87 de 004).
+ */
+export async function afirmarSesionDe(pagina: Page, persona: { nombre: string }): Promise<void> {
+  await expect(pagina.getByRole('button', { name: `Sesión de ${persona.nombre}` })).toBeVisible();
 }

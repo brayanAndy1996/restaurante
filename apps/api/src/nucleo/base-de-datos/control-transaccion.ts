@@ -231,6 +231,12 @@ export function contieneControlDeTransaccion(texto: string): boolean {
  * - Texto de consultas y sesiones ajenas (38b y 38c): `pg_stat_activity`, `pg_stat_get_activity`,
  *   `pg_cancel_backend`, `pg_terminate_backend` y `pg_signal_backend`.
  * - Objetos grandes (38d): `pg_largeobject`, `pg_largeobject_metadata`, `loread` y `lowrite`.
+ * - Canal lateral entre empresas (historia 004, criterio 70): `pg_notify` (los canales y los avisos son globales a
+ *   la base), `pg_listening_channels`, `pg_locks`, `pg_blocking_pids` y `pg_safe_snapshot_blocking_pids` (metadatos
+ *   de la actividad de otras sesiones del mismo rol) y los cerrojos consultivos de sesión (`pg_advisory_lock`,
+ *   `pg_advisory_lock_shared`, `pg_try_advisory_lock`, `pg_try_advisory_lock_shared`, `pg_advisory_unlock`,
+ *   `pg_advisory_unlock_shared` y `pg_advisory_unlock_all`), que sobreviven a la transacción y se ven entre
+ *   empresas. Los de transacción (`pg_advisory_xact_lock`, `pg_try_advisory_xact_lock`) siguen permitidos.
  *
  * Donde no hay superusuario (producción, criterio 38e) las revocaciones de `pg_catalog` no existen y
  * esta lista, aplicada en la guarda de la API y en la de plataforma, es la barrera de esos objetos.
@@ -252,12 +258,64 @@ export const NOMBRES_PROHIBIDOS: readonly string[] = [
   'pg_largeobject_metadata',
   'loread',
   'lowrite',
+  // Canal lateral de PostgreSQL (historia 004, criterio 70): avisos y cerrojos de sesión que ven todas las
+  // empresas por igual, y metadatos de bloqueos ajenos. `pg_advisory_xact_lock` NO está aquí: lo usan la carta
+  // y el salón, y el cerrojo de transacción se suelta solo al terminar (no sobrevive a la petición).
+  'pg_notify',
+  'pg_listening_channels',
+  'pg_locks',
+  // La función que está detrás de la vista `pg_locks` (ronda 2 del ataque a 3a): leer `pg_lock_status()` da lo
+  // mismo sin nombrar la vista. Las otras dos revelan si otra sesión espera un cerrojo y cuánto se llenó la cola
+  // de avisos (`pg_notification_queue_usage`), y `pg_prepared_xacts` / `pg_prepared_xact` listan las
+  // transacciones preparadas de todas las empresas con su dueño.
+  'pg_lock_status',
+  'pg_isolation_test_session_is_blocked',
+  'pg_notification_queue_usage',
+  'pg_prepared_xacts',
+  'pg_prepared_xact',
+  'pg_blocking_pids',
+  'pg_safe_snapshot_blocking_pids',
+  'pg_advisory_lock',
+  'pg_advisory_lock_shared',
+  'pg_try_advisory_lock',
+  'pg_try_advisory_lock_shared',
+  'pg_advisory_unlock',
+  'pg_advisory_unlock_shared',
+  'pg_advisory_unlock_all',
+  // Ronda 3 del ataque a 3a, sesiones ajenas: `pg_stat_ssl`, `pg_stat_gssapi` y `pg_stat_replication` son vistas
+  // que llaman a `pg_stat_get_activity` por dentro (pid, usuario y cliente de cada sesión de la base), y
+  // `pg_stat_get_progress_info` es la función de las vistas `pg_stat_progress_*` (prefijo aparte).
+  'pg_stat_ssl',
+  'pg_stat_gssapi',
+  'pg_stat_replication',
+  'pg_stat_get_progress_info',
+  // Ronda 3, estado de las transacciones de otras empresas: la instantánea (qué transacciones corren ahora),
+  // el estado de una transacción por su número y el número de la transacción propia (que permite ubicar a las
+  // vecinas). Las migraciones usan `pg_current_xact_id` en funciones SQL de la base, que no pasan por la guarda.
+  'pg_current_snapshot',
+  'txid_current_snapshot',
+  'pg_xact_status',
+  'txid_status',
+  'pg_current_xact_id',
+  'pg_current_xact_id_if_assigned',
+  'txid_current',
+  'txid_current_if_assigned',
+  'pg_snapshot_xmin',
+  'pg_snapshot_xmax',
+  'pg_snapshot_xip',
+  'pg_visible_in_snapshot',
+  'txid_visible_in_snapshot',
+  // Contadores de la base entera (transacciones confirmadas, deadlocks, tuplas) que suman a todas las empresas.
+  'pg_stat_database',
+  'pg_stat_database_conflicts',
 ];
 
 /**
  * Prefijos prohibidos: se rechaza todo identificador que empiece así (cualquier continuación cuenta);
  * solo se mira el carácter anterior. Son las familias de funciones de `pg_catalog` de las que no se
- * quiere ni una firma: `pg_stat_get_backend_*` (enumeran sesiones), `lo_*` (objetos grandes), y las
+ * quiere ni una firma: `pg_stat_get_backend_*` (enumeran sesiones), `pg_stat_progress_*` (progreso de
+ * operaciones ajenas), `txid_snapshot_*` (instantáneas de transacciones), `pg_stat_get_db_*` (contadores de
+ * la base entera), `lo_*` (objetos grandes), y las
  * funciones `*_to_xml*` que ejecutan SQL recibido como texto (`query_to_xml`, `cursor_to_xml`) o leen
  * una relación nombrada dentro de un literal (`table_to_xml`, `schema_to_xml`, `database_to_xml`, con
  * sus variantes `*schema` y `*_and_xmlschema`). Convención: ninguna tabla, columna ni alias de la
@@ -271,6 +329,12 @@ export const PREFIJOS_PROHIBIDOS: readonly string[] = [
   'table_to_xml',
   'schema_to_xml',
   'database_to_xml',
+  // Ronda 3 del ataque a 3a: vistas de progreso de operaciones ajenas, instantáneas de transacciones
+  // (`txid_snapshot_xmin`, `txid_snapshot_xmax`, `txid_snapshot_xip`) y contadores por base
+  // (`pg_stat_get_db_*`: `xact_commit`, `deadlocks`, `tuples_*`…).
+  'pg_stat_progress_',
+  'txid_snapshot_',
+  'pg_stat_get_db_',
 ];
 
 const NO_IDENTIFICADOR_ANTES = '(?<![A-Za-z0-9_\\u0080-\\uffff$])';

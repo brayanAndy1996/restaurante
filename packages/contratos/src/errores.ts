@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { seQuitaSchema, usadoEnSchema } from './carta';
+import { uuidSchema } from './comunes';
 
 /** Códigos de error que devuelve la API en el cuerpo de las respuestas de error. */
 export const CODIGOS_ERROR = [
@@ -41,6 +42,15 @@ export const CODIGOS_ERROR = [
   'FOTO_INVALIDA',
   'PRODUCTO_NO_VENDIBLE',
   'SELECCION_INVALIDA',
+  // Sección "Salón, Cocina e Impresión" (historia 004, entrega 3a).
+  'MESA_OCUPADA',
+  'ORDEN_NO_ABIERTA',
+  'ORDEN_SIN_CONSUMO',
+  'ORDEN_CON_CONSUMO',
+  'NADA_QUE_MARCHAR',
+  'ITEM_NO_ANULABLE',
+  'TRANSICION_INVALIDA',
+  'MONTO_FUERA_DE_RANGO',
 ] as const;
 
 export const codigoErrorSchema = z.enum(CODIGOS_ERROR);
@@ -61,6 +71,11 @@ export const errorRespuestaSchema = z.object({
   usadoEn: usadoEnSchema.optional(),
   /** Solo en `CONFIRMACION_REQUERIDA` (criterio 10b de 003): lo que el cambio de tipo quitaría. */
   seQuita: seQuitaSchema.optional(),
+  /**
+   * Solo en `MESA_OCUPADA` (la orden que ocupa la mesa) y en `ORDEN_NO_ABIERTA` cuando la orden se unió a otra
+   * (la orden a la que se unió): para que la PWA lleve a la persona ahí (criterios 11 y 29 de 004).
+   */
+  ordenId: uuidSchema.optional(),
 });
 
 export type CodigoError = z.infer<typeof codigoErrorSchema>;

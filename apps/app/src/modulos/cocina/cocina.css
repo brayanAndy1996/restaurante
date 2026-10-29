@@ -1,0 +1,60 @@
+/* KDS: filtros y sonido arriba, comandas en tarjetas y "Recientes" abajo. Las tarjetas son de `packages/ui`. */
+.cocina {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espacio-lg);
+}
+
+.cocina__herramientas {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espacio-sm);
+}
+
+.cocina__estado {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--espacio-sm) var(--espacio-lg);
+}
+
+.cocina__resumen {
+  margin: 0;
+  min-height: 1.75rem;
+  font-size: 1.25rem;
+  line-height: 1.75rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.cocina__sonido {
+  flex: 0 1 18rem;
+  min-width: 0;
+}
+
+/* Una columna en el celular; más columnas cuando caben tarjetas de 20 rem. El orden de lectura es el de llegada. */
+.cocina__tarjetas {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 20rem), 1fr));
+  gap: var(--espacio-lg);
+  align-items: start;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.cocina__tarjetas--recientes {
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 16rem), 1fr));
+  gap: var(--espacio-md);
+  padding-top: var(--espacio-sm);
+}
+
+.cocina__tarjetas > li {
+  min-width: 0;
+}
+
+/* Pocas estaciones caben en una sola fila incluso a 360 px; con muchas, pasan a otra fila. */
+.ui-segmentos.cocina__filtros {
+  grid-template-columns: repeat(auto-fit, minmax(5.5rem, 1fr));
+}

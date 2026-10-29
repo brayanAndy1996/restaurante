@@ -3,12 +3,14 @@ import type { CampoError, CodigoError, SeQuita, UsadoEn } from '@restaurante/con
 import type { ZodError } from 'zod';
 
 /**
- * Datos extra de un 409 de la carta (historia 003, criterios 10b y 10c): `usadoEn` solo en `EN_USO` de un
- * cambio de tipo y `seQuita` solo en `CONFIRMACION_REQUERIDA`.
+ * Datos extra de un 409: de la carta (historia 003, criterios 10b y 10c), `usadoEn` solo en `EN_USO` de un cambio
+ * de tipo y `seQuita` solo en `CONFIRMACION_REQUERIDA`; de los pedidos (historia 004, criterios 11 y 29),
+ * `ordenId` en `MESA_OCUPADA` (la orden que ocupa la mesa) y en `ORDEN_NO_ABIERTA` cuando la orden se unió a otra.
  */
 export interface DetalleDeError {
   usadoEn?: UsadoEn;
   seQuita?: SeQuita;
+  ordenId?: string;
 }
 
 /** Error de negocio con código estable; el filtro global lo responde como `{ codigo, mensaje, campos? }`. */

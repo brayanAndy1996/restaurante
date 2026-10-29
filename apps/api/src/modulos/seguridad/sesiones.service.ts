@@ -21,16 +21,16 @@ import { SucursalesConsultaService } from '../plataforma/sucursales-consulta.ser
 import { SuscripcionService } from '../plataforma/suscripcion.service';
 import { BloqueosService, decidirReserva, type FilaBloqueo } from './bloqueos.service';
 import { CupoScrypt, GRUPO_SIN_CUENTA } from './cupo-scrypt';
-import { MINUTOS_INACTIVIDAD_PIN_POR_DEFECTO } from './constantes-acceso';
+import { MINUTOS_INACTIVIDAD_CONTRASENA } from './constantes-acceso';
 import { Credenciales } from './credenciales';
+import { DesconexionDeSesiones } from './desconexion-de-sesiones';
 import { bloqueoTemporal, credencialesInvalidas, errorDeReserva } from './errores-acceso';
 import { HorarioService } from './horario.service';
+import { minutosDeInactividad } from './inactividad';
 import { SesionActual } from './sesion-actual';
 import { TopeDeIntentos, claveDeCambioContrasena, claveDeIngresoUsuario } from './tope-de-intentos';
 import { armarTokenSesion } from './tokens';
 
-/** Inactividad de una sesión de contraseña o de soporte, en minutos (criterios 14 y 66). */
-export const MINUTOS_INACTIVIDAD_CONTRASENA = 30;
 /** Duración máxima de una sesión de contraseña (criterio 14). */
 export const HORAS_MAXIMAS_CONTRASENA = 12;
 
@@ -98,6 +98,7 @@ export class SesionesService {
     @Inject(SucursalesConsultaService) private readonly sucursales: SucursalesConsultaService,
     @Inject(TopeDeIntentos) private readonly tope: TopeDeIntentos,
     @Inject(CupoScrypt) private readonly cupo: CupoScrypt,
+    @Inject(DesconexionDeSesiones) private readonly desconexion: DesconexionDeSesiones,
   ) {}
 
   // ---- Ingreso con contraseña ------------------------------------------------------------------
@@ -424,6 +425,13 @@ export class SesionesService {
 
     const elegibles = await this.sucursalesElegibles(usuario.id, usuario.es_administrador);
     const sucursalId = elegibles.length === 1 ? elegibles[0]!.id : null;
+    // Con una sola sucursal, ya hay rol y por tanto el tiempo de Cocina/Barra (criterio 63b).
+    const minutosInactividad = minutosDeInactividad({
+      tipo: 'CONTRASENA',
+      rol: elegibles.find((s) => s.id === sucursalId)?.rol ?? null,
+      ...(await this.minutosDeSucursal(sucursalId)),
+      minutosSesion: MINUTOS_INACTIVIDAD_CONTRASENA,
+    });
     const secreto = this.credenciales.generarSecreto();
     const expira = new Date(ahora.getTime() + HORAS_MAXIMAS_CONTRASENA * HORA_MS);
     const filas = await this.conexion.query<{ id: string }>(
@@ -453,9 +461,7 @@ export class SesionesService {
       sucursalId,
       elegibles,
       debeCambiarContrasena: usuario.contrasena_temporal,
-      expiraPorInactividadEn: new Date(
-        ahora.getTime() + MINUTOS_INACTIVIDAD_CONTRASENA * MINUTO_MS,
-      ),
+      expiraPorInactividadEn: new Date(ahora.getTime() + minutosInactividad * MINUTO_MS),
     });
     return { ok: { token: armarTokenSesion(empresaId, filas[0]!.id, secreto), sesion } };
   }
@@ -486,12 +492,18 @@ export class SesionesService {
       equipo_recordado_id: string | null;
       equipo_nombre: string | null;
       minutos_sucursal: number | null;
+      minutos_cocina: number | null;
+      rol_en_sucursal: Rol | null;
     }>(
       `SELECT s.sucursal_id, s.ultima_actividad_en, s.minutos_inactividad, s.equipo_id,
-              s.equipo_recordado_id, e.nombre AS equipo_nombre, sa.minutos_inactividad AS minutos_sucursal
+              s.equipo_recordado_id, e.nombre AS equipo_nombre, sa.minutos_inactividad AS minutos_sucursal,
+              sa.minutos_inactividad_cocina AS minutos_cocina, ac.rol AS rol_en_sucursal
          FROM sesion s
          LEFT JOIN equipo e ON e.id = s.equipo_id AND e.empresa_id = s.empresa_id
          LEFT JOIN sucursal_acceso sa ON sa.sucursal_id = s.sucursal_id AND sa.empresa_id = s.empresa_id
+         LEFT JOIN acceso_sucursal ac
+           ON ac.usuario_id = s.usuario_id AND ac.sucursal_id = s.sucursal_id
+          AND ac.empresa_id = s.empresa_id
         WHERE s.id = $1`,
       { bind: [principal.sesionId], type: QueryTypes.SELECT },
     );
@@ -502,11 +514,15 @@ export class SesionesService {
         'NO_AUTENTICADO',
         'Se requiere autenticación para esta operación',
       );
-    // La inactividad de una sesión PIN es la de su sucursal activa (criterio 39); las demás, la guardada.
-    const minutos =
-      principal.tipo === 'PIN'
-        ? (sesion.minutos_sucursal ?? MINUTOS_INACTIVIDAD_PIN_POR_DEFECTO)
-        : sesion.minutos_inactividad;
+    // El tiempo que rige (criterios 39 y 63b): el rol sale de la sucursal activa guardada en la sesión, no del
+    // principal, que pudo quedar atrás si esta misma petición acaba de cambiar de sucursal.
+    const minutos = minutosDeInactividad({
+      tipo: principal.tipo,
+      rol: principal.esAdministrador ? 'ADMINISTRADOR' : sesion.rol_en_sucursal,
+      minutosSucursal: sesion.minutos_sucursal,
+      minutosCocina: sesion.minutos_cocina,
+      minutosSesion: sesion.minutos_inactividad,
+    });
     const expira = new Date(sesion.ultima_actividad_en.getTime() + minutos * MINUTO_MS);
     const equipo =
       sesion.equipo_id !== null && sesion.equipo_recordado_id !== null
@@ -592,6 +608,9 @@ export class SesionesService {
       'UPDATE sesion SET sucursal_id = $2, actualizado_en = $3 WHERE id = $1',
       { bind: [principal.sesionId, sucursalId, ahora] },
     );
+    // Cambió de sucursal activa: sus conexiones de tiempo real se cierran al confirmar y la PWA se reconecta
+    // a las salas de la sucursal nueva (historia 004, criterio 66).
+    this.desconexion.alConfirmar([principal.sesionId]);
     if (principal.tipo === 'PIN' && principal.equipoRecordadoId !== null) {
       // Queda como la última sucursal de esa persona en ese equipo (criterios 17 y 33).
       await this.conexion.query(
@@ -684,11 +703,13 @@ export class SesionesService {
       { bind: [usuario.id, hash, ahora] },
     );
     // Se cierran las demás sesiones de la persona; esta sigue. Los equipos recordados se conservan.
-    await this.conexion.query(
+    const otras = await this.conexion.query<{ id: string }>(
       `UPDATE sesion SET cerrada_en = $3, motivo_cierre = 'CONTRASENA_CAMBIADA', actualizado_en = $3
-        WHERE usuario_id = $1 AND id <> $2 AND cerrada_en IS NULL`,
-      { bind: [usuario.id, principal.sesionId, ahora] },
+        WHERE usuario_id = $1 AND id <> $2 AND cerrada_en IS NULL
+        RETURNING id`,
+      { bind: [usuario.id, principal.sesionId, ahora], type: QueryTypes.SELECT },
     );
+    this.desconexion.alConfirmar(otras.map((o) => o.id));
     // Contraseña actual correcta: la cuenta de fallos vuelve a cero; un bloqueo vigente no se toca (criterio 61).
     await this.bloqueos.resolverExito('CONTRASENA_USUARIO', usuario.id, ahora);
     await this.auditoria.registrar({
@@ -712,6 +733,8 @@ export class SesionesService {
         WHERE id = $1 AND cerrada_en IS NULL RETURNING id`,
       { bind: [principal.sesionId, ahora], type: QueryTypes.SELECT },
     );
+    // La conexión de tiempo real de la sesión se cierra al confirmar (historia 004, criterio 66).
+    this.desconexion.alConfirmar(cerradas.map((c) => c.id));
     if (cerradas.length > 0 && principal.tipo === 'SOPORTE') {
       await this.auditoria.registrar({
         accion: 'fin_soporte',
@@ -746,6 +769,22 @@ export class SesionesService {
     const visibles = await this.sucursales.listar(accesos.map((a) => a.sucursal_id));
     const rolDe = new Map(accesos.map((a) => [a.sucursal_id, a.rol]));
     return visibles.map((s) => ({ id: s.id, nombre: s.nombre, rol: rolDe.get(s.id)! }));
+  }
+
+  /**
+   * Los minutos de inactividad configurados en la sucursal (`null` sin sucursal o sin fila en
+   * `sucursal_acceso`), para `minutosDeInactividad` en el momento del ingreso.
+   */
+  async minutosDeSucursal(
+    sucursalId: string | null,
+  ): Promise<{ minutosSucursal: number | null; minutosCocina: number | null }> {
+    if (sucursalId === null) return { minutosSucursal: null, minutosCocina: null };
+    const filas = await this.conexion.query<{ minutos: number; cocina: number }>(
+      `SELECT minutos_inactividad AS minutos, minutos_inactividad_cocina AS cocina
+         FROM sucursal_acceso WHERE sucursal_id = $1`,
+      { bind: [sucursalId], type: QueryTypes.SELECT },
+    );
+    return { minutosSucursal: filas[0]?.minutos ?? null, minutosCocina: filas[0]?.cocina ?? null };
   }
 
   /**

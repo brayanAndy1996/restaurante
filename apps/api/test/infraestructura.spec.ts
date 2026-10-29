@@ -18,6 +18,7 @@ describe('preparación de la base de pruebas', () => {
         'restaurante_api',
         'restaurante_migrador',
         'restaurante_plataforma',
+        'restaurante_tiempo_real',
       ]);
       for (const rol of rows) {
         expect(rol).toMatchObject({

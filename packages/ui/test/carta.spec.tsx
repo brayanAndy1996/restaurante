@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   Casilla,
   CampoMonto,
+  ContadorGrande,
   ContenidoDeFila,
   FilaOrdenable,
   Miniatura,
@@ -149,6 +150,28 @@ describe('OpcionesConAyuda', () => {
     expect(screen.getByText('Cada venta resta una unidad')).toBeInTheDocument();
     await userEvent.click(screen.getByRole('radio', { name: /Sin control/ }));
     expect(alCambiar).toHaveBeenCalledWith('SIN_CONTROL');
+  });
+
+  it('una opción deshabilitada se ve, no se puede elegir y dice por qué', async () => {
+    const alCambiar = vi.fn();
+    render(
+      <OpcionesConAyuda
+        etiqueta="Bebida"
+        opciones={[
+          { valor: 'chicha', titulo: 'Chicha morada', ayuda: 'Sin recargo' },
+          { valor: 'cerveza', titulo: 'Cerveza', ayuda: 'No disponible', deshabilitada: true },
+        ]}
+        valor=""
+        onCambio={alCambiar}
+      />,
+    );
+    const cerveza = screen.getByRole('radio', { name: /Cerveza/ });
+    expect(cerveza).toBeDisabled();
+    expect(screen.getByText('No disponible')).toBeVisible();
+    await userEvent.click(cerveza);
+    expect(alCambiar).not.toHaveBeenCalled();
+    await userEvent.click(screen.getByRole('radio', { name: /Chicha morada/ }));
+    expect(alCambiar).toHaveBeenCalledWith('chicha');
   });
 
   it('marca la elegida y anuncia el error', () => {
@@ -325,5 +348,47 @@ describe('SelectorDeCantidad', () => {
     expect(menos).toHaveAttribute('aria-disabled', 'true');
     await userEvent.click(menos);
     expect(screen.getByRole('status')).toHaveTextContent('× 1');
+  });
+});
+
+describe('ContadorGrande', () => {
+  function Prueba({ inicial = 4, maximo = 6 }: { inicial?: number; maximo?: number }) {
+    const [valor, setValor] = useState(inicial);
+    return (
+      <ContadorGrande
+        nombre="comensales"
+        unidad="comensales"
+        valor={valor}
+        maximo={maximo}
+        onCambio={setValor}
+      />
+    );
+  }
+
+  it('suma y resta de a uno y anuncia el número', async () => {
+    render(<Prueba />);
+    expect(screen.getByRole('group', { name: 'Cantidad de comensales' })).toBeInTheDocument();
+    expect(screen.getByRole('status')).toHaveTextContent('4');
+    await userEvent.click(screen.getByRole('button', { name: 'Agregar uno a comensales' }));
+    expect(screen.getByRole('status')).toHaveTextContent('5');
+    await userEvent.click(screen.getByRole('button', { name: 'Quitar uno de comensales' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Quitar uno de comensales' }));
+    expect(screen.getByRole('status')).toHaveTextContent('3');
+  });
+
+  it('no pasa de sus extremos y el botón queda marcado sin perder el foco', async () => {
+    render(<Prueba inicial={6} />);
+    const mas = screen.getByRole('button', { name: 'Agregar uno a comensales' });
+    expect(mas).toHaveAttribute('aria-disabled', 'true');
+    await userEvent.click(mas);
+    expect(screen.getByRole('status')).toHaveTextContent('6');
+  });
+
+  it('no baja del mínimo de uno', async () => {
+    render(<Prueba inicial={1} />);
+    const menos = screen.getByRole('button', { name: 'Quitar uno de comensales' });
+    expect(menos).toHaveAttribute('aria-disabled', 'true');
+    await userEvent.click(menos);
+    expect(screen.getByRole('status')).toHaveTextContent('1');
   });
 });

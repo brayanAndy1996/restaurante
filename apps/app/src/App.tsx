@@ -10,6 +10,7 @@ import { IngresoPagina } from './modulos/acceso/IngresoPagina';
 import { InicioPagina } from './modulos/acceso/InicioPagina';
 import { PinPagina } from './modulos/acceso/PinPagina';
 import { RecordarEquipoAutomatico } from './modulos/acceso/RecordarEquipo';
+import { veElSalon, veLaCocina } from './modulos/acceso/navegacion';
 import { usePermiso } from './modulos/acceso/permisos';
 import { useSesion } from './modulos/acceso/sesion';
 import { PlataformaIngresoPagina } from './modulos/plataforma/PlataformaIngresoPagina';
@@ -37,6 +38,11 @@ const AccesoSucursalPagina = lazy(() =>
     default: m.AccesoSucursalPagina,
   })),
 );
+const MapaDeMesasPagina = lazy(() =>
+  import('./modulos/administracion/mesas/MapaDeMesasPagina').then((m) => ({
+    default: m.MapaDeMesasPagina,
+  })),
+);
 const CartaPagina = lazy(() =>
   import('./modulos/carta/CartaPagina').then((m) => ({ default: m.CartaPagina })),
 );
@@ -60,6 +66,26 @@ const DisponibilidadPagina = lazy(() =>
   import('./modulos/disponibilidad/DisponibilidadPagina').then((m) => ({
     default: m.DisponibilidadPagina,
   })),
+);
+const SalonPagina = lazy(() =>
+  import('./modulos/salon/SalonPagina').then((m) => ({ default: m.SalonPagina })),
+);
+const OrdenPagina = lazy(() =>
+  import('./modulos/salon/OrdenPagina').then((m) => ({ default: m.OrdenPagina })),
+);
+// El comandero (carta, hoja de producto y borrador) es otro bloque: solo se baja al tocar «Agregar».
+const ComanderoPagina = lazy(() =>
+  import('./modulos/salon/ComanderoPagina').then((m) => ({ default: m.ComanderoPagina })),
+);
+// Mover y unir (el mapa en modo selección) también se baja solo al tocarlos.
+const MoverCuentaPagina = lazy(() =>
+  import('./modulos/salon/SeleccionDeMesasPagina').then((m) => ({ default: m.MoverCuentaPagina })),
+);
+const UnirMesasPagina = lazy(() =>
+  import('./modulos/salon/SeleccionDeMesasPagina').then((m) => ({ default: m.UnirMesasPagina })),
+);
+const CocinaPagina = lazy(() =>
+  import('./modulos/cocina/CocinaPagina').then((m) => ({ default: m.CocinaPagina })),
 );
 // Solo en desarrollo: la ruta y su código no llegan al paquete de producción.
 const ClaveSupervisorDemo = import.meta.env.DEV
@@ -186,6 +212,23 @@ function RutaDeDisponibilidad() {
   return <Outlet />;
 }
 
+/**
+ * El salón lo ve quien tiene `ATENDER_MESA` con su rol en la sucursal activa y el módulo de Salón en su plan
+ * (criterio 87 de 004). La guarda solo ordena la pantalla: la API decide.
+ */
+function RutaDeSalon() {
+  const { sesion } = useSesion();
+  if (!veElSalon(sesion)) return <Navigate to="/" replace />;
+  return <Outlet />;
+}
+
+/** La cocina la ve quien tiene `USAR_KDS` con su rol en la sucursal activa y el módulo de Cocina en su plan. */
+function RutaDeCocina() {
+  const { sesion } = useSesion();
+  if (!veLaCocina(sesion)) return <Navigate to="/" replace />;
+  return <Outlet />;
+}
+
 function Cargando() {
   return <PantallaDeCarga />;
 }
@@ -223,6 +266,16 @@ export function App() {
               {ClaveSupervisorDemo ? (
                 <Route path="/demo/clave-supervisor" element={<ClaveSupervisorDemo />} />
               ) : null}
+              <Route element={<RutaDeSalon />}>
+                <Route path="/salon" element={<SalonPagina />} />
+                <Route path="/salon/ordenes/:id" element={<OrdenPagina />} />
+                <Route path="/salon/ordenes/:id/agregar" element={<ComanderoPagina />} />
+                <Route path="/salon/ordenes/:id/mover" element={<MoverCuentaPagina />} />
+                <Route path="/salon/ordenes/:id/unir" element={<UnirMesasPagina />} />
+              </Route>
+              <Route element={<RutaDeCocina />}>
+                <Route path="/cocina" element={<CocinaPagina />} />
+              </Route>
               <Route element={<RutaDeCarta />}>
                 <Route path="/carta" element={<CartaPagina />} />
                 <Route path="/carta/productos/nuevo" element={<ProductoNuevoPagina />} />
@@ -234,10 +287,15 @@ export function App() {
                 <Route path="/disponibilidad" element={<DisponibilidadPagina />} />
               </Route>
               <Route element={<RutaDeAdministrador />}>
+                <Route
+                  path="/administracion"
+                  element={<Navigate to="/administracion/usuarios" replace />}
+                />
                 <Route path="/administracion/usuarios" element={<UsuariosPagina />} />
                 <Route path="/administracion/usuarios/nuevo" element={<UsuarioNuevoPagina />} />
                 <Route path="/administracion/usuarios/:id" element={<UsuarioEditarPagina />} />
                 <Route path="/administracion/acceso" element={<AccesoSucursalPagina />} />
+                <Route path="/administracion/mesas" element={<MapaDeMesasPagina />} />
               </Route>
             </Route>
           </Route>

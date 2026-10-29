@@ -51,8 +51,10 @@ const PROHIBIDO_CERRAR =
 
 const PROHIBIDO_NOMBRE =
   'Una operación de plataforma no puede nombrar funciones ni objetos que cambien el contexto o la ' +
-  'sesión, ejecuten SQL armado como texto o muestren sesiones, consultas u objetos grandes ajenos ' +
-  '(set_config, pg_settings, ts_rewrite, *_to_xml*, pg_stat_activity, pg_cancel_backend, lo_*…)';
+  'sesión, ejecuten SQL armado como texto o muestren sesiones, consultas u objetos grandes ajenos, ' +
+  'o el estado de las transacciones y la base entera (set_config, pg_settings, ts_rewrite, *_to_xml*, ' +
+  'pg_stat_activity, pg_stat_ssl, pg_stat_progress_*, pg_cancel_backend, lo_*, txid_*, ' +
+  'pg_current_xact_id*, pg_xact_status, pg_stat_database…)';
 
 /** Pool pequeño: las operaciones de plataforma son raras y manuales. */
 const POOL_PLATAFORMA = 2;

@@ -2,12 +2,17 @@ import { NestFactory } from '@nestjs/core';
 import type { INestApplication, LogLevel, Type } from '@nestjs/common';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import { AppModule } from './app.module';
-import { cargarEntorno, exigirEntornoDeProduccion } from './config/entorno';
+import {
+  cargarEntorno,
+  exigirEntornoDeProduccion,
+  exigirEntornoDeTiempoReal,
+} from './config/entorno';
 import {
   AlmacenEnDisco,
   descartarCuerpoDeFotoAlResponder,
   type AlmacenArchivos,
 } from './nucleo/archivos';
+import type { InventarioPuerto } from './modulos/pedidos';
 import type { PublicadorEventos } from './nucleo/eventos';
 import type { Reloj } from './nucleo/reloj';
 import { LIMITE_CUERPO_BYTES, traducirErrorDeCuerpo } from './nucleo/errores/filtro-global-errores';
@@ -35,6 +40,17 @@ export interface OpcionesAplicacion {
    * `AlmacenEnMemoria`.
    */
   almacenArchivos?: AlmacenArchivos;
+  /**
+   * Puerto de inventario (`INVENTARIO`) que el envío y las anulaciones llaman dentro de su transacción; por
+   * defecto el `InventarioNulo`, que no hace nada. Las pruebas pasan un `InventarioDePrueba`.
+   */
+  inventario?: InventarioPuerto;
+  /**
+   * Socket.IO (`/tiempo-real`): `habilitado` lo enciende o apaga; por defecto lo decide `TIEMPO_REAL` del
+   * entorno (apagado con `NODE_ENV=test`). Las pruebas de tiempo real lo habilitan y escuchan un puerto con
+   * `app.listen(0)`.
+   */
+  tiempoReal?: { habilitado: boolean };
 }
 
 /**
@@ -51,12 +67,17 @@ export async function crearAplicacion(
 ): Promise<INestApplication> {
   const entorno = cargarEntorno(process.env); // falla antes de construir nada
   exigirEntornoDeProduccion(entorno); // en producción exige PIN_PEPPER y ORIGENES_PERMITIDOS
+  const tiempoRealHabilitado =
+    opciones.tiempoReal?.habilitado ?? entorno.TIEMPO_REAL === 'habilitado';
+  exigirEntornoDeTiempoReal(entorno, tiempoRealHabilitado); // con el tiempo real exige DATABASE_TIEMPO_REAL_URL
   const app = await NestFactory.create<NestExpressApplication>(
     AppModule.registrar({
       controladoresExtra: opciones.controladoresExtra,
       reloj: opciones.reloj,
       publicadorEventos: opciones.publicadorEventos,
       almacenArchivos: opciones.almacenArchivos,
+      inventario: opciones.inventario,
+      tiempoReal: { habilitado: tiempoRealHabilitado },
     }),
     {
       // En pruebas se silencia el registro de Nest; los errores de arranque se propagan como excepción.

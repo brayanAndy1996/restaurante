@@ -148,14 +148,28 @@ export const usuarioModificadoRespuestaSchema = usuarioRespuestaSchema.extend({
 /** 200 de `POST /usuarios/:id/pin`. */
 export const pinRespuestaSchema = z.object({ pin: pinSchema });
 
-/** `PATCH /sucursales/:id/acceso` (criterio 40). */
-export const sucursalAccesoEntradaSchema = z.strictObject({
-  minutosInactividad: z.number().int().min(1).max(120),
-});
+const minutosInactividadSchema = z.number().int().min(1).max(120);
+/** Cocina/Barra aguanta más tiempo sin uso (historia 004, criterio 63c): de 1 a 720 minutos. */
+const minutosInactividadCocinaSchema = z.number().int().min(1).max(720);
+
+/**
+ * `PATCH /sucursales/:id/acceso` (criterio 40 de 002; criterio 63c de 004): al menos uno de los dos campos; el
+ * que no se envía no cambia.
+ */
+export const sucursalAccesoEntradaSchema = z
+  .strictObject({
+    minutosInactividad: minutosInactividadSchema.optional(),
+    minutosInactividadCocina: minutosInactividadCocinaSchema.optional(),
+  })
+  .refine(
+    (c) => c.minutosInactividad !== undefined || c.minutosInactividadCocina !== undefined,
+    'Envía al menos un campo',
+  );
 
 export const sucursalAccesoRespuestaSchema = z.object({
   sucursalId: uuidSchema,
-  minutosInactividad: z.number().int().min(1).max(120),
+  minutosInactividad: minutosInactividadSchema,
+  minutosInactividadCocina: minutosInactividadCocinaSchema,
 });
 
 export type HorarioUsuario = z.infer<typeof horarioUsuarioSchema>;

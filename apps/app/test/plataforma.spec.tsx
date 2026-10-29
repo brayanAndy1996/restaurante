@@ -58,6 +58,8 @@ describe('ingreso del superadministrador', () => {
     await userEvent.type(screen.getByLabelText('Contraseña'), 'Clave-de-ana-1');
     await userEvent.click(screen.getByRole('button', { name: 'Ingresar' }));
     expect(await screen.findByRole('heading', { name: 'Empresas' })).toBeInTheDocument();
+    // El encabezado se pinta al montar la pantalla; la lectura de empresas sale después, desde la consulta.
+    await waitFor(() => expect(s.de('GET', '/plataforma/empresas')).toHaveLength(1));
     expect(s.de('GET', '/plataforma/empresas')[0]?.cabeceras.get('Authorization')).toBe(
       `Bearer ${TOKEN_SA}`,
     );
@@ -206,7 +208,7 @@ describe('empresas y soporte', () => {
     expect(within(banner).getByText(/Ana Torres · hasta las/)).toBeInTheDocument();
     expect(screen.getByText('Estás en la cuenta de Inversiones Sol del Norte')).toBeInTheDocument();
     // En soporte se ven las opciones de Administrador.
-    expect(screen.getByRole('link', { name: /^Usuarios$/ })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /^Ajustes$/ })).toBeInTheDocument();
 
     await userEvent.click(within(banner).getByRole('button', { name: 'Terminar' }));
     expect(await screen.findByRole('heading', { name: 'Empresas' })).toBeInTheDocument();

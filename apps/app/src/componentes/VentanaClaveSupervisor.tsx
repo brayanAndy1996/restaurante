@@ -47,6 +47,11 @@ export interface PropsVentanaClaveSupervisor {
   /** Motivos de un toque; por defecto `ATAJOS_DE_MOTIVO`. */
   atajos?: readonly string[];
   /**
+   * Motivo ya elegido por quien pide la acción (por ejemplo, el de una anulación): la ventana lo muestra y
+   * lo usa tal cual, sin pedirlo otra vez. Sin él, la ventana pide el motivo.
+   */
+  motivo?: string;
+  /**
    * La API autorizó. `autorizacionId` va en `X-Autorizacion` al repetir la acción (`api.post(…,
    * { autorizacion: id })`); vale para esa sola acción y vence en `expiraEn` (2 minutos).
    */
@@ -59,10 +64,21 @@ interface PropsContenido extends Omit<PropsVentanaClaveSupervisor, 'abierta'> {
   atajos: readonly string[];
 }
 
+/** Motivo ya elegido por quien pide: ni atajos ni campo. */
+const motivoFijo = (motivo: string | undefined) => (motivo?.trim() ? motivo.trim() : null);
+
 /** Contenido de la ventana. Solo existe mientras está abierta: el PIN escrito no sobrevive al cierre. */
-function Contenido({ accion, descripcion, atajos, onAutorizada, onCancelar }: PropsContenido) {
-  const [motivo, setMotivo] = useState('');
-  const motivoActual = useRef('');
+function Contenido({
+  accion,
+  descripcion,
+  atajos,
+  motivo: motivoDado,
+  onAutorizada,
+  onCancelar,
+}: PropsContenido) {
+  const fijo = motivoFijo(motivoDado);
+  const [motivo, setMotivo] = useState(fijo ?? '');
+  const motivoActual = useRef(fijo ?? '');
   const [errorMotivo, setErrorMotivo] = useState<string | null>(null);
   const [pin, setPin] = useState('');
   const pinActual = useRef('');
@@ -220,28 +236,32 @@ function Contenido({ accion, descripcion, atajos, onAutorizada, onCancelar }: Pr
       <div className="clave__accion">
         <span className="texto-ayuda">Se autoriza (queda registrado con tu nombre)</span>
         <b>{descripcion}</b>
+        {fijo ? <span className="clave__motivo">Motivo: {fijo}</span> : null}
       </div>
 
-      <div className="formulario__grupo">
-        <Segmentos
-          etiqueta="Motivos frecuentes"
-          opciones={atajos.map((a) => ({ valor: a, etiqueta: a }))}
-          valor={atajos.includes(motivo) ? motivo : ''}
-          onCambio={(valor) => {
-            ponerMotivo(valor);
-            // Con el PIN ya escrito, elegir el motivo completa el envío.
-            if (pinActual.current.length === LARGO_PIN && !ocupado) void enviar(pinActual.current);
-          }}
-        />
-        <CampoAreaTexto
-          etiqueta="Motivo"
-          value={motivo}
-          onChange={(e) => ponerMotivo(e.target.value)}
-          error={errorMotivo ?? undefined}
-          maxLength={300}
-          rows={1}
-        />
-      </div>
+      {fijo ? null : (
+        <div className="formulario__grupo">
+          <Segmentos
+            etiqueta="Motivos frecuentes"
+            opciones={atajos.map((a) => ({ valor: a, etiqueta: a }))}
+            valor={atajos.includes(motivo) ? motivo : ''}
+            onCambio={(valor) => {
+              ponerMotivo(valor);
+              // Con el PIN ya escrito, elegir el motivo completa el envío.
+              if (pinActual.current.length === LARGO_PIN && !ocupado)
+                void enviar(pinActual.current);
+            }}
+          />
+          <CampoAreaTexto
+            etiqueta="Motivo"
+            value={motivo}
+            onChange={(e) => ponerMotivo(e.target.value)}
+            error={errorMotivo ?? undefined}
+            maxLength={300}
+            rows={1}
+          />
+        </div>
+      )}
 
       <div className="clave__pin">
         <span className="ui-campo__etiqueta" id="clave-pin-etiqueta">

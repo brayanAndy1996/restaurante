@@ -64,6 +64,11 @@ export interface OpcionesDeEnvio {
    * cambio de sucursal y la pantalla no está, el aviso sale como aviso global. Sin esto se da por ausente.
    */
   pantallaViva?: () => boolean;
+  /**
+   * Clave de idempotencia ya generada, para repetir una escritura lógica desde otra llamada (un nuevo toque
+   * sobre "Reintentar" tras rendirse, con la misma autorización). Por defecto se genera una nueva.
+   */
+  clave?: string;
 }
 
 /**
@@ -89,7 +94,7 @@ export async function enviarSinPerder<T>(
   ejecutar: (extra: ExtraDeEscritura) => Promise<T>,
   opciones: OpcionesDeEnvio = {},
 ): Promise<T> {
-  const clave = nuevaClaveDeIdempotencia();
+  const clave = opciones.clave ?? nuevaClaveDeIdempotencia();
   const origen = opciones.identidad ?? identidadActual();
   let pendiente = false;
   let contada = false;
@@ -204,9 +209,12 @@ export function useEnvioPendiente() {
        * (una cola de tareas): se captura con `identidadActual()` al pedirlo.
        */
       identidad?: IdentidadDeSesion,
+      /** Clave de idempotencia que se conserva entre llamadas (ver `OpcionesDeEnvio.clave`). */
+      clave?: string,
     ) =>
       enviarSinPerder(ejecutar, {
         ...(identidad ? { identidad } : {}),
+        ...(clave ? { clave } : {}),
         pantallaViva: () => montado.current,
         alCambiar: (pendiente) => {
           if (!montado.current) return;
