@@ -1,6 +1,7 @@
 // spec: 002-plataforma-y-acceso (pruebas protegidas)
 // Ajustado por 003-carta, decisión del usuario 5 (2026-10-28): EDITAR_CARTA permitido para el Cajero.
 // Ajustado por 004-salon-cocina, decisión 11 (2026-10-29): inactividad aparte para Cocina/Barra.
+// Ajustado por 004-salon-cocina (2026-10-29): la comprobación del PIN ya no cuenta coincidencias dentro de ids hexadecimales.
 //
 // P5 · Criterios 33 a 42 (ingreso con PIN, cambio rápido e inactividad): el PIN solo sirve en equipos
 // que recuerdan a la persona, bloqueo por persona en el equipo (5.º y 10.º fallo) y olvido al 15.º,
@@ -847,6 +848,29 @@ const PERMISOS_MOZO = {
   ADMINISTRAR: 'prohibido',
 };
 
+// ¿Aparece el PIN en la respuesta? Recorre el JSON (claves y valores). Un número o texto igual al PIN
+// cuenta; un texto que lo contiene como número aparte (sin dígitos pegados) también. Antes de buscar
+// dentro de un texto se quitan los UUID, las fechas ISO y los ids hexadecimales largos, donde 4 dígitos
+// seguidos salen por azar y no son una filtración.
+const PIN_RUIDO =
+  /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|\d{4}-\d{2}-\d{2}(?:T[\d:.]+(?:Z|[+-]\d{2}:?\d{2})?)?|\b[0-9a-f]{16,}\b/gi;
+function pinApareceEn(valor: unknown, pin: string): boolean {
+  if (valor === null || valor === undefined) return false;
+  if (typeof valor === 'number') return String(valor) === pin || valor === Number(pin);
+  if (typeof valor === 'string') {
+    if (valor === pin) return true;
+    const sinRuido = valor.replace(PIN_RUIDO, ' ');
+    return new RegExp(`(?<!\\d)${pin}(?!\\d)`).test(sinRuido);
+  }
+  if (Array.isArray(valor)) return valor.some((v) => pinApareceEn(v, pin));
+  if (typeof valor === 'object') {
+    return Object.entries(valor as Record<string, unknown>).some(
+      ([k, v]) => pinApareceEn(k, pin) || pinApareceEn(v, pin),
+    );
+  }
+  return false;
+}
+
 describe('criterio 42 · GET /sesion de una sesión PIN', () => {
   it('devuelve la sesión actual completa según sesionRespuestaSchema', async () => {
     const x = await mozoEn(1);
@@ -877,7 +901,14 @@ describe('criterio 42 · GET /sesion de una sesión PIN', () => {
           (entorno.reloj.ahora().getTime() + 5 * MINUTO),
       ),
     ).toBeLessThanOrEqual(1500);
-    expect(JSON.stringify(res.body)).not.toContain(x.pin);
+    // El detector sí detecta una filtración real y no se confunde con ids ni fechas.
+    expect(pinApareceEn({ a: { pin: x.pin } }, x.pin)).toBe(true);
+    expect(pinApareceEn({ a: [Number(x.pin)] }, x.pin)).toBe(true);
+    expect(pinApareceEn({ nombre: `Mozo ${x.pin}` }, x.pin)).toBe(true);
+    expect(pinApareceEn({ id: `12345678-${x.pin}-4abc-8abc-123456789abc` }, x.pin)).toBe(false);
+    expect(pinApareceEn({ nombreUsuario: `ab${x.pin}cdef01234567` }, x.pin)).toBe(false);
+    // La respuesta no contiene el PIN.
+    expect(pinApareceEn(res.body, x.pin)).toBe(false);
   });
 
   it('sin sucursal elegida no hay rol ni permisos; al elegirla aparecen los de ese rol', async () => {
