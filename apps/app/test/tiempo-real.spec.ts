@@ -32,6 +32,7 @@ let token: string | null;
 let sucursalId: string | null;
 let cliente: QueryClient;
 let invalidadas: unknown[][];
+let opcionesDeInvalidacion: unknown[];
 
 /** Deja que las promesas pendientes (la apertura del socket) terminen. */
 const vaciar = () => act(async () => void (await Promise.resolve()));
@@ -43,8 +44,13 @@ beforeEach(() => {
   guardarTokenDeSesion(TOKEN);
   cliente = new QueryClient();
   invalidadas = [];
-  vi.spyOn(cliente, 'invalidateQueries').mockImplementation(((filtros: { queryKey: unknown[] }) => {
+  opcionesDeInvalidacion = [];
+  vi.spyOn(cliente, 'invalidateQueries').mockImplementation(((
+    filtros: { queryKey: unknown[] },
+    opciones?: unknown,
+  ) => {
     invalidadas.push([...filtros.queryKey]);
+    opcionesDeInvalidacion.push(opciones);
     return Promise.resolve();
   }) as never);
 });
@@ -103,6 +109,16 @@ describe('la conexión de la sesión', () => {
       [...CLAVES_TIEMPO_REAL.cocina],
       [...CLAVES_TIEMPO_REAL.disponibilidad],
     ]);
+    // Si ya hay una lectura en camino, esa sirve: no se cancela para bajar lo mismo dos veces.
+    expect(opcionesDeInvalidacion).toEqual(Array(4).fill({ cancelRefetch: false }));
+  });
+
+  it('un aviso de cambio sí cancela la lectura en curso, que pudo salir antes del cambio', async () => {
+    const socket = await abrir();
+    socket.conectar();
+    opcionesDeInvalidacion.length = 0;
+    socket.desdeElServidor('salon.cambio', { mesaIds: [], ordenId: ORDEN });
+    expect(opcionesDeInvalidacion).toEqual([undefined]);
   });
 
   it('se cierra al salir de la sesión', async () => {
