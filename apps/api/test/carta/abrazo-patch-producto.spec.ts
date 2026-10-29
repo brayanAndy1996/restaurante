@@ -10,6 +10,7 @@
 // ya tiene el combo C) queda esperando. Entonces X (el segundo `PATCH` de C) y Y (la operación legítima) toman
 // lo suyo en el orden que forma el ciclo. Al soltar la fila no debe haber ningún abrazo mortal: ninguna
 // operación responde 409 y la base no cuenta ningún `deadlock` nuevo.
+import { randomBytes } from 'node:crypto';
 import type { Client } from 'pg';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { abrirCliente } from '../utilidades';
@@ -84,6 +85,27 @@ interface Escena {
   p: string;
 }
 
+/**
+ * Cambia el id de un producto recién creado (nadie lo referencia todavía) por uno que, siendo un UUID v4 válido,
+ * es menor que cualquier otro UUID v4 aleatorio: así P queda siempre antes que el combo C en el orden de bloqueo
+ * por id, sin depender del azar de `gen_random_uuid()`. El resto de la reproducción no cambia.
+ */
+async function darIdMenorQue(productoId: string): Promise<string> {
+  const sufijo = randomBytes(6).toString('hex');
+  const nuevo = `00000000-0000-4000-8000-${sufijo}`;
+  // Las tablas con trazabilidad exigen un actor fijado en la transacción; aquí, uno de sistema.
+  await admin.query('BEGIN');
+  try {
+    await admin.query('SELECT fijar_contexto_actor(NULL, NULL, NULL, $1)', ['prueba-abrazo']);
+    await admin.query('UPDATE producto SET id = $1 WHERE id = $2', [nuevo, productoId]);
+    await admin.query('COMMIT');
+  } catch (error) {
+    await admin.query('ROLLBACK').catch(() => undefined);
+    throw error;
+  }
+  return nuevo;
+}
+
 /** Arma las familias, el combo C y un simple P con id menor que el de C (el orden de bloqueo es por id). */
 async function armarEscena(familiaDeP: 'f1' | 'f2'): Promise<Escena> {
   const f1 = await crear('/carta/familias', { nombre: unico('F1') });
@@ -100,18 +122,15 @@ async function armarEscena(familiaDeP: 'f1' | 'f2'): Promise<Escena> {
     tipoControlStock: 'SIN_CONTROL',
     componentes: [{ productoId: q, cantidad: 1 }],
   });
-  let p = '';
-  for (let i = 0; i < 60 && p === ''; i += 1) {
-    const candidato = await crear(
-      '/carta/productos',
-      productoSimpleNuevo({
-        familiaId: familiaDeP === 'f1' ? f1 : f2,
-        estacionId: datos.estacionId,
-      }),
-    );
-    if (candidato < c) p = candidato;
-  }
-  expect(p, 'no salió un producto con id menor que el combo').not.toBe('');
+  const candidato = await crear(
+    '/carta/productos',
+    productoSimpleNuevo({
+      familiaId: familiaDeP === 'f1' ? f1 : f2,
+      estacionId: datos.estacionId,
+    }),
+  );
+  const p = await darIdMenorQue(candidato);
+  expect(p < c, 'P debe tener un id menor que el del combo').toBe(true);
   return { f1, f2, q, c, p };
 }
 
