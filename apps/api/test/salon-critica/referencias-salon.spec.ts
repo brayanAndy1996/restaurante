@@ -59,6 +59,22 @@ function mundo(): Promise<Mundo> {
   return mundoPendiente;
 }
 
+/**
+ * Un mundo aparte (otras dos empresas) para los casos de ids de cliente repetidos: esos casos crean a propósito, en
+ * B, órdenes con los mismos ids que las de A, y no deben contaminar el mundo compartido (donde cada id existe en una
+ * sola empresa y el criterio 86 lo comprueba).
+ */
+let mundoAparte: Promise<Mundo> | undefined;
+function mundoDeIdsRepetidos(): Promise<Mundo> {
+  mundoAparte ??= (async () => {
+    const e = await crearEscenarioCarta(ctx);
+    const A = await construirMundo(ctx, admin, e.A, `a${randomUUID().slice(0, 5)}`);
+    const B = await construirMundo(ctx, admin, e.B, `b${randomUUID().slice(0, 5)}`);
+    return { A, B };
+  })();
+  return mundoAparte;
+}
+
 beforeAll(async () => {
   ctx = await arrancarP4({ poolMax: 2 });
   admin = await abrirCliente('admin');
@@ -750,7 +766,7 @@ describe('criterio 85 · GET /salon, GET /ordenes/:id y GET /cocina/comandas sol
 // ------------------------------------------------------------------------------------------------
 describe('criterio 85 · los ids de cliente son únicos por empresa: el mismo id en B crea su propia fila', () => {
   it('orden, envío, marcha, anulación y pre-cuenta con los ids de A, usados en B, crean filas de B y no devuelven las de A', async () => {
-    const m = await mundo();
+    const m = await mundoDeIdsRepetidos();
     const idsA = await idsDeEmpresaSalon(admin, m.A.E.empresaId);
     const antesA = await instantaneaSalon(admin, m.A.E.empresaId);
     const a = m.A.principal;
@@ -854,7 +870,7 @@ describe('criterio 85 · los ids de cliente son únicos por empresa: el mismo id
   });
 
   it('repetir en B el id de una orden que A ya tiene no devuelve 409 ni 422 ni la orden de A: el id nuevo y el repetido responden igual', async () => {
-    const m = await mundo();
+    const m = await mundoDeIdsRepetidos();
     const libres = m.B.mesasLibres;
     const conIdDeA = await abrirOrden(ctx, m.B.tokenS1, {
       id: m.A.segunda.id,
