@@ -108,6 +108,18 @@ DB_PROTECCION_CATALOGO=omitir NODE_ENV=production pnpm db:preparar
   `lo_`, `pg_stat_get_backend_`, `query_to_xml`, `cursor_to_xml`, `table_to_xml`, `schema_to_xml` o
   `database_to_xml` (criterio 38e). **Convención:** ninguna tabla, columna ni alias de la aplicación
   empieza con `lo_`.
+- Por el canal lateral de la historia 004 (criterio 70) rechazan además `pg_notify`,
+  `pg_listening_channels`, `pg_locks`, `pg_lock_status`, `pg_blocking_pids`,
+  `pg_safe_snapshot_blocking_pids`, `pg_isolation_test_session_is_blocked`,
+  `pg_notification_queue_usage`, `pg_prepared_xacts`, `pg_prepared_xact` y los cerrojos de sesión
+  `pg_advisory_lock*`, `pg_try_advisory_lock*` y `pg_advisory_unlock*` (los `*_xact_lock` siguen
+  permitidos); las vistas que enumeran sesiones por dentro (`pg_stat_ssl`, `pg_stat_gssapi`,
+  `pg_stat_replication`, `pg_stat_get_progress_info` y todo `pg_stat_progress_*`); el estado de las
+  transacciones de otras empresas (`pg_current_snapshot`, `txid_current_snapshot`, `pg_xact_status`,
+  `txid_status`, `pg_current_xact_id`, `pg_current_xact_id_if_assigned`, `txid_current`,
+  `txid_current_if_assigned`, `pg_snapshot_xmin`, `pg_snapshot_xmax`, `pg_snapshot_xip`,
+  `pg_visible_in_snapshot`, `txid_visible_in_snapshot` y todo `txid_snapshot_*`); y los contadores de la
+  base entera (`pg_stat_database`, `pg_stat_database_conflicts` y todo `pg_stat_get_db_*`).
 - Condiciones de despliegue: no instalar en la base de la aplicación extensiones como
   `pg_stat_statements`, `dblink` o `postgres_fdw` (o agregar sus nombres a la lista de la guarda), no
   dar a los roles de la aplicación membresías en `pg_monitor`, `pg_read_all_stats` ni

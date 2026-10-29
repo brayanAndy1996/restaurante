@@ -282,12 +282,40 @@ export const NOMBRES_PROHIBIDOS: readonly string[] = [
   'pg_advisory_unlock',
   'pg_advisory_unlock_shared',
   'pg_advisory_unlock_all',
+  // Ronda 3 del ataque a 3a, sesiones ajenas: `pg_stat_ssl`, `pg_stat_gssapi` y `pg_stat_replication` son vistas
+  // que llaman a `pg_stat_get_activity` por dentro (pid, usuario y cliente de cada sesión de la base), y
+  // `pg_stat_get_progress_info` es la función de las vistas `pg_stat_progress_*` (prefijo aparte).
+  'pg_stat_ssl',
+  'pg_stat_gssapi',
+  'pg_stat_replication',
+  'pg_stat_get_progress_info',
+  // Ronda 3, estado de las transacciones de otras empresas: la instantánea (qué transacciones corren ahora),
+  // el estado de una transacción por su número y el número de la transacción propia (que permite ubicar a las
+  // vecinas). Las migraciones usan `pg_current_xact_id` en funciones SQL de la base, que no pasan por la guarda.
+  'pg_current_snapshot',
+  'txid_current_snapshot',
+  'pg_xact_status',
+  'txid_status',
+  'pg_current_xact_id',
+  'pg_current_xact_id_if_assigned',
+  'txid_current',
+  'txid_current_if_assigned',
+  'pg_snapshot_xmin',
+  'pg_snapshot_xmax',
+  'pg_snapshot_xip',
+  'pg_visible_in_snapshot',
+  'txid_visible_in_snapshot',
+  // Contadores de la base entera (transacciones confirmadas, deadlocks, tuplas) que suman a todas las empresas.
+  'pg_stat_database',
+  'pg_stat_database_conflicts',
 ];
 
 /**
  * Prefijos prohibidos: se rechaza todo identificador que empiece así (cualquier continuación cuenta);
  * solo se mira el carácter anterior. Son las familias de funciones de `pg_catalog` de las que no se
- * quiere ni una firma: `pg_stat_get_backend_*` (enumeran sesiones), `lo_*` (objetos grandes), y las
+ * quiere ni una firma: `pg_stat_get_backend_*` (enumeran sesiones), `pg_stat_progress_*` (progreso de
+ * operaciones ajenas), `txid_snapshot_*` (instantáneas de transacciones), `pg_stat_get_db_*` (contadores de
+ * la base entera), `lo_*` (objetos grandes), y las
  * funciones `*_to_xml*` que ejecutan SQL recibido como texto (`query_to_xml`, `cursor_to_xml`) o leen
  * una relación nombrada dentro de un literal (`table_to_xml`, `schema_to_xml`, `database_to_xml`, con
  * sus variantes `*schema` y `*_and_xmlschema`). Convención: ninguna tabla, columna ni alias de la
@@ -301,6 +329,12 @@ export const PREFIJOS_PROHIBIDOS: readonly string[] = [
   'table_to_xml',
   'schema_to_xml',
   'database_to_xml',
+  // Ronda 3 del ataque a 3a: vistas de progreso de operaciones ajenas, instantáneas de transacciones
+  // (`txid_snapshot_xmin`, `txid_snapshot_xmax`, `txid_snapshot_xip`) y contadores por base
+  // (`pg_stat_get_db_*`: `xact_commit`, `deadlocks`, `tuples_*`…).
+  'pg_stat_progress_',
+  'txid_snapshot_',
+  'pg_stat_get_db_',
 ];
 
 const NO_IDENTIFICADOR_ANTES = '(?<![A-Za-z0-9_\\u0080-\\uffff$])';
