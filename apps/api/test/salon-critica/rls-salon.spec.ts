@@ -139,12 +139,14 @@ describe.each(TABLAS_SALON.map((tabla) => ({ tabla, api: PRIVILEGIOS_SALON[tabla
 
     it('la siembra dejó filas de A y de B en la tabla (la prueba no es vacía)', async () => {
       const { A, B } = await sembrado();
-      expect((await idsDe(tabla, A.base.empresaId)).length, `filas de A en ${tabla}`).toBeGreaterThan(
-        0,
-      );
-      expect((await idsDe(tabla, B.base.empresaId)).length, `filas de B en ${tabla}`).toBeGreaterThan(
-        0,
-      );
+      expect(
+        (await idsDe(tabla, A.base.empresaId)).length,
+        `filas de A en ${tabla}`,
+      ).toBeGreaterThan(0);
+      expect(
+        (await idsDe(tabla, B.base.empresaId)).length,
+        `filas de B en ${tabla}`,
+      ).toBeGreaterThan(0);
     });
 
     it('lectura: con el contexto de A no se leen filas de B por id ni sin WHERE, y sí las de A', async () => {
@@ -211,9 +213,10 @@ describe.each(TABLAS_SALON.map((tabla) => ({ tabla, api: PRIVILEGIOS_SALON[tabla
       const { A, B } = await sembrado();
       const idsA = await idsDe(tabla, A.base.empresaId);
       const antesB = await fotoDe(tabla, B.base.empresaId);
-      expect(puede('DELETE'), 'la tabla "Permisos" de spec.md no da DELETE en ninguna tabla de 3a').toBe(
-        false,
-      );
+      expect(
+        puede('DELETE'),
+        'la tabla "Permisos" de spec.md no da DELETE en ninguna tabla de 3a',
+      ).toBe(false);
       const idsB = await idsDe(tabla, B.base.empresaId);
       await comoApi(A.base.empresaId, async () => {
         await apiCliente.query('SAVEPOINT sin_where');
@@ -384,8 +387,12 @@ describe.each(REFERENCIAS)(
             `UPDATE ${tabla} SET ${columna} = $1${setExtra ?? ''} WHERE empresa_id = $2`,
             [valor, A.base.empresaId],
           );
-        const cruzada = await comoApi(A.base.empresaId, () => errorDe(actualizar(deB(B, objetivo))));
-        const inexistente = await comoApi(A.base.empresaId, () => errorDe(actualizar(randomUUID())));
+        const cruzada = await comoApi(A.base.empresaId, () =>
+          errorDe(actualizar(deB(B, objetivo))),
+        );
+        const inexistente = await comoApi(A.base.empresaId, () =>
+          errorDe(actualizar(randomUUID())),
+        );
         expect(cruzada.code, cruzada.message).toBe('23503');
         expect(inexistente.code, inexistente.message).toBe('23503');
         expect(cruzada.constraint).toBe(inexistente.constraint);

@@ -343,19 +343,18 @@ describe('criterio 15 · enviar', () => {
 // ===================================================================================================
 
 describe('criterio 16 · un cambio posterior de la carta no altera lo enviado', () => {
-  let ordenId: string;
-  let enviado: EnvioRespuestaDePrueba;
-  let lineasAntes: Awaited<ReturnType<typeof lineasDeComanda>>[];
-  let ids: {
-    plato: string;
-    grupo: string;
-    rocoto: string;
-    aji: string;
-    componente: string;
-    combo: string;
-  };
+  interface Preparado {
+    ordenId: string;
+    enviado: EnvioRespuestaDePrueba;
+    lineasAntes: Awaited<ReturnType<typeof lineasDeComanda>>[];
+    ids: { plato: string; rocoto: string };
+  }
 
-  beforeAll(async () => {
+  /** Envía y cambia la carta una sola vez; cada prueba espera el mismo resultado (o el mismo fallo). */
+  let preparado: Promise<Preparado> | undefined;
+  const preparar = (): Promise<Preparado> => (preparado ??= prepararCambios());
+
+  async function prepararCambios(): Promise<Preparado> {
     const token = A().tokenAdmin;
     const salsa = await crearEnCarta(ctx, token, '/carta/grupos-modificadores', {
       nombre: nombreUnico('Salsa mutable'),
@@ -397,21 +396,14 @@ describe('criterio 16 · un cambio posterior de la carta no altera lo enviado', 
       tipoControlStock: 'SIN_CONTROL',
       componentes: [{ productoId: componente.id, cantidad: 2 }],
     });
-    ids = {
-      plato: plato.id,
-      grupo: salsa.id,
-      rocoto,
-      aji,
-      componente: componente.id,
-      combo: combo.id,
-    };
-
-    ordenId = (await abrir()).id;
-    enviado = await enviarComoMozo(ordenId, [
+    const ordenId = (await abrir()).id;
+    const enviado = await enviarComoMozo(ordenId, [
       { productoId: plato.id, modificadorIds: [rocoto], cantidad: 2 },
       { productoId: combo.id, modificadorIds: [], cantidad: 1 },
     ]);
-    lineasAntes = await Promise.all(enviado.comandas.map((c) => lineasDeComanda(admin, c.id)));
+    const lineasAntes = await Promise.all(
+      enviado.comandas.map((c) => lineasDeComanda(admin, c.id)),
+    );
 
     // Cambia todo lo que 003 permite: precio del producto y del modificador, nombre, estación de un
     // componente y el tipo del combo (con confirmación, 003 criterio 10b).
@@ -433,9 +425,11 @@ describe('criterio 16 · un cambio posterior de la carta no altera lo enviado', 
       estacionId: carta().cocinaId,
       confirmarPerdida: true,
     });
-  });
+    return { ordenId, enviado, lineasAntes, ids: { plato: plato.id, rocoto } };
+  }
 
-  it('el envío guardó el precio y el nombre de cuando se vendió', () => {
+  it('el envío guardó el precio y el nombre de cuando se vendió', async () => {
+    const { enviado } = await preparar();
     expect(enviado.items[0]).toMatchObject({
       nombre: 'Plato mutable',
       precioUnitario: '16.00',
@@ -451,12 +445,14 @@ describe('criterio 16 · un cambio posterior de la carta no altera lo enviado', 
   });
 
   it('GET /ordenes/:id sigue mostrando exactamente lo enviado', async () => {
+    const { ordenId, enviado } = await preparar();
     const orden = await ordenDe(ordenId);
     expect(orden.items).toEqual(enviado.items);
     expect(orden.total).toBe('52.00');
   });
 
   it('las líneas de las comandas no cambian de nombre, de cantidad ni de estación', async () => {
+    const { enviado, lineasAntes } = await preparar();
     const despues = await Promise.all(enviado.comandas.map((c) => lineasDeComanda(admin, c.id)));
     expect(despues).toEqual(lineasAntes);
     // El componente se envió a Cocina y sigue en la comanda de Cocina aunque ahora sea de Barra.
@@ -470,6 +466,7 @@ describe('criterio 16 · un cambio posterior de la carta no altera lo enviado', 
   });
 
   it('la pre-cuenta muestra lo enviado', async () => {
+    const { ordenId } = await preparar();
     const res = await pedirPrecuenta(ctx, t().mozo, ordenId);
     exigirEstado(res, 201, 'pedir la pre-cuenta');
     const lineas = (
@@ -488,6 +485,7 @@ describe('criterio 16 · un cambio posterior de la carta no altera lo enviado', 
   });
 
   it('una venta nueva sí usa la carta cambiada', async () => {
+    const { ids } = await preparar();
     const o = await abrir();
     const r = await enviarComoMozo(o.id, [
       { productoId: ids.plato, modificadorIds: [ids.rocoto], cantidad: 1 },

@@ -415,11 +415,10 @@ describe('criterio 72 · disponibles', () => {
     });
     exigirEstado(res, 200, 'GET /salon/stock');
     expect(res.body).toEqual({ productos: [{ productoId: carta().gaseosa, disponible: 7 }] });
-    const llamada = ctx.inventario.llamadas().find((l) => l.metodo === 'disponibles')!;
-    expect(llamada.entrada).toMatchObject({ sucursalId: A().S1 });
-    expect([...(llamada.entrada as { productoIds: string[] }).productoIds].sort()).toEqual(
-      [carta().gaseosa, carta().lomo].sort(),
-    );
+    const llamada = ctx.inventario.llamadas().find((l) => l.metodo === 'disponibles');
+    if (llamada?.metodo !== 'disponibles') throw new Error('No se llamó a disponibles');
+    expect(llamada.entrada.sucursalId).toBe(A().S1);
+    expect([...llamada.entrada.productoIds].sort()).toEqual([carta().gaseosa, carta().lomo].sort());
     ctx.inventario.fijarDisponibles(new Map());
   });
 });

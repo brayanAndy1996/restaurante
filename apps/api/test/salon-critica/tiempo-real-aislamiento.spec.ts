@@ -43,7 +43,11 @@ import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest
 import { crearAplicacion } from '../../src/aplicacion';
 import { CONEXION_API } from '../../src/nucleo/base-de-datos';
 import { ContextoEmpresa } from '../../src/nucleo/contexto-empresa';
-import { PUBLICADOR_EVENTOS, type EventoPublicable, type PublicadorEventos } from '../../src/nucleo/eventos';
+import {
+  PUBLICADOR_EVENTOS,
+  type EventoPublicable,
+  type PublicadorEventos,
+} from '../../src/nucleo/eventos';
 import { RelojManual } from '../../src/nucleo/reloj';
 import { ServidorTiempoReal } from '../../src/nucleo/tiempo-real';
 import {
@@ -55,10 +59,6 @@ import {
   nuevoSuperadmin,
   recordarEquipo,
 } from '../acceso/fabrica-plataforma';
-import {
-  CONTROLES_ALIAS_TIEMPO_REAL,
-  ENTRADAS_TIEMPO_REAL,
-} from './nombres-tiempo-real';
 import { variantes } from '../aislamiento/nombres-prohibidos';
 import {
   crearEscenarioCarta,
@@ -68,11 +68,20 @@ import {
   type EscenarioCarta,
 } from '../carta-critica/fabrica-permisos-carta';
 import { ClienteTiempoReal } from '../soporte';
-import { BASE_DE_PRUEBA, NOMBRES_DE_ROLES, abrirCliente, fijarEntornoDePrueba, urlDeRol } from '../utilidades';
 import {
+  BASE_DE_PRUEBA,
+  NOMBRES_DE_ROLES,
+  abrirCliente,
+  fijarEntornoDePrueba,
+  urlDeRol,
+} from '../utilidades';
+import {
+  CONTROLES_ALIAS_TIEMPO_REAL,
+  ENTRADAS_TIEMPO_REAL,
   abrirOrden,
   arrancarP4,
-  construirMundo,
+  sembrarCartaEjemplo,
+  sembrarSalon,
   enviar,
   exigirEstado,
   exigirSinFallos,
@@ -80,11 +89,10 @@ import {
   lineaLomo,
   llamar,
   postConClave,
-  sembrarCartaEjemplo,
   sesionContrasena,
   uuidsEn,
   type AppP4,
-  type MundoEmpresa,
+  type CartaEjemplo,
 } from './fabrica-p4';
 
 vi.setConfig({ testTimeout: 300_000, hookTimeout: 300_000 });
@@ -113,7 +121,9 @@ afterEach(() => {
 });
 
 const publicar = (app: INestApplication, evento: EventoPublicable) =>
-  Promise.resolve(app.get<PublicadorEventos>(PUBLICADOR_EVENTOS, { strict: false }).publicar(evento));
+  Promise.resolve(
+    app.get<PublicadorEventos>(PUBLICADOR_EVENTOS, { strict: false }).publicar(evento),
+  );
 
 /** Un `orden.cambio` con un `ordenId` nuevo, para reconocerlo al llegar. */
 const ordenCambio = (
@@ -125,16 +135,24 @@ const ordenCambio = (
 };
 
 // ------------------------------------------------------------------------------------------------
-// El mundo: dos empresas con su salón, su carta y sus sesiones
+// El mundo: dos empresas con su carta y sus sesiones (sin depender de las rutas del salón)
 // ------------------------------------------------------------------------------------------------
 interface Mundo {
   e: EscenarioCarta;
-  A: MundoEmpresa;
-  B: MundoEmpresa;
+  /** Carta de ejemplo de cada empresa, sembrada por las rutas de 003. */
+  cartaA: CartaEjemplo;
+  cartaB: CartaEjemplo;
   /** Sesiones de contraseña de A y de B (la sucursal activa va en el nombre). */
   tokens: {
     A: Record<
-      'adminSin' | 'adminS1' | 'adminS2' | 'mozoS1' | 'cocinaS1' | 'supervisorS1' | 'cajeroS1' | 'cajeroS2',
+      | 'adminSin'
+      | 'adminS1'
+      | 'adminS2'
+      | 'mozoS1'
+      | 'cocinaS1'
+      | 'supervisorS1'
+      | 'cajeroS1'
+      | 'cajeroS2',
       string
     >;
     B: Record<'adminSin' | 'adminS1' | 'mozoS1', string>;
@@ -147,28 +165,28 @@ let mundoPendiente: Promise<Mundo> | undefined;
 function mundo(): Promise<Mundo> {
   mundoPendiente ??= (async () => {
     const e = await crearEscenarioCarta(ctx);
-    const A = await construirMundo(ctx, admin, e.A, `a${randomUUID().slice(0, 5)}`);
-    const B = await construirMundo(ctx, admin, e.B, `b${randomUUID().slice(0, 5)}`);
+    const cartaA = await sembrarCartaEjemplo(ctx, e.A.tokenAdmin);
+    const cartaB = await sembrarCartaEjemplo(ctx, e.B.tokenAdmin);
     const tokens = {
       A: {
         adminSin: await sesionContrasena(ctx, e.A.base.admin, null),
-        adminS1: A.tokenS1,
-        adminS2: A.tokenS2,
+        adminS1: await sesionContrasena(ctx, e.A.base.admin, e.A.S1),
+        adminS2: await sesionContrasena(ctx, e.A.base.admin, e.A.S2),
         mozoS1: await sesionContrasena(ctx, e.A.mozo, e.A.S1),
-        cocinaS1: A.tokenCocinaS1,
+        cocinaS1: await sesionContrasena(ctx, e.A.cocina, e.A.S1),
         supervisorS1: await sesionContrasena(ctx, e.A.supervisor, e.A.S1),
         cajeroS1: await sesionContrasena(ctx, e.A.cajero, e.A.S1),
         cajeroS2: await sesionContrasena(ctx, e.A.cajero, e.A.S2),
       },
       B: {
         adminSin: await sesionContrasena(ctx, e.B.base.admin, null),
-        adminS1: B.tokenS1,
+        adminS1: await sesionContrasena(ctx, e.B.base.admin, e.B.S1),
         mozoS1: await sesionContrasena(ctx, e.B.mozo, e.B.S1),
       },
     };
     const equipo = await equipoDe(ctx, e.A.mozo);
     const pin = { token: await sesionPin(ctx, e.A.mozo, equipo, e.A.S1), equipo };
-    return { e, A, B, tokens, pin };
+    return { e, cartaA, cartaB, tokens, pin };
   })();
   return mundoPendiente;
 }
@@ -185,8 +203,7 @@ afterAll(async () => {
 });
 
 /** Cambia el último carácter del token para adulterar el secreto. */
-const adulterar = (token: string): string =>
-  token.slice(0, -1) + (token.endsWith('a') ? 'b' : 'a');
+const adulterar = (token: string): string => token.slice(0, -1) + (token.endsWith('a') ? 'b' : 'a');
 
 // ------------------------------------------------------------------------------------------------
 // 64 · Conexión
@@ -212,7 +229,11 @@ describe('criterio 64 · conexión con cada tipo de token', () => {
   it('se rechazan con NO_AUTENTICADO: sin token, basura, secreto adulterado, empresa cambiada y sesión cerrada', async () => {
     const m = await mundo();
     const cerrada = await sesionContrasena(ctx, m.e.A.mozo, m.e.A.S1);
-    exigirEstado(await llamar(ctx, cerrada, { metodo: 'delete', ruta: '/sesion' }), 204, 'cerrar la sesión');
+    exigirEstado(
+      await llamar(ctx, cerrada, { metodo: 'delete', ruta: '/sesion' }),
+      204,
+      'cerrar la sesión',
+    );
     const casos: [string, { token?: string; equipo?: string }][] = [
       ['sin token', {}],
       ['token vacío', { token: '' }],
@@ -238,7 +259,8 @@ describe('criterio 64 · conexión con cada tipo de token', () => {
     const m = await mundo();
     const sa = await nuevoSuperadmin(ctx);
     const equipo = await equipoDe(ctx, m.e.A.cocina);
-    const falso = (prefijo: string) => `${prefijo}.${m.e.A.empresaId}.${randomUUID()}.${randomUUID()}`;
+    const falso = (prefijo: string) =>
+      `${prefijo}.${m.e.A.empresaId}.${randomUUID()}.${randomUUID()}`;
     const casos: [string, { token?: string; equipo?: string }][] = [
       ['token de superadministrador (sa.)', { token: sa.token }],
       ['token de equipo (eq.)', { token: equipo }],
@@ -338,7 +360,9 @@ describe('criterio 65 · lo que el cliente emite no cambia sus salas ni provoca 
       const { evento, ordenId } = ordenCambio(empresaId, sala);
       await publicar(ctx.app, evento);
       if (empresaId === m.e.B.empresaId) {
-        expect(await vecinoB.esperarEvento<{ ordenId: string }>('orden.cambio')).toEqual({ ordenId });
+        expect(await vecinoB.esperarEvento<{ ordenId: string }>('orden.cambio')).toEqual({
+          ordenId,
+        });
       }
       await intruso.noRecibe('orden.cambio', 400);
       vecinoB.limpiar();
@@ -362,13 +386,22 @@ interface Conectados {
 
 async function conectarTodos(app: INestApplication, m: Mundo): Promise<Conectados> {
   const c: Conectados = {};
-  for (const [nombre, token] of Object.entries(m.tokens.A)) c[`A.${nombre}`] = await conectar(app, token);
-  for (const [nombre, token] of Object.entries(m.tokens.B)) c[`B.${nombre}`] = await conectar(app, token);
+  for (const [nombre, token] of Object.entries(m.tokens.A))
+    c[`A.${nombre}`] = await conectar(app, token);
+  for (const [nombre, token] of Object.entries(m.tokens.B))
+    c[`B.${nombre}`] = await conectar(app, token);
   c['A.mozoPinS1'] = await conectar(app, m.pin.token, m.pin.equipo);
   return c;
 }
 
-const SUCURSAL_1_DE_A = ['A.adminS1', 'A.mozoS1', 'A.cocinaS1', 'A.supervisorS1', 'A.cajeroS1', 'A.mozoPinS1'];
+const SUCURSAL_1_DE_A = [
+  'A.adminS1',
+  'A.mozoS1',
+  'A.cocinaS1',
+  'A.supervisorS1',
+  'A.cajeroS1',
+  'A.mozoPinS1',
+];
 const SUCURSAL_2_DE_A = ['A.adminS2', 'A.cajeroS2'];
 const TODOS_DE_A = ['A.adminSin', ...SUCURSAL_1_DE_A, ...SUCURSAL_2_DE_A];
 const TODOS_DE_B = ['B.adminSin', 'B.adminS1', 'B.mozoS1'];
@@ -391,7 +424,8 @@ async function exigirReparto(
       if (reciben.includes(nombre)) {
         try {
           const datos = await cliente.esperarEvento<{ ordenId: string }>('orden.cambio', 3000);
-          if (datos.ordenId !== ordenId) fallos.push(`${descripcion}: ${nombre} recibió otro evento`);
+          if (datos.ordenId !== ordenId)
+            fallos.push(`${descripcion}: ${nombre} recibió otro evento`);
           await cliente.noRecibe('orden.cambio', 300);
         } catch (error) {
           fallos.push(`${descripcion}: ${nombre} debía recibirlo y: ${(error as Error).message}`);
@@ -400,7 +434,9 @@ async function exigirReparto(
         try {
           await cliente.noRecibe('orden.cambio', 600);
         } catch (error) {
-          fallos.push(`${descripcion}: ${nombre} no debía recibirlo y: ${(error as Error).message}`);
+          fallos.push(
+            `${descripcion}: ${nombre} no debía recibirlo y: ${(error as Error).message}`,
+          );
         }
       }
     }),
@@ -426,16 +462,37 @@ describe('criterio 67 · las salas llevan la empresa y la sucursal', () => {
     const s2 = ordenCambio(m.e.A.empresaId, { tipo: 'sucursal', sucursalId: m.e.A.S2 });
     await exigirReparto(ctx.app, c, s2.evento, s2.ordenId, SUCURSAL_2_DE_A, 'sucursal 2 de A');
     const b1 = ordenCambio(m.e.B.empresaId, { tipo: 'sucursal', sucursalId: m.e.B.S1 });
-    await exigirReparto(ctx.app, c, b1.evento, b1.ordenId, ['B.adminS1', 'B.mozoS1'], 'sucursal 1 de B');
+    await exigirReparto(
+      ctx.app,
+      c,
+      b1.evento,
+      b1.ordenId,
+      ['B.adminS1', 'B.mozoS1'],
+      'sucursal 1 de B',
+    );
   });
 
   it('un evento con la empresa de A y una sucursal de B (o al revés) no llega a nadie', async () => {
     const m = await mundo();
     const c = await conectarTodos(ctx.app, m);
     const cruzado1 = ordenCambio(m.e.A.empresaId, { tipo: 'sucursal', sucursalId: m.e.B.S1 });
-    await exigirReparto(ctx.app, c, cruzado1.evento, cruzado1.ordenId, [], 'empresa A con sucursal de B');
+    await exigirReparto(
+      ctx.app,
+      c,
+      cruzado1.evento,
+      cruzado1.ordenId,
+      [],
+      'empresa A con sucursal de B',
+    );
     const cruzado2 = ordenCambio(m.e.B.empresaId, { tipo: 'sucursal', sucursalId: m.e.A.S1 });
-    await exigirReparto(ctx.app, c, cruzado2.evento, cruzado2.ordenId, [], 'empresa B con sucursal de A');
+    await exigirReparto(
+      ctx.app,
+      c,
+      cruzado2.evento,
+      cruzado2.ordenId,
+      [],
+      'empresa B con sucursal de A',
+    );
     const puente = ordenCambio(m.e.A.empresaId, { tipo: 'puente', puenteId: randomUUID() });
     await exigirReparto(ctx.app, c, puente.evento, puente.ordenId, [], 'sala de puente');
   });
@@ -451,7 +508,7 @@ describe('criterios 67 y 69 · los eventos reales llegan solo a su sala y no cam
     for (const cliente of Object.values(c)) cliente.limpiar();
     const res = await llamar(ctx, m.tokens.A.adminSin, {
       metodo: 'patch',
-      ruta: `/carta/productos/${m.A.carta.gaseosaId}`,
+      ruta: `/carta/productos/${m.cartaA.gaseosaId}`,
       cuerpo: { precio: '9.50' },
     });
     exigirEstado(res, 200, 'cambiar el precio de la gaseosa');
@@ -462,7 +519,8 @@ describe('criterios 67 y 69 · los eventos reales llegan solo a su sala y no cam
           try {
             const datos = await cliente.esperarEvento('carta.actualizada', 3000);
             const r = eventoCartaActualizadaDatosSchema.safeParse(datos);
-            if (!r.success) fallos.push(`${nombre}: forma de carta.actualizada ${JSON.stringify(datos)}`);
+            if (!r.success)
+              fallos.push(`${nombre}: forma de carta.actualizada ${JSON.stringify(datos)}`);
           } catch (error) {
             fallos.push(`${nombre}: ${(error as Error).message}`);
           }
@@ -482,10 +540,14 @@ describe('criterios 67 y 69 · los eventos reales llegan solo a su sala y no cam
     const m = await mundo();
     const c = await conectarTodos(ctx.app, m);
     for (const cliente of Object.values(c)) cliente.limpiar();
-    const ruta = `/carta/sucursal/agotados/${m.A.carta.gaseosaId}`;
+    const ruta = `/carta/sucursal/agotados/${m.cartaA.gaseosaId}`;
     try {
       exigirEstado(
-        await llamar(ctx, m.tokens.A.adminS1, { metodo: 'put', ruta, cuerpo: { hasta: 'FIN_DEL_DIA' } }),
+        await llamar(ctx, m.tokens.A.adminS1, {
+          metodo: 'put',
+          ruta,
+          cuerpo: { hasta: 'FIN_DEL_DIA' },
+        }),
         200,
         'marcar agotada la gaseosa en S1',
       );
@@ -501,7 +563,7 @@ describe('criterios 67 y 69 · los eventos reales llegan solo a su sala y no cam
               if (!eventoDisponibilidadDatosSchema.safeParse(datos).success) {
                 fallos.push(`${nombre}: forma de carta.disponibilidad ${JSON.stringify(datos)}`);
               }
-              if (datos.sucursalId !== m.e.A.S1 || datos.productoId !== m.A.carta.gaseosaId) {
+              if (datos.sucursalId !== m.e.A.S1 || datos.productoId !== m.cartaA.gaseosaId) {
                 fallos.push(`${nombre}: carta.disponibilidad de otro producto o sucursal`);
               }
             } catch (error) {
@@ -525,8 +587,15 @@ describe('criterios 67 y 69 · los eventos reales llegan solo a su sala y no cam
   it('abrir una mesa y enviar la comanda publican salon.cambio, orden.cambio y cocina.comanda solo a la sucursal, en menos de 1 segundo', async () => {
     const m = await mundo();
     const c = await conectarTodos(ctx.app, m);
+    const salon = await sembrarSalon(
+      ctx,
+      m.tokens.A.adminSin,
+      m.e.A.S1,
+      `t${randomUUID().slice(0, 5)}`,
+      2,
+    );
     for (const cliente of Object.values(c)) cliente.limpiar();
-    const mesa = m.A.mesasLibres[0]!;
+    const mesa = salon.mesas[0]!;
     const apertura = await abrirOrden(ctx, m.tokens.A.mozoS1, { mesaId: mesa.id, comensales: 2 });
     exigirEstado(apertura, 201, 'abrir la mesa');
     const ordenId = apertura.body.id as string;
@@ -535,7 +604,10 @@ describe('criterios 67 y 69 · los eventos reales llegan solo a su sala y no cam
       Object.entries(c).map(async ([nombre, cliente]) => {
         if (SUCURSAL_1_DE_A.includes(nombre)) {
           try {
-            const salon = await cliente.esperarEvento<{ mesaIds: string[]; ordenId: string }>('salon.cambio', 1000);
+            const salon = await cliente.esperarEvento<{ mesaIds: string[]; ordenId: string }>(
+              'salon.cambio',
+              1000,
+            );
             if (!eventoSalonCambioDatosSchema.safeParse(salon).success) {
               fallos.push(`${nombre}: forma de salon.cambio ${JSON.stringify(salon)}`);
             }
@@ -563,7 +635,7 @@ describe('criterios 67 y 69 · los eventos reales llegan solo a su sala y no cam
     exigirSinFallos(fallos);
 
     for (const cliente of Object.values(c)) cliente.limpiar();
-    const envio = await enviar(ctx, m.tokens.A.mozoS1, ordenId, [lineaLomo(m.A.carta)]);
+    const envio = await enviar(ctx, m.tokens.A.mozoS1, ordenId, [lineaLomo(m.cartaA)]);
     exigirEstado(envio, 201, 'enviar la comanda');
     const comandas = envio.body.comandas as { id: string; estacionId: string; tipo: string }[];
     expect(comandas.length).toBeGreaterThan(0);
@@ -572,7 +644,10 @@ describe('criterios 67 y 69 · los eventos reales llegan solo a su sala y no cam
       Object.entries(c).map(async ([nombre, cliente]) => {
         if (SUCURSAL_1_DE_A.includes(nombre)) {
           try {
-            const datos = await cliente.esperarEvento<{ comandaId: string }>('cocina.comanda', 1000);
+            const datos = await cliente.esperarEvento<{ comandaId: string }>(
+              'cocina.comanda',
+              1000,
+            );
             if (!eventoCocinaComandaDatosSchema.safeParse(datos).success) {
               fallosEnvio.push(`${nombre}: forma de cocina.comanda ${JSON.stringify(datos)}`);
             }
@@ -597,10 +672,19 @@ describe('criterios 67 y 69 · los eventos reales llegan solo a su sala y no cam
   it('un rechazo (id de B) no publica ningún evento a nadie', async () => {
     const m = await mundo();
     const c = await conectarTodos(ctx.app, m);
+    const salonB = await sembrarSalon(
+      ctx,
+      m.tokens.B.adminSin,
+      m.e.B.S1,
+      `r${randomUUID().slice(0, 5)}`,
+      1,
+    );
+    const ordenDeB = await abrirOrden(ctx, m.tokens.B.adminS1, { mesaId: salonB.mesas[0]!.id });
+    exigirEstado(ordenDeB, 201, 'abrir una mesa en B');
     for (const cliente of Object.values(c)) cliente.limpiar();
-    const res = await postConClave(ctx, m.tokens.A.adminS1, `/ordenes/${m.B.principal.id}/envios`, {
+    const res = await postConClave(ctx, m.tokens.A.adminS1, `/ordenes/${ordenDeB.body.id}/envios`, {
       id: randomUUID(),
-      lineas: [lineaLomo(m.A.carta)],
+      lineas: [lineaLomo(m.cartaA)],
     });
     expect(res.status).toBe(404);
     for (const nombre of ['salon.cambio', 'orden.cambio', 'cocina.comanda']) {
@@ -623,9 +707,9 @@ const CLAVES_DE_EVENTO: Record<string, string[]> = {
 describe('criterio 69 · cada evento pesa menos de 4 KB y lleva solo ids, estados y nombres', () => {
   it('en el peor caso (20 mesas unidas, producto de 100 caracteres, mesas de 20 caracteres) cada evento del salón y de la cocina cumple su forma y su tamaño', async () => {
     const m = await mundo();
-    const cliente = await conectar(ctx.app, await sesionContrasena(ctx, m.e.A.base.admin, m.e.A.S3));
-    const tokenS3 = await sesionContrasena(ctx, m.e.A.base.admin, m.e.A.S3);
-    const zona = await llamar(ctx, m.A.tokenAdmin, {
+    const tokenS3 = await sesionContrasena(ctx, m.e.A.base.admin, m.e.A.S3!);
+    const cliente = await conectar(ctx.app, tokenS3);
+    const zona = await llamar(ctx, m.tokens.A.adminSin, {
       metodo: 'post',
       ruta: `/sucursales/${m.e.A.S3}/zonas`,
       cuerpo: { nombre: 'Zona grande', columnas: 12, filas: 2 },
@@ -634,24 +718,30 @@ describe('criterio 69 · cada evento pesa menos de 4 KB y lleva solo ids, estado
     const mesas: { id: string; nombre: string }[] = [];
     for (let i = 0; i < 20; i++) {
       const nombre = `M${i}-${randomUUID().replace(/-/g, '').slice(0, 15)}`;
-      const res = await llamar(ctx, m.A.tokenAdmin, {
+      const res = await llamar(ctx, m.tokens.A.adminSin, {
         metodo: 'post',
         ruta: `/sucursales/${m.e.A.S3}/zonas/${zona.body.id}/mesas`,
-        cuerpo: { nombre, capacidad: 4, forma: 'REDONDA', columna: (i % 12) + 1, fila: Math.floor(i / 12) + 1 },
+        cuerpo: {
+          nombre,
+          capacidad: 4,
+          forma: 'REDONDA',
+          columna: (i % 12) + 1,
+          fila: Math.floor(i / 12) + 1,
+        },
       });
       exigirEstado(res, 201, `crear la mesa ${nombre}`);
       mesas.push({ id: res.body.id as string, nombre });
     }
     const nombreLargo = 'X'.repeat(100);
-    const largo = await llamar(ctx, m.A.tokenAdmin, {
+    const largo = await llamar(ctx, m.tokens.A.adminSin, {
       metodo: 'post',
       ruta: '/carta/productos',
       cuerpo: {
         tipo: 'SIMPLE',
         nombre: nombreLargo,
-        familiaId: m.A.carta.familiaId,
+        familiaId: m.cartaA.familiaId,
         precio: '5.00',
-        estacionId: m.A.carta.cocinaId,
+        estacionId: m.cartaA.cocinaId,
         tipoControlStock: 'SIN_CONTROL',
       },
     });
@@ -682,12 +772,17 @@ describe('criterio 69 · cada evento pesa menos de 4 KB y lleva solo ids, estado
     });
     exigirEstado(estado, 200, 'marcar la línea lista');
     const itemId = (envio.body.items as { id: string }[])[0]!.id;
-    const anulacion = await postConClave(ctx, tokenS3, `/ordenes/${ordenId}/items/${itemId}/anulaciones`, {
-      id: randomUUID(),
-      cantidad: 500,
-      motivo: 'Error de toma',
-      destinoStock: 'MERMA',
-    });
+    const anulacion = await postConClave(
+      ctx,
+      tokenS3,
+      `/ordenes/${ordenId}/items/${itemId}/anulaciones`,
+      {
+        id: randomUUID(),
+        cantidad: 500,
+        motivo: 'Error de toma',
+        destinoStock: 'MERMA',
+      },
+    );
     exigirEstado(anulacion, 201, 'anular parte');
     await new Promise((resolver) => setTimeout(resolver, 600));
 
@@ -704,7 +799,9 @@ describe('criterio 69 · cada evento pesa menos de 4 KB y lleva solo ids, estado
       if (peso >= 4096) fallos.push(`${evento.nombre} pesa ${peso} bytes (el límite es 4096)`);
       const llaves = Object.keys(evento.datos as object).sort();
       if (JSON.stringify(llaves) !== JSON.stringify(claves)) {
-        fallos.push(`${evento.nombre} trae ${llaves.join(', ')} y se esperaba ${claves.join(', ')}`);
+        fallos.push(
+          `${evento.nombre} trae ${llaves.join(', ')} y se esperaba ${claves.join(', ')}`,
+        );
       }
       const esquema = {
         'salon.cambio': eventoSalonCambioDatosSchema,
@@ -714,14 +811,18 @@ describe('criterio 69 · cada evento pesa menos de 4 KB y lleva solo ids, estado
         'cocina.listo': eventoCocinaListoDatosSchema,
       }[evento.nombre];
       if (esquema && !esquema.safeParse(evento.datos).success) {
-        fallos.push(`${evento.nombre} no cumple su esquema: ${JSON.stringify(evento.datos).slice(0, 200)}`);
+        fallos.push(
+          `${evento.nombre} no cumple su esquema: ${JSON.stringify(evento.datos).slice(0, 200)}`,
+        );
       }
     }
     for (const nombre of Object.keys(CLAVES_DE_EVENTO)) {
       if (!vistos.has(nombre)) fallos.push(`no llegó ningún ${nombre} en el recorrido`);
     }
     exigirSinFallos(fallos);
-    const peor = cliente.eventos('salon.cambio').find((e) => (e.datos as { mesaIds: string[] }).mesaIds.length >= 20);
+    const peor = cliente
+      .eventos('salon.cambio')
+      .find((e) => (e.datos as { mesaIds: string[] }).mesaIds.length >= 20);
     expect(peor, 'un salon.cambio con las 20 mesas').toBeTruthy();
   });
 });
@@ -736,12 +837,18 @@ describe('criterio 66 · se desconectan las conexiones de una sesión que se cie
     const otra = await sesionContrasena(ctx, m.e.A.mozo, m.e.A.S1);
     const cerrada = await conectar(ctx.app, propia);
     const abierta = await conectar(ctx.app, otra);
-    exigirEstado(await llamar(ctx, propia, { metodo: 'delete', ruta: '/sesion' }), 204, 'cerrar la sesión');
+    exigirEstado(
+      await llamar(ctx, propia, { metodo: 'delete', ruta: '/sesion' }),
+      204,
+      'cerrar la sesión',
+    );
     await cerrada.esperarDesconexion(3000);
     expect(cerrada.conectado).toBe(false);
     const evento = ordenCambio(m.e.A.empresaId, { tipo: 'sucursal', sucursalId: m.e.A.S1 });
     await publicar(ctx.app, evento.evento);
-    expect(await abierta.esperarEvento<{ ordenId: string }>('orden.cambio')).toEqual({ ordenId: evento.ordenId });
+    expect(await abierta.esperarEvento<{ ordenId: string }>('orden.cambio')).toEqual({
+      ordenId: evento.ordenId,
+    });
     expect(abierta.conectado).toBe(true);
   });
 
@@ -761,14 +868,20 @@ describe('criterio 66 · se desconectan las conexiones de una sesión que se cie
     expect(deContrasena.conectado).toBe(true);
     const evento = ordenCambio(m.e.A.empresaId, { tipo: 'empresa' });
     await publicar(ctx.app, evento.evento);
-    expect(await nuevo.esperarEvento<{ ordenId: string }>('orden.cambio')).toEqual({ ordenId: evento.ordenId });
+    expect(await nuevo.esperarEvento<{ ordenId: string }>('orden.cambio')).toEqual({
+      ordenId: evento.ordenId,
+    });
   });
 
   it('cambiar de sucursal activa desconecta la conexión; al reconectar con la misma sesión solo recibe lo de la sucursal nueva', async () => {
     const m = await mundo();
     const token = await sesionContrasena(ctx, m.e.A.cajero, m.e.A.S1);
     const primera = await conectar(ctx.app, token);
-    const cambio = await llamar(ctx, token, { metodo: 'put', ruta: '/sesion/sucursal', cuerpo: { sucursalId: m.e.A.S2 } });
+    const cambio = await llamar(ctx, token, {
+      metodo: 'put',
+      ruta: '/sesion/sucursal',
+      cuerpo: { sucursalId: m.e.A.S2 },
+    });
     exigirEstado(cambio, 200, 'cambiar a S2');
     await primera.esperarDesconexion(3000);
     const segunda = await conectar(ctx.app, token);
@@ -777,23 +890,32 @@ describe('criterio 66 · se desconectan las conexiones de una sesión que se cie
     await segunda.noRecibe('orden.cambio', 500);
     const deS2 = ordenCambio(m.e.A.empresaId, { tipo: 'sucursal', sucursalId: m.e.A.S2 });
     await publicar(ctx.app, deS2.evento);
-    expect(await segunda.esperarEvento<{ ordenId: string }>('orden.cambio')).toEqual({ ordenId: deS2.ordenId });
+    expect(await segunda.esperarEvento<{ ordenId: string }>('orden.cambio')).toEqual({
+      ordenId: deS2.ordenId,
+    });
   });
 
   it('revocar los equipos recordados de la persona desconecta sus sesiones de PIN de esos equipos', async () => {
     const m = await mundo();
-    const persona = await crearPersona(ctx, m.tokens.A.adminSin, [{ sucursalId: m.e.A.S1, rol: 'MOZO' }]);
+    const persona = await crearPersona(ctx, m.tokens.A.adminSin, [
+      { sucursalId: m.e.A.S1, rol: 'MOZO' },
+    ]);
     const equipo = await equipoDe(ctx, persona);
     const token = await sesionPin(ctx, persona, equipo, m.e.A.S1);
     const cliente = await conectar(ctx.app, token, equipo);
-    const revocacion = await llamar(ctx, m.tokens.A.adminSin, { metodo: 'delete', ruta: `/usuarios/${persona.id}/equipos` });
+    const revocacion = await llamar(ctx, m.tokens.A.adminSin, {
+      metodo: 'delete',
+      ruta: `/usuarios/${persona.id}/equipos`,
+    });
     exigirEstado(revocacion, 204, 'revocar los equipos');
     await cliente.esperarDesconexion(3000);
   });
 
   it('desactivar a la persona desconecta todas sus sesiones', async () => {
     const m = await mundo();
-    const persona = await crearPersona(ctx, m.tokens.A.adminSin, [{ sucursalId: m.e.A.S1, rol: 'MOZO' }]);
+    const persona = await crearPersona(ctx, m.tokens.A.adminSin, [
+      { sucursalId: m.e.A.S1, rol: 'MOZO' },
+    ]);
     const cliente = await conectar(ctx.app, await sesionContrasena(ctx, persona, m.e.A.S1));
     const baja = await llamar(ctx, m.tokens.A.adminSin, {
       metodo: 'patch',
@@ -843,15 +965,55 @@ describe('criterio 68 · dos instancias de la API contra la misma base', () => {
     const reciben = (lista: string[]) => lista.filter((n) => n in clientes);
     for (const desde of [ctx.app, ctx2.app]) {
       const empresaA = ordenCambio(m.e.A.empresaId, { tipo: 'empresa' });
-      await exigirReparto(ctx.app, clientes, empresaA.evento, empresaA.ordenId, reciben(TODOS_DE_A), 'empresa A', desde);
+      await exigirReparto(
+        ctx.app,
+        clientes,
+        empresaA.evento,
+        empresaA.ordenId,
+        reciben(TODOS_DE_A),
+        'empresa A',
+        desde,
+      );
       const s1 = ordenCambio(m.e.A.empresaId, { tipo: 'sucursal', sucursalId: m.e.A.S1 });
-      await exigirReparto(ctx.app, clientes, s1.evento, s1.ordenId, reciben(SUCURSAL_1_DE_A), 'sucursal 1 de A', desde);
+      await exigirReparto(
+        ctx.app,
+        clientes,
+        s1.evento,
+        s1.ordenId,
+        reciben(SUCURSAL_1_DE_A),
+        'sucursal 1 de A',
+        desde,
+      );
       const s2 = ordenCambio(m.e.A.empresaId, { tipo: 'sucursal', sucursalId: m.e.A.S2 });
-      await exigirReparto(ctx.app, clientes, s2.evento, s2.ordenId, reciben(SUCURSAL_2_DE_A), 'sucursal 2 de A', desde);
+      await exigirReparto(
+        ctx.app,
+        clientes,
+        s2.evento,
+        s2.ordenId,
+        reciben(SUCURSAL_2_DE_A),
+        'sucursal 2 de A',
+        desde,
+      );
       const deB = ordenCambio(m.e.B.empresaId, { tipo: 'empresa' });
-      await exigirReparto(ctx.app, clientes, deB.evento, deB.ordenId, reciben(TODOS_DE_B), 'empresa B', desde);
+      await exigirReparto(
+        ctx.app,
+        clientes,
+        deB.evento,
+        deB.ordenId,
+        reciben(TODOS_DE_B),
+        'empresa B',
+        desde,
+      );
       const cruzado = ordenCambio(m.e.A.empresaId, { tipo: 'sucursal', sucursalId: m.e.B.S1 });
-      await exigirReparto(ctx.app, clientes, cruzado.evento, cruzado.ordenId, [], 'empresa A con sucursal de B', desde);
+      await exigirReparto(
+        ctx.app,
+        clientes,
+        cruzado.evento,
+        cruzado.ordenId,
+        [],
+        'empresa A con sucursal de B',
+        desde,
+      );
     }
   });
 
@@ -860,15 +1022,22 @@ describe('criterio 68 · dos instancias de la API contra la misma base', () => {
     const enLaSegunda = await conectar(ctx2.app, m.tokens.A.mozoS1);
     const deOtraSucursal = await conectar(ctx2.app, m.tokens.A.adminS2);
     const deB = await conectar(ctx2.app, m.tokens.B.adminS1);
-    const ruta = `/carta/sucursal/agotados/${m.A.carta.gaseosaId}`;
+    const ruta = `/carta/sucursal/agotados/${m.cartaA.gaseosaId}`;
     try {
       exigirEstado(
-        await llamar(ctx, m.tokens.A.adminS1, { metodo: 'put', ruta, cuerpo: { hasta: 'FIN_DEL_DIA' } }),
+        await llamar(ctx, m.tokens.A.adminS1, {
+          metodo: 'put',
+          ruta,
+          cuerpo: { hasta: 'FIN_DEL_DIA' },
+        }),
         200,
         'agotar en la instancia 1',
       );
-      const datos = await enLaSegunda.esperarEvento<{ productoId: string }>('carta.disponibilidad', 3000);
-      expect(datos.productoId).toBe(m.A.carta.gaseosaId);
+      const datos = await enLaSegunda.esperarEvento<{ productoId: string }>(
+        'carta.disponibilidad',
+        3000,
+      );
+      expect(datos.productoId).toBe(m.cartaA.gaseosaId);
       await deOtraSucursal.noRecibe('carta.disponibilidad', 600);
       await deB.noRecibe('carta.disponibilidad', 100);
     } finally {
@@ -880,7 +1049,11 @@ describe('criterio 68 · dos instancias de la API contra la misma base', () => {
     const m = await mundo();
     const token = await sesionContrasena(ctx, m.e.A.mozo, m.e.A.S1);
     const cliente = await conectar(ctx2.app, token);
-    exigirEstado(await llamar(ctx, token, { metodo: 'delete', ruta: '/sesion' }), 204, 'cerrar la sesión');
+    exigirEstado(
+      await llamar(ctx, token, { metodo: 'delete', ruta: '/sesion' }),
+      204,
+      'cerrar la sesión',
+    );
     await cliente.esperarDesconexion(3000);
   });
 });
@@ -893,15 +1066,30 @@ describe('criterio 86 · 100 envíos concurrentes de A y de B con un pool de 2: 
     const m = await mundo();
     const cA = await conectar(ctx.app, m.tokens.A.adminS1);
     const cB = await conectar(ctx.app, m.tokens.B.adminS1);
+    // Una mesa abierta por empresa: a ella van los 100 envíos.
+    const preparar = async (
+      e: EscenarioCarta['A'],
+      tokenAdmin: string,
+      tokenS1: string,
+      carta: CartaEjemplo,
+    ) => {
+      const salon = await sembrarSalon(ctx, tokenAdmin, e.S1, `c${randomUUID().slice(0, 5)}`, 1);
+      const apertura = await abrirOrden(ctx, tokenS1, { mesaId: salon.mesas[0]!.id });
+      exigirEstado(apertura, 201, 'abrir la mesa');
+      return { ordenId: apertura.body.id as string, tokenS1, carta };
+    };
+    const empresas = [
+      await preparar(m.e.A, m.tokens.A.adminSin, m.tokens.A.adminS1, m.cartaA),
+      await preparar(m.e.B, m.tokens.B.adminSin, m.tokens.B.adminS1, m.cartaB),
+    ] as const;
     cA.limpiar();
     cB.limpiar();
     const enviados: [number, number] = [0, 0];
-    const empresas = [m.A, m.B] as const;
     const respuestas = await Promise.all(
       Array.from({ length: 100 }, async (_, i) => {
         const quien = (i % 2) as 0 | 1;
         const e = empresas[quien];
-        const res = await enviar(ctx, e.tokenS1, e.segunda.id, [lineaLomo(e.carta)]);
+        const res = await enviar(ctx, e.tokenS1, e.ordenId, [lineaLomo(e.carta)]);
         if (res.status === 201) enviados[quien]++;
         return `#${i} (${quien === 0 ? 'A' : 'B'}) ${res.status}`;
       }),
@@ -916,18 +1104,28 @@ describe('criterio 86 · 100 envíos concurrentes de A y de B con un pool de 2: 
       { timeout: 10_000, interval: 100 },
     );
     await new Promise((resolver) => setTimeout(resolver, 500));
-    const idsA = await idsDeEmpresaSalon(admin, m.A.E.empresaId);
-    const idsB = await idsDeEmpresaSalon(admin, m.B.E.empresaId);
+    const idsA = await idsDeEmpresaSalon(admin, m.e.A.empresaId);
+    const idsB = await idsDeEmpresaSalon(admin, m.e.B.empresaId);
     for (const [nombre, cliente, propios, ajenos, propia] of [
-      ['A', cA, idsA, idsB, m.A] as const,
-      ['B', cB, idsB, idsA, m.B] as const,
+      ['A', cA, idsA, idsB, empresas[0]] as const,
+      ['B', cB, idsB, idsA, empresas[1]] as const,
     ]) {
       for (const evento of cliente.eventos()) {
         const ids = uuidsEn(JSON.stringify(evento.datos));
-        expect(ids.filter((id) => ajenos.has(id)), `${nombre}: ${evento.nombre} con ids de la otra empresa`).toEqual([]);
-        expect(ids.filter((id) => !propios.has(id)), `${nombre}: ${evento.nombre} con ids desconocidos`).toEqual([]);
+        expect(
+          ids.filter((id) => ajenos.has(id)),
+          `${nombre}: ${evento.nombre} con ids de la otra empresa`,
+        ).toEqual([]);
+        expect(
+          ids.filter((id) => !propios.has(id)),
+          `${nombre}: ${evento.nombre} con ids desconocidos`,
+        ).toEqual([]);
       }
-      expect(cliente.eventos('orden.cambio').every((e) => (e.datos as { ordenId: string }).ordenId === propia.segunda.id)).toBe(true);
+      expect(
+        cliente
+          .eventos('orden.cambio')
+          .every((e) => (e.datos as { ordenId: string }).ordenId === propia.ordenId),
+      ).toBe(true);
       expect(cliente.eventos('cocina.comanda')).toHaveLength(50);
     }
   });
@@ -968,7 +1166,9 @@ describe('criterio 70 · la guarda de la API rechaza antes de la base los nombre
       }
       let lectura: Fila[] | string;
       try {
-        lectura = await sequelize.query<Fila>('SELECT id FROM sucursal', { type: QueryTypes.SELECT });
+        lectura = await sequelize.query<Fila>('SELECT id FROM sucursal', {
+          type: QueryTypes.SELECT,
+        });
       } catch (e) {
         lectura = describir(e);
       }
@@ -976,7 +1176,8 @@ describe('criterio 70 · la guarda de la API rechaza antes de la base los nombre
     });
     if (visto.error === undefined) return 'la sentencia tuvo éxito (no se rechazó)';
     if (visto.error instanceof DatabaseError) return `llegó a la base: ${describir(visto.error)}`;
-    if (!(visto.error instanceof Error)) return `se lanzó un valor que no es un Error: ${String(visto.error)}`;
+    if (!(visto.error instanceof Error))
+      return `se lanzó un valor que no es un Error: ${String(visto.error)}`;
     if (typeof visto.lectura === 'string') return `el SELECT posterior falló: ${visto.lectura}`;
     const vistos = visto.lectura.map((f) => f.id).sort();
     if (JSON.stringify(vistos) !== JSON.stringify(sucursales)) {
@@ -991,7 +1192,8 @@ describe('criterio 70 · la guarda de la API rechaza antes de la base los nombre
       const problemas: string[] = [];
       for (const [descripcion, sql] of variantes(entrada)) {
         const problema = await problemaAlRechazar(sql);
-        if (problema !== null) problemas.push(`[${descripcion}] ${JSON.stringify(sql)} → ${problema}`);
+        if (problema !== null)
+          problemas.push(`[${descripcion}] ${JSON.stringify(sql)} → ${problema}`);
       }
       expect(problemas, problemas.join('\n')).toEqual([]);
     },
@@ -1005,40 +1207,58 @@ describe('criterio 70 · la guarda de la API rechaza antes de la base los nombre
     expect(filas.map((f) => f.id).sort()).toEqual(sucursales);
   });
 
-  it.each(CONTROLES_ALIAS_TIEMPO_REAL)('control · el alias %s (que contiene un nombre dentro de otro identificador) se ejecuta', async (alias) => {
-    const filas = await contexto.ejecutar(empresaId, async () => {
-      await sequelize.query(`SELECT 1 AS ${alias}`);
-      return sequelize.query<Fila>('SELECT id FROM sucursal', { type: QueryTypes.SELECT });
-    });
-    expect(filas.map((f) => f.id).sort()).toEqual(sucursales);
-  });
+  it.each(CONTROLES_ALIAS_TIEMPO_REAL)(
+    'control · el alias %s (que contiene un nombre dentro de otro identificador) se ejecuta',
+    async (alias) => {
+      const filas = await contexto.ejecutar(empresaId, async () => {
+        await sequelize.query(`SELECT 1 AS ${alias}`);
+        return sequelize.query<Fila>('SELECT id FROM sucursal', { type: QueryTypes.SELECT });
+      });
+      expect(filas.map((f) => f.id).sort()).toEqual(sucursales);
+    },
+  );
 
   it.each([
-    ['comillas simples', `'pg_notify pg_listening_channels pg_locks pg_blocking_pids pg_advisory_lock'`],
+    [
+      'comillas simples',
+      `'pg_notify pg_listening_channels pg_locks pg_blocking_pids pg_advisory_lock'`,
+    ],
     ['E-string', `E'pg_notify pg_try_advisory_lock_shared pg_advisory_unlock_all'`],
     ['comillas de dólar', `$$pg_notify('c', 'x'); pg_advisory_lock(1)$$`],
     ['comillas de dólar con etiqueta', `$q$pg_safe_snapshot_blocking_pids pg_locks$q$`],
-  ])('control · un UPDATE con un literal (%s) con esos nombres guarda el valor tal cual', async (_nombre, literal) => {
-    const esperado = (await admin.query<{ v: string }>(`SELECT ${literal} AS v`)).rows[0]!.v;
-    await contexto.ejecutar(
-      empresaId,
-      () => sequelize.query(`UPDATE sucursal SET direccion = ${literal} WHERE id = '${sucursales[0]}'`),
-      { actor: { sistema: 'prueba' } },
-    );
-    const { rows } = await admin.query<{ direccion: string }>('SELECT direccion FROM sucursal WHERE id = $1', [
-      sucursales[0],
-    ]);
-    expect(rows[0]!.direccion).toBe(esperado);
-  });
+  ])(
+    'control · un UPDATE con un literal (%s) con esos nombres guarda el valor tal cual',
+    async (_nombre, literal) => {
+      const esperado = (await admin.query<{ v: string }>(`SELECT ${literal} AS v`)).rows[0]!.v;
+      await contexto.ejecutar(
+        empresaId,
+        () =>
+          sequelize.query(
+            `UPDATE sucursal SET direccion = ${literal} WHERE id = '${sucursales[0]}'`,
+          ),
+        { actor: { sistema: 'prueba' } },
+      );
+      const { rows } = await admin.query<{ direccion: string }>(
+        'SELECT direccion FROM sucursal WHERE id = $1',
+        [sucursales[0]],
+      );
+      expect(rows[0]!.direccion).toBe(esperado);
+    },
+  );
 
   it.each([
     `/* pg_notify pg_locks pg_advisory_lock */ SELECT id FROM sucursal`,
     `-- pg_listening_channels pg_blocking_pids\nSELECT id FROM sucursal`,
     `SELECT id FROM sucursal /* pg_try_advisory_lock pg_advisory_unlock_all */`,
-  ])('control · un comentario con esos nombres antes o después de un SELECT no se rechaza: %j', async (sql) => {
-    const filas = await contexto.ejecutar(empresaId, () => sequelize.query<Fila>(sql, { type: QueryTypes.SELECT }));
-    expect(filas.map((f) => f.id).sort()).toEqual(sucursales);
-  });
+  ])(
+    'control · un comentario con esos nombres antes o después de un SELECT no se rechaza: %j',
+    async (sql) => {
+      const filas = await contexto.ejecutar(empresaId, () =>
+        sequelize.query<Fila>(sql, { type: QueryTypes.SELECT }),
+      );
+      expect(filas.map((f) => f.id).sort()).toEqual(sucursales);
+    },
+  );
 });
 
 // ------------------------------------------------------------------------------------------------
@@ -1054,7 +1274,13 @@ describe('criterio 70 · el rol restaurante_tiempo_real y el esquema tiempo_real
       [ROL],
     );
     expect(rol.rows).toEqual([
-      { rolsuper: false, rolbypassrls: false, rolcreaterole: false, rolcreatedb: false, rolcanlogin: true },
+      {
+        rolsuper: false,
+        rolbypassrls: false,
+        rolcreaterole: false,
+        rolcreatedb: false,
+        rolcanlogin: true,
+      },
     ]);
     const membresias = await admin.query(
       `SELECT g.rolname FROM pg_auth_members m
@@ -1094,8 +1320,7 @@ describe('criterio 70 · el rol restaurante_tiempo_real y el esquema tiempo_real
     const cliente = await abrirCliente('tiempoReal');
     try {
       for (const tabla of ['empresa', 'sucursal', 'orden', 'auditoria']) {
-        await cliente.query('SAVEPOINT s').catch(() => undefined);
-        const error = await cliente.query(`SELECT 1 FROM ${tabla}`).then(
+        const error = await cliente.query(`SELECT 1 FROM public.${tabla}`).then(
           () => null,
           (e: { code?: string }) => e,
         );
@@ -1107,10 +1332,10 @@ describe('criterio 70 · el rol restaurante_tiempo_real y el esquema tiempo_real
   });
 
   it('el esquema tiempo_real es del migrador, con USAGE solo para el rol del adaptador', async () => {
-    const dueño = await admin.query<{ dueno: string }>(
+    const duenoEsquema = await admin.query<{ dueno: string }>(
       `SELECT r.rolname AS dueno FROM pg_namespace n JOIN pg_roles r ON r.oid = n.nspowner WHERE n.nspname = 'tiempo_real'`,
     );
-    expect(dueño.rows, 'el esquema tiempo_real existe').toEqual([{ dueno: migrador }]);
+    expect(duenoEsquema.rows, 'el esquema tiempo_real existe').toEqual([{ dueno: migrador }]);
     const concedidos = await admin.query<{ grantee: string; privilegio: string }>(
       `SELECT CASE WHEN a.grantee = 0 THEN 'PUBLIC' ELSE (SELECT rolname FROM pg_roles WHERE oid = a.grantee) END AS grantee,
               a.privilege_type AS privilegio
@@ -1119,7 +1344,9 @@ describe('criterio 70 · el rol restaurante_tiempo_real y el esquema tiempo_real
     );
     const ajenos = concedidos.rows.filter((f) => f.grantee !== migrador && f.grantee !== ROL);
     expect(ajenos, 'nadie más tiene privilegios sobre el esquema').toEqual([]);
-    expect(concedidos.rows.filter((f) => f.grantee === ROL).map((f) => f.privilegio)).toContain('USAGE');
+    expect(concedidos.rows.filter((f) => f.grantee === ROL).map((f) => f.privilegio)).toContain(
+      'USAGE',
+    );
     for (const otro of [api, plataforma]) {
       const r = await admin.query<{ uso: boolean }>(
         `SELECT has_schema_privilege($1, 'tiempo_real', 'USAGE') AS uso`,
@@ -1147,7 +1374,11 @@ describe('criterio 70 · el rol restaurante_tiempo_real y el esquema tiempo_real
     expect(dueno.rows).toEqual([{ dueno: migrador }]);
     const puede = async (rol: string, privilegio: string) =>
       (
-        await admin.query<{ ok: boolean }>(`SELECT has_table_privilege($1, $2, $3) AS ok`, [rol, tabla, privilegio])
+        await admin.query<{ ok: boolean }>(`SELECT has_table_privilege($1, $2, $3) AS ok`, [
+          rol,
+          tabla,
+          privilegio,
+        ])
       ).rows[0]!.ok;
     expect(await puede(ROL, 'SELECT')).toBe(true);
     expect(await puede(ROL, 'INSERT')).toBe(true);
@@ -1168,13 +1399,15 @@ describe('criterio 70 · el rol restaurante_tiempo_real y el esquema tiempo_real
         `INSERT INTO tiempo_real.socket_io_attachments (payload) VALUES ('\\x0102') RETURNING id`,
       );
       expect(insertado.rowCount).toBe(1);
-      const leido = await cliente.query(`SELECT payload FROM tiempo_real.socket_io_attachments WHERE id = $1`, [
-        insertado.rows[0]!.id,
-      ]);
+      const leido = await cliente.query(
+        `SELECT payload FROM tiempo_real.socket_io_attachments WHERE id = $1`,
+        [insertado.rows[0]!.id],
+      );
       expect(leido.rowCount).toBe(1);
-      const borrado = await cliente.query(`DELETE FROM tiempo_real.socket_io_attachments WHERE id = $1`, [
-        insertado.rows[0]!.id,
-      ]);
+      const borrado = await cliente.query(
+        `DELETE FROM tiempo_real.socket_io_attachments WHERE id = $1`,
+        [insertado.rows[0]!.id],
+      );
       expect(borrado.rowCount).toBe(1);
       await cliente.query('ROLLBACK');
     } finally {
@@ -1197,6 +1430,7 @@ describe('criterio 70 · el rol restaurante_tiempo_real y el esquema tiempo_real
 // 70 · El arranque rechaza un rol privilegiado en DATABASE_TIEMPO_REAL_URL
 // ------------------------------------------------------------------------------------------------
 describe('criterio 70 · el arranque rechaza roles privilegiados en DATABASE_TIEMPO_REAL_URL', () => {
+  const { migrador } = NOMBRES_DE_ROLES;
   const sufijo = randomUUID().replace(/-/g, '').slice(0, 10);
   const rolBypass = `prueba_tr_bypass_${sufijo}`;
   const rolMiembro = `prueba_tr_miembro_${sufijo}`;
@@ -1213,14 +1447,18 @@ describe('criterio 70 · el arranque rechaza roles privilegiados en DATABASE_TIE
       `CREATE ROLE ${rolMiembro} LOGIN NOSUPERUSER NOBYPASSRLS INHERIT PASSWORD ${adminLocal.escapeLiteral(contrasena)} IN ROLE ${migrador}`,
     );
     for (const rol of [rolBypass, rolMiembro]) {
-      await adminLocal.query(`GRANT CONNECT ON DATABASE ${adminLocal.escapeIdentifier(BASE_DE_PRUEBA)} TO ${rol}`);
+      await adminLocal.query(
+        `GRANT CONNECT ON DATABASE ${adminLocal.escapeIdentifier(BASE_DE_PRUEBA)} TO ${rol}`,
+      );
     }
   });
 
   afterAll(async () => {
     try {
       for (const rol of [rolBypass, rolMiembro]) {
-        await adminLocal.query(`REVOKE ALL ON DATABASE ${adminLocal.escapeIdentifier(BASE_DE_PRUEBA)} FROM ${rol}`);
+        await adminLocal.query(
+          `REVOKE ALL ON DATABASE ${adminLocal.escapeIdentifier(BASE_DE_PRUEBA)} FROM ${rol}`,
+        );
         await adminLocal.query(`DROP ROLE IF EXISTS ${rol}`);
       }
     } finally {
@@ -1256,7 +1494,10 @@ describe('criterio 70 · el arranque rechaza roles privilegiados en DATABASE_TIE
       }) as typeof process.stderr.write),
     ];
     try {
-      const app = await crearAplicacion({ logger: ['error', 'warn', 'log'], tiempoReal: { habilitado: true } });
+      const app = await crearAplicacion({
+        logger: ['error', 'warn', 'log'],
+        tiempoReal: { habilitado: true },
+      });
       await app.close();
       return null;
     } catch (error) {
@@ -1274,7 +1515,12 @@ describe('criterio 70 · el arranque rechaza roles privilegiados en DATABASE_TIE
       rol: () => decodeURIComponent(new URL(urlDeRol('admin')).username),
       atributo: /superusuario|superuser/i,
     },
-    { motivo: 'BYPASSRLS', url: () => urlConRol(rolBypass), rol: () => rolBypass, atributo: /bypassrls/i },
+    {
+      motivo: 'BYPASSRLS',
+      url: () => urlConRol(rolBypass),
+      rol: () => rolBypass,
+      atributo: /bypassrls/i,
+    },
     {
       motivo: 'dueño de una tabla de public',
       url: () => urlDeRol('migrador'),
@@ -1291,7 +1537,10 @@ describe('criterio 70 · el arranque rechaza roles privilegiados en DATABASE_TIE
 
   it.each(casos)('un rol $motivo: no arranca y se indica rol y atributo', async (caso) => {
     const texto = await intentarArrancar(caso.url());
-    expect(texto, 'la API arrancó con un rol privilegiado en DATABASE_TIEMPO_REAL_URL').not.toBeNull();
+    expect(
+      texto,
+      'la API arrancó con un rol privilegiado en DATABASE_TIEMPO_REAL_URL',
+    ).not.toBeNull();
     expect(texto).toContain(caso.rol());
     expect(texto).toMatch(caso.atributo);
   });
@@ -1308,8 +1557,12 @@ describe('criterio 70 · el arranque rechaza roles privilegiados en DATABASE_TIE
 // ------------------------------------------------------------------------------------------------
 describe('criterios 64 y 66 · inactividad y vencimiento (con el reloj de la API)', () => {
   /** Sesión de contraseña de una persona con acceso solo a S1. */
-  async function sesionNueva(m: Mundo): Promise<{ token: string; persona: Awaited<ReturnType<typeof crearPersona>> }> {
-    const persona = await crearPersona(ctx, m.tokens.A.adminSin, [{ sucursalId: m.e.A.S1, rol: 'MOZO' }]);
+  async function sesionNueva(
+    m: Mundo,
+  ): Promise<{ token: string; persona: Awaited<ReturnType<typeof crearPersona>> }> {
+    const persona = await crearPersona(ctx, m.tokens.A.adminSin, [
+      { sucursalId: m.e.A.S1, rol: 'MOZO' },
+    ]);
     return { token: await sesionContrasena(ctx, persona, m.e.A.S1), persona };
   }
 
@@ -1321,7 +1574,10 @@ describe('criterios 64 y 66 · inactividad y vencimiento (con el reloj de la API
     expect(cliente.conectado).toBe(true);
     reloj.avanzar(2 * MINUTO);
     const res = await llamar(ctx, token, { metodo: 'get', ruta: '/sesion' });
-    expect(res.status, 'si la conexión hubiera renovado la actividad, la sesión seguiría válida').toBe(401);
+    expect(
+      res.status,
+      'si la conexión hubiera renovado la actividad, la sesión seguiría válida',
+    ).toBe(401);
     expect((res.body as { codigo?: string }).codigo).toBe('SESION_EXPIRADA');
   });
 
@@ -1332,7 +1588,11 @@ describe('criterios 64 y 66 · inactividad y vencimiento (con el reloj de la API
     const cDormida = await conectar(ctx.app, dormida.token);
     const cActiva = await conectar(ctx.app, activa.token);
     reloj.avanzar(20 * MINUTO);
-    exigirEstado(await llamar(ctx, activa.token, { metodo: 'get', ruta: '/sesion' }), 200, 'la sesión activa se usa');
+    exigirEstado(
+      await llamar(ctx, activa.token, { metodo: 'get', ruta: '/sesion' }),
+      200,
+      'la sesión activa se usa',
+    );
     reloj.avanzar(11 * MINUTO);
     await ctx.app.get(ServidorTiempoReal).revisarAhora();
     await cDormida.esperarDesconexion(3000);
@@ -1340,12 +1600,16 @@ describe('criterios 64 y 66 · inactividad y vencimiento (con el reloj de la API
     expect(cActiva.conectado, 'la sesión usada hace 11 minutos sigue conectada').toBe(true);
     const evento = ordenCambio(m.e.A.empresaId, { tipo: 'sucursal', sucursalId: m.e.A.S1 });
     await publicar(ctx.app, evento.evento);
-    expect(await cActiva.esperarEvento<{ ordenId: string }>('orden.cambio')).toEqual({ ordenId: evento.ordenId });
+    expect(await cActiva.esperarEvento<{ ordenId: string }>('orden.cambio')).toEqual({
+      ordenId: evento.ordenId,
+    });
   });
 
   it('revisarAhora() desconecta una sesión de PIN a los 6 minutos sin uso (5 por defecto) y no a los 4', async () => {
     const m = await mundo();
-    const persona = await crearPersona(ctx, m.tokens.A.adminSin, [{ sucursalId: m.e.A.S1, rol: 'MOZO' }]);
+    const persona = await crearPersona(ctx, m.tokens.A.adminSin, [
+      { sucursalId: m.e.A.S1, rol: 'MOZO' },
+    ]);
     const equipo = await equipoDe(ctx, persona);
     const token = await sesionPin(ctx, persona, equipo, m.e.A.S1);
     const cliente = await conectar(ctx.app, token, equipo);

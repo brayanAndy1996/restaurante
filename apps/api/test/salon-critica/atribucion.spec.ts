@@ -125,7 +125,12 @@ describe('criterio 10 · sin mozoId, el mozo responsable es quien abre la mesa',
       exigirEstado(res, 201, 'abrir la mesa');
       const orden = ordenRespuestaSchema.parse(res.body);
       expect(orden.mozo).toEqual({ id: e.A.mozo.id, nombre: nombreDe(e.A.mozo) });
-      expect(orden).toMatchObject({ estado: 'ABIERTA', tipo: 'MESA', canal: 'SALON', comensales: 3 });
+      expect(orden).toMatchObject({
+        estado: 'ABIERTA',
+        tipo: 'MESA',
+        canal: 'SALON',
+        comensales: 3,
+      });
 
       // 81: la orden queda con `creado_por_usuario_id` = quien abrió y `mozo_id` = el responsable.
       expect(await mozoGuardado(admin, orden.id)).toBe(e.A.mozo.id);
@@ -195,7 +200,10 @@ describe('criterio 10 · con mozoId, otra persona que atiende mesas es el mozo r
     const adminS1 = (await sesiones(ctx, e.A.base.admin, e.A.S1)).contrasena;
     const supervisor = (await sesiones(ctx, e.A.supervisor, e.A.S1)).pin;
     const mesas = await mesasS1();
-    const deAdmin = await abrirOrden(ctx, adminS1, { mesaId: (await mesas.siguiente()).id, mozoId: e.A.mozo.id });
+    const deAdmin = await abrirOrden(ctx, adminS1, {
+      mesaId: (await mesas.siguiente()).id,
+      mozoId: e.A.mozo.id,
+    });
     const deSupervisor = await abrirOrden(ctx, supervisor, {
       mesaId: (await mesas.siguiente()).id,
       mozoId: e.mozo2.id,
@@ -228,7 +236,9 @@ describe('criterio 10 · un mozoId que no atiende mesas se rechaza con 422 REFER
         { sucursalId: e.A.S1, rol: 'COCINA_BARRA' },
         { sucursalId: e.A.S2, rol: 'MOZO' },
       ]);
-      const inactivo = await crearPersona(ctx, e.A.tokenAdmin, [{ sucursalId: e.A.S1, rol: 'MOZO' }]);
+      const inactivo = await crearPersona(ctx, e.A.tokenAdmin, [
+        { sucursalId: e.A.S1, rol: 'MOZO' },
+      ]);
       const desactivar = await llamar(ctx, e.A.tokenAdmin, {
         metodo: 'patch',
         ruta: `/usuarios/${inactivo.id}`,
@@ -342,7 +352,9 @@ describe('criterio 10 · el mozo responsable no cambia después', () => {
     const sigueIgual = async (que: string) => {
       expect(await mozoGuardado(admin, idOrden), `${que}: mozo_id`).toBe(e.A.mozo.id);
       expect((await leerOrden(ctx, m1, idOrden)).mozo, que).toEqual(responsable);
-      expect((await mesaEnSalon(ctx, m1, mesa.id)).orden?.mozo, `${que}: mapa`).toEqual(responsable);
+      expect((await mesaEnSalon(ctx, m1, mesa.id)).orden?.mozo, `${que}: mapa`).toEqual(
+        responsable,
+      );
     };
 
     // Editar los comensales (otra persona) no cambia al responsable.
@@ -377,12 +389,28 @@ describe('criterio 10 · el mozo responsable no cambia después', () => {
     // Otras personas envían, anulan y piden la pre-cuenta.
     const envio = await enviar(ctx, m2, idOrden, [lineaLomo(c, 2), lineaGaseosa(c, 1)]);
     exigirEstado(envio, 201, 'M2 envía');
-    exigirEstado(await pedirPrecuenta(ctx, supervisor, idOrden), 201, 'el Supervisor pide la pre-cuenta');
-    const auth = await pedirAutorizacion(ctx, cajero.contrasena, e.A.supervisor.pin, 'ANULAR_ITEM_ENVIADO');
     exigirEstado(
-      await anularItem(ctx, cajero.contrasena, idOrden, envio.body.items[0].id as string, cuerpoDeAnulacion(), {
-        autorizacion: auth.autorizacionId,
-      }),
+      await pedirPrecuenta(ctx, supervisor, idOrden),
+      201,
+      'el Supervisor pide la pre-cuenta',
+    );
+    const auth = await pedirAutorizacion(
+      ctx,
+      cajero.contrasena,
+      e.A.supervisor.pin,
+      'ANULAR_ITEM_ENVIADO',
+    );
+    exigirEstado(
+      await anularItem(
+        ctx,
+        cajero.contrasena,
+        idOrden,
+        envio.body.items[0].id as string,
+        cuerpoDeAnulacion(),
+        {
+          autorizacion: auth.autorizacionId,
+        },
+      ),
       201,
       'el Cajero anula con clave',
     );
@@ -433,7 +461,9 @@ describe.each(TIPOS_DE_SESION)(
         exigirEstado(envio, 201, `${que} envía`);
       }
       // El primer envío es la comanda; los siguientes, adiciones.
-      expect([envioM1, envioM2, envioC, envioS].map((r) => [r.body.numero, r.body.esAdicion])).toEqual([
+      expect(
+        [envioM1, envioM2, envioC, envioS].map((r) => [r.body.numero, r.body.esAdicion]),
+      ).toEqual([
         [1, false],
         [2, true],
         [3, true],
@@ -449,17 +479,35 @@ describe.each(TIPOS_DE_SESION)(
         [4, { id: e.A.supervisor.id, nombre: nombreDe(e.A.supervisor) }],
       ]);
       // Lo mismo dicen los ítems de la respuesta de cada envío.
-      expect(envioM2.body.items[0].comandadoPor).toEqual({ id: e.mozo2.id, nombre: nombreDe(e.mozo2) });
-      expect(envioC.body.items[0].comandadoPor).toEqual({ id: e.A.cajero.id, nombre: nombreDe(e.A.cajero) });
+      expect(envioM2.body.items[0].comandadoPor).toEqual({
+        id: e.mozo2.id,
+        nombre: nombreDe(e.mozo2),
+      });
+      expect(envioC.body.items[0].comandadoPor).toEqual({
+        id: e.A.cajero.id,
+        nombre: nombreDe(e.A.cajero),
+      });
       expect(await mozoGuardado(admin, ordenId)).toBe(e.A.mozo.id);
     });
 
     it('la trazabilidad: la orden queda creada por M1 y cada ítem y cada envío, por quien los envió y desde su equipo', async () => {
       const { e, c, s, equipos, ordenId } = await armar();
       const envios = [
-        { quien: 'm1', persona: e.A.mozo, res: await enviar(ctx, s.m1, ordenId, [lineaLomo(c, 1)]) },
-        { quien: 'm2', persona: e.mozo2, res: await enviar(ctx, s.m2, ordenId, [lineaGaseosa(c, 2)]) },
-        { quien: 'c', persona: e.A.cajero, res: await enviar(ctx, s.c, ordenId, [lineaCombo(c, 1)]) },
+        {
+          quien: 'm1',
+          persona: e.A.mozo,
+          res: await enviar(ctx, s.m1, ordenId, [lineaLomo(c, 1)]),
+        },
+        {
+          quien: 'm2',
+          persona: e.mozo2,
+          res: await enviar(ctx, s.m2, ordenId, [lineaGaseosa(c, 2)]),
+        },
+        {
+          quien: 'c',
+          persona: e.A.cajero,
+          res: await enviar(ctx, s.c, ordenId, [lineaCombo(c, 1)]),
+        },
       ] as const;
       for (const { res } of envios) exigirEstado(res, 201, 'enviar');
 
@@ -480,7 +528,10 @@ describe.each(TIPOS_DE_SESION)(
             sistema: null,
           });
         }
-        expect(await autorDeFila(admin, 'envio', res.body.id as string), `envío de ${quien}`).toMatchObject({
+        expect(
+          await autorDeFila(admin, 'envio', res.body.id as string),
+          `envío de ${quien}`,
+        ).toMatchObject({
           usuarioId: persona.id,
           equipoId: equipoEsperado,
         });
@@ -498,7 +549,9 @@ describe.each(TIPOS_DE_SESION)(
       const deLaMesa = salon.zonas.flatMap((z) => z.mesas).find((m) => m.id === mesa.id)!;
       expect(deLaMesa.orden?.mozo.id).toBe(e.A.mozo.id);
       const cocina = (await sesiones(ctx, e.A.cocina, e.A.S1)).contrasena;
-      const comandas = comandasDelKds(await leerCocina(ctx, cocina)).filter((k) => k.orden.id === ordenId);
+      const comandas = comandasDelKds(await leerCocina(ctx, cocina)).filter(
+        (k) => k.orden.id === ordenId,
+      );
       expect(comandas.length).toBeGreaterThanOrEqual(3);
       for (const k of comandas) expect(k.orden.mozo.id).toBe(e.A.mozo.id);
       expect(new Set(comandas.map((k) => k.tipo))).toEqual(new Set(['COMANDA', 'ADICION']));
@@ -516,7 +569,11 @@ describe('criterio 30 · cualquier persona con ATENDER_MESA envía a cualquier o
     exigirEstado(abrir, 201, 'M1 abre');
     for (const tipo of TIPOS_DE_SESION) {
       const cocina = (await sesiones(ctx, e.A.cocina, e.A.S1))[tipo];
-      esperarError(await enviar(ctx, cocina, abrir.body.id as string, [lineaGaseosa(c, 1)]), 403, 'PROHIBIDO');
+      esperarError(
+        await enviar(ctx, cocina, abrir.body.id as string, [lineaGaseosa(c, 1)]),
+        403,
+        'PROHIBIDO',
+      );
     }
     expect(await filasDe(admin, 'item', 'orden_id = $1', [abrir.body.id])).toHaveLength(0);
   });
@@ -542,7 +599,12 @@ describe.each(TIPOS_DE_SESION)(
       exigirEstado(envio, 201, 'M2 envía');
       const itemId = envio.body.items[0].id as string;
 
-      const auth = await pedirAutorizacion(ctx, cajero[tipo], e.A.supervisor.pin, 'ANULAR_ITEM_ENVIADO');
+      const auth = await pedirAutorizacion(
+        ctx,
+        cajero[tipo],
+        e.A.supervisor.pin,
+        'ANULAR_ITEM_ENVIADO',
+      );
       const cuerpo = cuerpoDeAnulacion({ cantidad: 1 });
       const res = await anularItem(ctx, cajero[tipo], ordenId, itemId, cuerpo, {
         autorizacion: auth.autorizacionId,
@@ -569,7 +631,12 @@ describe.each(TIPOS_DE_SESION)(
         equipoId: equipoCajero,
       });
       // La auditoría: el Cajero como actor y el Supervisor como autorizador.
-      const filas = await filasDe(admin, 'auditoria', `entidad_id = $1 AND accion = 'anular_item'`, [itemId]);
+      const filas = await filasDe(
+        admin,
+        'auditoria',
+        `entidad_id = $1 AND accion = 'anular_item'`,
+        [itemId],
+      );
       expect(filas).toHaveLength(1);
       expect(filas[0]).toMatchObject({
         actor_usuario_id: e.A.cajero.id,

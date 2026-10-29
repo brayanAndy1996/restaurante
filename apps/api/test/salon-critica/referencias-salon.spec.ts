@@ -18,10 +18,7 @@ import { randomUUID } from 'node:crypto';
 import type { Client } from 'pg';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { abrirCliente } from '../utilidades';
-import {
-  crearEscenarioCarta,
-  type Llamada,
-} from '../carta-critica/fabrica-permisos-carta';
+import { crearEscenarioCarta, type Llamada } from '../carta-critica/fabrica-permisos-carta';
 import {
   abrirOrden,
   arrancarP4,
@@ -159,7 +156,13 @@ const casosDeRuta = (): CasoDeRuta[] => [
     construir: (m, ids) => ({
       metodo: 'post',
       ruta: `/sucursales/${ids.sucursal}/zonas/${m.A.salon1.zonaId}/mesas`,
-      cuerpo: { nombre: `X${randomUUID().slice(0, 6)}`, capacidad: 4, forma: 'REDONDA', columna: 4, fila: 3 },
+      cuerpo: {
+        nombre: `X${randomUUID().slice(0, 6)}`,
+        capacidad: 4,
+        forma: 'REDONDA',
+        columna: 4,
+        fila: 3,
+      },
     }),
   },
   {
@@ -169,7 +172,13 @@ const casosDeRuta = (): CasoDeRuta[] => [
     construir: (m, ids) => ({
       metodo: 'post',
       ruta: `/sucursales/${m.A.E.S1}/zonas/${ids.zona}/mesas`,
-      cuerpo: { nombre: `X${randomUUID().slice(0, 6)}`, capacidad: 4, forma: 'REDONDA', columna: 4, fila: 3 },
+      cuerpo: {
+        nombre: `X${randomUUID().slice(0, 6)}`,
+        capacidad: 4,
+        forma: 'REDONDA',
+        columna: 4,
+        fila: 3,
+      },
     }),
   },
   {
@@ -488,7 +497,11 @@ const casosDeCuerpo = (): CasoDeCuerpo[] => [
       cuerpo: {
         id: randomUUID(),
         lineas: [
-          { productoId: m.A.carta.lomoId, modificadorIds: [m.A.carta.termino.jugoso, v], cantidad: 1 },
+          {
+            productoId: m.A.carta.lomoId,
+            modificadorIds: [m.A.carta.termino.jugoso, v],
+            cantidad: 1,
+          },
         ],
       },
       cabeceras: unaClave(),
@@ -583,9 +596,13 @@ describe('criterio 85 · un id de B en el cuerpo responde 422 (o el 400 del orde
         );
       }
       if (caso.campo !== undefined) {
-        const campos = ((resB.body as { campos?: { campo: string }[] }).campos ?? []).map((c) => c.campo);
+        const campos = ((resB.body as { campos?: { campo: string }[] }).campos ?? []).map(
+          (c) => c.campo,
+        );
         const campo = caso.campo;
-        if (!campos.some((c) => c === campo || c.startsWith(`${campo}.`) || c.startsWith(`${campo}[`))) {
+        if (
+          !campos.some((c) => c === campo || c.startsWith(`${campo}.`) || c.startsWith(`${campo}[`))
+        ) {
           fallos.push(`${caso.nombre}: campos ${JSON.stringify(campos)} no señala ${campo}`);
         }
       }
@@ -629,12 +646,17 @@ describe('criterio 85 · GET /salon, GET /ordenes/:id y GET /cocina/comandas sol
     exigirEstado(res, 200, 'GET /salon de A en S1');
     expect(res.body.sucursalId).toBe(m.A.E.S1);
     expect(uuidsEn(res.text).filter((id) => ajenos.has(id))).toEqual([]);
-    const zonas = res.body.zonas as { id: string; mesas: { id: string; orden: { id: string } | null }[] }[];
+    const zonas = res.body.zonas as {
+      id: string;
+      mesas: { id: string; orden: { id: string } | null }[];
+    }[];
     expect(zonas.map((z) => z.id)).toEqual([m.A.salon1.zonaId]);
     expect(zonas.flatMap((z) => z.mesas.map((mesa) => mesa.id)).sort()).toEqual(
       m.A.salon1.mesas.map((mesa) => mesa.id).sort(),
     );
-    const ordenes = zonas.flatMap((z) => z.mesas.flatMap((mesa) => (mesa.orden ? [mesa.orden.id] : [])));
+    const ordenes = zonas.flatMap((z) =>
+      z.mesas.flatMap((mesa) => (mesa.orden ? [mesa.orden.id] : [])),
+    );
     expect(ordenes.sort()).toEqual([m.A.principal.id, m.A.segunda.id].sort());
     expect(res.text).not.toContain(m.B.salon1.mesas[0]!.nombre);
   });
@@ -661,7 +683,10 @@ describe('criterio 85 · GET /salon, GET /ordenes/:id y GET /cocina/comandas sol
     const deS2 = await idsDeEmpresaSalon(admin, m.A.E.empresaId, m.A.E.S2);
     const deS1 = await idsDeEmpresaSalon(admin, m.A.E.empresaId, m.A.E.S1);
     for (const id of deS2) if (!deS1.has(id)) ajenos.add(id);
-    const res = await llamar(ctx, m.A.tokenS1, { metodo: 'get', ruta: `/ordenes/${m.A.principal.id}` });
+    const res = await llamar(ctx, m.A.tokenS1, {
+      metodo: 'get',
+      ruta: `/ordenes/${m.A.principal.id}`,
+    });
     exigirEstado(res, 200, 'GET /ordenes/:id de A');
     expect(res.body.id).toBe(m.A.principal.id);
     expect(res.body.sucursalId).toBe(m.A.E.S1);
@@ -680,9 +705,10 @@ describe('criterio 85 · GET /salon, GET /ordenes/:id y GET /cocina/comandas sol
     const res = await llamar(ctx, m.A.tokenCocinaS1, { metodo: 'get', ruta: '/cocina/comandas' });
     exigirEstado(res, 200, 'GET /cocina/comandas de A en S1');
     expect(uuidsEn(res.text).filter((id) => ajenos.has(id))).toEqual([]);
-    const ids = [...(res.body.pendientes as { id: string }[]), ...(res.body.recientes as { id: string }[])].map(
-      (c) => c.id,
-    );
+    const ids = [
+      ...(res.body.pendientes as { id: string }[]),
+      ...(res.body.recientes as { id: string }[]),
+    ].map((c) => c.id);
     const esperadas = new Set([...m.A.principal.comandaIds, ...m.A.segunda.comandaIds]);
     expect(ids.length).toBeGreaterThan(0);
     expect(ids.every((id) => esperadas.has(id))).toBe(true);
@@ -731,7 +757,11 @@ describe('criterio 85 · los ids de cliente son únicos por empresa: el mismo id
     const mesaDeB = m.B.mesasLibres[0]!;
 
     // La orden con el id de la orden de A.
-    const apertura = await abrirOrden(ctx, m.B.tokenS1, { id: a.id, mesaId: mesaDeB.id, comensales: 4 });
+    const apertura = await abrirOrden(ctx, m.B.tokenS1, {
+      id: a.id,
+      mesaId: mesaDeB.id,
+      comensales: 4,
+    });
     exigirEstado(apertura, 201, 'abrir en B una orden con el id de la de A');
     expect(apertura.body.id).toBe(a.id);
     expect(apertura.body.sucursalId).toBe(m.B.E.S1);
@@ -759,15 +789,22 @@ describe('criterio 85 · los ids de cliente son únicos por empresa: el mismo id
     )!;
 
     // La marcha, la anulación y la pre-cuenta con los ids de A.
-    const marcha = await postConClave(ctx, m.B.tokenS1, `/ordenes/${a.id}/marchas`, { id: a.marchaId });
+    const marcha = await postConClave(ctx, m.B.tokenS1, `/ordenes/${a.id}/marchas`, {
+      id: a.marchaId,
+    });
     exigirEstado(marcha, 201, 'marchar en B con el id de la marcha de A');
     expect(marcha.body.id).toBe(a.marchaId);
-    const anulacion = await postConClave(ctx, m.B.tokenS1, `/ordenes/${a.id}/items/${itemLomo.id}/anulaciones`, {
-      id: a.anulacionId,
-      cantidad: 1,
-      motivo: 'Error de toma',
-      destinoStock: 'MERMA',
-    });
+    const anulacion = await postConClave(
+      ctx,
+      m.B.tokenS1,
+      `/ordenes/${a.id}/items/${itemLomo.id}/anulaciones`,
+      {
+        id: a.anulacionId,
+        cantidad: 1,
+        motivo: 'Error de toma',
+        destinoStock: 'MERMA',
+      },
+    );
     exigirEstado(anulacion, 201, 'anular en B con el id de la anulación de A');
     expect(anulacion.body.id).toBe(a.anulacionId);
     expect(anulacion.body.itemId).toBe(itemLomo.id);
@@ -781,7 +818,9 @@ describe('criterio 85 · los ids de cliente son únicos por empresa: el mismo id
     // Ninguna respuesta de B nombra un id de A (salvo los de cliente que B eligió).
     const reutilizados = new Set([a.id, a.envioId, a.marchaId, a.anulacionId, a.precuentaId]);
     for (const res of [apertura, envio, marcha, anulacion, precuenta]) {
-      expect(uuidsEn(res.text).filter((id) => idsA.has(id) && !reutilizados.has(id as string))).toEqual([]);
+      expect(
+        uuidsEn(res.text).filter((id) => idsA.has(id) && !reutilizados.has(id as string)),
+      ).toEqual([]);
     }
 
     // En la base hay dos filas con cada id, una por empresa, y las de A no cambiaron.
@@ -796,9 +835,10 @@ describe('criterio 85 · los ids de cliente son únicos por empresa: el mismo id
         `SELECT empresa_id FROM ${tabla} WHERE id = $1 ORDER BY empresa_id`,
         [id],
       );
-      expect(filas.rows.map((f) => f.empresa_id).sort(), `filas de ${tabla} con el id repetido`).toEqual(
-        [m.A.E.empresaId, m.B.E.empresaId].sort(),
-      );
+      expect(
+        filas.rows.map((f) => f.empresa_id).sort(),
+        `filas de ${tabla} con el id repetido`,
+      ).toEqual([m.A.E.empresaId, m.B.E.empresaId].sort());
     }
     expect(await instantaneaSalon(admin, m.A.E.empresaId)).toEqual(antesA);
 
@@ -816,7 +856,10 @@ describe('criterio 85 · los ids de cliente son únicos por empresa: el mismo id
   it('repetir en B el id de una orden que A ya tiene no devuelve 409 ni 422 ni la orden de A: el id nuevo y el repetido responden igual', async () => {
     const m = await mundo();
     const libres = m.B.mesasLibres;
-    const conIdDeA = await abrirOrden(ctx, m.B.tokenS1, { id: m.A.segunda.id, mesaId: libres[1]!.id });
+    const conIdDeA = await abrirOrden(ctx, m.B.tokenS1, {
+      id: m.A.segunda.id,
+      mesaId: libres[1]!.id,
+    });
     const conIdNuevo = await abrirOrden(ctx, m.B.tokenS1, { mesaId: libres[2]!.id });
     exigirEstado(conIdDeA, 201, 'abrir con un id que A ya usa');
     exigirEstado(conIdNuevo, 201, 'abrir con un id nuevo');
@@ -854,20 +897,29 @@ describe('criterio 86 · 100 peticiones concurrentes alternando A y B con un poo
         const problemas: string[] = [];
         if (tipo === 0) {
           const res = await llamar(ctx, e.tokenS1, { metodo: 'get', ruta: '/salon' });
-          if (res.status !== 200) return [`#${i} GET /salon de ${quien}: ${res.status} ${res.text.slice(0, 200)}`];
+          if (res.status !== 200)
+            return [`#${i} GET /salon de ${quien}: ${res.status} ${res.text.slice(0, 200)}`];
           if (res.body.sucursalId !== e.E.S1) problemas.push(`#${i} GET /salon con otra sucursal`);
           textos.push({ empresa: quien, ruta: '/salon', texto: res.text });
         } else if (tipo === 1) {
           const res = await enviar(ctx, e.tokenS1, e.segunda.id, [lineaGaseosa(e.carta)]);
-          if (res.status !== 201) return [`#${i} envío de ${quien}: ${res.status} ${res.text.slice(0, 200)}`];
+          if (res.status !== 201)
+            return [`#${i} envío de ${quien}: ${res.status} ${res.text.slice(0, 200)}`];
           enviados[quien]++;
           if (res.body.ordenId !== e.segunda.id) problemas.push(`#${i} envío con otra orden`);
           const productos = (res.body.items as { productoId: string }[]).map((x) => x.productoId);
-          if (productos.some((p) => p !== e.carta.gaseosaId)) problemas.push(`#${i} envío con otro producto`);
+          if (productos.some((p) => p !== e.carta.gaseosaId))
+            problemas.push(`#${i} envío con otro producto`);
           textos.push({ empresa: quien, ruta: 'envio', texto: res.text });
         } else {
-          const res = await llamar(ctx, e.tokenCocinaS1, { metodo: 'get', ruta: '/cocina/comandas' });
-          if (res.status !== 200) return [`#${i} GET /cocina/comandas de ${quien}: ${res.status} ${res.text.slice(0, 200)}`];
+          const res = await llamar(ctx, e.tokenCocinaS1, {
+            metodo: 'get',
+            ruta: '/cocina/comandas',
+          });
+          if (res.status !== 200)
+            return [
+              `#${i} GET /cocina/comandas de ${quien}: ${res.status} ${res.text.slice(0, 200)}`,
+            ];
           textos.push({ empresa: quien, ruta: '/cocina/comandas', texto: res.text });
         }
         return problemas;
@@ -884,7 +936,10 @@ describe('criterio 86 · 100 peticiones concurrentes alternando A y B con un poo
     const fugas = textos.flatMap((t) =>
       uuidsEn(t.texto)
         .filter((id) => ids[t.empresa === 0 ? 1 : 0].has(id))
-        .map((id) => `${t.ruta} de ${t.empresa === 0 ? 'A' : 'B'} nombra el id ${id} de la otra empresa`),
+        .map(
+          (id) =>
+            `${t.ruta} de ${t.empresa === 0 ? 'A' : 'B'} nombra el id ${id} de la otra empresa`,
+        ),
     );
     exigirSinFallos(fugas);
 
@@ -910,14 +965,21 @@ describe('criterio 86 · 100 peticiones concurrentes alternando A y B con un poo
     const eventos = ctx.publicador.eventos();
     expect(eventos.length).toBeGreaterThan(0);
     for (const evento of eventos) {
-      const indice = evento.empresaId === m.A.E.empresaId ? 0 : evento.empresaId === m.B.E.empresaId ? 1 : -1;
-      expect(indice, `evento ${evento.nombre} de una empresa desconocida`).toBeGreaterThanOrEqual(0);
-      const propia = empresas[indice]!;
+      const indice = evento.empresaId === m.A.E.empresaId ? 0 : 1;
+      expect(
+        [m.A.E.empresaId, m.B.E.empresaId],
+        `evento ${evento.nombre} de una empresa desconocida`,
+      ).toContain(evento.empresaId);
+      const propia = empresas[indice];
       if (evento.sala.tipo === 'sucursal') {
         expect([propia.E.S1, propia.E.S2, propia.E.S3]).toContain(evento.sala.sucursalId);
       }
-      const ajenosDelEvento = uuidsEn(JSON.stringify(evento.datos)).filter((id) => !ids[indice]!.has(id));
-      expect(ajenosDelEvento, `evento ${evento.nombre} con ids que no son de su empresa`).toEqual([]);
+      const ajenosDelEvento = uuidsEn(JSON.stringify(evento.datos)).filter(
+        (id) => !ids[indice].has(id),
+      );
+      expect(ajenosDelEvento, `evento ${evento.nombre} con ids que no son de su empresa`).toEqual(
+        [],
+      );
     }
     const ordenCambio = (indice: 0 | 1) =>
       eventos.filter(

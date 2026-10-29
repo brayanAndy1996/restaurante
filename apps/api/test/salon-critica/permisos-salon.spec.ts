@@ -269,7 +269,11 @@ describe('criterio 79 · cada rol sin permiso recibe 403 PROHIBIDO en cada ruta 
     const e = await esc();
     const s = await sesiones(ctx, e.A.cocina, e.A.S1);
     const ruta = RUTAS_SALON.find((r) => r.clave === 'POST /ordenes/:p/envios')!;
-    esperarError(await llamar(ctx, s.contrasena, ruta.construir(idsAleatoriosSalon(e.A.S1))), 403, 'PROHIBIDO');
+    esperarError(
+      await llamar(ctx, s.contrasena, ruta.construir(idsAleatoriosSalon(e.A.S1))),
+      403,
+      'PROHIBIDO',
+    );
   });
 });
 
@@ -317,7 +321,13 @@ describe('criterio 79 · los rechazos no cambian filas ni auditoría, no llaman 
     const o = await ordenConItems(ctx, await mesasS1(), c, mozo.contrasena);
     const cocina = (await sesiones(ctx, e.A.cocina, e.A.S1)).contrasena;
     const antes = await leerCocina(ctx, cocina);
-    const ids = await idsRealesSalon(admin, e.A.S1, o, await (await mesasS1()).siguiente(), c.gaseosaId);
+    const ids = await idsRealesSalon(
+      admin,
+      e.A.S1,
+      o,
+      await (await mesasS1()).siguiente(),
+      c.gaseosaId,
+    );
     for (const tipo of TIPOS_DE_SESION) {
       for (const [, persona] of [
         ['Mozo', e.A.mozo],
@@ -341,12 +351,23 @@ describe('criterio 79 · los rechazos no cambian filas ni auditoría, no llaman 
     const c = await carta();
     const mozo = (await sesiones(ctx, e.A.mozo, e.A.S1)).contrasena;
     const o = await ordenConItems(ctx, await mesasS1(), c, mozo);
-    const ids = await idsRealesSalon(admin, e.A.S1, o, await (await mesasS1()).siguiente(), c.gaseosaId);
+    const ids = await idsRealesSalon(
+      admin,
+      e.A.S1,
+      o,
+      await (await mesasS1()).siguiente(),
+      c.gaseosaId,
+    );
     const fallos: string[] = [];
     for (const persona of [e.A.supervisor, e.A.base.admin]) {
       const s = await sesiones(ctx, persona, e.A.S1);
       // Solo las lecturas: no se consume la orden de ejemplo.
-      for (const clave of ['GET /salon', 'GET /ordenes/:p', 'GET /cocina/comandas', 'GET /salon/stock']) {
+      for (const clave of [
+        'GET /salon',
+        'GET /ordenes/:p',
+        'GET /cocina/comandas',
+        'GET /salon/stock',
+      ]) {
         const ruta = RUTAS_SALON.find((r) => r.clave === clave)!;
         const res = await llamar(ctx, s.contrasena, ruta.construir(ids));
         if (res.status !== 200) fallos.push(`${clave}: se esperaba 200 y fue ${res.status}`);
@@ -377,7 +398,11 @@ describe('criterio 79 · el rol es el de la sucursal activa', () => {
       const abrir = await abrirOrden(ctx, enS1, { mesaId: mesa.id });
       exigirEstado(abrir, 201, 'abrir con S1 activa');
       const ordenId = abrir.body.id as string;
-      exigirEstado(await enviar(ctx, enS1, ordenId, [lineaGaseosa(c, 1)]), 201, 'enviar con S1 activa');
+      exigirEstado(
+        await enviar(ctx, enS1, ordenId, [lineaGaseosa(c, 1)]),
+        201,
+        'enviar con S1 activa',
+      );
       esperarError(
         await llamar(ctx, enS1, { metodo: 'get', ruta: '/cocina/comandas' }),
         403,
@@ -418,9 +443,17 @@ describe('criterio 79 · el rol es el de la sucursal activa', () => {
       const enS1 = (await sesiones(ctx, mixto, e.A.S1))[tipo];
       const enS2 = (await sesiones(ctx, mixto, e.A.S2))[tipo];
       esperarError(await llamar(ctx, enS1, { metodo: 'get', ruta: '/salon' }), 403, 'PROHIBIDO');
-      exigirEstado(await llamar(ctx, enS1, { metodo: 'get', ruta: '/cocina/comandas' }), 200, 'KDS en S1');
+      exigirEstado(
+        await llamar(ctx, enS1, { metodo: 'get', ruta: '/cocina/comandas' }),
+        200,
+        'KDS en S1',
+      );
       exigirEstado(await llamar(ctx, enS2, { metodo: 'get', ruta: '/salon' }), 200, 'salón en S2');
-      esperarError(await llamar(ctx, enS2, { metodo: 'get', ruta: '/cocina/comandas' }), 403, 'PROHIBIDO');
+      esperarError(
+        await llamar(ctx, enS2, { metodo: 'get', ruta: '/cocina/comandas' }),
+        403,
+        'PROHIBIDO',
+      );
     });
   }
 
@@ -435,14 +468,26 @@ describe('criterio 79 · el rol es el de la sucursal activa', () => {
       const token = s[tipo];
       exigirEstado(await llamar(ctx, token, { metodo: 'get', ruta: '/salon' }), 200, 'salón en S1');
       exigirEstado(
-        await llamar(ctx, token, { metodo: 'put', ruta: '/sesion/sucursal', cuerpo: { sucursalId: e.A.S2 } }),
+        await llamar(ctx, token, {
+          metodo: 'put',
+          ruta: '/sesion/sucursal',
+          cuerpo: { sucursalId: e.A.S2 },
+        }),
         200,
         'elegir S2',
       );
       esperarError(await llamar(ctx, token, { metodo: 'get', ruta: '/salon' }), 403, 'PROHIBIDO');
-      exigirEstado(await llamar(ctx, token, { metodo: 'get', ruta: '/cocina/comandas' }), 200, 'KDS en S2');
       exigirEstado(
-        await llamar(ctx, token, { metodo: 'put', ruta: '/sesion/sucursal', cuerpo: { sucursalId: e.A.S1 } }),
+        await llamar(ctx, token, { metodo: 'get', ruta: '/cocina/comandas' }),
+        200,
+        'KDS en S2',
+      );
+      exigirEstado(
+        await llamar(ctx, token, {
+          metodo: 'put',
+          ruta: '/sesion/sucursal',
+          cuerpo: { sucursalId: e.A.S1 },
+        }),
         200,
         'elegir S1',
       );
@@ -474,7 +519,9 @@ describe('criterio 79 · sin sucursal activa, 409 SUCURSAL_NO_ELEGIDA', () => {
         const codigo = (res.body as { codigo?: string } | undefined)?.codigo;
         // Anular pide clave al Mozo, pero la sucursal activa se exige antes.
         if (res.status !== 409 || codigo !== 'SUCURSAL_NO_ELEGIDA') {
-          fallos.push(`${ruta.clave}: se esperaba 409 SUCURSAL_NO_ELEGIDA y fue ${res.status} ${codigo}`);
+          fallos.push(
+            `${ruta.clave}: se esperaba 409 SUCURSAL_NO_ELEGIDA y fue ${res.status} ${codigo}`,
+          );
         }
       }
       exigirSinFallos(fallos);
@@ -498,7 +545,9 @@ describe('criterio 79 · sin sucursal activa, 409 SUCURSAL_NO_ELEGIDA', () => {
         const res = await llamar(ctx, token, ruta.construir(idsAleatoriosSalon(e.A.S1)));
         const codigo = (res.body as { codigo?: string } | undefined)?.codigo;
         if (res.status !== 409 || codigo !== 'SUCURSAL_NO_ELEGIDA') {
-          fallos.push(`${ruta.clave}: se esperaba 409 SUCURSAL_NO_ELEGIDA y fue ${res.status} ${codigo}`);
+          fallos.push(
+            `${ruta.clave}: se esperaba 409 SUCURSAL_NO_ELEGIDA y fue ${res.status} ${codigo}`,
+          );
         }
       }
       exigirSinFallos(fallos);
@@ -511,7 +560,11 @@ describe('criterio 79 · sin sucursal activa, 409 SUCURSAL_NO_ELEGIDA', () => {
     const sesion = await llamar(ctx, token, { metodo: 'get', ruta: '/sesion' });
     expect(sesion.body.sucursal, 'el Administrador entra sin sucursal activa').toBeNull();
     for (const ruta of RUTAS_SALON.filter((r) => r.modulo !== null)) {
-      esperarError(await llamar(ctx, token, ruta.construir(idsAleatoriosSalon(e.A.S1))), 409, 'SUCURSAL_NO_ELEGIDA');
+      esperarError(
+        await llamar(ctx, token, ruta.construir(idsAleatoriosSalon(e.A.S1))),
+        409,
+        'SUCURSAL_NO_ELEGIDA',
+      );
     }
     const lista = await llamar(ctx, token, { metodo: 'get', ruta: `/sucursales/${e.A.S2}/zonas` });
     exigirEstado(lista, 200, 'listar zonas de S2 sin sucursal activa');
@@ -563,9 +616,13 @@ describe('criterio 79 · con el módulo SALON o COCINA fuera del plan, 403 MODUL
   async function personasDeS3() {
     const e = await esc();
     sucursalS3 = e.A.S3!;
-    const supervisor = await crearPersona(ctx, e.A.tokenAdmin, [{ sucursalId: sucursalS3, rol: 'SUPERVISOR' }]);
+    const supervisor = await crearPersona(ctx, e.A.tokenAdmin, [
+      { sucursalId: sucursalS3, rol: 'SUPERVISOR' },
+    ]);
     const mozo = await crearPersona(ctx, e.A.tokenAdmin, [{ sucursalId: sucursalS3, rol: 'MOZO' }]);
-    const cocina = await crearPersona(ctx, e.A.tokenAdmin, [{ sucursalId: sucursalS3, rol: 'COCINA_BARRA' }]);
+    const cocina = await crearPersona(ctx, e.A.tokenAdmin, [
+      { sucursalId: sucursalS3, rol: 'COCINA_BARRA' },
+    ]);
     return { supervisor, mozo, cocina };
   }
 
@@ -582,7 +639,9 @@ describe('criterio 79 · con el módulo SALON o COCINA fuera del plan, 403 MODUL
       const codigo = (res.body as { codigo?: string } | undefined)?.codigo;
       if (seBloquean(ruta)) {
         if (res.status !== 403 || codigo !== 'MODULO_NO_INCLUIDO') {
-          fallos.push(`${ruta.clave}: se esperaba 403 MODULO_NO_INCLUIDO y fue ${res.status} ${codigo}`);
+          fallos.push(
+            `${ruta.clave}: se esperaba 403 MODULO_NO_INCLUIDO y fue ${res.status} ${codigo}`,
+          );
         }
       } else if (codigo === 'MODULO_NO_INCLUIDO' || res.status >= 500) {
         fallos.push(`${ruta.clave}: no debía depender de ese módulo y fue ${res.status} ${codigo}`);
@@ -605,7 +664,14 @@ describe('criterio 79 · con el módulo SALON o COCINA fuera del plan, 403 MODUL
       const auditoriaAntes = await auditoriaSalon(admin, e.A.empresaId);
       const fallos: string[] = [];
       const operacion = RUTAS_SALON.filter((r) => r.modulo !== null);
-      fallos.push(...(await probar((await sesiones(ctx, supervisor, sucursalS3))[tipo], operacion, ids, () => true)));
+      fallos.push(
+        ...(await probar(
+          (await sesiones(ctx, supervisor, sucursalS3))[tipo],
+          operacion,
+          ids,
+          () => true,
+        )),
+      );
       // Cada rol con permiso, en su propio módulo.
       fallos.push(
         ...(await probar(
@@ -705,7 +771,9 @@ describe('criterio 79 · la sesión de soporte es Administrador y queda trazada 
       entidad_id: zona.body.id,
       sesion_id: sesionId,
     });
-    expect((await autorDeFila(admin, 'zona', zona.body.id as string)).superadministradorId).toBe(e.sa.id);
+    expect((await autorDeFila(admin, 'zona', zona.body.id as string)).superadministradorId).toBe(
+      e.sa.id,
+    );
 
     // Sin `mozoId` la apertura se rechaza: soporte no es una persona de la empresa.
     const mesa = await pool.siguiente();
@@ -739,14 +807,25 @@ describe('criterio 79 · la sesión de soporte es Administrador y queda trazada 
     const itemId = envio.body.items[0].id as string;
     expect((await autorDeFila(admin, 'item', itemId)).superadministradorId).toBe(e.sa.id);
     expect((await autorDeFila(admin, 'item', itemId)).usuarioId).toBeNull();
-    expect((await autorDeFila(admin, 'envio', envio.body.id as string)).superadministradorId).toBe(e.sa.id);
+    expect((await autorDeFila(admin, 'envio', envio.body.id as string)).superadministradorId).toBe(
+      e.sa.id,
+    );
 
     // Anula un ítem sin clave: es Administrador. La auditoría lleva al superadministrador y su sesión.
     const antesAnular = await auditoriaSalon(admin, e.A.empresaId);
-    const anular = await anularItem(ctx, token, ordenId, itemId, cuerpoDeAnulacion({ cantidad: 1 }));
+    const anular = await anularItem(
+      ctx,
+      token,
+      ordenId,
+      itemId,
+      cuerpoDeAnulacion({ cantidad: 1 }),
+    );
     exigirEstado(anular, 201, 'soporte anula un ítem sin clave');
     expect(anular.body.autorizadoPor).toBeNull();
-    const filaAnular = unaFilaDe(await auditoriaNueva(admin, e.A.empresaId, antesAnular), 'anular_item');
+    const filaAnular = unaFilaDe(
+      await auditoriaNueva(admin, e.A.empresaId, antesAnular),
+      'anular_item',
+    );
     expect(filaAnular).toMatchObject({
       actor_superadministrador_id: e.sa.id,
       actor_usuario_id: null,
@@ -758,7 +837,10 @@ describe('criterio 79 · la sesión de soporte es Administrador y queda trazada 
     // Anula la orden.
     const antesOrden = await auditoriaSalon(admin, e.A.empresaId);
     exigirEstado(await anularOrden(ctx, token, ordenId), 200, 'soporte anula la orden');
-    const filaOrden = unaFilaDe(await auditoriaNueva(admin, e.A.empresaId, antesOrden), 'anular_orden');
+    const filaOrden = unaFilaDe(
+      await auditoriaNueva(admin, e.A.empresaId, antesOrden),
+      'anular_orden',
+    );
     expect(filaOrden).toMatchObject({
       actor_superadministrador_id: e.sa.id,
       actor_usuario_id: null,
@@ -771,8 +853,15 @@ describe('criterio 79 · la sesión de soporte es Administrador y queda trazada 
     const otra = await abrirOrden(ctx, token, { mesaId: otraMesa.id, mozoId: e.A.mozo.id });
     exigirEstado(otra, 201, 'soporte abre otra mesa');
     const antesLiberar = await auditoriaSalon(admin, e.A.empresaId);
-    exigirEstado(await liberarMesa(ctx, token, otra.body.id as string), 200, 'soporte libera la mesa');
-    const filaLiberar = unaFilaDe(await auditoriaNueva(admin, e.A.empresaId, antesLiberar), 'liberar_mesa');
+    exigirEstado(
+      await liberarMesa(ctx, token, otra.body.id as string),
+      200,
+      'soporte libera la mesa',
+    );
+    const filaLiberar = unaFilaDe(
+      await auditoriaNueva(admin, e.A.empresaId, antesLiberar),
+      'liberar_mesa',
+    );
     expect(filaLiberar).toMatchObject({
       actor_superadministrador_id: e.sa.id,
       actor_usuario_id: null,

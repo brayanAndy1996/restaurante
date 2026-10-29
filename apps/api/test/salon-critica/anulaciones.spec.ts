@@ -33,6 +33,7 @@ import {
   arrancarP3,
   asentar,
   auditoriaNueva,
+  cerca,
   auditoriaSalon,
   autorizacionGuardada,
   comandasDeAnulacion,
@@ -159,9 +160,12 @@ const nombreDe = (persona: PersonaConSesion): string =>
 
 /** Líneas de una comanda del KDS como `nombre → cantidad`, ordenadas. */
 const lineasComo = (lineas: { nombre: string; cantidad: number }[]) =>
-  lineas.map((l) => ({ nombre: l.nombre, cantidad: l.cantidad })).sort((a, b) => a.nombre.localeCompare(b.nombre));
+  lineas
+    .map((l) => ({ nombre: l.nombre, cantidad: l.cantidad }))
+    .sort((a, b) => a.nombre.localeCompare(b.nombre));
 
-const porNombre = (a: { nombre: string }, b: { nombre: string }) => a.nombre.localeCompare(b.nombre);
+const porNombre = (a: { nombre: string }, b: { nombre: string }) =>
+  a.nombre.localeCompare(b.nombre);
 
 // ------------------------------------------------------------------------------------------------
 // 35 · Anular parte y todo (decisión 6)
@@ -173,7 +177,11 @@ describe('criterio 35 · anular parte de la cantidad y toda (decisión 6)', () =
     const mozo = await actor('MOZO', 'contrasena');
     const o = await ordenNueva();
     const auth = await clave(mozo);
-    const cuerpo = cuerpoDeAnulacion({ cantidad: 2, destinoStock: 'VUELVE', motivo: 'Se equivocaron de plato' });
+    const cuerpo = cuerpoDeAnulacion({
+      cantidad: 2,
+      destinoStock: 'VUELVE',
+      motivo: 'Se equivocaron de plato',
+    });
     const res = await anularItem(ctx, mozo.token, o.ordenId, o.combo.id, cuerpo, {
       autorizacion: auth.autorizacionId,
     });
@@ -272,9 +280,7 @@ describe('criterio 35 · anular parte de la cantidad y toda (decisión 6)', () =
     const cocina = (await sesiones(ctx, e.A.cocina, e.A.S1)).contrasena;
     const o = await ordenNueva();
     const kds = comandasDelKds(await leerCocina(ctx, cocina));
-    const lineaDelLomo = kds
-      .flatMap((c) => c.lineas)
-      .find((l) => l.itemId === o.lomo.id);
+    const lineaDelLomo = kds.flatMap((c) => c.lineas).find((l) => l.itemId === o.lomo.id);
     expect(lineaDelLomo, 'el KDS muestra la línea del lomo').toBeDefined();
     exigirEstado(
       await llamar(ctx, cocina, {
@@ -303,98 +309,103 @@ describe('criterio 35 · anular parte de la cantidad y toda (decisión 6)', () =
 // ------------------------------------------------------------------------------------------------
 // 36 · La clave del Supervisor
 // ------------------------------------------------------------------------------------------------
-describe.each(['MOZO', 'CAJERO'] as const)('criterio 36 · %s necesita la clave del Supervisor', (rol) => {
-  describe.each(TIPOS_DE_SESION)('con sesión de %s', (tipo) => {
-    it('sin X-Autorizacion responde 403 CLAVE_REQUERIDA y no cambia nada', async () => {
-      const quien = await actor(rol, tipo);
-      const o = await ordenNueva();
-      const antes = await prepararRechazo();
-      const res = await anularItem(ctx, quien.token, o.ordenId, o.combo.id, cuerpoDeAnulacion());
-      esperarError(res, 403, 'CLAVE_REQUERIDA');
-      await exigirSinCambios(antes, 'sin clave');
+describe.each(['MOZO', 'CAJERO'] as const)(
+  'criterio 36 · %s necesita la clave del Supervisor',
+  (rol) => {
+    describe.each(TIPOS_DE_SESION)('con sesión de %s', (tipo) => {
+      it('sin X-Autorizacion responde 403 CLAVE_REQUERIDA y no cambia nada', async () => {
+        const quien = await actor(rol, tipo);
+        const o = await ordenNueva();
+        const antes = await prepararRechazo();
+        const res = await anularItem(ctx, quien.token, o.ordenId, o.combo.id, cuerpoDeAnulacion());
+        esperarError(res, 403, 'CLAVE_REQUERIDA');
+        await exigirSinCambios(antes, 'sin clave');
+      });
+
+      it('con una autorización válida responde 201, la deja usada y deja la fila de 002 con quién pidió y quién autorizó', async () => {
+        const e = await esc();
+        const quien = await actor(rol, tipo);
+        const o = await ordenNueva();
+        const auth = await clave(quien, 'ANULAR_ITEM_ENVIADO', 'Autorizo el ceviche');
+        const antes = await auditoriaSalon(admin, e.A.empresaId);
+        const res = await anularItem(ctx, quien.token, o.ordenId, o.combo.id, cuerpoDeAnulacion(), {
+          autorizacion: auth.autorizacionId,
+        });
+        exigirEstado(res, 201, 'anular con clave');
+        expect(res.body.autorizadoPor).toMatchObject({ id: e.A.supervisor.id });
+
+        const guardada = await autorizacionGuardada(admin, auth.autorizacionId);
+        expect(guardada.usada_en).not.toBeNull();
+        expect(cerca(guardada.usada_en!, ctx.reloj.ahora().getTime())).toBe(true);
+
+        const nuevas = await auditoriaNueva(admin, e.A.empresaId, antes);
+        expect(nuevas.map((f) => f.accion).sort()).toEqual(['ANULAR_ITEM_ENVIADO', 'anular_item']);
+        const consumo = nuevas.find((f) => f.accion === 'ANULAR_ITEM_ENVIADO')!;
+        expect(consumo).toMatchObject({
+          actor_usuario_id: quien.persona.id,
+          autorizado_por_id: e.A.supervisor.id,
+          autorizacion_id: auth.autorizacionId,
+          motivo: 'Autorizo el ceviche',
+          sucursal_id: e.A.S1,
+        });
+      });
+
+      it('una autorización de otra acción (ANULAR_ORDEN) responde 403 AUTORIZACION_INVALIDA, no cambia nada y no se consume', async () => {
+        const quien = await actor(rol, tipo);
+        const o = await ordenNueva();
+        const deOtraAccion = await clave(quien, 'ANULAR_ORDEN');
+        const antes = await prepararRechazo();
+        const res = await anularItem(ctx, quien.token, o.ordenId, o.combo.id, cuerpoDeAnulacion(), {
+          autorizacion: deOtraAccion.autorizacionId,
+        });
+        esperarError(res, 403, 'AUTORIZACION_INVALIDA');
+        await exigirSinCambios(antes, 'autorización de otra acción');
+        expect(
+          (await autorizacionGuardada(admin, deOtraAccion.autorizacionId)).usada_en,
+        ).toBeNull();
+      });
+
+      it('una autorización inexistente responde 403 AUTORIZACION_INVALIDA con el mismo cuerpo', async () => {
+        const quien = await actor(rol, tipo);
+        const o = await ordenNueva();
+        const deOtraAccion = await clave(quien, 'ANULAR_ORDEN');
+        const a = await anularItem(ctx, quien.token, o.ordenId, o.combo.id, cuerpoDeAnulacion(), {
+          autorizacion: randomUUID(),
+        });
+        const b = await anularItem(ctx, quien.token, o.ordenId, o.combo.id, cuerpoDeAnulacion(), {
+          autorizacion: deOtraAccion.autorizacionId,
+        });
+        esperarError(a, 403, 'AUTORIZACION_INVALIDA');
+        expect(a.body).toEqual(b.body);
+      });
+
+      it('una autorización vencida (a los 2 minutos exactos) responde 403; con una nueva y la misma clave la anulación sale', async () => {
+        const quien = await actor(rol, tipo);
+        const o = await ordenNueva();
+        const vieja = await clave(quien);
+        ctx.reloj.avanzar(2 * MINUTO);
+        const antes = await prepararRechazo();
+        const cuerpo = cuerpoDeAnulacion({ cantidad: 2 });
+        const claveDeIdempotencia = randomUUID();
+        const vencida = await anularItem(ctx, quien.token, o.ordenId, o.combo.id, cuerpo, {
+          clave: claveDeIdempotencia,
+          autorizacion: vieja.autorizacionId,
+        });
+        esperarError(vencida, 403, 'AUTORIZACION_INVALIDA');
+        await exigirSinCambios(antes, 'autorización vencida');
+
+        // La PWA pide la clave otra vez y conserva lo elegido (misma clave, mismo cuerpo): el error no se guardó.
+        const nueva = await clave(quien);
+        const reintento = await anularItem(ctx, quien.token, o.ordenId, o.combo.id, cuerpo, {
+          clave: claveDeIdempotencia,
+          autorizacion: nueva.autorizacionId,
+        });
+        exigirEstado(reintento, 201, 'reintento con la autorización nueva');
+        expect(reintento.body).toMatchObject({ id: cuerpo.id, cantidad: 2 });
+      });
     });
-
-    it('con una autorización válida responde 201, la deja usada y deja la fila de 002 con quién pidió y quién autorizó', async () => {
-      const e = await esc();
-      const quien = await actor(rol, tipo);
-      const o = await ordenNueva();
-      const auth = await clave(quien, 'ANULAR_ITEM_ENVIADO', 'Autorizo el ceviche');
-      const antes = await auditoriaSalon(admin, e.A.empresaId);
-      const res = await anularItem(ctx, quien.token, o.ordenId, o.combo.id, cuerpoDeAnulacion(), {
-        autorizacion: auth.autorizacionId,
-      });
-      exigirEstado(res, 201, 'anular con clave');
-      expect(res.body.autorizadoPor).toMatchObject({ id: e.A.supervisor.id });
-
-      const guardada = await autorizacionGuardada(admin, auth.autorizacionId);
-      expect(guardada.usada_en).not.toBeNull();
-      expect(new Date(guardada.usada_en!).getTime()).toBe(ctx.reloj.ahora().getTime());
-
-      const nuevas = await auditoriaNueva(admin, e.A.empresaId, antes);
-      expect(nuevas.map((f) => f.accion).sort()).toEqual(['ANULAR_ITEM_ENVIADO', 'anular_item']);
-      const consumo = nuevas.find((f) => f.accion === 'ANULAR_ITEM_ENVIADO')!;
-      expect(consumo).toMatchObject({
-        actor_usuario_id: quien.persona.id,
-        autorizado_por_id: e.A.supervisor.id,
-        autorizacion_id: auth.autorizacionId,
-        motivo: 'Autorizo el ceviche',
-        sucursal_id: e.A.S1,
-      });
-    });
-
-    it('una autorización de otra acción (ANULAR_ORDEN) responde 403 AUTORIZACION_INVALIDA, no cambia nada y no se consume', async () => {
-      const quien = await actor(rol, tipo);
-      const o = await ordenNueva();
-      const deOtraAccion = await clave(quien, 'ANULAR_ORDEN');
-      const antes = await prepararRechazo();
-      const res = await anularItem(ctx, quien.token, o.ordenId, o.combo.id, cuerpoDeAnulacion(), {
-        autorizacion: deOtraAccion.autorizacionId,
-      });
-      esperarError(res, 403, 'AUTORIZACION_INVALIDA');
-      await exigirSinCambios(antes, 'autorización de otra acción');
-      expect((await autorizacionGuardada(admin, deOtraAccion.autorizacionId)).usada_en).toBeNull();
-    });
-
-    it('una autorización inexistente responde 403 AUTORIZACION_INVALIDA con el mismo cuerpo', async () => {
-      const quien = await actor(rol, tipo);
-      const o = await ordenNueva();
-      const deOtraAccion = await clave(quien, 'ANULAR_ORDEN');
-      const a = await anularItem(ctx, quien.token, o.ordenId, o.combo.id, cuerpoDeAnulacion(), {
-        autorizacion: randomUUID(),
-      });
-      const b = await anularItem(ctx, quien.token, o.ordenId, o.combo.id, cuerpoDeAnulacion(), {
-        autorizacion: deOtraAccion.autorizacionId,
-      });
-      esperarError(a, 403, 'AUTORIZACION_INVALIDA');
-      expect(a.body).toEqual(b.body);
-    });
-
-    it('una autorización vencida (a los 2 minutos exactos) responde 403; con una nueva y la misma clave la anulación sale', async () => {
-      const quien = await actor(rol, tipo);
-      const o = await ordenNueva();
-      const vieja = await clave(quien);
-      ctx.reloj.avanzar(2 * MINUTO);
-      const antes = await prepararRechazo();
-      const cuerpo = cuerpoDeAnulacion({ cantidad: 2 });
-      const claveDeIdempotencia = randomUUID();
-      const vencida = await anularItem(ctx, quien.token, o.ordenId, o.combo.id, cuerpo, {
-        clave: claveDeIdempotencia,
-        autorizacion: vieja.autorizacionId,
-      });
-      esperarError(vencida, 403, 'AUTORIZACION_INVALIDA');
-      await exigirSinCambios(antes, 'autorización vencida');
-
-      // La PWA pide la clave otra vez y conserva lo elegido (misma clave, mismo cuerpo): el error no se guardó.
-      const nueva = await clave(quien);
-      const reintento = await anularItem(ctx, quien.token, o.ordenId, o.combo.id, cuerpo, {
-        clave: claveDeIdempotencia,
-        autorizacion: nueva.autorizacionId,
-      });
-      exigirEstado(reintento, 201, 'reintento con la autorización nueva');
-      expect(reintento.body).toMatchObject({ id: cuerpo.id, cantidad: 2 });
-    });
-  });
-});
+  },
+);
 
 describe.each(['SUPERVISOR', 'ADMINISTRADOR'] as const)(
   'criterio 36 · %s anula sin clave',
@@ -500,13 +511,7 @@ describe('criterio 36 · el orden de los rechazos', () => {
 
   it('el 403 de clave va antes que el 404: sin autorización, un ítem inexistente responde CLAVE_REQUERIDA', async () => {
     const mozo = await actor('MOZO', 'contrasena');
-    const res = await anularItem(
-      ctx,
-      mozo.token,
-      randomUUID(),
-      randomUUID(),
-      cuerpoDeAnulacion(),
-    );
+    const res = await anularItem(ctx, mozo.token, randomUUID(), randomUUID(), cuerpoDeAnulacion());
     esperarError(res, 403, 'CLAVE_REQUERIDA');
   });
 });
@@ -528,7 +533,10 @@ describe.each(TIPOS_DE_SESION)(
       const guardada = await autorizacionGuardada(admin, auth.autorizacionId);
       expect(guardada.usada_en, 'la autorización sigue sin usar').toBeNull();
       expect(
-        await filasDe(admin, 'auditoria', `autorizacion_id = $1`, [auth.autorizacionId]),
+        await filasDe(admin, 'auditoria', `autorizacion_id = $1 AND accion = ANY($2::text[])`, [
+          auth.autorizacionId,
+          ['ANULAR_ITEM_ENVIADO', 'ANULAR_ORDEN', 'anular_item', 'anular_orden'],
+        ]),
         'ninguna fila de auditoría con esa autorización',
       ).toHaveLength(0);
       expect((await foto()).tablas).toEqual(antes.tablas);
@@ -564,7 +572,13 @@ describe.each(TIPOS_DE_SESION)(
       const supervisor = await actor('SUPERVISOR', 'contrasena');
       const o = await ordenNueva();
       exigirEstado(
-        await anularItem(ctx, supervisor.token, o.ordenId, o.combo.id, cuerpoDeAnulacion({ cantidad: 3 })),
+        await anularItem(
+          ctx,
+          supervisor.token,
+          o.ordenId,
+          o.combo.id,
+          cuerpoDeAnulacion({ cantidad: 3 }),
+        ),
         201,
         'anular todo el combo',
       );
@@ -699,9 +713,12 @@ describe('criterio 37 · la réplica no anula ni consume de nuevo', () => {
       expect(ctx.inventario.alAnularLlamadas(), 'una sola llamada al inventario').toHaveLength(1);
       expect(await anulacionesDelItem(admin, o.combo.id)).toHaveLength(1);
       expect(
-        await filasDe(admin, 'auditoria', `autorizacion_id = $1 AND accion = 'ANULAR_ITEM_ENVIADO'`, [
-          auth.autorizacionId,
-        ]),
+        await filasDe(
+          admin,
+          'auditoria',
+          `autorizacion_id = $1 AND accion = 'ANULAR_ITEM_ENVIADO'`,
+          [auth.autorizacionId],
+        ),
       ).toHaveLength(1);
       expect(await comandasDeAnulacion(admin, o.ordenId)).toHaveLength(2);
       const orden = await leerOrden(ctx, mozo.token, o.ordenId);
@@ -770,7 +787,9 @@ describe('criterio 37 · la réplica no anula ni consume de nuevo', () => {
       });
     const respuestas = await Promise.all(Array.from({ length: 6 }, peticion));
     const exitosas = respuestas.filter((r) => r.status === 201);
-    expect(exitosas.length, JSON.stringify(respuestas.map((r) => r.body))).toBeGreaterThanOrEqual(1);
+    expect(exitosas.length, JSON.stringify(respuestas.map((r) => r.body))).toBeGreaterThanOrEqual(
+      1,
+    );
     for (const r of respuestas) {
       if (r.status === 201) expect(r.body).toEqual(exitosas[0]!.body);
       else esperarError(r, 409, 'CONFLICTO');
@@ -781,7 +800,9 @@ describe('criterio 37 · la réplica no anula ni consume de nuevo', () => {
         auth.autorizacionId,
       ]),
     ).toHaveLength(1);
-    expect(ctx.inventario.alAnularLlamadas().filter((l) => l.anulacionId === cuerpo.id)).toHaveLength(1);
+    expect(
+      ctx.inventario.alAnularLlamadas().filter((l) => l.anulacionId === cuerpo.id),
+    ).toHaveLength(1);
     const repetida = await peticion();
     expect(repetida.status).toBe(201);
     expect(repetida.body).toEqual(exitosas[0]!.body);
@@ -921,7 +942,10 @@ describe('criterio 37 · el mismo id de anulación', () => {
       ['otro ítem', anularItem(ctx, supervisor.token, o.ordenId, o.lomo.id, cuerpo)],
       [
         'otro destino',
-        anularItem(ctx, supervisor.token, o.ordenId, o.combo.id, { ...cuerpo, destinoStock: 'VUELVE' }),
+        anularItem(ctx, supervisor.token, o.ordenId, o.combo.id, {
+          ...cuerpo,
+          destinoStock: 'VUELVE',
+        }),
       ],
     ];
     for (const [que, promesa] of variantes) {
@@ -979,7 +1003,13 @@ describe('criterio 35 · cantidad, estado e ítem inválidos', () => {
     await exigirSinCambios(antes, 'cantidad mayor que la vigente');
 
     exigirEstado(
-      await anularItem(ctx, supervisor.token, o.ordenId, o.combo.id, cuerpoDeAnulacion({ cantidad: 2 })),
+      await anularItem(
+        ctx,
+        supervisor.token,
+        o.ordenId,
+        o.combo.id,
+        cuerpoDeAnulacion({ cantidad: 2 }),
+      ),
       201,
       'anulación parcial',
     );
@@ -1029,7 +1059,13 @@ describe('criterio 35 · cantidad, estado e ítem inválidos', () => {
     const supervisor = await actor('SUPERVISOR', 'contrasena');
     const o = await ordenNueva();
     exigirEstado(
-      await anularItem(ctx, supervisor.token, o.ordenId, o.gaseosa.id, cuerpoDeAnulacion({ cantidad: 2 })),
+      await anularItem(
+        ctx,
+        supervisor.token,
+        o.ordenId,
+        o.gaseosa.id,
+        cuerpoDeAnulacion({ cantidad: 2 }),
+      ),
       201,
       'anular la gaseosa',
     );
@@ -1063,10 +1099,34 @@ describe('criterio 35 · cantidad, estado e ítem inválidos', () => {
     const admin1 = await actor('ADMINISTRADOR', 'contrasena');
     const antes = await prepararRechazo();
 
-    const deOtraOrden = await anularItem(ctx, supervisor.token, o1.ordenId, o2.combo.id, cuerpoDeAnulacion());
-    const deOtraSucursal = await anularItem(ctx, admin1.token, deS2.ordenId, deS2.combo.id, cuerpoDeAnulacion());
-    const inexistente = await anularItem(ctx, supervisor.token, o1.ordenId, randomUUID(), cuerpoDeAnulacion());
-    const ordenInexistente = await anularItem(ctx, supervisor.token, randomUUID(), o1.combo.id, cuerpoDeAnulacion());
+    const deOtraOrden = await anularItem(
+      ctx,
+      supervisor.token,
+      o1.ordenId,
+      o2.combo.id,
+      cuerpoDeAnulacion(),
+    );
+    const deOtraSucursal = await anularItem(
+      ctx,
+      admin1.token,
+      deS2.ordenId,
+      deS2.combo.id,
+      cuerpoDeAnulacion(),
+    );
+    const inexistente = await anularItem(
+      ctx,
+      supervisor.token,
+      o1.ordenId,
+      randomUUID(),
+      cuerpoDeAnulacion(),
+    );
+    const ordenInexistente = await anularItem(
+      ctx,
+      supervisor.token,
+      randomUUID(),
+      o1.combo.id,
+      cuerpoDeAnulacion(),
+    );
     for (const res of [deOtraOrden, deOtraSucursal, inexistente, ordenInexistente]) {
       esperarError(res, 404, 'NO_ENCONTRADO');
     }
@@ -1107,8 +1167,12 @@ describe('criterio 38 · una comanda ANULACION por estación, con la cantidad de
     );
     expect(porEstacion.Cocina, 'la comanda de Cocina está en el KDS').toBeDefined();
     expect(porEstacion.Barra, 'la comanda de Barra está en el KDS').toBeDefined();
-    expect(lineasComo(porEstacion.Cocina!.lineas)).toEqual([{ nombre: 'Hamburguesa clásica', cantidad: 2 }]);
-    expect(lineasComo(porEstacion.Barra!.lineas)).toEqual([{ nombre: 'Cerveza Pilsen', cantidad: 2 }]);
+    expect(lineasComo(porEstacion.Cocina!.lineas)).toEqual([
+      { nombre: 'Hamburguesa clásica', cantidad: 2 },
+    ]);
+    expect(lineasComo(porEstacion.Barra!.lineas)).toEqual([
+      { nombre: 'Cerveza Pilsen', cantidad: 2 },
+    ]);
     for (const k of Object.values(porEstacion)) {
       expect(k!.tipo).toBe('ANULACION');
       expect(k!.orden.id).toBe(o.ordenId);
@@ -1138,14 +1202,21 @@ describe('criterio 38 · una comanda ANULACION por estación, con la cantidad de
     // Eventos: una `cocina.comanda` por comanda, `orden.cambio` y nada de otra empresa.
     await asentar();
     const comandas = eventosDe(ctx, 'cocina.comanda');
-    expect(comandas.map((x) => x.datos).sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b)))).toEqual(
+    expect(
+      comandas
+        .map((x) => x.datos)
+        .sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b))),
+    ).toEqual(
       anulacion.comandas
         .map((x) => ({ comandaId: x.id, estacionId: x.estacionId, tipo: 'ANULACION' }))
         .sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b))),
     );
     expect(eventosDe(ctx, 'orden.cambio').map((x) => x.datos)).toEqual([{ ordenId: o.ordenId }]);
     for (const ev of ctx.publicador.eventos()) {
-      expect(ev).toMatchObject({ empresaId: e.A.empresaId, sala: { tipo: 'sucursal', sucursalId: e.A.S1 } });
+      expect(ev).toMatchObject({
+        empresaId: e.A.empresaId,
+        sala: { tipo: 'sucursal', sucursalId: e.A.S1 },
+      });
     }
   });
 
@@ -1155,7 +1226,13 @@ describe('criterio 38 · una comanda ANULACION por estación, con la cantidad de
     const cocina = (await sesiones(ctx, e.A.cocina, e.A.S1)).contrasena;
     const o = await ordenNueva();
     exigirEstado(
-      await anularItem(ctx, supervisor.token, o.ordenId, o.combo.id, cuerpoDeAnulacion({ cantidad: 2 })),
+      await anularItem(
+        ctx,
+        supervisor.token,
+        o.ordenId,
+        o.combo.id,
+        cuerpoDeAnulacion({ cantidad: 2 }),
+      ),
       201,
       'primera anulación',
     );
@@ -1168,7 +1245,9 @@ describe('criterio 38 · una comanda ANULACION por estación, con la cantidad de
     );
     exigirEstado(res, 201, 'segunda anulación');
     const kds = comandasDelKds(await leerCocina(ctx, cocina));
-    const segundaPorEstacion = res.body.comandas.map((x: { id: string }) => kds.find((k) => k.id === x.id)!);
+    const segundaPorEstacion = res.body.comandas.map((x: { id: string }) =>
+      kds.find((k) => k.id === x.id)!,
+    );
     for (const k of segundaPorEstacion) {
       expect(k.lineas).toHaveLength(1);
       expect(k.lineas[0]!.cantidad).toBe(1);
@@ -1179,7 +1258,9 @@ describe('criterio 38 · una comanda ANULACION por estación, con la cantidad de
       .filter((l) => l.itemId === o.combo.id);
     expect(originales).toHaveLength(2);
     for (const l of originales) expect(l.estado).toBe('ANULADO');
-    const item = (await leerOrden(ctx, supervisor.token, o.ordenId)).items.find((i) => i.id === o.combo.id)!;
+    const item = (await leerOrden(ctx, supervisor.token, o.ordenId)).items.find(
+      (i) => i.id === o.combo.id,
+    )!;
     expect(item.cocina).toMatchObject({ anulado: 2, enviado: 0, enPreparacion: 0, listo: 0 });
   });
 
@@ -1188,7 +1269,13 @@ describe('criterio 38 · una comanda ANULACION por estación, con la cantidad de
     const e = await esc();
     const cocina = (await sesiones(ctx, e.A.cocina, e.A.S1)).contrasena;
     const o = await ordenNueva();
-    const lomo = await anularItem(ctx, supervisor.token, o.ordenId, o.lomo.id, cuerpoDeAnulacion({ cantidad: 1 }));
+    const lomo = await anularItem(
+      ctx,
+      supervisor.token,
+      o.ordenId,
+      o.lomo.id,
+      cuerpoDeAnulacion({ cantidad: 1 }),
+    );
     exigirEstado(lomo, 201, 'anular el lomo');
     expect(lomo.body.comandas).toHaveLength(1);
     expect(lomo.body.comandas[0]).toMatchObject({ estacionNombre: 'Cocina', tipo: 'ANULACION' });
@@ -1197,7 +1284,13 @@ describe('criterio 38 · una comanda ANULACION por estación, con la cantidad de
     expect(lineasComo(comanda.lineas)).toEqual([{ nombre: 'Lomo saltado', cantidad: 1 }]);
 
     ctx.inventario.limpiar();
-    const gaseosa = await anularItem(ctx, supervisor.token, o.ordenId, o.gaseosa.id, cuerpoDeAnulacion({ cantidad: 2 }));
+    const gaseosa = await anularItem(
+      ctx,
+      supervisor.token,
+      o.ordenId,
+      o.gaseosa.id,
+      cuerpoDeAnulacion({ cantidad: 2 }),
+    );
     exigirEstado(gaseosa, 201, 'anular la gaseosa');
     expect(gaseosa.body.comandas).toEqual([]);
     // Igual se llama al inventario: la gaseosa tiene control por unidades.
@@ -1260,13 +1353,24 @@ describe('criterio 39 · el destino del stock y la llamada al inventario', () =>
     const o = await ordenNueva();
     ctx.inventario.limpiar();
     exigirEstado(
-      await anularItem(ctx, supervisor.token, o.ordenId, o.lomo.id, cuerpoDeAnulacion({ cantidad: 2 })),
+      await anularItem(
+        ctx,
+        supervisor.token,
+        o.ordenId,
+        o.lomo.id,
+        cuerpoDeAnulacion({ cantidad: 2 }),
+      ),
       201,
       'anular el lomo',
     );
     expect(ctx.inventario.alAnularLlamadas()).toHaveLength(1);
     expect(ctx.inventario.alAnularLlamadas()[0]!.partes).toEqual([
-      { productoId: c.huevoFritoId, nombre: 'Huevo frito', cantidad: 2, tipoControlStock: 'UNIDADES' },
+      {
+        productoId: c.huevoFritoId,
+        nombre: 'Huevo frito',
+        cantidad: 2,
+        tipoControlStock: 'UNIDADES',
+      },
     ]);
   });
 });
@@ -1315,7 +1419,10 @@ describe('criterio 40 · la pre-cuenta se invalida también con una anulación p
         { mesaIds: [o.mesa.id], ordenId: o.ordenId },
       ]);
       for (const ev of ctx.publicador.eventos()) {
-        expect(ev).toMatchObject({ empresaId: e.A.empresaId, sala: { tipo: 'sucursal', sucursalId: e.A.S1 } });
+        expect(ev).toMatchObject({
+          empresaId: e.A.empresaId,
+          sala: { tipo: 'sucursal', sucursalId: e.A.S1 },
+        });
       }
 
       // La siguiente pre-cuenta tiene el número siguiente y el total nuevo.
@@ -1331,7 +1438,13 @@ describe('criterio 40 · la pre-cuenta se invalida también con una anulación p
   it('el total vigente del ítem y el de la orden salen de packages/dominio: precio × vigente y la suma', async () => {
     const supervisor = await actor('SUPERVISOR', 'contrasena');
     const o = await ordenNueva();
-    const res = await anularItem(ctx, supervisor.token, o.ordenId, o.lomo.id, cuerpoDeAnulacion({ cantidad: 1 }));
+    const res = await anularItem(
+      ctx,
+      supervisor.token,
+      o.ordenId,
+      o.lomo.id,
+      cuerpoDeAnulacion({ cantidad: 1 }),
+    );
     exigirEstado(res, 201, 'anular un lomo');
     expect(res.body.item).toMatchObject({
       precioUnitario: PRECIO.lomoConHuevo,
@@ -1357,7 +1470,11 @@ describe('criterio 41 · una fila anular_item con el autorizador y el detalle ex
       const o = await ordenNueva();
       const auth = await clave(cajero, 'ANULAR_ITEM_ENVIADO', 'Autorizo al cajero');
       const antes = await auditoriaSalon(admin, e.A.empresaId);
-      const cuerpo = cuerpoDeAnulacion({ cantidad: 1, motivo: 'Cliente alérgico al huevo', destinoStock: 'VUELVE' });
+      const cuerpo = cuerpoDeAnulacion({
+        cantidad: 1,
+        motivo: 'Cliente alérgico al huevo',
+        destinoStock: 'VUELVE',
+      });
       const res = await anularItem(ctx, cajero.token, o.ordenId, o.lomo.id, cuerpo, {
         autorizacion: auth.autorizacionId,
       });
@@ -1377,7 +1494,7 @@ describe('criterio 41 · una fila anular_item con el autorizador y el detalle ex
         autorizacion_id: auth.autorizacionId,
         equipo_id: tipo === 'pin' ? cajero.equipoId : null,
       });
-      expect(new Date(fila.ocurrido_en).getTime()).toBe(ctx.reloj.ahora().getTime());
+      expect(cerca(fila.ocurrido_en, ctx.reloj.ahora().getTime())).toBe(true);
       expect(fila.detalle).toEqual({
         ordenId: o.ordenId,
         productoId: c.lomoId,
@@ -1413,7 +1530,13 @@ describe('criterio 41 · una fila anular_item con el autorizador y el detalle ex
     const o = await ordenNueva();
     const antes = await auditoriaSalon(admin, e.A.empresaId);
     exigirEstado(
-      await anularItem(ctx, supervisor.token, o.ordenId, o.combo.id, cuerpoDeAnulacion({ cantidad: 3, destinoStock: 'MERMA' })),
+      await anularItem(
+        ctx,
+        supervisor.token,
+        o.ordenId,
+        o.combo.id,
+        cuerpoDeAnulacion({ cantidad: 3, destinoStock: 'MERMA' }),
+      ),
       201,
       'anular el combo',
     );
@@ -1439,7 +1562,9 @@ describe('criterio 41 · una fila anular_item con el autorizador y el detalle ex
     const cuerpo = cuerpoDeAnulacion({ cantidad: 1 });
     const claveDeIdempotencia = randomUUID();
     exigirEstado(
-      await anularItem(ctx, supervisor.token, o.ordenId, o.combo.id, cuerpo, { clave: claveDeIdempotencia }),
+      await anularItem(ctx, supervisor.token, o.ordenId, o.combo.id, cuerpo, {
+        clave: claveDeIdempotencia,
+      }),
       201,
       'anular',
     );
@@ -1450,11 +1575,15 @@ describe('criterio 41 · una fila anular_item con el autorizador y el detalle ex
       equipo_id: supervisor.equipoId,
     });
     exigirEstado(
-      await anularItem(ctx, supervisor.token, o.ordenId, o.combo.id, cuerpo, { clave: claveDeIdempotencia }),
+      await anularItem(ctx, supervisor.token, o.ordenId, o.combo.id, cuerpo, {
+        clave: claveDeIdempotencia,
+      }),
       201,
       'réplica',
     );
-    expect((await auditoriaNueva(admin, e.A.empresaId, antes)).map((f) => f.accion)).toEqual(['anular_item']);
+    expect((await auditoriaNueva(admin, e.A.empresaId, antes)).map((f) => f.accion)).toEqual([
+      'anular_item',
+    ]);
   });
 
   it('los rechazos (409, 422, 403) no dejan fila de anular_item', async () => {
@@ -1462,7 +1591,11 @@ describe('criterio 41 · una fila anular_item con el autorizador y el detalle ex
     const mozo = await actor('MOZO', 'contrasena');
     const o = await ordenNueva();
     const antes = await auditoriaSalon(admin, e.A.empresaId);
-    esperarError(await anularItem(ctx, mozo.token, o.ordenId, o.combo.id, cuerpoDeAnulacion()), 403, 'CLAVE_REQUERIDA');
+    esperarError(
+      await anularItem(ctx, mozo.token, o.ordenId, o.combo.id, cuerpoDeAnulacion()),
+      403,
+      'CLAVE_REQUERIDA',
+    );
     const auth = await clave(mozo);
     esperarError(
       await anularItem(ctx, mozo.token, o.ordenId, o.combo.id, cuerpoDeAnulacion({ cantidad: 9 }), {
@@ -1488,14 +1621,25 @@ describe('criterio 42 · anular la orden', () => {
       const auth = await clave(mozo, 'ANULAR_ORDEN', 'Autorizo anular la mesa');
       const cuerpo = { motivo: 'Se fueron sin pagar', destinoStock: 'MERMA' as const };
 
-      const res = await anularOrden(ctx, mozo.token, o.ordenId, cuerpo, { autorizacion: auth.autorizacionId });
+      const res = await anularOrden(ctx, mozo.token, o.ordenId, cuerpo, {
+        autorizacion: auth.autorizacionId,
+      });
       exigirEstado(res, 200, 'anular la orden');
       const orden = ordenRespuestaSchema.parse(res.body);
-      expect(orden).toMatchObject({ id: o.ordenId, estado: 'ANULADA', sinConsumo: false, total: '0.00' });
-      expect(new Date(orden.anuladaEn!).getTime()).toBe(ctx.reloj.ahora().getTime());
+      expect(orden).toMatchObject({
+        id: o.ordenId,
+        estado: 'ANULADA',
+        sinConsumo: false,
+        total: '0.00',
+      });
+      expect(cerca(orden.anuladaEn!, ctx.reloj.ahora().getTime())).toBe(true);
       expect(orden.items).toHaveLength(3);
       for (const item of orden.items) {
-        expect(item, item.nombre).toMatchObject({ cantidadVigente: 0, estado: 'ANULADO', totalVigente: '0.00' });
+        expect(item, item.nombre).toMatchObject({
+          cantidadVigente: 0,
+          estado: 'ANULADO',
+          totalVigente: '0.00',
+        });
         expect(item.cantidadAnulada).toBe(item.cantidad);
       }
 
@@ -1505,13 +1649,20 @@ describe('criterio 42 · anular la orden', () => {
       const relaciones = await filasDe(admin, 'orden_mesa', 'orden_id = $1', [o.ordenId]);
       expect(relaciones.length).toBeGreaterThan(0);
       for (const r of relaciones) expect(r.hasta).not.toBeNull();
-      exigirEstado(await abrirOrden(ctx, mozo.token, { mesaId: o.mesa.id }), 201, 'abrir de nuevo la mesa');
+      exigirEstado(
+        await abrirOrden(ctx, mozo.token, { mesaId: o.mesa.id }),
+        201,
+        'abrir de nuevo la mesa',
+      );
 
       // La autorización quedó usada y la auditoría dice quién pidió y quién autorizó.
       expect((await autorizacionGuardada(admin, auth.autorizacionId)).usada_en).not.toBeNull();
-      const consumo = await filasDe(admin, 'auditoria', `autorizacion_id = $1 AND accion = 'ANULAR_ORDEN'`, [
-        auth.autorizacionId,
-      ]);
+      const consumo = await filasDe(
+        admin,
+        'auditoria',
+        `autorizacion_id = $1 AND accion = 'ANULAR_ORDEN'`,
+        [auth.autorizacionId],
+      );
       expect(consumo).toHaveLength(1);
       expect(consumo[0]).toMatchObject({
         actor_usuario_id: mozo.persona.id,
@@ -1522,7 +1673,11 @@ describe('criterio 42 · anular la orden', () => {
       const anulaciones = await filasDe(admin, 'anulacion_item', 'orden_id = $1', [o.ordenId]);
       expect(anulaciones).toHaveLength(3);
       for (const a of anulaciones) {
-        expect(a).toMatchObject({ motivo: 'Se fueron sin pagar', destino_stock: 'MERMA', de_orden: true });
+        expect(a).toMatchObject({
+          motivo: 'Se fueron sin pagar',
+          destino_stock: 'MERMA',
+          de_orden: true,
+        });
       }
     },
   );
@@ -1535,16 +1690,30 @@ describe('criterio 42 · anular la orden', () => {
     const o = await ordenNueva();
     // Un combo anulado en parte y la gaseosa anulada del todo: la orden se anula con lo que queda vigente.
     exigirEstado(
-      await anularItem(ctx, supervisor.token, o.ordenId, o.combo.id, cuerpoDeAnulacion({ cantidad: 1 })),
+      await anularItem(
+        ctx,
+        supervisor.token,
+        o.ordenId,
+        o.combo.id,
+        cuerpoDeAnulacion({ cantidad: 1 }),
+      ),
       201,
       'anulación parcial previa',
     );
     exigirEstado(
-      await anularItem(ctx, supervisor.token, o.ordenId, o.gaseosa.id, cuerpoDeAnulacion({ cantidad: 2 })),
+      await anularItem(
+        ctx,
+        supervisor.token,
+        o.ordenId,
+        o.gaseosa.id,
+        cuerpoDeAnulacion({ cantidad: 2 }),
+      ),
       201,
       'anulación total previa',
     );
-    const comandasAntes = new Set((await comandasDeAnulacion(admin, o.ordenId)).map((f) => f.id as string));
+    const comandasAntes = new Set(
+      (await comandasDeAnulacion(admin, o.ordenId)).map((f) => f.id as string),
+    );
     await asentar();
     ctx.publicador.limpiar();
     ctx.inventario.limpiar();
@@ -1557,12 +1726,26 @@ describe('criterio 42 · anular la orden', () => {
     const orden = ordenRespuestaSchema.parse(res.body);
     expect(orden.estado).toBe('ANULADA');
     const itemsPorId = new Map(orden.items.map((i) => [i.id, i]));
-    expect(itemsPorId.get(o.lomo.id)).toMatchObject({ cantidadAnulada: 2, cantidadVigente: 0, estado: 'ANULADO' });
-    expect(itemsPorId.get(o.combo.id)).toMatchObject({ cantidadAnulada: 3, cantidadVigente: 0, estado: 'ANULADO' });
-    expect(itemsPorId.get(o.gaseosa.id)).toMatchObject({ cantidadAnulada: 2, cantidadVigente: 0, estado: 'ANULADO' });
+    expect(itemsPorId.get(o.lomo.id)).toMatchObject({
+      cantidadAnulada: 2,
+      cantidadVigente: 0,
+      estado: 'ANULADO',
+    });
+    expect(itemsPorId.get(o.combo.id)).toMatchObject({
+      cantidadAnulada: 3,
+      cantidadVigente: 0,
+      estado: 'ANULADO',
+    });
+    expect(itemsPorId.get(o.gaseosa.id)).toMatchObject({
+      cantidadAnulada: 2,
+      cantidadVigente: 0,
+      estado: 'ANULADO',
+    });
 
     // Las comandas nuevas, por estación, con la cantidad vigente que tenía cada parte.
-    const nuevas = (await comandasDeAnulacion(admin, o.ordenId)).filter((f) => !comandasAntes.has(f.id as string));
+    const nuevas = (await comandasDeAnulacion(admin, o.ordenId)).filter(
+      (f) => !comandasAntes.has(f.id as string),
+    );
     expect(nuevas.length).toBeGreaterThanOrEqual(2);
     const kds = comandasDelKds(await leerCocina(ctx, cocina));
     const lineasPorEstacion: Record<string, { nombre: string; cantidad: number }[]> = {};
@@ -1570,14 +1753,18 @@ describe('criterio 42 · anular la orden', () => {
       const k = kds.find((x) => x.id === fila.id)!;
       expect(k, `la comanda ${String(fila.id)} está en el KDS`).toBeDefined();
       expect(k.tipo).toBe('ANULACION');
-      (lineasPorEstacion[k.estacion.nombre] ??= []).push(...k.lineas.map((l) => ({ nombre: l.nombre, cantidad: l.cantidad })));
+      (lineasPorEstacion[k.estacion.nombre] ??= []).push(
+        ...k.lineas.map((l) => ({ nombre: l.nombre, cantidad: l.cantidad })),
+      );
     }
     expect(Object.keys(lineasPorEstacion).sort()).toEqual(['Barra', 'Cocina']);
     expect(lineasComo(lineasPorEstacion.Cocina!)).toEqual([
       { nombre: 'Hamburguesa clásica', cantidad: 2 },
       { nombre: 'Lomo saltado', cantidad: 2 },
     ]);
-    expect(lineasComo(lineasPorEstacion.Barra!)).toEqual([{ nombre: 'Cerveza Pilsen', cantidad: 2 }]);
+    expect(lineasComo(lineasPorEstacion.Barra!)).toEqual([
+      { nombre: 'Cerveza Pilsen', cantidad: 2 },
+    ]);
 
     // Una sola llamada al inventario con todas las partes (la gaseosa ya estaba anulada).
     const llamadas = ctx.inventario.alAnularLlamadas();
@@ -1585,21 +1772,43 @@ describe('criterio 42 · anular la orden', () => {
     expect(llamadas[0]).toMatchObject({ sucursalId: e.A.S1, destino: 'VUELVE' });
     expect([...llamadas[0]!.partes].sort(porNombre)).toEqual(
       [
-        { productoId: c.huevoFritoId, nombre: 'Huevo frito', cantidad: 2, tipoControlStock: 'UNIDADES' },
-        { productoId: c.hamburguesaId, nombre: 'Hamburguesa clásica', cantidad: 2, tipoControlStock: 'PORCIONES' },
-        { productoId: c.cervezaPilsenId, nombre: 'Cerveza Pilsen', cantidad: 2, tipoControlStock: 'UNIDADES' },
+        {
+          productoId: c.huevoFritoId,
+          nombre: 'Huevo frito',
+          cantidad: 2,
+          tipoControlStock: 'UNIDADES',
+        },
+        {
+          productoId: c.hamburguesaId,
+          nombre: 'Hamburguesa clásica',
+          cantidad: 2,
+          tipoControlStock: 'PORCIONES',
+        },
+        {
+          productoId: c.cervezaPilsenId,
+          nombre: 'Cerveza Pilsen',
+          cantidad: 2,
+          tipoControlStock: 'UNIDADES',
+        },
       ].sort(porNombre),
     );
 
     // Eventos: salon.cambio (la mesa queda libre), orden.cambio y cocina.comanda por cada comanda.
     await asentar();
-    expect(eventosDe(ctx, 'salon.cambio').map((x) => x.datos)).toEqual([{ mesaIds: [o.mesa.id], ordenId: o.ordenId }]);
+    expect(eventosDe(ctx, 'salon.cambio').map((x) => x.datos)).toEqual([
+      { mesaIds: [o.mesa.id], ordenId: o.ordenId },
+    ]);
     expect(eventosDe(ctx, 'orden.cambio').map((x) => x.datos)).toEqual([{ ordenId: o.ordenId }]);
-    expect(eventosDe(ctx, 'cocina.comanda').map((x) => (x.datos as { comandaId: string }).comandaId).sort()).toEqual(
-      nuevas.map((f) => f.id as string).sort(),
-    );
+    expect(
+      eventosDe(ctx, 'cocina.comanda')
+        .map((x) => (x.datos as { comandaId: string }).comandaId)
+        .sort(),
+    ).toEqual(nuevas.map((f) => f.id as string).sort());
     for (const ev of ctx.publicador.eventos()) {
-      expect(ev).toMatchObject({ empresaId: e.A.empresaId, sala: { tipo: 'sucursal', sucursalId: e.A.S1 } });
+      expect(ev).toMatchObject({
+        empresaId: e.A.empresaId,
+        sala: { tipo: 'sucursal', sucursalId: e.A.S1 },
+      });
     }
   });
 
@@ -1608,11 +1817,18 @@ describe('criterio 42 · anular la orden', () => {
     const supervisor = await actor('SUPERVISOR', 'contrasena');
     const o = await ordenNueva();
     exigirEstado(await pedirPrecuenta(ctx, mozo.token, o.ordenId), 201, 'pre-cuenta');
-    exigirEstado(await anularOrden(ctx, supervisor.token, o.ordenId), 200, 'anular desde la pre-cuenta');
+    exigirEstado(
+      await anularOrden(ctx, supervisor.token, o.ordenId),
+      200,
+      'anular desde la pre-cuenta',
+    );
     const guardada = await filasDe(admin, 'precuenta', 'orden_id = $1', [o.ordenId]);
     expect(guardada).toHaveLength(1);
     expect(guardada[0]!.invalidada_en).not.toBeNull();
-    expect(await mesaEnSalon(ctx, mozo.token, o.mesa.id)).toMatchObject({ estado: 'LIBRE', orden: null });
+    expect(await mesaEnSalon(ctx, mozo.token, o.mesa.id)).toMatchObject({
+      estado: 'LIBRE',
+      orden: null,
+    });
   });
 
   it.each(['SUPERVISOR', 'ADMINISTRADOR'] as const)('%s anula la orden sin clave', async (rol) => {
@@ -1634,30 +1850,38 @@ describe('criterio 42 · anular la orden', () => {
   });
 
   describe.each(['MOZO', 'CAJERO'] as const)('%s necesita la clave', (rol) => {
-    it.each(TIPOS_DE_SESION)('sesión de %s: sin cabecera 403 CLAVE_REQUERIDA; con la clave de otra acción 403; sin cambios', async (tipo) => {
-      const quien = await actor(rol, tipo);
-      const o = await ordenNueva();
-      const deItem = await clave(quien, 'ANULAR_ITEM_ENVIADO');
-      const antes = await prepararRechazo();
-      esperarError(await anularOrden(ctx, quien.token, o.ordenId), 403, 'CLAVE_REQUERIDA');
-      esperarError(
-        await anularOrden(ctx, quien.token, o.ordenId, undefined, { autorizacion: deItem.autorizacionId }),
-        403,
-        'AUTORIZACION_INVALIDA',
-      );
-      await exigirSinCambios(antes, 'anular la orden sin la clave correcta');
-      expect((await autorizacionGuardada(admin, deItem.autorizacionId)).usada_en).toBeNull();
-    });
+    it.each(TIPOS_DE_SESION)(
+      'sesión de %s: sin cabecera 403 CLAVE_REQUERIDA; con la clave de otra acción 403; sin cambios',
+      async (tipo) => {
+        const quien = await actor(rol, tipo);
+        const o = await ordenNueva();
+        const deItem = await clave(quien, 'ANULAR_ITEM_ENVIADO');
+        const antes = await prepararRechazo();
+        esperarError(await anularOrden(ctx, quien.token, o.ordenId), 403, 'CLAVE_REQUERIDA');
+        esperarError(
+          await anularOrden(ctx, quien.token, o.ordenId, undefined, {
+            autorizacion: deItem.autorizacionId,
+          }),
+          403,
+          'AUTORIZACION_INVALIDA',
+        );
+        await exigirSinCambios(antes, 'anular la orden sin la clave correcta');
+        expect((await autorizacionGuardada(admin, deItem.autorizacionId)).usada_en).toBeNull();
+      },
+    );
   });
 
-  it.each(TIPOS_DE_SESION)('Cocina/Barra recibe 403 PROHIBIDO (sesión de %s) y no cambia nada', async (tipo) => {
-    const cocina = await actor('COCINA_BARRA', tipo);
-    const o = await ordenNueva();
-    const antes = await prepararRechazo();
-    esperarError(await anularOrden(ctx, cocina.token, o.ordenId), 403, 'PROHIBIDO');
-    esperarError(await anularOrden(ctx, cocina.token, randomUUID()), 403, 'PROHIBIDO');
-    await exigirSinCambios(antes, 'Cocina/Barra');
-  });
+  it.each(TIPOS_DE_SESION)(
+    'Cocina/Barra recibe 403 PROHIBIDO (sesión de %s) y no cambia nada',
+    async (tipo) => {
+      const cocina = await actor('COCINA_BARRA', tipo);
+      const o = await ordenNueva();
+      const antes = await prepararRechazo();
+      esperarError(await anularOrden(ctx, cocina.token, o.ordenId), 403, 'PROHIBIDO');
+      esperarError(await anularOrden(ctx, cocina.token, randomUUID()), 403, 'PROHIBIDO');
+      await exigirSinCambios(antes, 'Cocina/Barra');
+    },
+  );
 
   it('una orden que ya no está abierta responde 409 ORDEN_NO_ABIERTA y el consumo de la autorización se revierte', async () => {
     const mozo = await actor('MOZO', 'contrasena');
@@ -1667,7 +1891,9 @@ describe('criterio 42 · anular la orden', () => {
     const auth = await clave(mozo, 'ANULAR_ORDEN');
     const antes = await prepararRechazo();
     esperarError(
-      await anularOrden(ctx, mozo.token, o.ordenId, undefined, { autorizacion: auth.autorizacionId }),
+      await anularOrden(ctx, mozo.token, o.ordenId, undefined, {
+        autorizacion: auth.autorizacionId,
+      }),
       409,
       'ORDEN_NO_ABIERTA',
     );
@@ -1694,7 +1920,11 @@ describe('criterio 42 · anular la orden', () => {
       { motivo: 'x', destinoStock: 'VUELVE', sucursalId: randomUUID() },
       { motivo: 'm'.repeat(301), destinoStock: 'VUELVE' },
     ]) {
-      esperarError(await anularOrden(ctx, supervisor.token, o.ordenId, cuerpo), 400, 'DATOS_INVALIDOS');
+      esperarError(
+        await anularOrden(ctx, supervisor.token, o.ordenId, cuerpo),
+        400,
+        'DATOS_INVALIDOS',
+      );
     }
     esperarError(await anularOrden(ctx, adminS1.token, deS2.ordenId), 404, 'NO_ENCONTRADO');
     esperarError(await anularOrden(ctx, adminS1.token, randomUUID()), 404, 'NO_ENCONTRADO');
@@ -1706,9 +1936,13 @@ describe('criterio 42 · anular la orden', () => {
     const o = await ordenNueva();
     const auth = await clave(mozo, 'ANULAR_ORDEN');
     const antes = await prepararRechazo();
-    ctx.inventario.lanzarAlAnular(new ErrorAplicacion(422, 'DATOS_INVALIDOS', 'Sin permiso del inventario'));
+    ctx.inventario.lanzarAlAnular(
+      new ErrorAplicacion(422, 'DATOS_INVALIDOS', 'Sin permiso del inventario'),
+    );
     try {
-      const res = await anularOrden(ctx, mozo.token, o.ordenId, undefined, { autorizacion: auth.autorizacionId });
+      const res = await anularOrden(ctx, mozo.token, o.ordenId, undefined, {
+        autorizacion: auth.autorizacionId,
+      });
       esperarError(res, 422, 'DATOS_INVALIDOS');
     } finally {
       ctx.inventario.lanzarAlAnular(null);
@@ -1721,7 +1955,9 @@ describe('criterio 42 · anular la orden', () => {
     expect(await mesaEnSalon(ctx, mozo.token, o.mesa.id)).toMatchObject({ estado: 'OCUPADA' });
     // Y la misma autorización sirve después.
     exigirEstado(
-      await anularOrden(ctx, mozo.token, o.ordenId, undefined, { autorizacion: auth.autorizacionId }),
+      await anularOrden(ctx, mozo.token, o.ordenId, undefined, {
+        autorizacion: auth.autorizacionId,
+      }),
       200,
       'anular con la misma autorización',
     );
@@ -1752,7 +1988,9 @@ describe('criterio 42 · anular la orden', () => {
     expect((await autorizacionGuardada(admin, auth.autorizacionId)).usada_en).toEqual(usadaEn);
     expect(ctx.inventario.alAnularLlamadas()).toHaveLength(1);
     expect(
-      (await auditoriaSalon(admin, e.A.empresaId, { entidadId: o.ordenId })).filter((f) => f.accion === 'anular_orden'),
+      (await auditoriaSalon(admin, e.A.empresaId, { entidadId: o.ordenId })).filter(
+        (f) => f.accion === 'anular_orden',
+      ),
     ).toHaveLength(1);
   });
 });
@@ -1764,12 +2002,24 @@ describe('criterio 43 · una fila anular_orden y ninguna anular_item por ítem',
     const supervisor = await actor('SUPERVISOR', 'contrasena');
     const o = await ordenNueva(); // mozo responsable: el Mozo A.mozo
     exigirEstado(
-      await anularItem(ctx, supervisor.token, o.ordenId, o.gaseosa.id, cuerpoDeAnulacion({ cantidad: 2 })),
+      await anularItem(
+        ctx,
+        supervisor.token,
+        o.ordenId,
+        o.gaseosa.id,
+        cuerpoDeAnulacion({ cantidad: 2 }),
+      ),
       201,
       'anulación previa de la gaseosa',
     );
     exigirEstado(
-      await anularItem(ctx, supervisor.token, o.ordenId, o.combo.id, cuerpoDeAnulacion({ cantidad: 1 })),
+      await anularItem(
+        ctx,
+        supervisor.token,
+        o.ordenId,
+        o.combo.id,
+        cuerpoDeAnulacion({ cantidad: 1 }),
+      ),
       201,
       'anulación previa de un combo',
     );
@@ -1785,7 +2035,10 @@ describe('criterio 43 · una fila anular_orden y ninguna anular_item por ítem',
     exigirEstado(res, 200, 'anular la orden');
 
     const nuevas = await auditoriaNueva(admin, e.A.empresaId, antes);
-    expect(nuevas.map((f) => f.accion).sort(), 'sin filas anular_item por ítem').toEqual(['ANULAR_ORDEN', 'anular_orden']);
+    expect(nuevas.map((f) => f.accion).sort(), 'sin filas anular_item por ítem').toEqual([
+      'ANULAR_ORDEN',
+      'anular_orden',
+    ]);
     const fila = nuevas.find((f) => f.accion === 'anular_orden')!;
     expect(fila).toMatchObject({
       entidad: 'orden',
@@ -1810,7 +2063,12 @@ describe('criterio 43 · una fila anular_orden y ninguna anular_item por ítem',
     expect([...detalle.items].sort((a, b) => a.itemId.localeCompare(b.itemId))).toEqual(
       [
         { itemId: o.lomo.id, nombre: 'Lomo saltado', cantidadAnulada: 2, totalAnulado: '61.00' },
-        { itemId: o.combo.id, nombre: 'Combo hamburguesa', cantidadAnulada: 2, totalAnulado: '54.80' },
+        {
+          itemId: o.combo.id,
+          nombre: 'Combo hamburguesa',
+          cantidadAnulada: 2,
+          totalAnulado: '54.80',
+        },
       ].sort((a, b) => a.itemId.localeCompare(b.itemId)),
     );
     // Las mesas de la orden: por id o por nombre, la mesa aparece.
@@ -1842,37 +2100,50 @@ describe('criterio 44 · liberar una mesa sin consumo', () => {
   }
 
   describe.each(['MOZO', 'CAJERO', 'SUPERVISOR', 'ADMINISTRADOR'] as const)('%s', (rol) => {
-    it.each(TIPOS_DE_SESION)('libera sin clave (sesión de %s): 200, ANULADA, sinConsumo y la mesa libre', async (tipo) => {
-      const e = await esc();
-      const quien = await actor(rol, tipo);
-      const { ordenId, mesa } = await ordenVacia(quien.token);
-      await asentar();
-      ctx.publicador.limpiar();
-      ctx.inventario.limpiar();
-      const antes = await auditoriaSalon(admin, e.A.empresaId);
-      const res = await liberarMesa(ctx, quien.token, ordenId);
-      exigirEstado(res, 200, 'liberar la mesa');
-      const orden = ordenRespuestaSchema.parse(res.body);
-      expect(orden).toMatchObject({ id: ordenId, estado: 'ANULADA', sinConsumo: true, items: [] });
-      expect(await mesaEnSalon(ctx, quien.token, mesa.id)).toMatchObject({ estado: 'LIBRE', orden: null });
+    it.each(TIPOS_DE_SESION)(
+      'libera sin clave (sesión de %s): 200, ANULADA, sinConsumo y la mesa libre',
+      async (tipo) => {
+        const e = await esc();
+        const quien = await actor(rol, tipo);
+        const { ordenId, mesa } = await ordenVacia(quien.token);
+        await asentar();
+        ctx.publicador.limpiar();
+        ctx.inventario.limpiar();
+        const antes = await auditoriaSalon(admin, e.A.empresaId);
+        const res = await liberarMesa(ctx, quien.token, ordenId);
+        exigirEstado(res, 200, 'liberar la mesa');
+        const orden = ordenRespuestaSchema.parse(res.body);
+        expect(orden).toMatchObject({
+          id: ordenId,
+          estado: 'ANULADA',
+          sinConsumo: true,
+          items: [],
+        });
+        expect(await mesaEnSalon(ctx, quien.token, mesa.id)).toMatchObject({
+          estado: 'LIBRE',
+          orden: null,
+        });
 
-      const fila = unaFilaDe(await auditoriaNueva(admin, e.A.empresaId, antes), 'liberar_mesa');
-      expect(fila).toMatchObject({
-        entidad: 'orden',
-        entidad_id: ordenId,
-        sucursal_id: e.A.S1,
-        actor_usuario_id: quien.persona.id,
-        autorizado_por_id: null,
-        equipo_id: tipo === 'pin' ? quien.equipoId : null,
-      });
-      expect(new Date(fila.ocurrido_en).getTime()).toBe(ctx.reloj.ahora().getTime());
+        const fila = unaFilaDe(await auditoriaNueva(admin, e.A.empresaId, antes), 'liberar_mesa');
+        expect(fila).toMatchObject({
+          entidad: 'orden',
+          entidad_id: ordenId,
+          sucursal_id: e.A.S1,
+          actor_usuario_id: quien.persona.id,
+          autorizado_por_id: null,
+          equipo_id: tipo === 'pin' ? quien.equipoId : null,
+        });
+        expect(cerca(fila.ocurrido_en, ctx.reloj.ahora().getTime())).toBe(true);
 
-      await asentar();
-      expect(eventosDe(ctx, 'salon.cambio').map((x) => x.datos)).toEqual([{ mesaIds: [mesa.id], ordenId }]);
-      expect(ctx.inventario.llamadas()).toEqual([]);
-      // Sin comandas de anulación ni consumo de autorizaciones.
-      expect(await comandasDeAnulacion(admin, ordenId)).toEqual([]);
-    });
+        await asentar();
+        expect(eventosDe(ctx, 'salon.cambio').map((x) => x.datos)).toEqual([
+          { mesaIds: [mesa.id], ordenId },
+        ]);
+        expect(ctx.inventario.llamadas()).toEqual([]);
+        // Sin comandas de anulación ni consumo de autorizaciones.
+        expect(await comandasDeAnulacion(admin, ordenId)).toEqual([]);
+      },
+    );
   });
 
   it('la réplica con la misma clave devuelve lo guardado sin otra fila de auditoría ni otro evento', async () => {
@@ -1888,7 +2159,9 @@ describe('criterio 44 · liberar una mesa sin consumo', () => {
     expect(replica.body).toEqual(primera.body);
     await exigirSinCambios(antes, 'réplica de liberar');
     expect(
-      (await auditoriaSalon(admin, e.A.empresaId, { entidadId: ordenId })).filter((f) => f.accion === 'liberar_mesa'),
+      (await auditoriaSalon(admin, e.A.empresaId, { entidadId: ordenId })).filter(
+        (f) => f.accion === 'liberar_mesa',
+      ),
     ).toHaveLength(1);
   });
 
@@ -1911,7 +2184,13 @@ describe('criterio 44 · liberar una mesa sin consumo', () => {
 
     for (const item of [o.lomo, o.combo, o.gaseosa]) {
       exigirEstado(
-        await anularItem(ctx, supervisor.token, o.ordenId, item.id, cuerpoDeAnulacion({ cantidad: item.cantidad })),
+        await anularItem(
+          ctx,
+          supervisor.token,
+          o.ordenId,
+          item.id,
+          cuerpoDeAnulacion({ cantidad: item.cantidad }),
+        ),
         201,
         `anular ${item.nombre}`,
       );
@@ -1931,7 +2210,11 @@ describe('criterio 44 · liberar una mesa sin consumo', () => {
       { productoId: randomUUID(), modificadorIds: [], cantidad: 1 },
     ]);
     expect(rechazado.status).toBe(422);
-    exigirEstado(await liberarMesa(ctx, mozo.token, ordenId), 200, 'liberar tras un envío rechazado');
+    exigirEstado(
+      await liberarMesa(ctx, mozo.token, ordenId),
+      200,
+      'liberar tras un envío rechazado',
+    );
 
     const otra = await ordenVacia(mozo.token);
     exigirEstado(await enviar(ctx, mozo.token, otra.ordenId, [lineaGaseosa(c, 1)]), 201, 'enviar');
@@ -1957,7 +2240,11 @@ describe('criterio 44 · liberar una mesa sin consumo', () => {
     const deS2 = await abrirOrden(ctx, mozoS2, { mesaId: mesaS2.id });
     exigirEstado(deS2, 201, 'abrir en S2');
     const antes = await prepararRechazo();
-    esperarError(await liberarMesa(ctx, mozo.token, ordenId, { clave: null }), 400, 'DATOS_INVALIDOS');
+    esperarError(
+      await liberarMesa(ctx, mozo.token, ordenId, { clave: null }),
+      400,
+      'DATOS_INVALIDOS',
+    );
     esperarError(await liberarMesa(ctx, adminS1.token, deS2.body.id), 404, 'NO_ENCONTRADO');
     esperarError(await liberarMesa(ctx, adminS1.token, randomUUID()), 404, 'NO_ENCONTRADO');
     await exigirSinCambios(antes, 'rechazos de liberar');

@@ -16,6 +16,7 @@ import { AlmacenEnMemoria } from '../../src/nucleo/archivos';
 import { PublicadorEnMemoria } from '../../src/nucleo/eventos';
 import { RelojManual } from '../../src/nucleo/reloj';
 import { enTransaccion } from '../aislamiento/fabrica';
+import type { EntradaProhibida } from '../aislamiento/nombres-prohibidos';
 import { INICIO_POR_DEFECTO } from '../acceso/fabrica-plataforma';
 import {
   bearer,
@@ -338,13 +339,18 @@ export async function idsDeEmpresaSalon(
   await tomar(`SELECT id FROM mesa WHERE empresa_id = $1${f}`, p);
   await tomar(`SELECT id FROM orden WHERE empresa_id = $1${f}`, p);
   await tomar(`SELECT id FROM comanda WHERE empresa_id = $1${f}`, p);
-  const deOrdenes = sucursalId === undefined ? '' : ' AND orden_id IN (SELECT id FROM orden WHERE sucursal_id = $2)';
+  const deOrdenes =
+    sucursalId === undefined
+      ? ''
+      : ' AND orden_id IN (SELECT id FROM orden WHERE sucursal_id = $2)';
   for (const tabla of ['orden_mesa', 'envio', 'marcha', 'item', 'anulacion_item', 'precuenta']) {
     await tomar(`SELECT id FROM ${tabla} WHERE empresa_id = $1${deOrdenes}`, p);
   }
   await tomar(
     `SELECT l.id FROM comanda_linea l WHERE l.empresa_id = $1${
-      sucursalId === undefined ? '' : ' AND l.comanda_id IN (SELECT id FROM comanda WHERE sucursal_id = $2)'
+      sucursalId === undefined
+        ? ''
+        : ' AND l.comanda_id IN (SELECT id FROM comanda WHERE sucursal_id = $2)'
     }`,
     p,
   );
@@ -393,7 +399,7 @@ export async function sembrarCartaEjemplo(ctx: AppCarta, token: string): Promise
       nombre,
       familiaId: familia.id,
       seVendeSolo: false,
-      ...(estacionId === null ? {} : { estacionId }),
+      estacionId,
       tipoControlStock: control,
     });
   const huevoFrito = await ligado('Huevo frito', cocina.id, 'UNIDADES');
@@ -469,6 +475,7 @@ export async function sembrarCartaEjemplo(ctx: AppCarta, token: string): Promise
     nombre: 'Gaseosa 1 L',
     familiaId: familia.id,
     precio: '9.00',
+    estacionId: null,
     tipoControlStock: 'UNIDADES',
   });
   return {
@@ -537,7 +544,10 @@ export function lineaCombo(
   const { bebida, acompanamiento, ...resto } = extra;
   return {
     productoId: carta.comboId,
-    modificadorIds: [bebida ?? carta.bebida.cerveza, acompanamiento ?? carta.acompanamiento.ensalada],
+    modificadorIds: [
+      bebida ?? carta.bebida.cerveza,
+      acompanamiento ?? carta.acompanamiento.ensalada,
+    ],
     cantidad: 1,
     ...resto,
   };
@@ -581,7 +591,13 @@ export async function sembrarSalon(
     const res = await llamar(ctx, tokenAdmin, {
       metodo: 'post',
       ruta: `/sucursales/${sucursalId}/zonas/${zonaId}/mesas`,
-      cuerpo: { nombre, capacidad: 4, forma: 'CUADRADA', columna: (i % 4) + 1, fila: Math.floor(i / 4) + 1 },
+      cuerpo: {
+        nombre,
+        capacidad: 4,
+        forma: 'CUADRADA',
+        columna: (i % 4) + 1,
+        fila: Math.floor(i / 4) + 1,
+      },
     });
     exigirEstado(res, 201, `crear la mesa ${nombre}`);
     mesas.push({ id: res.body.id as string, nombre });
@@ -595,13 +611,16 @@ export interface OpcionesLlamadaConClave {
   cabeceras?: Record<string, string>;
 }
 
+/** Respuesta de una petición con un id de cliente: lleva además el id que se mandó. */
+export type RespuestaConId = request.Response & { idEnviado: string };
+
 /** `POST /ordenes` con `Idempotency-Key`. */
 export function abrirOrden(
   ctx: AppCarta,
   token: string,
   cuerpo: { id?: string; mesaId: string; comensales?: number; mozoId?: string },
   opciones: OpcionesLlamadaConClave = {},
-) {
+): Promise<RespuestaConId> {
   const id = cuerpo.id ?? randomUUID();
   return llamar(ctx, token, {
     metodo: 'post',
@@ -618,7 +637,7 @@ export function enviar(
   ordenId: string,
   lineas: LineaEnvio[],
   opciones: OpcionesLlamadaConClave & { id?: string } = {},
-) {
+): Promise<RespuestaConId> {
   const id = opciones.id ?? randomUUID();
   return llamar(ctx, token, {
     metodo: 'post',
@@ -761,7 +780,9 @@ export async function construirMundo(
 
   const principal = await sembrarOrden(ctx, admin, tokenS1, parcial, E.S1, salon1.mesas[0]!.id);
   const marchaId = randomUUID();
-  const marcha = await postConClave(ctx, tokenS1, `/ordenes/${principal.id}/marchas`, { id: marchaId });
+  const marcha = await postConClave(ctx, tokenS1, `/ordenes/${principal.id}/marchas`, {
+    id: marchaId,
+  });
   exigirEstado(marcha, 201, 'marchar el segundo tiempo');
   const anulacionId = randomUUID();
   const anulacion = await postConClave(
@@ -796,3 +817,89 @@ export async function construirMundo(
     deS2,
   };
 }
+
+// ------------------------------------------------------------------------------------------------
+// Nombres del canal lateral de PostgreSQL que la guarda de la API rechaza (criterio 70)
+// ------------------------------------------------------------------------------------------------
+
+const pgCatalog = 'pg_catalog' as const;
+/** Clave de cerrojo poco común: si la sentencia llegara a la base, no estorba a otras pruebas. */
+const CLAVE = '424242424242';
+
+/**
+ * Cada nombre de la lista del criterio 70 con una sentencia sintácticamente válida que lo menciona, en el
+ * formato de `nombres-prohibidos.ts` de 001 (`variantes()` lo reescribe con esquema, comillas, mayúsculas,
+ * tras otra sentencia y tras comentarios).
+ */
+export const ENTRADAS_TIEMPO_REAL: EntradaProhibida[] = [
+  {
+    nombre: 'pg_notify',
+    grupo: '22d',
+    sql: (n) => `SELECT ${n}('canal_p4_prueba', 'carga')`,
+    esquema: pgCatalog,
+  },
+  {
+    nombre: 'pg_listening_channels',
+    grupo: '22d',
+    sql: (n) => `SELECT * FROM ${n}()`,
+    esquema: pgCatalog,
+  },
+  { nombre: 'pg_locks', grupo: '22d', sql: (n) => `SELECT mode FROM ${n}`, esquema: pgCatalog },
+  { nombre: 'pg_blocking_pids', grupo: '22d', sql: (n) => `SELECT ${n}(1)`, esquema: pgCatalog },
+  {
+    nombre: 'pg_safe_snapshot_blocking_pids',
+    grupo: '22d',
+    sql: (n) => `SELECT ${n}(1)`,
+    esquema: pgCatalog,
+  },
+  {
+    nombre: 'pg_advisory_lock',
+    grupo: '22d',
+    sql: (n) => `SELECT ${n}(${CLAVE})`,
+    esquema: pgCatalog,
+  },
+  {
+    nombre: 'pg_advisory_lock_shared',
+    grupo: '22d',
+    sql: (n) => `SELECT ${n}(${CLAVE})`,
+    esquema: pgCatalog,
+  },
+  {
+    nombre: 'pg_try_advisory_lock',
+    grupo: '22d',
+    sql: (n) => `SELECT ${n}(${CLAVE})`,
+    esquema: pgCatalog,
+  },
+  {
+    nombre: 'pg_try_advisory_lock_shared',
+    grupo: '22d',
+    sql: (n) => `SELECT ${n}(${CLAVE})`,
+    esquema: pgCatalog,
+  },
+  {
+    nombre: 'pg_advisory_unlock',
+    grupo: '22d',
+    sql: (n) => `SELECT ${n}(${CLAVE})`,
+    esquema: pgCatalog,
+  },
+  {
+    nombre: 'pg_advisory_unlock_shared',
+    grupo: '22d',
+    sql: (n) => `SELECT ${n}(${CLAVE})`,
+    esquema: pgCatalog,
+  },
+  {
+    nombre: 'pg_advisory_unlock_all',
+    grupo: '22d',
+    sql: (n) => `SELECT ${n}()`,
+    esquema: pgCatalog,
+  },
+];
+
+/** Alias que contienen uno de esos nombres dentro de otro identificador: deben ejecutarse. */
+export const CONTROLES_ALIAS_TIEMPO_REAL = [
+  'mi_pg_notify',
+  'x_pg_locks',
+  'mi_pg_advisory_lock',
+  'mi_pg_listening_channels',
+];

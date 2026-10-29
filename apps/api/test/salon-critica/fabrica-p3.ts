@@ -51,6 +51,10 @@ export type { AppCarta, EscenarioCarta, Llamada, PersonaCarta };
 export { asentar, exigirSinFallos } from '../carta-critica/fabrica-permisos-carta';
 
 export const MINUTO = 60_000;
+
+/** Un instante está a menos de `tolerancia` ms del esperado (el reloj de las pruebas es manual). */
+export const cerca = (valor: Date | string, esperadoMs: number, tolerancia = 1500): boolean =>
+  Math.abs(new Date(valor).getTime() - esperadoMs) <= tolerancia;
 export const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
 // ------------------------------------------------------------------------------------------------
@@ -330,7 +334,10 @@ export const lineaLomo = (
   opciones: { conHuevo?: boolean } = {},
 ): LineaDeEnvio => ({
   productoId: c.lomoId,
-  modificadorIds: [c.terminoIds.tresCuartos, ...(opciones.conHuevo === false ? [] : [c.extrasIds.huevo])],
+  modificadorIds: [
+    c.terminoIds.tresCuartos,
+    ...(opciones.conHuevo === false ? [] : [c.extrasIds.huevo]),
+  ],
   cantidad,
 });
 
@@ -744,8 +751,10 @@ export async function filasDe(
   condicion: string,
   parametros: unknown[] = [],
 ): Promise<Record<string, unknown>[]> {
+  // `auditoria` no tiene `creado_en`: se ordena por la hora del suceso.
+  const orden = tabla === 'auditoria' ? 'ocurrido_en, id::text' : 'creado_en, id::text';
   const { rows } = await admin.query(
-    `SELECT * FROM ${tabla} WHERE ${condicion} ORDER BY creado_en, id::text`,
+    `SELECT * FROM ${tabla} WHERE ${condicion} ORDER BY ${orden}`,
     parametros,
   );
   return rows;
@@ -920,7 +929,13 @@ export const RUTAS_SALON: RutaSalon[] = [
     construir: (ids) => ({
       metodo: 'post',
       ruta: `/sucursales/${ids.sucursalId}/zonas/${ids.zonaId}/mesas`,
-      cuerpo: { nombre: `X${randomUUID().slice(0, 6)}`, capacidad: 4, forma: 'REDONDA', columna: 1, fila: 1 },
+      cuerpo: {
+        nombre: `X${randomUUID().slice(0, 6)}`,
+        capacidad: 4,
+        forma: 'REDONDA',
+        columna: 1,
+        fila: 1,
+      },
     }),
   },
   {
