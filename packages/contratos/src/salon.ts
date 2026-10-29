@@ -202,6 +202,11 @@ export const salonRespuestaSchema = z.object({
   sucursalId: uuidSchema,
   /** Hora de la API (para que la PWA calcule "hace 25 min" sin fiarse del reloj del equipo). */
   ahora: instanteSchema,
+  /**
+   * Las personas que pueden ser el mozo responsable al abrir una mesa (criterio 10, decisión 8): usuarios activos
+   * que atienden mesas en la sucursal activa, los mismos que `POST /ordenes` acepta como `mozoId`, por nombre.
+   */
+  mozos: z.array(personaRefSchema),
   zonas: z.array(
     z.object({
       id: uuidSchema,

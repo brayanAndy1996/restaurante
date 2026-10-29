@@ -46,6 +46,30 @@ export class UsuariosConsultaService {
   }
 
   /**
+   * Las personas que pueden ser el mozo responsable en la sucursal (criterio 10): las mismas que acepta
+   * `puedenAtenderMesa`, es decir, usuarios activos de la empresa que son Administrador o tienen `ATENDER_MESA`
+   * como `permitido` con su rol en esa sucursal. Ordenadas por nombre. Una sola consulta.
+   */
+  async quienesAtiendenMesa(
+    sucursalId: string,
+    transaccion?: Transaction,
+  ): Promise<{ id: string; nombre: string }[]> {
+    return this.conexion.query<{ id: string; nombre: string }>(
+      `SELECT u.id, u.nombre FROM usuario u
+        WHERE u.activo
+          AND (u.es_administrador
+               OR EXISTS (SELECT 1 FROM acceso_sucursal a
+                           WHERE a.usuario_id = u.id AND a.sucursal_id = $1 AND a.rol = ANY($2::text[])))
+        ORDER BY lower(u.nombre), u.id`,
+      {
+        bind: [sucursalId, [...ROLES_QUE_ATIENDEN_MESA]],
+        type: QueryTypes.SELECT,
+        transaction: transaccion,
+      },
+    );
+  }
+
+  /**
    * El nombre de cada usuario de la empresa pedido (para mostrar al mozo responsable y a quien comandó). Un id
    * de otra empresa o inexistente no aparece. Una sola consulta sin importar cuántos ids.
    */

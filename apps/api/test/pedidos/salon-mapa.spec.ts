@@ -11,6 +11,7 @@ import {
   abrirOrden,
   arrancarP3,
   crearEscenarioP3,
+  crearPersona,
   esperarError,
   exigirEstado,
   leerOrden,
@@ -23,6 +24,8 @@ import {
   type EscenarioP3,
 } from '../salon-critica/fabrica-p3';
 import { sesionContrasena } from '../carta-critica/fabrica-permisos-carta';
+import { ContextoEmpresa } from '../../src/nucleo/contexto-empresa';
+import { UsuariosConsultaService } from '../../src/modulos/seguridad';
 import { contarConsultas, escribir, ponerEstado, sembrarEnvio } from './ayudas-pedidos';
 
 vi.setConfig({ testTimeout: 240_000, hookTimeout: 240_000 });
@@ -206,6 +209,111 @@ describe('criterio 7 · GET /salon', () => {
       409,
       'SUCURSAL_NO_ELEGIDA',
     );
+  });
+});
+
+describe('decisión 8 · mozos: quiénes pueden ser el mozo responsable', () => {
+  const idsDe = (salon: { mozos: { id: string }[] }) => salon.mozos.map((m) => m.id);
+
+  it('trae a los usuarios activos que atienden mesas en la sucursal activa, por nombre, y ninguno más', async () => {
+    const soloS2 = await crearPersona(ctx, e.A.tokenAdmin, [{ sucursalId: e.A.S2, rol: 'MOZO' }]);
+    const inactivo = await crearPersona(ctx, e.A.tokenAdmin, [{ sucursalId: e.A.S1, rol: 'MOZO' }]);
+    exigirEstado(
+      await llamar(ctx, e.A.tokenAdmin, {
+        metodo: 'patch',
+        ruta: `/usuarios/${inactivo.id}`,
+        cuerpo: { activo: false },
+      }),
+      200,
+      'desactivar',
+    );
+    const salon = salonRespuestaSchema.parse(await leerSalon(ctx, mozo));
+    const ids = idsDe(salon);
+    for (const quien of [e.A.mozo, e.mozo2, e.A.cajero, e.A.supervisor, e.A.base.admin]) {
+      expect(ids, `debería estar ${quien.id}`).toContain(quien.id);
+    }
+    // Cocina/Barra, quien solo tiene S2, el inactivo y todos los de B quedan fuera.
+    for (const fuera of [e.A.cocina.id, soloS2.id, inactivo.id, e.B.mozo.id, e.B.base.admin.id]) {
+      expect(ids).not.toContain(fuera);
+    }
+    expect(salon.mozos.every((m) => m.nombre.length > 0)).toBe(true);
+    const nombres = salon.mozos.map((m) => m.nombre.toLowerCase());
+    expect(nombres).toEqual([...nombres].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0)));
+    // Sin repetidos.
+    expect(new Set(ids).size).toBe(ids.length);
+  });
+
+  it('es la misma lista que POST /ordenes acepta como mozoId (puedenAtenderMesa)', async () => {
+    const consulta = ctx.app.get(UsuariosConsultaService);
+    const soloS2 = await crearPersona(ctx, e.A.tokenAdmin, [{ sucursalId: e.A.S2, rol: 'MOZO' }]);
+    const candidatos = [
+      e.A.mozo.id,
+      e.mozo2.id,
+      e.A.cajero.id,
+      e.A.supervisor.id,
+      e.A.base.admin.id,
+      e.A.cocina.id,
+      soloS2.id,
+      e.B.mozo.id,
+    ];
+    const aceptados = await ctx.app
+      .get(ContextoEmpresa)
+      .ejecutar(e.A.empresaId, () => consulta.puedenAtenderMesa(e.A.S1, candidatos), {
+        actor: { sistema: 'prueba' },
+      });
+    const enLista = idsDe(await leerSalon(ctx, mozo));
+    expect(enLista.filter((id) => candidatos.includes(id)).sort()).toEqual([...aceptados].sort());
+    // El rol que cuenta es el de la sucursal activa: S2 no lista a quien solo atiende en S1, y sí al Cajero (Mozo en S2).
+    const enS2 = idsDe(await leerSalon(ctx, (await sesiones(ctx, e.A.cajero, e.A.S2)).contrasena));
+    expect(enS2).toContain(e.A.cajero.id);
+    expect(enS2).toContain(soloS2.id);
+    expect(enS2).toContain(e.A.base.admin.id);
+    expect(enS2).not.toContain(e.A.mozo.id);
+    expect(enS2).not.toContain(e.A.cocina.id);
+  });
+
+  it('nunca trae usuarios de otra empresa', async () => {
+    const deB = await leerSalon(ctx, (await sesiones(ctx, e.B.mozo, e.B.S1)).contrasena);
+    const deA = await leerSalon(ctx, mozo);
+    const idsA = new Set(idsDe(deA));
+    expect(idsDe(deB)).toContain(e.B.mozo.id);
+    expect(idsDe(deB).filter((id) => idsA.has(id))).toEqual([]);
+  });
+
+  it('el ETag cambia si entra o sale una persona de la lista (alta, cambio de rol, desactivación) y no si nada cambia', async () => {
+    const etagActual = async (): Promise<string> => {
+      const res = await llamar(ctx, mozo, { metodo: 'get', ruta: '/salon' });
+      exigirEstado(res, 200, 'leer el salón');
+      return res.headers.etag as string;
+    };
+    const base = await etagActual();
+    expect(await etagActual()).toBe(base);
+    const nueva = await crearPersona(ctx, e.A.tokenAdmin, [{ sucursalId: e.A.S1, rol: 'MOZO' }]);
+    const conNueva = await etagActual();
+    expect(conNueva).not.toBe(base);
+    const sinCambios = await llamar(ctx, mozo, {
+      metodo: 'get',
+      ruta: '/salon',
+      cabeceras: { 'If-None-Match': conNueva },
+    });
+    expect(sinCambios.status).toBe(304);
+    exigirEstado(
+      await llamar(ctx, e.A.tokenAdmin, {
+        metodo: 'patch',
+        ruta: `/usuarios/${nueva.id}`,
+        cuerpo: { activo: false },
+      }),
+      200,
+      'desactivar',
+    );
+    const sinNueva = await llamar(ctx, mozo, {
+      metodo: 'get',
+      ruta: '/salon',
+      cabeceras: { 'If-None-Match': conNueva },
+    });
+    expect(sinNueva.status).toBe(200);
+    expect(sinNueva.headers.etag).not.toBe(conNueva);
+    expect(idsDe(sinNueva.body)).not.toContain(nueva.id);
   });
 });
 

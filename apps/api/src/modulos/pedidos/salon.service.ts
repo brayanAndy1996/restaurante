@@ -35,8 +35,8 @@ export interface MapaDelSalon {
  * `GET /salon` (HU-10, criterio 7): las zonas activas de la sucursal activa con sus mesas activas y el estado de
  * cada una, calculado de su orden abierta (`estadoDeMesa`, criterio 8; no hay columna de estado). Se arma con
  * una cantidad fija de consultas sin importar cuántas mesas haya: las zonas y las mesas (`MesasConsultaService`),
- * las órdenes abiertas con sus mesas vigentes, los ítems de esas órdenes (para `totalOrden`) y los nombres de los
- * mozos.
+ * las órdenes abiertas con sus mesas vigentes, los ítems de esas órdenes (para `totalOrden`), los nombres de los
+ * mozos y las personas que pueden ser el mozo responsable (`mozos`). El `ETag` cubre también esa lista.
  */
 @Injectable()
 export class SalonService {
@@ -71,6 +71,7 @@ export class SalonService {
     const nombresMozos = await this.usuarios.nombres(
       abiertas.flatMap((f) => (f.mozo_id === null ? [] : [f.mozo_id])),
     );
+    const mozos = await this.usuarios.quienesAtiendenMesa(sucursalId);
 
     const nombreDeMesa = new Map<string, string>();
     for (const zona of zonas) for (const mesa of zona.mesas) nombreDeMesa.set(mesa.id, mesa.nombre);
@@ -137,7 +138,7 @@ export class SalonService {
       });
     }
 
-    const paraEtag = { sucursalId, zonas: salonZonas };
+    const paraEtag = { sucursalId, mozos, zonas: salonZonas };
     return { respuesta: { ...paraEtag, ahora: this.reloj.ahora().toISOString() }, paraEtag };
   }
 }
