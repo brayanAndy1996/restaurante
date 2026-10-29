@@ -1,5 +1,5 @@
 import { QueryTypes, type Sequelize } from 'sequelize';
-import { ordenNoEncontrada } from './errores-pedidos';
+import { ordenNoAbierta, ordenNoEncontrada } from './errores-pedidos';
 
 /** La orden bloqueada para una escritura, con lo que hace falta para decidir si se puede seguir. */
 export interface OrdenBloqueada {
@@ -43,4 +43,14 @@ export async function bloquearOrden(
     comensales: fila.comensales,
     unidaA: fila.unida_a_orden_id,
   };
+}
+
+/**
+ * La orden debe estar abierta (`ABIERTA` o `EN_PRECUENTA`): `ANULADA` o `CERRADA`, 409 `ORDEN_NO_ABIERTA`;
+ * `UNIDA`, 409 con la orden a la que se unió para que la PWA lleve ahí al mozo (criterio 29).
+ */
+export function exigirOrdenAbierta(orden: OrdenBloqueada): void {
+  if (orden.estado !== 'ABIERTA' && orden.estado !== 'EN_PRECUENTA') {
+    throw ordenNoAbierta(orden.estado === 'UNIDA' ? orden.unidaA : null);
+  }
 }

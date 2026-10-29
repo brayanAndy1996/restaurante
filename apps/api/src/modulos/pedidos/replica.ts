@@ -49,3 +49,45 @@ export const huellaDeMarcha = (itemIds: MarchaEntrada['itemIds']): Buffer =>
       itemIds: itemIds === undefined ? null : itemIds.map((id) => id.toLowerCase()).sort(),
     }),
   );
+
+/**
+ * Huella de la anulación de un ítem (criterio 37): el ítem, la cantidad, el destino del stock y el motivo. El
+ * mismo `id` con otra cosa de esto es otra petición (422); con lo mismo, la misma. La orden va aparte (el ítem
+ * ya la determina).
+ */
+export const huellaDeAnulacion = (entrada: {
+  itemId: string;
+  cantidad: number;
+  motivo: string;
+  destinoStock: string;
+}): Buffer =>
+  sha256(
+    jsonCanonico({
+      itemId: entrada.itemId.toLowerCase(),
+      cantidad: entrada.cantidad,
+      motivo: entrada.motivo,
+      destinoStock: entrada.destinoStock,
+    }),
+  );
+
+/**
+ * Huella de la fila de `anulacion_item` que deja la anulación de una orden por cada ítem vigente (criterio 42):
+ * no tiene id de cliente, así que nada la reconoce como réplica; la huella solo completa la columna y deja
+ * constancia de lo pedido.
+ */
+export const huellaDeAnulacionDeOrden = (entrada: {
+  ordenId: string;
+  itemId: string;
+  cantidad: number;
+  motivo: string;
+  destinoStock: string;
+}): Buffer =>
+  sha256(
+    jsonCanonico({
+      ordenId: entrada.ordenId.toLowerCase(),
+      itemId: entrada.itemId.toLowerCase(),
+      cantidad: entrada.cantidad,
+      motivo: entrada.motivo,
+      destinoStock: entrada.destinoStock,
+    }),
+  );

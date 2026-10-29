@@ -1,5 +1,7 @@
 export { SeguridadModule } from './seguridad.module';
 export {
+  CLAVE_DIFERIDA,
+  ClaveDespuesDeValidar,
   PERMISO,
   PERMITE_CONTRASENA_TEMPORAL,
   PUBLICA,
@@ -31,6 +33,8 @@ export { SesionActual } from './sesion-actual';
 export { AutorizacionService, autorizacionInvalida } from './autorizacion.service';
 export { ClaveSupervisorService } from './clave-supervisor.service';
 export { PermisoInterceptor } from './permiso.interceptor';
+export { ClaveDiferidaInterceptor } from './clave-diferida.interceptor';
+export type { ValidacionPrevia } from './clave-diferida.interceptor';
 export type { AutorizacionConsumida, ConsumirAutorizacion } from './autorizacion.service';
 export type { Principal, TipoPrincipal } from '../../nucleo/principal';
 export { AccesoSucursalController } from './acceso-sucursal.controller';

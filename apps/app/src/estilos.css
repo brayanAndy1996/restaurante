@@ -440,6 +440,13 @@ body,
   overflow-wrap: anywhere;
 }
 
+.clave__motivo {
+  font-size: 0.9375rem;
+  line-height: 1.375rem;
+  color: var(--color-tinta-suave);
+  overflow-wrap: anywhere;
+}
+
 .clave__pin {
   display: flex;
   flex-direction: column;

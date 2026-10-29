@@ -4,6 +4,7 @@ import { CartaModule } from '../carta';
 import { SalonModule } from '../salon';
 import { SeguridadModule } from '../seguridad';
 import { AnulacionesController } from './anulaciones.controller';
+import { AnulacionesService } from './anulaciones.service';
 import { CocinaController } from './cocina.controller';
 import { CocinaService } from './cocina.service';
 import { EnviosController } from './envios.controller';
@@ -39,6 +40,7 @@ import { VistaOrdenService } from './vista-orden';
     PedidosConsultaService,
     OrdenesService,
     EnviosService,
+    AnulacionesService,
     CocinaService,
     SalonService,
     VistaOrdenService,

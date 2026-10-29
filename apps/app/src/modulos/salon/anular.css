@@ -1,0 +1,38 @@
+/* Anular un ítem o la orden y liberar la mesa (criterios 35 a 44 y 93 de 004). Se carga con la hoja. */
+
+.hoja-anular .ui-hoja__cuerpo {
+  padding-bottom: 0;
+  /* Lo que se enfoca o se toca no queda tapado por los botones fijos de abajo */
+  scroll-padding-bottom: 6rem;
+}
+.anular__que {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--espacio-md);
+  background: var(--color-fondo);
+  border: 1px solid var(--color-junta);
+  border-radius: var(--radio-baldosa);
+}
+.anular__que > b {
+  font-size: 1.0625rem;
+  line-height: 1.375rem;
+  overflow-wrap: anywhere;
+}
+.anular__cantidad {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espacio-sm);
+}
+/* Los botones quedan a la vista aunque la hoja se desplace */
+.anular__pie {
+  position: sticky;
+  bottom: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--espacio-sm);
+  margin: 0 calc(var(--espacio-lg) * -1);
+  padding: var(--espacio-md) var(--espacio-lg) max(var(--espacio-lg), env(safe-area-inset-bottom));
+  border-top: 1px solid var(--color-junta);
+  background: var(--color-baldosa);
+}

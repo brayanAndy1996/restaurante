@@ -8,6 +8,8 @@ export interface PedidoDeClave {
   /** Qué se autoriza, para que el supervisor lo lea ("Anular ítem: Ceviche mixto x1 · S/ 38.00"). */
   descripcion: string;
   atajos?: readonly string[];
+  /** Motivo que la persona ya eligió: la ventana lo muestra y no lo pide otra vez. */
+  motivo?: string;
 }
 
 /**
@@ -59,6 +61,7 @@ export function useClaveDeSupervisor(): {
       accion={pedido?.accion ?? 'ATENDER_MESA'}
       descripcion={pedido?.descripcion ?? ''}
       {...(pedido?.atajos ? { atajos: pedido.atajos } : {})}
+      {...(pedido?.motivo ? { motivo: pedido.motivo } : {})}
       onAutorizada={terminar}
       onCancelar={() => terminar(null)}
     />

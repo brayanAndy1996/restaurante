@@ -227,9 +227,8 @@ export class CocinaService {
   }
 
   /**
-   * El motivo de cada comanda `ANULACION` (criterio 38), que guarda `anulacion_item.motivo` (tabla de la tarea
-   * T22). Solo consulta si hay una comanda `ANULACION` a la vista; mientras esa tabla no exista (todavía no puede
-   * haber anulaciones), no hay motivo que leer.
+   * El motivo de cada comanda `ANULACION` (criterio 38), que guarda `anulacion_item.motivo`. Solo consulta si hay
+   * una comanda `ANULACION` a la vista.
    */
   private async motivosDeAnulacion(
     filas: readonly FilaComanda[],
@@ -238,11 +237,6 @@ export class CocinaService {
       f.tipo === 'ANULACION' && f.origen_id !== null ? [f.origen_id] : [],
     );
     if (origenes.length === 0) return new Map();
-    const [existe] = await this.conexion.query<{ existe: boolean }>(
-      `SELECT to_regclass('public.anulacion_item') IS NOT NULL AS existe`,
-      { type: QueryTypes.SELECT },
-    );
-    if (existe?.existe !== true) return new Map();
     const motivos = await this.conexion.query<{ id: string; motivo: string }>(
       'SELECT id, motivo FROM anulacion_item WHERE id = ANY($1::uuid[])',
       { bind: [origenes], type: QueryTypes.SELECT },

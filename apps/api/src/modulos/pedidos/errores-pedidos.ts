@@ -107,3 +107,27 @@ export const comandaNoEncontrada = (): ErrorAplicacion =>
 /** 409 `TRANSICION_INVALIDA` (criterios 58 y 59): la línea o la comanda no admite ese cambio. */
 export const transicionInvalida = (mensaje: string): ErrorAplicacion =>
   new ErrorAplicacion(409, 'TRANSICION_INVALIDA', mensaje);
+
+/** 409 `ITEM_NO_ANULABLE` (criterio 35): el ítem ya está anulado del todo, no queda nada vigente que anular. */
+export const itemNoAnulable = (): ErrorAplicacion =>
+  new ErrorAplicacion(409, 'ITEM_NO_ANULABLE', 'El ítem ya está anulado');
+
+/** 422 `DATOS_INVALIDOS` (criterio 35): se pidió anular más de la cantidad vigente del ítem. */
+export const cantidadMayorQueLaVigente = (vigente: number): ErrorAplicacion =>
+  new ErrorAplicacion(422, 'DATOS_INVALIDOS', 'La cantidad supera la cantidad vigente del ítem', [
+    { campo: 'cantidad', mensaje: `Como máximo ${vigente}` },
+  ]);
+
+/**
+ * 404 de un ítem de otra orden, de otra sucursal, de otra empresa o inexistente (criterio 35): el mismo cuerpo
+ * que el de una orden inexistente, así quien llama no distingue cuál de los dos faltaba.
+ */
+export const itemNoEncontrado = (): ErrorAplicacion => ordenNoEncontrada();
+
+/** 409 `ORDEN_CON_CONSUMO` (criterio 44): la orden tuvo algún envío, se anula con clave en lugar de liberarse. */
+export const ordenConConsumo = (): ErrorAplicacion =>
+  new ErrorAplicacion(
+    409,
+    'ORDEN_CON_CONSUMO',
+    'La orden tiene consumo: anúlala con la clave de un supervisor',
+  );

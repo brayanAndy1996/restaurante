@@ -9,17 +9,20 @@ import { CONEXION_API } from '../../nucleo/base-de-datos';
 import { ContextoEmpresa } from '../../nucleo/contexto-empresa';
 import { ErrorAplicacion } from '../../nucleo/errores/error-aplicacion';
 import { RELOJ, type Reloj } from '../../nucleo/reloj';
+import { AuditoriaService } from '../auditoria';
 import { MesasConsultaService } from '../salon';
 import { SesionActual, UsuariosConsultaService } from '../seguridad';
-import { bloquearOrden } from './bloqueos-orden';
+import { bloquearOrden, exigirOrdenAbierta } from './bloqueos-orden';
 import {
   idDeClienteReutilizado,
   mesaInactiva,
   mesaOcupada,
   mozoInvalido,
+  ordenConConsumo,
   ordenNoAbierta,
 } from './errores-pedidos';
 import { EventosPedidos } from './eventos-pedidos';
+import { mesasVigentesDeOrden } from './mesas-de-orden';
 import { VistaOrdenService } from './vista-orden';
 
 interface OrdenExistente {
@@ -41,6 +44,7 @@ export class OrdenesService {
     @Inject(SesionActual) private readonly sesion: SesionActual,
     @Inject(MesasConsultaService) private readonly mesas: MesasConsultaService,
     @Inject(UsuariosConsultaService) private readonly usuarios: UsuariosConsultaService,
+    @Inject(AuditoriaService) private readonly auditoria: AuditoriaService,
     @Inject(EventosPedidos) private readonly eventos: EventosPedidos,
     @Inject(VistaOrdenService) private readonly vista: VistaOrdenService,
   ) {}
@@ -134,6 +138,55 @@ export class OrdenesService {
       );
       this.eventos.ordenCambio(sucursalId, orden.id);
     }
+    return this.vista.armar(orden.id, sucursalId);
+  }
+
+  /**
+   * Criterio 44 (decisión 7): libera la mesa de una orden abierta que nunca tuvo un envío, sin clave. La orden
+   * queda `ANULADA` con `sinConsumo`, su relación con la mesa se cierra y la mesa vuelve a estar libre. Si la
+   * orden tuvo algún envío (aunque todo esté anulado, o los ítems vengan de otra orden unida), 409
+   * `ORDEN_CON_CONSUMO`: se anula con clave. Deja la fila de auditoría `liberar_mesa`. La réplica de la misma
+   * `Idempotency-Key` la devuelve el interceptor de idempotencia; con otra clave, una orden ya liberada responde
+   * 409 `ORDEN_NO_ABIERTA`.
+   */
+  async liberar(ordenId: string): Promise<OrdenRespuesta> {
+    const sucursalId = this.sucursalActiva();
+    const orden = await bloquearOrden(this.conexion, ordenId, sucursalId);
+    exigirOrdenAbierta(orden);
+
+    const [consumo] = await this.conexion.query<{ hay: boolean }>(
+      `SELECT EXISTS (SELECT 1 FROM envio WHERE orden_id = $1)
+           OR EXISTS (SELECT 1 FROM item WHERE orden_id = $1) AS hay`,
+      { bind: [orden.id], type: QueryTypes.SELECT },
+    );
+    if (consumo?.hay === true) throw ordenConConsumo();
+
+    const ahora = this.reloj.ahora();
+    const mesaIds = await mesasVigentesDeOrden(this.conexion, orden.id);
+    const [mozo] = await this.conexion.query<{ mozo_id: string | null }>(
+      `UPDATE orden
+          SET estado = 'ANULADA', anulada_en = $2, sin_consumo = true, version = version + 1,
+              actualizado_en = $2
+        WHERE id = $1
+        RETURNING mozo_id`,
+      { bind: [orden.id, ahora], type: QueryTypes.SELECT },
+    );
+    await this.conexion.query(
+      `UPDATE orden_mesa SET hasta = $2, actualizado_en = $2 WHERE orden_id = $1 AND hasta IS NULL`,
+      { bind: [orden.id, ahora], type: QueryTypes.UPDATE },
+    );
+    const nombresMesas = await this.mesas.nombres(mesaIds);
+    await this.auditoria.registrar({
+      accion: 'liberar_mesa',
+      entidad: 'orden',
+      entidadId: orden.id,
+      detalle: {
+        mesas: mesaIds.map((id) => ({ id, nombre: nombresMesas.get(id) ?? '' })),
+        mozoId: mozo?.mozo_id ?? null,
+      },
+    });
+
+    this.eventos.salonCambio(sucursalId, orden.id, mesaIds);
     return this.vista.armar(orden.id, sucursalId);
   }
 

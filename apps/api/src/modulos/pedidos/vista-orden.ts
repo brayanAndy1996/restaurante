@@ -1,5 +1,6 @@
 import { Inject, Injectable } from '@nestjs/common';
 import type {
+  AnulacionRespuesta,
   ComandaResumen,
   EnvioRespuesta,
   ItemRespuesta,
@@ -225,8 +226,14 @@ export class VistaOrdenService {
     return { id: marchaId, comandas: await this.resumirComandas(comandas) };
   }
 
-  /** Las comandas como `comandaResumen`, por nombre de estación y luego por id (orden estable). */
-  private async resumirComandas(comandas: readonly FilaComanda[]): Promise<ComandaResumen[]> {
+  /**
+   * Las comandas como `comandaResumen`, por nombre de estación y luego por id (orden estable). `motivo` es el de
+   * la anulación de la que salen las comandas `ANULACION` (criterio 38); las demás no lo llevan.
+   */
+  private async resumirComandas(
+    comandas: readonly FilaComanda[],
+    motivo: string | null = null,
+  ): Promise<ComandaResumen[]> {
     const nombres = await this.estaciones.nombres(comandas.map((c) => c.estacion_id));
     return comandas
       .map((c): ComandaResumen => ({
@@ -235,9 +242,74 @@ export class VistaOrdenService {
         estacionNombre: nombres.get(c.estacion_id) ?? '',
         tipo: c.tipo,
         destino: c.destino,
-        motivo: null,
+        motivo: c.tipo === 'ANULACION' ? motivo : null,
       }))
       .sort((a, b) => a.estacionNombre.localeCompare(b.estacionNombre) || a.id.localeCompare(b.id));
+  }
+
+  /**
+   * `anulacionRespuesta` (criterio 35) de la anulación con ese id: la anulación, su ítem tal como está ahora y las
+   * comandas `ANULACION` que salieron de ella (con el motivo). La primera respuesta y la réplica por el mismo id
+   * salen de aquí. 404 si la anulación no es de una orden de la sucursal.
+   */
+  async armarAnulacion(anulacionId: string, sucursalId: string): Promise<AnulacionRespuesta> {
+    const anulaciones = await this.conexion.query<{
+      id: string;
+      item_id: string;
+      cantidad: number;
+      motivo: string;
+      destino_stock: AnulacionRespuesta['destinoStock'];
+      autorizado_por_id: string | null;
+    }>(
+      `SELECT a.id, a.item_id, a.cantidad, a.motivo, a.destino_stock, a.autorizado_por_id
+         FROM anulacion_item a JOIN orden o ON o.id = a.orden_id AND o.empresa_id = a.empresa_id
+        WHERE a.id = $1 AND o.sucursal_id = $2`,
+      { bind: [anulacionId, sucursalId], type: QueryTypes.SELECT },
+    );
+    const anulacion = anulaciones[0];
+    if (anulacion === undefined) throw ordenNoEncontrada();
+
+    const items = await this.conexion.query<FilaItem>(
+      `SELECT ${COLUMNAS_ITEM}
+         FROM item i JOIN envio e ON e.id = i.envio_id AND e.empresa_id = i.empresa_id
+        WHERE i.id = $1`,
+      { bind: [anulacion.item_id], type: QueryTypes.SELECT },
+    );
+    const item = items[0];
+    if (item === undefined) throw ordenNoEncontrada();
+    const conteos = await this.conexion.query<FilaConteo>(
+      `SELECT cl.item_id, cl.estado, count(*) AS n
+         FROM comanda_linea cl JOIN comanda c ON c.id = cl.comanda_id AND c.empresa_id = cl.empresa_id
+        WHERE cl.item_id = $1 AND c.tipo IN ('COMANDA', 'ADICION')
+        GROUP BY cl.item_id, cl.estado`,
+      { bind: [item.id], type: QueryTypes.SELECT },
+    );
+    const comandas = await this.conexion.query<FilaComanda>(
+      `SELECT id, estacion_id, tipo, destino FROM comanda
+        WHERE origen_id = $1 AND tipo = 'ANULACION'`,
+      { bind: [anulacion.id], type: QueryTypes.SELECT },
+    );
+    const nombres = await this.usuarios.nombres([
+      ...(item.comandado_por === null ? [] : [item.comandado_por]),
+      ...(anulacion.autorizado_por_id === null ? [] : [anulacion.autorizado_por_id]),
+    ]);
+    const cocinaDe = contarCocina(conteos);
+    return {
+      id: anulacion.id,
+      itemId: item.id,
+      cantidad: anulacion.cantidad,
+      motivo: anulacion.motivo,
+      destinoStock: anulacion.destino_stock,
+      autorizadoPor:
+        anulacion.autorizado_por_id === null
+          ? null
+          : {
+              id: anulacion.autorizado_por_id,
+              nombre: nombres.get(anulacion.autorizado_por_id) ?? '',
+            },
+      item: aItemRespuesta(item, cocinaDe.get(item.id) ?? { ...SIN_COCINA }, nombres, false),
+      comandas: await this.resumirComandas(comandas, anulacion.motivo),
+    };
   }
 
   /** 404 si la orden no existe, es de otra sucursal o de otra empresa. */
@@ -318,9 +390,32 @@ export class VistaOrdenService {
           cantidadAnulada: i.cantidad_anulada,
         })),
       ),
-      // La tabla `precuenta` llega con la migración de las anulaciones y pre-cuentas (T22): hasta entonces
-      // ninguna orden tiene una pre-cuenta vigente que mostrar.
-      precuentaVigente: null,
+      precuentaVigente: await this.precuentaVigente(orden.id, orden.estado),
     };
+  }
+
+  /**
+   * La pre-cuenta vigente (la que no se ha invalidado), si hay. Solo una orden `EN_PRECUENTA` puede tenerla: toda
+   * escritura que cambia la orden la invalida y la devuelve a `ABIERTA` (criterios 23, 40 y 53), así que las
+   * demás ni la consultan.
+   */
+  private async precuentaVigente(
+    ordenId: string,
+    estado: OrdenRespuesta['estado'],
+  ): Promise<OrdenRespuesta['precuentaVigente']> {
+    if (estado !== 'EN_PRECUENTA') return null;
+    const filas = await this.conexion.query<{
+      id: string;
+      numero: number;
+      total: string;
+      emitida_en: Date;
+    }>(
+      `SELECT id, numero, total, emitida_en FROM precuenta
+        WHERE orden_id = $1 AND invalidada_en IS NULL`,
+      { bind: [ordenId], type: QueryTypes.SELECT },
+    );
+    const fila = filas[0];
+    if (fila === undefined) return null;
+    return { id: fila.id, numero: fila.numero, total: fila.total, emitidaEn: iso(fila.emitida_en) };
   }
 }

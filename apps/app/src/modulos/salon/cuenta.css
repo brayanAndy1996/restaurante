@@ -126,10 +126,19 @@
 .item__etiquetas:empty {
   display: none;
 }
-.item__total {
+.item__lado {
+  display: flex;
   flex: none;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: var(--espacio-sm);
+}
+.item__total {
   font-weight: 700;
   font-variant-numeric: tabular-nums;
+}
+.item__anular {
+  padding-inline: var(--espacio-md);
 }
 .item--anulado .item__nombre,
 .item--anulado .item__cantidad {
@@ -151,4 +160,14 @@
   font-size: 1.5rem;
   line-height: 2rem;
   font-variant-numeric: tabular-nums;
+}
+
+/* Cerrar la cuenta sin cobrar: aparte, separado de lo que se hace a diario */
+.cuenta__cierre {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espacio-sm);
+  margin-top: var(--espacio-sm);
+  padding-top: var(--espacio-xl);
+  border-top: 1px solid var(--color-junta);
 }

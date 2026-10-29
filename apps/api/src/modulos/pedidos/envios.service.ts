@@ -34,6 +34,7 @@ import {
 import { EventosPedidos } from './eventos-pedidos';
 import { IMPRESION, type ImpresionPuerto } from './impresion';
 import { INVENTARIO, type InventarioPuerto } from './inventario';
+import { mesasVigentesDeOrden } from './mesas-de-orden';
 import { invalidarPrecuentaVigente } from './precuenta-invalidacion';
 import { huellaDeEnvio, huellaDeMarcha, normalizarLineas } from './replica';
 import { VistaOrdenService } from './vista-orden';
@@ -256,7 +257,11 @@ export class EnviosService {
     }
     this.eventos.ordenCambio(sucursalId, orden.id);
     if (estabaEnPrecuenta) {
-      this.eventos.salonCambio(sucursalId, orden.id, await this.mesasVigentes(orden.id));
+      this.eventos.salonCambio(
+        sucursalId,
+        orden.id,
+        await mesasVigentesDeOrden(this.conexion, orden.id),
+      );
     }
 
     return this.vista.armarEnvio(envioId, sucursalId);
@@ -461,15 +466,6 @@ export class EnviosService {
       { bind: [id], type: QueryTypes.SELECT },
     );
     return filas[0];
-  }
-
-  /** Las mesas vigentes de la orden, para `salon.cambio`. */
-  private async mesasVigentes(ordenId: string): Promise<string[]> {
-    const filas = await this.conexion.query<{ mesa_id: string }>(
-      'SELECT mesa_id FROM orden_mesa WHERE orden_id = $1 AND hasta IS NULL ORDER BY desde, id',
-      { bind: [ordenId], type: QueryTypes.SELECT },
-    );
-    return filas.map((f) => f.mesa_id);
   }
 }
 

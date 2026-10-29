@@ -15,7 +15,7 @@ import {
   claseFila,
 } from '@restaurante/ui';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { useEffect, useRef, useState } from 'react';
+import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import { Link, Navigate, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { Pagina } from '../../componentes/Pagina';
 import { AvisoPendiente } from '../../componentes/PendienteDeEnvio';
@@ -24,6 +24,7 @@ import { MUTACION_SIN_PAUSA, useEnvioPendiente } from '../../lib/envios';
 import { ErrorApi, mensajeDeError } from '../../lib/errores';
 import { montoEnSoles } from '../../lib/formato';
 import { CLAVES_TIEMPO_REAL } from '../../lib/tiempo-real';
+import { usePermiso } from '../acceso/permisos';
 import { useSesionActiva } from '../acceso/sesion';
 import {
   claveDeBorrador,
@@ -32,6 +33,8 @@ import {
   unidadesDelBorrador,
   useBorrador,
 } from './borrador';
+import { sePuedeAnularItem, sePuedeAnularOrden, sePuedeLiberar } from './anulaciones';
+import type { ObjetivoDeAnulacion } from './AnularHoja';
 import { enviarBorrador } from './enviar-borrador';
 import {
   ETIQUETA_DE_ESTADO,
@@ -50,6 +53,12 @@ import {
 import { rutaDeComandero, rutaDeOrden } from './salon';
 import { useAhoraDelServidor, useOrden } from './useOrden';
 import './cuenta.css';
+
+// Anular y liberar se cargan al tocarlos: la cuenta se abre sin ese código (presupuesto del paquete).
+const AnularHoja = lazy(() => import('./AnularHoja').then((m) => ({ default: m.AnularHoja })));
+const LiberarMesaHoja = lazy(() =>
+  import('./AnularHoja').then((m) => ({ default: m.LiberarMesaHoja })),
+);
 
 /** Lo que la pantalla anterior le pide a la cuenta al llegar. */
 interface EstadoDeLlegada {
@@ -116,6 +125,14 @@ function Cuenta({
   const [enviado, setEnviado] = useState(llegada.enviado ?? null);
   const [marchada, setMarchada] = useState(false);
   const [fallo, setFallo] = useState<string | null>(null);
+  // Anular un ítem o la orden y liberar la mesa (criterios 35 a 44).
+  const [anulando, setAnulando] = useState<ObjetivoDeAnulacion | null>(null);
+  const [liberando, setLiberando] = useState(false);
+  const [conConsumo, setConConsumo] = useState(false);
+  const [hecho, setHecho] = useState<string | null>(null);
+  const puedeAnularItem = usePermiso('ANULAR_ITEM_ENVIADO') !== 'prohibido';
+  const puedeAnularOrden = usePermiso('ANULAR_ORDEN') !== 'prohibido';
+  const puedeLiberar = usePermiso('ATENDER_MESA') !== 'prohibido';
 
   const montado = useRef(true);
   useEffect(() => {
@@ -218,6 +235,12 @@ function Cuenta({
   const grupos = agruparPorEnvio(orden.items);
   const porMarchar = itemsPorMarchar(orden);
   const hayBorrador = borrador.lineas.length > 0;
+  // "Liberar la mesa" solo si nada se envió o todo está anulado; si la API dijo que hubo consumo, "Anular la orden".
+  const ofreceLiberar = puedeLiberar && sePuedeLiberar(orden) && !conConsumo;
+  const ofreceAnularOrden =
+    puedeAnularOrden &&
+    sePuedeAnularOrden(orden) &&
+    (!sePuedeLiberar(orden) || !puedeLiberar || conConsumo);
 
   return (
     <Pagina
@@ -253,6 +276,12 @@ function Cuenta({
       {consulta.isError ? (
         <Aviso tipo="alerta" titulo="No pudimos actualizar la cuenta">
           Lo que ves puede estar desactualizado. Seguimos intentando.
+        </Aviso>
+      ) : null}
+
+      {hecho ? (
+        <Aviso tipo="ok" titulo="Hecho">
+          {hecho}
         </Aviso>
       ) : null}
 
@@ -365,7 +394,20 @@ function Cuenta({
             : 'Esta cuenta no tuvo pedidos.'}
         </EstadoVacio>
       ) : (
-        grupos.map((grupo) => <GrupoDeItems key={grupo.clave} grupo={grupo} />)
+        grupos.map((grupo) => (
+          <GrupoDeItems
+            key={grupo.clave}
+            grupo={grupo}
+            {...(abierta && puedeAnularItem
+              ? {
+                  alAnular: (item: ItemRespuesta) => {
+                    setHecho(null);
+                    setAnulando({ tipo: 'item', itemId: item.id });
+                  },
+                }
+              : {})}
+          />
+        ))
       )}
 
       {grupos.length > 0 ? (
@@ -374,6 +416,71 @@ function Cuenta({
           <b>{montoEnSoles(orden.total)}</b>
         </div>
       ) : null}
+
+      {conConsumo ? (
+        <Aviso tipo="alerta" titulo="Esta mesa ya tuvo pedidos">
+          No se puede liberar sin más. Para dejarla libre, anula la orden.
+        </Aviso>
+      ) : null}
+      {ofreceLiberar || ofreceAnularOrden ? (
+        <section className="cuenta__cierre" aria-label="Cerrar sin cobrar">
+          {ofreceLiberar ? (
+            <Boton
+              bloque
+              onClick={() => {
+                setHecho(null);
+                setLiberando(true);
+              }}
+            >
+              Liberar la mesa
+            </Boton>
+          ) : null}
+          {ofreceAnularOrden ? (
+            <Boton
+              variante="peligro"
+              bloque
+              onClick={() => {
+                setHecho(null);
+                setAnulando({ tipo: 'orden' });
+              }}
+            >
+              Anular la orden
+            </Boton>
+          ) : null}
+        </section>
+      ) : null}
+
+      <Suspense fallback={null}>
+        {anulando ? (
+          <AnularHoja
+            key={anulando.tipo === 'item' ? anulando.itemId : 'orden'}
+            objetivo={anulando}
+            orden={orden}
+            onCerrar={() => setAnulando(null)}
+            onHecho={(texto) => {
+              if (!montado.current) return;
+              setAnulando(null);
+              setHecho(texto);
+            }}
+          />
+        ) : null}
+        {liberando ? (
+          <LiberarMesaHoja
+            orden={orden}
+            onCerrar={() => setLiberando(false)}
+            onHecho={() => {
+              if (!montado.current) return;
+              setLiberando(false);
+              setHecho('La mesa quedó libre.');
+            }}
+            onConConsumo={() => {
+              if (!montado.current) return;
+              setLiberando(false);
+              setConConsumo(true);
+            }}
+          />
+        ) : null}
+      </Suspense>
     </Pagina>
   );
 }
@@ -388,7 +495,13 @@ function Cabecera({ orden, ahora }: { orden: OrdenRespuesta; ahora: number }) {
   );
 }
 
-function GrupoDeItems({ grupo }: { grupo: GrupoDeEnvio }) {
+function GrupoDeItems({
+  grupo,
+  alAnular,
+}: {
+  grupo: GrupoDeEnvio;
+  alAnular?: (item: ItemRespuesta) => void;
+}) {
   return (
     <section className="cuenta__envio" aria-label={grupo.titulo}>
       <h2 className="cuenta__envio-titulo">
@@ -401,7 +514,7 @@ function GrupoDeItems({ grupo }: { grupo: GrupoDeEnvio }) {
       <ul className="cuenta__items">
         {grupo.items.map((item) => (
           <li key={item.id}>
-            <FilaDeItem item={item} />
+            <FilaDeItem item={item} {...(alAnular ? { alAnular } : {})} />
           </li>
         ))}
       </ul>
@@ -409,7 +522,13 @@ function GrupoDeItems({ grupo }: { grupo: GrupoDeEnvio }) {
   );
 }
 
-function FilaDeItem({ item }: { item: ItemRespuesta }) {
+function FilaDeItem({
+  item,
+  alAnular,
+}: {
+  item: ItemRespuesta;
+  alAnular?: (item: ItemRespuesta) => void;
+}) {
   const anulado = item.estado === 'ANULADO';
   const modificadores = textoDeModificadores(item);
   const cocina = estadoEnCocina(item);
@@ -440,7 +559,21 @@ function FilaDeItem({ item }: { item: ItemRespuesta }) {
           {cocina ? <EtiquetaDeEstado tono="neutro">{cocina}</EtiquetaDeEstado> : null}
         </span>
       </span>
-      {anulado ? null : <span className="item__total">{total}</span>}
+      {anulado ? null : (
+        <span className="item__lado">
+          <span className="item__total">{total}</span>
+          {alAnular && sePuedeAnularItem(item) ? (
+            <button
+              type="button"
+              className={`${claseBoton()} item__anular`}
+              aria-label={`Anular ${item.nombre}`}
+              onClick={() => alAnular(item)}
+            >
+              Anular
+            </button>
+          ) : null}
+        </span>
+      )}
     </div>
   );
 }

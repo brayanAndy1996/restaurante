@@ -54,7 +54,9 @@ export class AutorizacionService {
    * actor de la transacción), quién autorizó, el motivo y el `autorizacionId` (criterio 48), en la misma
    * transacción: si la acción falla, se revierten el consumo y la fila. `@Permiso` la llama sola.
    */
-  async consumir(datos: ConsumirAutorizacion): Promise<AutorizacionConsumida> {
+  async consumir(
+    datos: ConsumirAutorizacion,
+  ): Promise<AutorizacionConsumida & { autorizacionId: string }> {
     const principal = this.sesion.principal();
     const id = uuidSchema.safeParse(datos.autorizacionId);
     if (
@@ -86,7 +88,8 @@ export class AutorizacionService {
     const fila = filas[0];
     if (fila === undefined) throw autorizacionInvalida();
 
-    const consumida: AutorizacionConsumida = {
+    const consumida = {
+      autorizacionId: id.data.toLowerCase(),
       solicitanteId: fila.solicitante_id,
       autorizadorId: fila.autorizador_id,
       motivo: fila.motivo,
