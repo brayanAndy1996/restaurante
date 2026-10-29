@@ -30,7 +30,7 @@ Solo la PWA: `pnpm --filter @restaurante/app dev`. Llama a la API que diga `VITE
 
 ## E2E del salón y la cocina
 
-`e2e/salon-cocina.spec.ts` tiene diez pruebas, en serie, con el tiempo real encendido (la API de Playwright lo trae por defecto en desarrollo y necesita `DATABASE_TIEMPO_REAL_URL`, como en la CI). Tres celulares de 360 px de la misma empresa se ven en vivo: un Mozo, Cocina/Barra y un Supervisor que mira el mapa y da la clave para anular. El Administrador diseña una zona con tres mesas; el Mozo abre la mesa 1, comanda un combo y un lomo en segundo tiempo, marcha, agrega adiciones, pide pre-cuentas, anula 1 de 2 con la clave del Supervisor, une la mesa 2 y mueve la cuenta a la mesa 3; un envío con `context.setOffline` queda «Pendiente de envío» y sale una sola vez al volver la red. Dos pruebas miran el diseño a 360 px y en una tableta. La carta, los usuarios y la empresa se crean por la API (`e2e/ayudas-salon.ts`); todo lo demás se hace desde la PWA y se comprueba con lo que la PWA mandó (cada escritura lleva su `Idempotency-Key`).
+`e2e/salon-cocina.spec.ts` tiene diez pruebas, en serie, con el tiempo real encendido (la API de Playwright lo trae por defecto en desarrollo y necesita `DATABASE_TIEMPO_REAL_URL`, como en la CI). Tres celulares de 360 px de la misma empresa se ven en vivo: un Mozo, Cocina/Barra y un Supervisor que mira el mapa y da la clave para anular. El Administrador diseña una zona con tres mesas; el Mozo abre la mesa 1, comanda un combo y un lomo en segundo tiempo, marcha, agrega adiciones, pide pre-cuentas, anula 1 de 2 con la clave del Supervisor, une la mesa 2 y mueve la cuenta a la mesa 3; un envío con `context.setOffline` queda «Pendiente de envío» y sale una sola vez al volver la red. Dos pruebas miran el diseño a 360 px y en una tableta. La carta, los usuarios y la empresa se crean por la API (`e2e/ayudas-salon.ts`); todo lo demás se hace desde la PWA y se comprueba con lo que la PWA mandó (cada escritura lleva su `Idempotency-Key`). No es una prueba protegida: las de 004 que protegen la API y el dominio están en `apps/api/test/salon-critica/` y `packages/dominio/test/salon/`.
 
 ## "Pendiente de envío"
 
@@ -59,6 +59,8 @@ El destino inicial sale del rol y del plan (`modulos/acceso/navegacion.ts`): "Sa
 TanStack Query con cada evento y se reconecta a 1, 2, 5 y 10 s. Sin conexión, las pantallas en vivo se
 refrescan cada 30 s con `ETag` y `X-Actividad: segundo-plano` (`useIntervaloDeSondeo`). Se cierra al salir,
 al cambiar de usuario y al cambiar de sucursal. En las pruebas, `test/preparar.ts` instala sockets de mentira.
+
+La pantalla de cocina y barra es `/cocina` (`modulos/cocina`): comandas en orden de llegada, filtros de estación que se recuerdan, tiempo transcurrido con avisos a los 10 y 20 minutos, «Preparando», «Listo», «Todo listo» y «Enterado», sonido que se puede silenciar (`sonido.ts`) y comandas recientes. Cada «Listo» avisa en el salón a quien comandó y al mozo responsable (lista «Avisos»). En un iPad o una tableta conviene dejarla en primer plano: en segundo plano, el navegador corta la conexión, y al volver la pantalla se pone al día.
 
 ## Ver las fotos de los productos en desarrollo
 
