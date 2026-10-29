@@ -539,7 +539,12 @@ describe('criterio 107 · vincular el puente con el código', () => {
         fallos.push(`ronda ${ronda}: ${despues - antes} filas vincular_puente (debe ser 1)`);
       }
       if (ganadoras[0] !== undefined) {
-        const res = await llamarPuente(ctx, ganadoras[0].body.token, 'get', '/puente/configuracion');
+        const res = await llamarPuente(
+          ctx,
+          ganadoras[0].body.token,
+          'get',
+          '/puente/configuracion',
+        );
         if (res.status !== 200) fallos.push(`ronda ${ronda}: el token ganador dio ${res.status}`);
       }
     }
@@ -581,13 +586,7 @@ describe('criterio 108 · un puente activo por sucursal y su revocación', () =>
     });
     exigirSinFallos(await exigirRechazoEnElPuente(primero.token, 'puente revocado'));
     for (const r of rutasDelPuente()) {
-      const res = await llamarPuente(
-        ctx,
-        segundo.token,
-        r.metodo,
-        r.ruta,
-        r.cuerpo,
-      );
+      const res = await llamarPuente(ctx, segundo.token, r.metodo, r.ruta, r.cuerpo);
       expect([200, 204, 404], `${r.metodo} ${r.ruta} con el puente nuevo`).toContain(res.status);
     }
     const lista = await listarPuentes(ctx, A.tokenAdmin, A.S1);
@@ -651,7 +650,9 @@ describe('criterio 108 · un puente activo por sucursal y su revocación', () =>
     const primera = await llamar(ctx, A.tokenAdmin, { metodo: 'delete', ruta });
     expect(primera.status, JSON.stringify(primera.body)).toBe(204);
     await conexion.esperarDesconexion(3000);
-    exigirSinFallos(await exigirRechazoEnElPuente(puente.token, 'puente revocado por el Administrador'));
+    exigirSinFallos(
+      await exigirRechazoEnElPuente(puente.token, 'puente revocado por el Administrador'),
+    );
     const [fila] = await listarPuentes(ctx, A.tokenAdmin, A.S1);
     expect(fila).toMatchObject({ id: puente.id, activo: false });
     expect(fila!.revocadoEn).not.toBeNull();
@@ -674,7 +675,10 @@ describe('criterio 108 · un puente activo por sucursal y su revocación', () =>
     const antesA = await instantaneaImpresion(admin, A.empresaId);
     const antesB = await instantaneaImpresion(admin, B.empresaId);
     const borrar = (sucursalId: string, id: string) =>
-      llamar(ctx, A.tokenAdmin, { metodo: 'delete', ruta: `/sucursales/${sucursalId}/puentes/${id}` });
+      llamar(ctx, A.tokenAdmin, {
+        metodo: 'delete',
+        ruta: `/sucursales/${sucursalId}/puentes/${id}`,
+      });
     // Un puente que no existe en una sucursal propia, y una sucursal que no existe.
     const puenteInexistente = await borrar(A.S1, randomUUID());
     expect(puenteInexistente.status, JSON.stringify(puenteInexistente.body)).toBe(404);
@@ -717,7 +721,9 @@ describe('criterio 108 · un puente activo por sucursal y su revocación', () =>
         ] as const) {
           const res = await llamar(ctx, token, { metodo, ruta });
           if (res.status !== 403 || res.body.codigo !== 'PROHIBIDO') {
-            fallos.push(`${rol} (${tipo}) ${metodo.toUpperCase()}: ${res.status} ${JSON.stringify(res.body)}`);
+            fallos.push(
+              `${rol} (${tipo}) ${metodo.toUpperCase()}: ${res.status} ${JSON.stringify(res.body)}`,
+            );
           }
         }
       }
@@ -801,7 +807,9 @@ describe('criterio 109 · el token pu. solo sirve en /puente/* y en /puente/* so
     for (const r of rutasDelPuente()) {
       const res = await llamarPuente(ctx, token, r.metodo, r.ruta, r.cuerpo);
       if (res.status !== 403 || res.body.codigo !== 'CAMBIO_CONTRASENA_REQUERIDO') {
-        fallos.push(`${r.metodo.toUpperCase()} ${r.ruta}: ${res.status} ${JSON.stringify(res.body)}`);
+        fallos.push(
+          `${r.metodo.toUpperCase()} ${r.ruta}: ${res.status} ${JSON.stringify(res.body)}`,
+        );
       }
     }
     exigirSinFallos(fallos);
@@ -814,9 +822,8 @@ describe('criterio 109 · el token pu. solo sirve en /puente/* y en /puente/* so
       { metodo: 'post', ruta: '/puente/vinculacion', cuerpo: ENTRADA_PUENTE },
     ];
     for (const r of rutas) {
-      const res = await ctx
-        .http()
-        [r.metodo](r.ruta)
+      const peticion = ctx.http()[r.metodo](r.ruta);
+      const res = await peticion
         .set('X-Empresa-Id', randomUUID())
         .send(r.cuerpo as object | undefined);
       if (res.status !== 401) {
@@ -847,9 +854,8 @@ describe('criterio 109 · el token pu. solo sirve en /puente/* y en /puente/* so
       fallos.push(...(await exigirRechazoEnElPuente(token, nombre)));
     }
     for (const r of rutasDelPuente()) {
-      const res = await ctx
-        .http()
-        [r.metodo](r.ruta)
+      const peticion = ctx.http()[r.metodo](r.ruta);
+      const res = await peticion
         .set('Authorization', `Basic ${puente.token}`)
         .send(r.cuerpo as object | undefined);
       if (res.status !== 401) fallos.push(`esquema Basic ${r.ruta}: ${res.status}`);
@@ -864,7 +870,8 @@ describe('criterio 109 · el token pu. solo sirve en /puente/* y en /puente/* so
     const puente = await nuevoPuente(ctx, A.tokenAdmin, A, A.S1);
     const fallos: string[] = [];
     for (let i = 0; i < 30; i++) {
-      const falso = i % 2 === 0 ? conSecretoAdulterado(puente.token) : tokenAleatorio('pu', A.empresaId);
+      const falso =
+        i % 2 === 0 ? conSecretoAdulterado(puente.token) : tokenAleatorio('pu', A.empresaId);
       const res = await llamarPuente(ctx, falso, 'get', '/puente/configuracion');
       if (res.status !== 401) fallos.push(`intento ${i}: ${res.status}`);
     }
@@ -884,9 +891,15 @@ describe('criterio 109 · el token pu. solo sirve en /puente/* y en /puente/* so
     });
     const lista = await trabajosDelPuente(ctx, puente);
     expect(lista.map((t) => t.id)).toEqual([trabajoId]);
-    const reporte = await llamarPuente(ctx, puente.token, 'post', `/puente/trabajos/${trabajoId}/resultado`, {
-      resultado: 'IMPRESO',
-    });
+    const reporte = await llamarPuente(
+      ctx,
+      puente.token,
+      'post',
+      `/puente/trabajos/${trabajoId}/resultado`,
+      {
+        resultado: 'IMPRESO',
+      },
+    );
     expect(reporte.status, JSON.stringify(reporte.body)).toBe(200);
     const autor = await autorDe(admin, 'trabajo_impresion', trabajoId);
     expect(autor.actualizadoPorSistema).toBe(`puente:${puente.id}`);
@@ -918,7 +931,9 @@ describe('criterio 111 · espacio /puente de Socket.IO', () => {
     const cliente = await conectarPuente(puente.token);
     expect(cliente.conectado).toBe(true);
     const trabajoId = await crearPrueba(ctx, A.tokenAdmin, A.S1, impresora.id);
-    expect(await cliente.esperarEvento<{ trabajoId: string }>('trabajo.nuevo')).toEqual({ trabajoId });
+    expect(await cliente.esperarEvento<{ trabajoId: string }>('trabajo.nuevo')).toEqual({
+      trabajoId,
+    });
     exigirEstado(
       await llamar(ctx, A.tokenAdmin, {
         metodo: 'patch',
@@ -931,29 +946,49 @@ describe('criterio 111 · espacio /puente de Socket.IO', () => {
     expect(await cliente.esperarEvento('puente.configuracion')).toEqual({});
   });
 
-  it('se rechaza con NO_AUTENTICADO: sin token, basura, otro tipo de token, pu. adulterado, de otra empresa o revocado (control: el verdadero entra)', async () => {
+  it('se rechaza con NO_AUTENTICADO: sin token, basura, sesiones de personas (se.), sa., eq., y pu. o vi. que no existen', async () => {
     const A = await crearEmpresaP6(ctx, sa, 2);
-    const B = await crearEmpresaP6(ctx, sa, 2);
     const roles = await crearRolesP6(ctx, A);
-    const puente = await nuevoPuente(ctx, A.tokenAdmin, A, A.S1);
-    const viejo = await nuevoPuente(ctx, A.tokenAdmin, A, A.S2);
-    const reemplazo = await nuevoPuente(ctx, A.tokenAdmin, A, A.S2);
-    const deB = await nuevoPuente(ctx, B.tokenAdmin, B, B.S1);
-    const codigo = (await crearVinculacion(ctx, A.tokenAdmin, A.S1)).token;
     const equipo = await equipoDe(ctx, roles.MOZO.persona);
     const pinMozo = await sesionPin(ctx, roles.MOZO.persona, equipo, A.S1);
-    await conectarPuente(puente.token);
-
     const casos: [string, { token?: string; equipo?: string }][] = [
       ['sin token', {}],
       ['token vacío', { token: '' }],
       ['basura', { token: 'esto-no-es-un-token' }],
       ['sesión del Administrador (se.)', { token: A.tokenAdmin }],
+      ['sesión del Administrador con S1 activa (se.)', { token: A.tokenS1 }],
       ['sesión de contraseña del Mozo (se.)', { token: roles.MOZO.contrasena }],
       ['sesión de PIN con su equipo (se.)', { token: pinMozo, equipo }],
       ['sesión de superadministrador (sa.)', { token: sa.token }],
       ['token de equipo (eq.)', { token: equipo }],
-      ['código de vinculación (vi.)', { token: codigo }],
+      ['token de equipo (eq.) con el mismo equipo', { token: equipo, equipo }],
+      ['código de vinculación (vi.) que no existe', { token: tokenAleatorio('vi', A.empresaId) }],
+      ['pu. que no existe', { token: tokenAleatorio('pu', A.empresaId) }],
+    ];
+    const fallos: string[] = [];
+    for (const [nombre, auth] of casos) {
+      const error = await intentar(auth);
+      if (error !== 'NO_AUTENTICADO') {
+        fallos.push(
+          `${nombre}: se esperaba el error NO_AUTENTICADO y fue ${JSON.stringify(error)}`,
+        );
+      }
+    }
+    exigirSinFallos(fallos);
+  });
+
+  it('se rechaza con NO_AUTENTICADO un pu. adulterado, de otra empresa o revocado y un vi. sin gastar; entran el verdadero y el que reemplazó al revocado', async () => {
+    const A = await crearEmpresaP6(ctx, sa, 2);
+    const B = await crearEmpresaP6(ctx, sa, 2);
+    const puente = await nuevoPuente(ctx, A.tokenAdmin, A, A.S1);
+    const viejo = await nuevoPuente(ctx, A.tokenAdmin, A, A.S2);
+    const reemplazo = await nuevoPuente(ctx, A.tokenAdmin, A, A.S2);
+    const deB = await nuevoPuente(ctx, B.tokenAdmin, B, B.S1);
+    const codigo = (await crearVinculacion(ctx, A.tokenAdmin, A.S1)).token;
+    await conectarPuente(puente.token);
+
+    const casos: [string, { token?: string; equipo?: string }][] = [
+      ['código de vinculación (vi.) válido', { token: codigo }],
       ['pu. con el secreto adulterado', { token: conSecretoAdulterado(puente.token) }],
       ['pu. con el id cambiado', { token: conIdDe(puente.token, randomUUID()) }],
       ['pu. con la empresa cambiada a B', { token: conEmpresaDe(puente.token, B.empresaId) }],
@@ -964,28 +999,33 @@ describe('criterio 111 · espacio /puente de Socket.IO', () => {
     for (const [nombre, auth] of casos) {
       const error = await intentar(auth);
       if (error !== 'NO_AUTENTICADO') {
-        fallos.push(`${nombre}: se esperaba el error NO_AUTENTICADO y fue ${JSON.stringify(error)}`);
+        fallos.push(
+          `${nombre}: se esperaba el error NO_AUTENTICADO y fue ${JSON.stringify(error)}`,
+        );
       }
     }
     exigirSinFallos(fallos);
     // El código de vinculación no se gastó al intentar entrar.
     exigirEstado(await vincular(ctx, codigo), 201, 'el código sigue sirviendo');
-    // Controles: el verdadero y el reemplazo entran.
+    // Controles: el verdadero, el reemplazo y el de B entran.
     expect(await intentar({ token: reemplazo.token })).toBeNull();
     expect(await intentar({ token: deB.token })).toBeNull();
   });
 
   it('una persona no entra al espacio /puente ni un puente al espacio / (cada una entra al suyo)', async () => {
     const A = await crearEmpresaP6(ctx, sa, 2);
-    const puente = await nuevoPuente(ctx, A.tokenAdmin, A, A.S1);
-    expect(await intentar({ token: puente.token }, '/puente'), 'el puente en su espacio').toBeNull();
-    expect(await intentar({ token: A.tokenS1 }, '/'), 'la persona en el suyo').toBeNull();
     expect(await intentar({ token: A.tokenS1 }, '/puente'), 'la persona en el del puente').toBe(
       'NO_AUTENTICADO',
     );
+    const puente = await nuevoPuente(ctx, A.tokenAdmin, A, A.S1);
+    expect(
+      await intentar({ token: puente.token }, '/puente'),
+      'el puente en su espacio',
+    ).toBeNull();
     expect(await intentar({ token: puente.token }, '/'), 'el puente en el de la PWA').toBe(
       'NO_AUTENTICADO',
     );
+    expect(await intentar({ token: A.tokenS1 }, '/'), 'la persona en el suyo').toBeNull();
   });
 
   it('la señal del puente se actualiza al conectarse y al desconectarse', async () => {
@@ -1044,7 +1084,11 @@ describe('criterio 130 · auditoría de la impresión', () => {
     // crear_impresora
     const impresora = await crearImpresora(ctx, A.tokenAdmin, A.S1);
     let fila = await unaNueva(A, antes, 'crear_impresora');
-    expect(fila).toMatchObject({ actor_usuario_id: A.adminId, sucursal_id: A.S1, actor_sistema: null });
+    expect(fila).toMatchObject({
+      actor_usuario_id: A.adminId,
+      sucursal_id: A.S1,
+      actor_sistema: null,
+    });
     await avanzar();
 
     // modificar_impresora
@@ -1122,7 +1166,10 @@ describe('criterio 130 · auditoría de la impresión', () => {
 
     // revocar_puente (y el repetido no audita)
     const revocar = () =>
-      llamar(ctx, A.tokenAdmin, { metodo: 'delete', ruta: `/sucursales/${A.S1}/puentes/${puenteId}` });
+      llamar(ctx, A.tokenAdmin, {
+        metodo: 'delete',
+        ruta: `/sucursales/${A.S1}/puentes/${puenteId}`,
+      });
     expect((await revocar()).status).toBe(204);
     fila = await unaNueva(A, antes, 'revocar_puente');
     expect(fila).toMatchObject({ actor_usuario_id: A.adminId, sucursal_id: A.S1 });
@@ -1145,14 +1192,26 @@ describe('criterio 130 · auditoría de la impresión', () => {
     });
     expect(latido.status, JSON.stringify(latido.body)).toBe(204);
     expect((await trabajosDelPuente(ctx, puente)).map((t) => t.id)).toEqual([prueba]);
-    const reportado = await llamarPuente(ctx, puente.token, 'post', `/puente/trabajos/${prueba}/resultado`, {
-      resultado: 'NO_IMPRESO',
-      error: 'La impresora no respondió',
-    });
+    const reportado = await llamarPuente(
+      ctx,
+      puente.token,
+      'post',
+      `/puente/trabajos/${prueba}/resultado`,
+      {
+        resultado: 'NO_IMPRESO',
+        error: 'La impresora no respondió',
+      },
+    );
     expect(reportado.status, JSON.stringify(reportado.body)).toBe(200);
-    const impreso = await llamarPuente(ctx, puente.token, 'post', `/puente/trabajos/${prueba}/resultado`, {
-      resultado: 'IMPRESO',
-    });
+    const impreso = await llamarPuente(
+      ctx,
+      puente.token,
+      'post',
+      `/puente/trabajos/${prueba}/resultado`,
+      {
+        resultado: 'IMPRESO',
+      },
+    );
     expect(impreso.status, JSON.stringify(impreso.body)).toBe(200);
 
     const reimpresion = await conClave(

@@ -49,7 +49,12 @@ import {
 import { sembrarFilasSalon, type FilasSalon } from '../salon-critica/fabrica-p4';
 import { fijarEntornoDePrueba } from '../utilidades';
 
-export { exigirEstado, exigirSinFallos, llamar, unico } from '../carta-critica/fabrica-permisos-carta';
+export {
+  exigirEstado,
+  exigirSinFallos,
+  llamar,
+  unico,
+} from '../carta-critica/fabrica-permisos-carta';
 export type { Metodo } from '../carta-critica/fabrica-permisos-carta';
 
 // ------------------------------------------------------------------------------------------------
