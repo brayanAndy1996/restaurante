@@ -116,9 +116,7 @@ describe('5 · pendientes del KDS: el índice se acota por empresa y deja fuera 
 
   it('las líneas de una marcha y de una anulación quedan fuera del índice parcial', async () => {
     const orden = await abrirOrden(ctx, esc.salon, t().mozo);
-    const envio = await enviarOk(ctx, t().mozo, orden.id, [
-      L.lomo(['3/4'], 2, { tiempo: 2 }),
-    ]);
+    const envio = await enviarOk(ctx, t().mozo, orden.id, [L.lomo(['3/4'], 2, { tiempo: 2 })]);
     exigirEstado(
       await llamar(ctx, t().mozo, {
         metodo: 'post',

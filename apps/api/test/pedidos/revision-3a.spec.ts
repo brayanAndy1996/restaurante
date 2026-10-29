@@ -134,7 +134,7 @@ describe('I1 y M3 · GET /cocina/comandas: pendientes por índice y recientes po
     );
     const defs = Object.fromEntries(rows.map((r) => [r.indexname, r.indexdef]));
     expect(defs['comanda_linea_pendiente_idx']).toMatch(
-      /\(comanda_id\) WHERE .*ENVIADO.*EN_PREPARACION/,
+      /\(empresa_id, comanda_id\) WHERE .*ENVIADO.*EN_PREPARACION/,
     );
     expect(defs['comanda_no_vista_idx']).toMatch(
       /\(sucursal_id\) WHERE .*vista_en IS NULL.*MARCHAR.*ANULACION/,

@@ -73,9 +73,11 @@ const COLUMNAS_ITEM = `i.id, i.producto_id, i.nombre, i.cantidad, i.cantidad_anu
  * `SesionActual.autorizacionConsumida()`): si la anulación falla, el consumo se revierte con ella.
  *
  * Orden de las comprobaciones de una anulación de ítem (plan, "Anular un ítem"): la orden se bloquea (`FOR UPDATE`;
- * serializa las anulaciones con los envíos, las marchas y las pre-cuentas de la misma orden); el ítem de esa orden
- * (404); la réplica por el id de la anulación (antes del estado, así llega aunque la orden se anule después); el
- * estado de la orden (409), el ítem (409) y la cantidad (422); los `INSERT` y los `UPDATE`; el puerto de
+ * serializa las anulaciones con los envíos, las marchas y las pre-cuentas de la misma orden); el ítem de esa ruta
+ * (404: está en la orden o lo envió una orden que luego se unió a esta, por la cadena `unida_a_orden_id`); la
+ * réplica por el id de la anulación (antes del estado, así llega aunque la orden se anule o se una después, y por
+ * la ruta de la orden original o la de la principal); el estado de la orden (409; `UNIDA` responde con la orden a
+ * la que se unió, criterio 29), el ítem (409) y la cantidad (422); los `INSERT` y los `UPDATE`; el puerto de
  * inventario (dentro de la transacción: si lanza, no queda nada); y los eventos, que salen solo al confirmar.
  */
 @Injectable()
