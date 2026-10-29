@@ -1,11 +1,7 @@
 import type { APIRequestContext, Locator, Page } from '@playwright/test';
 import { expect } from '@playwright/test';
 import { llamarApi, tokenDeSesion, type Persona } from './ayudas';
-import {
-  crearEscenarioDeCarta,
-  type Escritura,
-  type EscenarioDeCarta,
-} from './ayudas-carta';
+import { crearEscenarioDeCarta, type Escritura, type EscenarioDeCarta } from './ayudas-carta';
 
 /**
  * Preparación del E2E del salón y la cocina (historia 004, entrega 3a). La empresa, sus personas y la carta se
@@ -93,7 +89,12 @@ export async function crearEscenarioDeSalon(request: APIRequestContext): Promise
 
   // La carta: lo mínimo para comandar con ruteo por estación y un combo que reparte su preparación.
   async function crear<T extends { id: string }>(ruta: string, cuerpo: unknown): Promise<T> {
-    const r = await llamarApi<T>(request, ruta, { metodo: 'POST', token, cuerpo, idempotente: true });
+    const r = await llamarApi<T>(request, ruta, {
+      metodo: 'POST',
+      token,
+      cuerpo,
+      idempotente: true,
+    });
     expect(r.estado, `POST ${ruta} ${JSON.stringify(cuerpo)}`).toBe(201);
     return r.cuerpo;
   }
@@ -240,7 +241,9 @@ export async function cuentaPorApi<T = { items: { nombre: string; cantidad: numb
   page: Page,
   ordenId: string,
 ): Promise<T> {
-  const r = await llamarApi<T>(request, `/ordenes/${ordenId}`, { token: await tokenDeSesion(page) });
+  const r = await llamarApi<T>(request, `/ordenes/${ordenId}`, {
+    token: await tokenDeSesion(page),
+  });
   expect(r.estado, 'GET de la cuenta').toBe(200);
   return r.cuerpo;
 }

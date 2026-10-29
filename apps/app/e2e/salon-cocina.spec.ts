@@ -50,6 +50,8 @@ import {
  * salón y la cocina debe llevar su clave de idempotencia: cada paso lo comprueba con lo que la PWA mandó de verdad.
  */
 test.describe.configure({ mode: 'serial' });
+// Un control que no está falla en segundos, no a los dos minutos del tiempo de la prueba.
+test.use({ actionTimeout: 15_000 });
 
 const TABLETA: BrowserContextOptions = {
   ...CELULAR,
@@ -168,7 +170,9 @@ test('el Administrador diseña una zona con tres mesas', async ({ browser }) => 
       await page.getByLabel('Capacidad (personas)').fill(capacidad);
       await page.getByRole('button', { name: 'Crear mesa' }).click();
       await expect(page.getByText(`Mesa ${nombre} creada.`)).toBeVisible();
-      await expect(page.getByRole('button', { name: new RegExp(`^Mesa ${nombre},`) })).toBeVisible();
+      await expect(
+        page.getByRole('button', { name: new RegExp(`^Mesa ${nombre},`) }),
+      ).toBeVisible();
     }
     await page.screenshot({ path: 'e2e/resultados/salon-2-mapa-de-mesas.png', fullPage: true });
   });
@@ -264,7 +268,9 @@ test('el Mozo comanda un combo y un lomo en segundo tiempo y envía; el KDS ve l
 
     const lomo = await elegirProducto(page, CARTA.lomo, PRECIOS.lomo);
     await lomo.getByRole('button', { name: 'Tiempo 2' }).click();
-    await expect(lomo.getByText('Cocina lo recibe como «Esperar» hasta que marches.')).toBeVisible();
+    await expect(
+      lomo.getByText('Cocina lo recibe como «Esperar» hasta que marches.'),
+    ).toBeVisible();
     await lomo.getByLabel(/Observación/).fill('sin cebolla');
     await lomo.getByRole('button', { name: `Agregar · ${PRECIOS.lomo}` }).click();
     await expect(lomo).toBeHidden();
@@ -400,7 +406,7 @@ test('el Mozo marcha, Cocina marca «Listo» y el Mozo recibe el aviso', async (
     // La cuenta del Mozo cambia sin recargar.
     await expect(itemDeCuenta(page, CARTA.lomo)).toContainText('Listo');
 
-    await destino(page, 'Salón').click();
+    await page.getByRole('link', { name: 'Volver a Salón' }).click();
     const aviso = page.getByRole('button', {
       name: /^Lomo saltado × 1 de la mesa 1 está listo\. Toca para quitar el aviso\.$/,
     });
@@ -443,17 +449,17 @@ test('el Mozo agrega una adición, pide la pre-cuenta (amarillo) y agrega otra (
     await abrirElComandero(page, 'Mesa 1');
     const ceviche = await elegirProducto(page, CARTA.ceviche, PRECIOS.ceviche);
     await ceviche.getByRole('button', { name: `Agregar una unidad de ${CARTA.ceviche}` }).click();
-    await expect(ceviche.getByRole('group', { name: `Cantidad de ${CARTA.ceviche}` })).toContainText(
-      '2',
-    );
+    await expect(
+      ceviche.getByRole('group', { name: `Cantidad de ${CARTA.ceviche}` }),
+    ).toContainText('2');
     await ceviche.getByRole('button', { name: 'Agregar · S/ 76.00' }).click();
     await expect(page.getByText('2 ítems por enviar')).toBeVisible();
     await page.getByRole('button', { name: 'Enviar', exact: true }).click();
     await esperarLaCuenta(page, 'Mesa 1');
     await expect(page.getByText('La adición 2 ya salió a cocina.')).toBeVisible();
-    await expect(itemDeCuenta(page.getByRole('region', { name: 'Adición 2' }), CARTA.ceviche)).toContainText(
-      '2 ×',
-    );
+    await expect(
+      itemDeCuenta(page.getByRole('region', { name: 'Adición 2' }), CARTA.ceviche),
+    ).toContainText('2 ×');
     await expect(page.locator('.cuenta__total')).toContainText('S/ 144.00');
 
     const adicion = tarjetaDeCocina(cocina.page, 'Adición', 'Mesa 1', 'Cocina');
@@ -479,15 +485,22 @@ test('el Mozo agrega una adición, pide la pre-cuenta (amarillo) y agrega otra (
     await expect(hoja).toBeHidden();
 
     await expect(page.locator('.cuenta__cabecera')).toContainText('Pre-cuenta');
-    await expect(page.locator('.cuenta__precuenta-dato')).toContainText('Pre-cuenta 1 pedida a las');
+    await expect(page.locator('.cuenta__precuenta-dato')).toContainText(
+      'Pre-cuenta 1 pedida a las',
+    );
     await afirmarEstadoDeMesa(supervisor.page, '1', 'en-precuenta');
     await expect(supervisor.page.getByText('1 en pre-cuenta')).toBeVisible();
-    await supervisor.page.screenshot({ path: 'e2e/resultados/salon-11-supervisor-ve-precuenta.png' });
+    await supervisor.page.screenshot({
+      path: 'e2e/resultados/salon-11-supervisor-ve-precuenta.png',
+    });
   });
 
   await test.step('una adición deja sin valor la pre-cuenta y la mesa vuelve a rojo', async () => {
     await abrirElComandero(page, 'Mesa 1');
-    await page.getByRole('group', { name: 'Familias de la carta' }).getByRole('button', { name: CARTA.familias.bebidas }).click();
+    await page
+      .getByRole('group', { name: 'Familias de la carta' })
+      .getByRole('button', { name: CARTA.familias.bebidas })
+      .click();
     const gaseosa = await elegirProducto(page, CARTA.gaseosa, PRECIOS.gaseosa);
     await gaseosa.getByRole('button', { name: `Agregar · ${PRECIOS.gaseosa}` }).click();
     await page.getByRole('button', { name: 'Enviar', exact: true }).click();
@@ -541,7 +554,7 @@ test('el Mozo pide otra pre-cuenta y anula 1 de 2 con la clave del Supervisor; e
     await expect(hoja.getByText('Elige qué pasa con el stock')).toBeVisible();
 
     await hoja.getByRole('button', { name: 'Error al comandar' }).click();
-    await hoja.getByText('Vuelve al stock').click();
+    await hoja.getByRole('radio', { name: /Vuelve al stock/ }).check();
     await mozo.page.waitForTimeout(400); // la hoja termina de subir
     await page.screenshot({ path: 'e2e/resultados/salon-12-anular-item.png' });
     await hoja.getByRole('button', { name: 'Pedir clave de supervisor' }).click();
@@ -614,7 +627,9 @@ test('el Mozo une la mesa 2 y mueve la cuenta a la mesa 3', async () => {
     // La mesa 1 es de la propia cuenta: no se puede elegir.
     await expect(baldosaDeMesa(page, '1')).toHaveCount(0);
     await baldosaDeMesa(page, '2').click();
-    await expect(page.getByRole('region', { name: 'Mesas elegidas' })).toContainText('Mesa 2 · Libre');
+    await expect(page.getByRole('region', { name: 'Mesas elegidas' })).toContainText(
+      'Mesa 2 · Libre',
+    );
     await page.screenshot({ path: 'e2e/resultados/salon-15-unir.png' });
     await page.getByRole('button', { name: 'Unir 2', exact: true }).click();
     const confirmacion = page.getByRole('dialog', { name: '¿Unir 2?' });
@@ -624,7 +639,9 @@ test('el Mozo une la mesa 2 y mueve la cuenta a la mesa 3', async () => {
     await confirmacion.getByRole('button', { name: 'Sí, unir' }).click();
 
     await esperarLaCuenta(page, 'Mesas 1 y 2');
-    await expect(page.getByText(`Se unieron 2 a esta cuenta. La venta queda a nombre de ${e.mozo.nombre}.`)).toBeVisible();
+    await expect(
+      page.getByText(`Se unieron 2 a esta cuenta. La venta queda a nombre de ${e.mozo.nombre}.`),
+    ).toBeVisible();
     await expect(page.locator('.cuenta__total')).toContainText('S/ 112.00');
   });
 
@@ -646,7 +663,10 @@ test('el Mozo une la mesa 2 y mueve la cuenta a la mesa 3', async () => {
     await expect(page.getByRole('heading', { name: 'Mover la cuenta', level: 1 })).toBeVisible();
     // Con dos mesas hay que decir cuál se mueve.
     await expect(page.getByRole('button', { name: 'Elige una mesa libre' })).toBeDisabled();
-    await page.getByRole('group', { name: 'Mesa que se mueve' }).getByRole('button', { name: 'Mesa 1' }).click();
+    await page
+      .getByRole('group', { name: 'Mesa que se mueve' })
+      .getByRole('button', { name: 'Mesa 1' })
+      .click();
     // Solo las libres se pueden elegir: la 2 es de la cuenta.
     await expect(baldosaDeMesa(page, '2')).toHaveCount(0);
     await baldosaDeMesa(page, '3').click();
@@ -659,7 +679,9 @@ test('el Mozo une la mesa 2 y mueve la cuenta a la mesa 3', async () => {
     await confirmacion.getByRole('button', { name: 'Sí, mover' }).click();
 
     await esperarLaCuenta(page, 'Mesas 2 y 3');
-    await expect(page.getByText('La cuenta pasó a la mesa 3. La mesa 1 quedó libre.')).toBeVisible();
+    await expect(
+      page.getByText('La cuenta pasó a la mesa 3. La mesa 1 quedó libre.'),
+    ).toBeVisible();
     await expect(page.locator('.cuenta__total')).toContainText('S/ 112.00');
   });
 
@@ -692,13 +714,19 @@ test('un envío con la red cortada queda «Pendiente de envío» y sale una sola
     }
   });
   page.on('response', (r) => {
-    if (r.request().method() === 'POST' && /\/ordenes\/[^/]+\/envios$/.test(new URL(r.url()).pathname)) {
+    if (
+      r.request().method() === 'POST' &&
+      /\/ordenes\/[^/]+\/envios$/.test(new URL(r.url()).pathname)
+    ) {
       respuestas.push(r.status());
     }
   });
 
   await abrirElComandero(page, 'Mesas 2 y 3');
-  await page.getByRole('group', { name: 'Familias de la carta' }).getByRole('button', { name: CARTA.familias.bebidas }).click();
+  await page
+    .getByRole('group', { name: 'Familias de la carta' })
+    .getByRole('button', { name: CARTA.familias.bebidas })
+    .click();
   const gaseosa = await elegirProducto(page, CARTA.gaseosa, PRECIOS.gaseosa);
   await gaseosa.getByLabel(/Observación/).fill('sin hielo');
   await gaseosa.getByRole('button', { name: `Agregar · ${PRECIOS.gaseosa}` }).click();
@@ -725,10 +753,19 @@ test('un envío con la red cortada queda «Pendiente de envío» y sale una sola
     await expect(page.getByText('La adición 4 ya salió a cocina.')).toBeVisible();
     await expect(page.getByText('Sin conexión', { exact: true })).toHaveCount(0);
 
-    expect(intentos.length, 'el primer intento falló por la red y hubo al menos un reintento').toBeGreaterThanOrEqual(2);
-    expect(new Set(intentos.map((i) => i.clave)).size, 'todos los intentos llevan la misma clave').toBe(1);
+    expect(
+      intentos.length,
+      'el primer intento falló por la red y hubo al menos un reintento',
+    ).toBeGreaterThanOrEqual(2);
+    expect(
+      new Set(intentos.map((i) => i.clave)).size,
+      'todos los intentos llevan la misma clave',
+    ).toBe(1);
     expect(intentos[0]?.clave).toMatch(/^[0-9a-f-]{36}$/);
-    expect(respuestas.filter((s) => s >= 200 && s < 300), 'una sola respuesta de éxito').toHaveLength(1);
+    expect(
+      respuestas.filter((s) => s >= 200 && s < 300),
+      'una sola respuesta de éxito',
+    ).toHaveLength(1);
   });
 
   await test.step('la cuenta y la cocina tienen la gaseosa una sola vez', async () => {
@@ -760,7 +797,7 @@ test('a 360 px, las pantallas del salón y la cocina no se desplazan de lado y s
   expect(page.viewportSize()?.width, 'el celular de la prueba mide 360 px').toBe(360);
 
   await test.step('Salón: mapa, lista y hoja de abrir mesa', async () => {
-    await destino(page, 'Salón').click();
+    await page.getByRole('link', { name: 'Volver a Salón' }).click();
     await expect(page.getByText('1 libre', { exact: true })).toBeVisible();
     await afirmarPantallaDeCelular(page, 'Salón > mapa');
     await page.screenshot({ path: 'e2e/resultados/salon-19-mapa-360.png', fullPage: true });
@@ -791,7 +828,7 @@ test('a 360 px, las pantallas del salón y la cocina no se desplazan de lado y s
     await page.waitForTimeout(400);
     await afirmarPantallaDeCelular(page, 'Cuenta > hoja de anular ítem');
     await hoja.getByRole('button', { name: 'Error al comandar' }).click();
-    await hoja.getByText('Es merma').click();
+    await hoja.getByRole('radio', { name: /Es merma/ }).check();
     await hoja.getByRole('button', { name: 'Pedir clave de supervisor' }).click();
     const ventana = page.getByRole('dialog', { name: 'Clave de supervisor' });
     await expect(ventana).toBeVisible();
@@ -883,7 +920,8 @@ test('en una tableta, el mapa, la cuenta, el comandero y la cocina aprovechan el
 }) => {
   const mesas = await entrar(browser, e.mozo, undefined, TABLETA);
   const kds = await entrar(browser, e.cocina, undefined, TABLETA);
-  const todo = (p: Page) => p.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth);
+  const todo = (p: Page) =>
+    p.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth);
 
   await test.step('Salón: mapa más ancho y avisos', async () => {
     await expect(mesas.page.getByRole('grid', { name: `Mesas de ${ZONA}` })).toBeVisible();
@@ -891,7 +929,10 @@ test('en una tableta, el mapa, la cuenta, el comandero y la cocina aprovechan el
     await afirmarEstadoDeMesa(mesas.page, '2', 'en-precuenta');
     await afirmarEstadoDeMesa(mesas.page, '1', 'libre');
     expect(await todo(mesas.page), 'sin desplazamiento lateral').toBe(true);
-    await mesas.page.screenshot({ path: 'e2e/resultados/salon-27-mapa-tableta.png', fullPage: true });
+    await mesas.page.screenshot({
+      path: 'e2e/resultados/salon-27-mapa-tableta.png',
+      fullPage: true,
+    });
   });
 
   await test.step('Comandero: la carta y «Por enviar» se ven a la vez', async () => {
@@ -910,7 +951,9 @@ test('en una tableta, el mapa, la cuenta, el comandero y la cocina aprovechan el
   });
 
   await test.step('Cocina: las comandas se reparten en columnas', async () => {
-    const tarjetas = kds.page.getByRole('list', { name: 'Comandas pendientes' }).getByRole('article');
+    const tarjetas = kds.page
+      .getByRole('list', { name: 'Comandas pendientes' })
+      .getByRole('article');
     await expect(tarjetas.first()).toBeVisible();
     expect(await tarjetas.count()).toBeGreaterThanOrEqual(2);
     const cajas = await tarjetas.evaluateAll((els) =>
@@ -919,8 +962,14 @@ test('en una tableta, el mapa, la cuenta, el comandero y la cocina aprovechan el
         return { x: Math.round(c.left), y: Math.round(c.top) };
       }),
     );
-    expect(new Set(cajas.map((c) => c.x)).size, 'las comandas ocupan más de una columna').toBeGreaterThan(1);
+    expect(
+      new Set(cajas.map((c) => c.x)).size,
+      'las comandas ocupan más de una columna',
+    ).toBeGreaterThan(1);
     expect(await todo(kds.page), 'sin desplazamiento lateral').toBe(true);
-    await kds.page.screenshot({ path: 'e2e/resultados/salon-29-cocina-tableta.png', fullPage: true });
+    await kds.page.screenshot({
+      path: 'e2e/resultados/salon-29-cocina-tableta.png',
+      fullPage: true,
+    });
   });
 });

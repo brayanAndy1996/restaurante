@@ -115,7 +115,11 @@ test('el Administrador ve el aviso de gracia y luego el de suspensión, y no pue
   );
   await expect(suspendida.getByRole('button')).toHaveCount(0);
   await page.screenshot({ path: 'e2e/resultados/aviso-2-suspendida.png' });
-  await page.getByRole('link', { name: 'Administrar usuarios' }).click();
+  // La Administradora entra en el Salón (criterio 87 de 004): Ajustes está en la navegación, no en Inicio.
+  await page
+    .getByRole('navigation', { name: 'Principal' })
+    .getByRole('link', { name: 'Ajustes' })
+    .click();
   await expect(page.getByRole('heading', { name: 'Ajustes' }).first()).toBeVisible();
   await expect(page.getByRole('button', { name: 'Usuarios', exact: true })).toHaveAttribute(
     'aria-pressed',

@@ -361,6 +361,10 @@ test('Cocina/Barra de S1 arma el menú de hoy y marca un plato agotado solo por 
     });
   });
 
+  // Cocina/Barra entra en la Cocina (criterio 87 de 004), que ya pidió la vista de la sucursal para sus filtros
+  // antes de que este oyente existiera: se recarga para que la primera lectura que se mira sea la de esta prueba.
+  await page.reload();
+  await expect(page.getByRole('heading', { name: 'Cocina', level: 1 })).toBeVisible();
   await expect(destino(page, 'Carta')).toHaveCount(0);
   await destino(page, 'Disponibilidad').click();
   await expect(page.getByRole('heading', { name: 'Disponibilidad', level: 1 })).toBeVisible();
