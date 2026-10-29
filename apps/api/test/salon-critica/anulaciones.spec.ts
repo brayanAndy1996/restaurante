@@ -120,7 +120,11 @@ async function actor(rol: Rol, tipo: TipoDeSesion): Promise<Actor> {
 /** Una orden nueva con el lomo × 2, el combo × 3 y la gaseosa × 2, abierta y enviada por el Mozo. */
 async function ordenNueva(): Promise<OrdenConItems> {
   const mozo = await actor('MOZO', 'contrasena');
-  return ordenConItems(ctx, await mesasS1(), await carta(), mozo.token);
+  const orden = await ordenConItems(ctx, await mesasS1(), await carta(), mozo.token);
+  // El registro del inventario es de todo el archivo: cada caso empieza con el suyo vacío (la llamada del
+  // envío ya no cuenta), así las aserciones sobre las llamadas de la anulación son de este caso.
+  ctx.inventario.limpiar();
+  return orden;
 }
 
 /** Autorización de clave del Supervisor para el actor (queda atada a su sesión). */
