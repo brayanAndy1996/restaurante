@@ -176,6 +176,10 @@ export function totalDeMesa(mesa: MesaDelSalon): string | null {
 /** Ruta de la cuenta de una mesa (T16 la dibuja completa). */
 export const rutaDeOrden = (ordenId: string) => `/salon/ordenes/${ordenId}`;
 
+/** Rutas del mapa en modo selección para mover la cuenta o unir mesas (criterio 94). */
+export const rutaDeMover = (ordenId: string) => `${rutaDeOrden(ordenId)}/mover`;
+export const rutaDeUnir = (ordenId: string) => `${rutaDeOrden(ordenId)}/unir`;
+
 /** Ruta del comandero de una cuenta (criterio 91). */
 export const rutaDeComandero = (ordenId: string) => `${rutaDeOrden(ordenId)}/agregar`;
 

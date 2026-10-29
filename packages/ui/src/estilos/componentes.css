@@ -1803,6 +1803,18 @@ button.ui-mesa:active {
 .ui-mesa--en-precuenta .ui-mesa__datos {
   color: var(--color-aviso-texto);
 }
+/* Fuera de juego en el modo selección: borde punteado y tintas neutras; el estado sigue dicho con texto */
+.ui-mesa--no-elegible {
+  border-style: dashed;
+  border-color: var(--color-borde-control);
+  background: var(--color-fondo);
+  color: var(--color-tinta-suave);
+}
+.ui-mesa--no-elegible .ui-mesa__estado,
+.ui-mesa--no-elegible .ui-mesa__datos,
+.ui-mesa--no-elegible .ui-mesa__detalle {
+  color: var(--color-tinta-suave);
+}
 .ui-mesa--elegida {
   padding: 3px;
   border: 2px solid var(--color-accion);

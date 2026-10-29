@@ -25,6 +25,11 @@ export interface MesaDeCuadricula {
   detalle?: string;
   /** Las otras mesas de la misma cuenta ("5, 6"): la baldosa dice "Grupo con 5, 6" y lleva un eslabón. */
   grupo?: string;
+  /**
+   * Por qué esta mesa no se puede elegir ahora (modo selección de mover y unir): "Ocupada: para juntar
+   * cuentas usa Unir". La baldosa se ve apagada, no se toca y la etiqueta accesible dice el motivo.
+   */
+  noElegible?: string;
 }
 
 export interface CeldaDeCuadricula {
@@ -41,6 +46,8 @@ interface PropsCuadricula {
   /** Lado de cada celda en px: 64 o más en el salón (por defecto 72); nunca menos de 48. */
   tamanoCelda?: number;
   mesaElegidaId?: string | null;
+  /** Varias mesas elegidas a la vez (unir mesas); se suman a `mesaElegidaId`. */
+  mesasElegidasIds?: readonly string[];
   onElegirMesa?: (id: string) => void;
   /** Celda vacía elegida (el editor está creando una mesa ahí). */
   celdaElegida?: CeldaDeCuadricula | null;
@@ -70,6 +77,7 @@ export function CuadriculaDeMesas({
   mesas,
   tamanoCelda = 72,
   mesaElegidaId,
+  mesasElegidasIds,
   onElegirMesa,
   celdaElegida,
   onElegirCelda,
@@ -81,15 +89,20 @@ export function CuadriculaDeMesas({
   const [desborda, setDesborda] = useState(false);
 
   const mesaEn = new Map(mesas.map((m) => [`${m.columna}:${m.fila}`, m]));
-  const mesaElegida = mesas.find((m) => m.id === mesaElegidaId);
+  const mesaElegida = mesas.find(
+    (m) => m.id === mesaElegidaId || mesasElegidasIds?.includes(m.id) === true,
+  );
+  const estaElegida = (id: string) =>
+    id === mesaElegidaId || mesasElegidasIds?.includes(id) === true;
   const hayAcciones = onElegirMesa !== undefined || onElegirCelda !== undefined;
 
-  // Celda que recibe el Tab: la elegida; si no, la primera mesa; si no, la primera celda.
+  // Celda que recibe el Tab: la elegida; si no, la primera mesa que se pueda tocar; si no, la primera celda.
+  const primeraElegible = mesas.find((m) => !m.noElegible) ?? mesas[0];
   const porDefecto: CeldaDeCuadricula = mesaElegida
     ? { columna: mesaElegida.columna, fila: mesaElegida.fila }
     : (celdaElegida ??
-      (mesas[0] && !onElegirCelda
-        ? { columna: mesas[0].columna, fila: mesas[0].fila }
+      (primeraElegible && !onElegirCelda
+        ? { columna: primeraElegible.columna, fila: primeraElegible.fila }
         : { columna: 1, fila: 1 }));
   const [foco, setFoco] = useState<CeldaDeCuadricula | null>(null);
   const celdaDeFoco = foco ?? porDefecto;
@@ -99,7 +112,9 @@ export function CuadriculaDeMesas({
     columna <= columnas &&
     fila >= 1 &&
     fila <= filas &&
-    (mesaEn.has(`${columna}:${fila}`) ? onElegirMesa !== undefined : onElegirCelda !== undefined);
+    (mesaEn.has(`${columna}:${fila}`)
+      ? onElegirMesa !== undefined && !mesaEn.get(`${columna}:${fila}`)?.noElegible
+      : onElegirCelda !== undefined);
   const celdaConTab = tocable(celdaDeFoco.columna, celdaDeFoco.fila)
     ? celdaDeFoco
     : (primeraTocable() ?? celdaDeFoco);
@@ -209,10 +224,11 @@ export function CuadriculaDeMesas({
                         {...(mesa.estado ? { estado: mesa.estado } : {})}
                         {...(mesa.detalle ? { detalle: mesa.detalle } : {})}
                         {...(mesa.grupo ? { grupo: mesa.grupo } : {})}
-                        {...(onElegirMesa
+                        {...(mesa.noElegible ? { noElegible: mesa.noElegible } : {})}
+                        {...(onElegirMesa && !mesa.noElegible
                           ? {
                               onClick: () => onElegirMesa(mesa.id),
-                              elegida: mesa.id === mesaElegidaId,
+                              elegida: estaElegida(mesa.id),
                               tabIndex: conTab ? 0 : -1,
                             }
                           : {})}

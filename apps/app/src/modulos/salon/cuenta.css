@@ -171,3 +171,22 @@
   padding-top: var(--espacio-xl);
   border-top: 1px solid var(--color-junta);
 }
+
+/* Pre-cuenta, mover y unir: lo que se pide al cerrar el servicio, aparte de lo que se hace a diario */
+.cuenta__acciones {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espacio-sm);
+}
+.cuenta__precuenta-dato {
+  margin: 0;
+  font-size: 0.9375rem;
+  line-height: 1.375rem;
+  color: var(--color-tinta-suave);
+  font-variant-numeric: tabular-nums;
+}
+.cuenta__mover-unir {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--espacio-sm);
+}

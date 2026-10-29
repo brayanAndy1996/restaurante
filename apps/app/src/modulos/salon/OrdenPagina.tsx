@@ -1,4 +1,4 @@
-import type { ItemRespuesta, OrdenRespuesta } from '@restaurante/contratos';
+import type { ItemRespuesta, OrdenRespuesta, PrecuentaRespuesta } from '@restaurante/contratos';
 import {
   Aviso,
   Boton,
@@ -8,9 +8,12 @@ import {
   EstadoVacio,
   EtiquetaDeEstado,
   Icono,
+  IconoCambiar,
   IconoDerecha,
+  IconoNota,
   IconoPendiente,
   IconoSalon,
+  IconoUnidas,
   claseBoton,
   claseFila,
 } from '@restaurante/ui';
@@ -22,7 +25,7 @@ import { AvisoPendiente } from '../../componentes/PendienteDeEnvio';
 import { nuevaClaveDeIdempotencia } from '../../lib/api';
 import { MUTACION_SIN_PAUSA, useEnvioPendiente } from '../../lib/envios';
 import { ErrorApi, mensajeDeError } from '../../lib/errores';
-import { montoEnSoles } from '../../lib/formato';
+import { horaDeLima, montoEnSoles } from '../../lib/formato';
 import { CLAVES_TIEMPO_REAL } from '../../lib/tiempo-real';
 import { usePermiso } from '../acceso/permisos';
 import { useSesionActiva } from '../acceso/sesion';
@@ -50,7 +53,8 @@ import {
   tituloDeMesas,
   type GrupoDeEnvio,
 } from './ordenes';
-import { rutaDeComandero, rutaDeOrden } from './salon';
+import { pedirPrecuenta, esLaVigente, sePuedePedirPrecuenta } from './precuenta';
+import { rutaDeComandero, rutaDeMover, rutaDeOrden, rutaDeUnir } from './salon';
 import { useAhoraDelServidor, useOrden } from './useOrden';
 import './cuenta.css';
 
@@ -58,6 +62,9 @@ import './cuenta.css';
 const AnularHoja = lazy(() => import('./AnularHoja').then((m) => ({ default: m.AnularHoja })));
 const LiberarMesaHoja = lazy(() =>
   import('./AnularHoja').then((m) => ({ default: m.LiberarMesaHoja })),
+);
+const PrecuentaHoja = lazy(() =>
+  import('./PrecuentaHoja').then((m) => ({ default: m.PrecuentaHoja })),
 );
 
 /** Lo que la pantalla anterior le pide a la cuenta al llegar. */
@@ -68,7 +75,16 @@ interface EstadoDeLlegada {
   enviado?: { numero: number; esAdicion: boolean };
   /** Esta cuenta absorbió a otra (criterio 47). */
   unida?: boolean;
+  /** Lo que acaba de hacerse desde otra pantalla (mover o unir mesas), dicho en una frase. */
+  hecho?: string;
 }
+
+const MENSAJES_DE_PRECUENTA = {
+  ORDEN_SIN_CONSUMO:
+    'Aún no hay nada vigente en la cuenta. Envía un pedido antes de pedir la pre-cuenta.',
+  ORDEN_NO_ABIERTA: 'Esta cuenta ya no está abierta.',
+  NO_ENCONTRADO: 'Esta cuenta ya no existe.',
+} as const;
 
 const MENSAJES_DE_MARCHA = {
   NADA_QUE_MARCHAR: 'No hay nada por marchar. Puede que otra persona ya lo haya marchado.',
@@ -129,10 +145,21 @@ function Cuenta({
   const [anulando, setAnulando] = useState<ObjetivoDeAnulacion | null>(null);
   const [liberando, setLiberando] = useState(false);
   const [conConsumo, setConConsumo] = useState(false);
-  const [hecho, setHecho] = useState<string | null>(null);
+  const [hecho, setHecho] = useState<string | null>(llegada.hecho ?? null);
+  // La pre-cuenta que se está mirando y cuándo llegó (para saber si lo que se ve de la cuenta es posterior).
+  const [precuenta, setPrecuenta] = useState<{
+    datos: PrecuentaRespuesta;
+    recibidaEn: number;
+  } | null>(null);
+  const [falloPrecuenta, setFalloPrecuenta] = useState<string | null>(null);
+  // Decisión 10: la pre-cuenta vigente que se vio y dejó de valer (se agregó o se anuló algo).
+  const [vistaVigente, setVistaVigente] = useState<number | null>(null);
+  const [vencida, setVencida] = useState<number | null>(null);
   const puedeAnularItem = usePermiso('ANULAR_ITEM_ENVIADO') !== 'prohibido';
   const puedeAnularOrden = usePermiso('ANULAR_ORDEN') !== 'prohibido';
   const puedeLiberar = usePermiso('ATENDER_MESA') !== 'prohibido';
+  const puedeAtender = usePermiso('ATENDER_MESA') !== 'prohibido';
+  const puedeMoverUnir = usePermiso('MOVER_UNIR_MESAS') !== 'prohibido';
 
   const montado = useRef(true);
   useEffect(() => {
@@ -170,6 +197,38 @@ function Cuenta({
         setMarchada(false);
         setFallo(mensajeDeError(error, MENSAJES_DE_MARCHA));
       }
+    },
+  });
+
+  // Se ajusta durante el dibujo (no en un efecto): el número de la pre-cuenta vigente que se ve ahora.
+  const numeroVigente =
+    orden?.estado === 'EN_PRECUENTA' ? (orden.precuentaVigente?.numero ?? null) : null;
+  if (orden && numeroVigente !== vistaVigente) {
+    setVistaVigente(numeroVigente);
+    if (numeroVigente !== null) setVencida(null);
+    else if (vistaVigente !== null) setVencida(vistaVigente);
+  }
+
+  const pedirLaPrecuenta = useMutation({
+    ...MUTACION_SIN_PAUSA,
+    mutationFn: () => {
+      // El id de la pre-cuenta se genera una vez por toque y se conserva en los reintentos (criterio 50).
+      const id = nuevaClaveDeIdempotencia();
+      return envio.enviar((extra) => pedirPrecuenta(ordenId, { id }, extra));
+    },
+    onSuccess: (datos) => {
+      void clientes.invalidateQueries({ queryKey: CLAVES_TIEMPO_REAL.orden(ordenId) });
+      void clientes.invalidateQueries({ queryKey: CLAVES_TIEMPO_REAL.salon });
+      if (montado.current) {
+        setPrecuenta({ datos, recibidaEn: Date.now() });
+        setFalloPrecuenta(null);
+      }
+    },
+    onError: (error) => {
+      if (error instanceof ErrorApi && error.estado >= 400 && error.estado < 500) {
+        void clientes.invalidateQueries({ queryKey: CLAVES_TIEMPO_REAL.orden(ordenId) });
+      }
+      if (montado.current) setFalloPrecuenta(mensajeDeError(error, MENSAJES_DE_PRECUENTA));
     },
   });
 
@@ -240,6 +299,8 @@ function Cuenta({
   const ofreceLiberar = puedeLiberar && sePuedeLiberar(orden) && !conConsumo;
   const ofreceAnularOrden =
     puedeAnularOrden && (sePuedeAnularOrden(orden) || (conConsumo && abierta));
+  const ofrecePrecuenta = puedeAtender && sePuedePedirPrecuenta(orden);
+  const enPrecuenta = orden.estado === 'EN_PRECUENTA' ? orden.precuentaVigente : null;
 
   return (
     <Pagina
@@ -285,6 +346,12 @@ function Cuenta({
       ) : null}
 
       <Cabecera orden={orden} ahora={ahora} />
+
+      {abierta && vencida !== null ? (
+        <Aviso tipo="alerta" titulo={`La pre-cuenta ${vencida} ya no vale`}>
+          Se agregó o se anuló algo después de pedirla. Pide otra cuando el cliente la necesite.
+        </Aviso>
+      ) : null}
 
       {!abierta ? (
         <Aviso
@@ -416,6 +483,50 @@ function Cuenta({
         </div>
       ) : null}
 
+      {abierta && (ofrecePrecuenta || puedeMoverUnir) ? (
+        <section className="cuenta__acciones" aria-label="Pre-cuenta, mover y unir">
+          {ofrecePrecuenta ? (
+            <>
+              {enPrecuenta ? (
+                <p className="cuenta__precuenta-dato">
+                  Pre-cuenta {enPrecuenta.numero} pedida a las {horaDeLima(enPrecuenta.emitidaEn)}.
+                  Si agregas o anulas algo, deja de valer.
+                </p>
+              ) : null}
+              <Boton
+                bloque
+                icono={IconoNota}
+                cargando={pedirLaPrecuenta.isPending}
+                textoCargando={envio.pendiente ? 'Pendiente de envío' : 'Pidiendo…'}
+                onClick={() => {
+                  setFalloPrecuenta(null);
+                  pedirLaPrecuenta.mutate();
+                }}
+              >
+                {enPrecuenta ? 'Ver pre-cuenta' : 'Pedir pre-cuenta'}
+              </Boton>
+              {falloPrecuenta && !precuenta ? (
+                <Aviso tipo="error" titulo="No pudimos pedir la pre-cuenta">
+                  {falloPrecuenta}
+                </Aviso>
+              ) : null}
+            </>
+          ) : null}
+          {puedeMoverUnir ? (
+            <div className="cuenta__mover-unir">
+              <Link to={rutaDeMover(ordenId)} className={claseBoton()}>
+                <Icono icono={IconoCambiar} tamano={20} />
+                Mover
+              </Link>
+              <Link to={rutaDeUnir(ordenId)} className={claseBoton()}>
+                <Icono icono={IconoUnidas} tamano={20} />
+                Unir
+              </Link>
+            </div>
+          ) : null}
+        </section>
+      ) : null}
+
       {conConsumo ? (
         <Aviso tipo="alerta" titulo="Esta mesa ya tuvo pedidos">
           No se puede liberar sin más. Para dejarla libre, anula la orden.
@@ -450,6 +561,23 @@ function Cuenta({
       ) : null}
 
       <Suspense fallback={null}>
+        {precuenta ? (
+          <PrecuentaHoja
+            precuenta={precuenta.datos}
+            // Mientras lo que se ve de la cuenta sea anterior a la pre-cuenta, no se puede decir que dejó de valer.
+            vale={
+              consulta.dataUpdatedAt < precuenta.recibidaEn || esLaVigente(orden, precuenta.datos)
+            }
+            pidiendo={pedirLaPrecuenta.isPending}
+            pendiente={envio.pendiente}
+            fallo={falloPrecuenta}
+            onPedirOtra={() => {
+              setFalloPrecuenta(null);
+              pedirLaPrecuenta.mutate();
+            }}
+            onCerrar={() => setPrecuenta(null)}
+          />
+        ) : null}
         {anulando ? (
           <AnularHoja
             key={anulando.tipo === 'item' ? anulando.itemId : 'orden'}

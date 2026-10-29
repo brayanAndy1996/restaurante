@@ -77,6 +77,13 @@ const OrdenPagina = lazy(() =>
 const ComanderoPagina = lazy(() =>
   import('./modulos/salon/ComanderoPagina').then((m) => ({ default: m.ComanderoPagina })),
 );
+// Mover y unir (el mapa en modo selección) también se baja solo al tocarlos.
+const MoverCuentaPagina = lazy(() =>
+  import('./modulos/salon/SeleccionDeMesasPagina').then((m) => ({ default: m.MoverCuentaPagina })),
+);
+const UnirMesasPagina = lazy(() =>
+  import('./modulos/salon/SeleccionDeMesasPagina').then((m) => ({ default: m.UnirMesasPagina })),
+);
 const CocinaPagina = lazy(() =>
   import('./modulos/cocina/CocinaPagina').then((m) => ({ default: m.CocinaPagina })),
 );
@@ -263,6 +270,8 @@ export function App() {
                 <Route path="/salon" element={<SalonPagina />} />
                 <Route path="/salon/ordenes/:id" element={<OrdenPagina />} />
                 <Route path="/salon/ordenes/:id/agregar" element={<ComanderoPagina />} />
+                <Route path="/salon/ordenes/:id/mover" element={<MoverCuentaPagina />} />
+                <Route path="/salon/ordenes/:id/unir" element={<UnirMesasPagina />} />
               </Route>
               <Route element={<RutaDeCocina />}>
                 <Route path="/cocina" element={<CocinaPagina />} />

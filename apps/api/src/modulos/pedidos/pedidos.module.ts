@@ -11,10 +11,12 @@ import { EnviosController } from './envios.controller';
 import { EnviosService } from './envios.service';
 import { EventosPedidos } from './eventos-pedidos';
 import { IMPRESION, ImpresionSoloKds } from './impresion';
+import { MovimientosService } from './movimientos.service';
 import { OrdenesController } from './ordenes.controller';
 import { OrdenesService } from './ordenes.service';
 import { PedidosConsultaService } from './pedidos-consulta.service';
 import { PrecuentasController } from './precuentas.controller';
+import { PrecuentasService } from './precuentas.service';
 import { SalonController } from './salon.controller';
 import { SalonService } from './salon.service';
 import { VistaOrdenService } from './vista-orden';
@@ -41,6 +43,8 @@ import { VistaOrdenService } from './vista-orden';
     OrdenesService,
     EnviosService,
     AnulacionesService,
+    MovimientosService,
+    PrecuentasService,
     CocinaService,
     SalonService,
     VistaOrdenService,

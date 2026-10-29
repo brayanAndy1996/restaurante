@@ -1,0 +1,135 @@
+/* La pre-cuenta en pantalla (criterios 50 a 54 y 95 de 004). Se carga con la hoja. */
+
+.hoja-precuenta .ui-hoja__cuerpo {
+  padding-bottom: 0;
+  scroll-padding-bottom: 6rem;
+}
+.precuenta {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espacio-lg);
+  min-width: 0;
+  font-variant-numeric: tabular-nums;
+}
+.precuenta__cabecera {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--espacio-sm);
+}
+.precuenta__datos {
+  margin: 0;
+  font-size: 0.9375rem;
+  line-height: 1.375rem;
+  color: var(--color-tinta-suave);
+}
+
+/* Las líneas, separadas por juntas */
+.precuenta__lineas {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  background: var(--color-baldosa);
+  border: 1px solid var(--color-junta);
+  border-radius: var(--radio-baldosa);
+}
+.precuenta__linea {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--espacio-md);
+  padding: var(--espacio-md);
+}
+.precuenta__linea + .precuenta__linea {
+  border-top: 1px solid var(--color-junta);
+}
+.precuenta__cantidad {
+  flex: none;
+  min-width: 2.25rem;
+  font-weight: 700;
+}
+.precuenta__texto {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.precuenta__nombre {
+  font-size: 1.0625rem;
+  line-height: 1.375rem;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.precuenta__detalle {
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+  color: var(--color-tinta-suave);
+  overflow-wrap: anywhere;
+}
+.precuenta__importe {
+  flex: none;
+  font-size: 1.0625rem;
+  line-height: 1.375rem;
+  font-weight: 700;
+  text-align: right;
+}
+
+/* El total: lo único grande, con IGV incluido y sin desglose */
+.precuenta__total {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--espacio-md);
+  padding-top: var(--espacio-md);
+  border-top: 2px solid var(--color-tinta);
+  font-size: 1.0625rem;
+  font-weight: 600;
+}
+.precuenta__total span {
+  display: flex;
+  flex-direction: column;
+}
+.precuenta__total small {
+  font-size: 0.875rem;
+  font-weight: 400;
+  color: var(--color-tinta-suave);
+}
+.precuenta__total b {
+  font-size: 1.5rem;
+  line-height: 2rem;
+  font-weight: 700;
+}
+
+.precuenta__nota {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espacio-xs);
+}
+.precuenta__nota p {
+  margin: 0;
+  font-size: 0.9375rem;
+  line-height: 1.375rem;
+  color: var(--color-tinta-suave);
+}
+.precuenta__nota .precuenta__icbper {
+  font-weight: 700;
+  color: var(--color-tinta);
+}
+
+/* Una pre-cuenta que ya no vale lleva el total tachado (y lo dice con palabras): no se le muestra al cliente */
+.precuenta--vencida .precuenta__total b {
+  text-decoration: line-through;
+}
+
+/* Los botones quedan a la vista aunque la hoja se desplace */
+.precuenta__pie {
+  position: sticky;
+  bottom: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--espacio-sm);
+  margin: 0 calc(var(--espacio-lg) * -1);
+  padding: var(--espacio-md) var(--espacio-lg) max(var(--espacio-lg), env(safe-area-inset-bottom));
+  border-top: 1px solid var(--color-junta);
+  background: var(--color-baldosa);
+}

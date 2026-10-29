@@ -1,0 +1,134 @@
+/* Mover y unir: el mapa en modo selección (criterios 45 a 49 y 94 de 004). Se carga con la pantalla. */
+
+.seleccion {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espacio-lg);
+  min-width: 0;
+}
+
+/* Qué se hace y quién queda a cargo: siempre a la vista, antes de tocar nada */
+.seleccion__cargo {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espacio-xs);
+  padding: var(--espacio-md);
+  background: var(--color-baldosa);
+  border: 1px solid var(--color-junta);
+  border-radius: var(--radio-baldosa);
+}
+.seleccion__cargo p {
+  margin: 0;
+}
+.seleccion__instruccion {
+  font-size: 1.0625rem;
+  line-height: 1.5rem;
+  font-weight: 600;
+}
+.seleccion__mozo {
+  font-size: 0.9375rem;
+  line-height: 1.375rem;
+  color: var(--color-tinta-suave);
+}
+.seleccion__mozo b {
+  color: var(--color-tinta);
+}
+
+.seleccion__barra {
+  display: flex;
+  justify-content: flex-end;
+}
+
+/* Fila de la vista de lista: estado, total y marca de elegida alineados a la derecha */
+.seleccion__fila-estado {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: var(--espacio-xs);
+}
+.seleccion__fila-total {
+  font-size: 0.9375rem;
+  line-height: 1.25rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.seleccion__marca {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--espacio-xs);
+  font-size: 0.8125rem;
+  line-height: 1.125rem;
+  font-weight: 700;
+  color: var(--color-accion);
+}
+.seleccion button.ui-fila[aria-pressed='true'] {
+  background: var(--color-accion-suave);
+  outline: 2px solid var(--color-accion);
+  outline-offset: -2px;
+}
+.seleccion button.ui-fila:disabled {
+  cursor: default;
+}
+
+/* Las mesas que se suman, con su mozo y su total: lo que se lee antes de confirmar */
+.seleccion__elegidas {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espacio-sm);
+}
+.seleccion__titulo {
+  margin: 0;
+  font-size: 1.125rem;
+  line-height: 1.5rem;
+  font-weight: 700;
+}
+.seleccion__elegidas ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  background: var(--color-baldosa);
+  border: 1px solid var(--color-junta);
+  border-radius: var(--radio-baldosa);
+  font-variant-numeric: tabular-nums;
+}
+.seleccion__elegidas li {
+  padding: var(--espacio-md);
+  font-size: 1rem;
+  line-height: 1.5rem;
+  overflow-wrap: anywhere;
+}
+.seleccion__elegidas li + li {
+  border-top: 1px solid var(--color-junta);
+}
+
+/* Texto de la confirmación */
+.seleccion__confirmacion {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espacio-sm);
+}
+.seleccion__confirmacion p {
+  margin: 0;
+}
+.seleccion__absorbidas {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espacio-xs);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-variant-numeric: tabular-nums;
+}
+.seleccion__absorbidas li {
+  display: flex;
+  flex-direction: column;
+  padding: var(--espacio-sm) var(--espacio-md);
+  background: var(--color-fondo);
+  border: 1px solid var(--color-junta);
+  border-radius: var(--radio-baldosa);
+}
+.seleccion__absorbidas span {
+  font-size: 0.9375rem;
+  line-height: 1.375rem;
+  color: var(--color-tinta-suave);
+}

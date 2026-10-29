@@ -43,6 +43,8 @@ export interface PropsBaldosaDeMesa {
    * baldosa con un eslabón, para que las mesas unidas se reconozcan sin leer.
    */
   grupo?: string;
+  /** Por qué no se puede elegir (modo selección): baldosa apagada, sin toque, con el motivo en su etiqueta. */
+  noElegible?: string;
   /** Mesa elegida: lleva una marca además del color y se anuncia como presionada. */
   elegida?: boolean;
   /** Se toca (botón). Sin él, la baldosa es solo informativa. */
@@ -72,6 +74,7 @@ export function BaldosaDeMesa({
   estado,
   detalle,
   grupo,
+  noElegible,
   elegida,
   onClick,
   tabIndex,
@@ -88,6 +91,7 @@ export function BaldosaDeMesa({
     TEXTO_DE_FORMA_DE_MESA[forma],
     textoEstado,
     textoGrupo,
+    noElegible,
   ]
     .filter(Boolean)
     .join(', ');
@@ -95,6 +99,7 @@ export function BaldosaDeMesa({
     'ui-mesa',
     estado && `ui-mesa--${estado.toLowerCase().replace('_', '-')}`,
     grupo && 'ui-mesa--grupo',
+    noElegible && 'ui-mesa--no-elegible',
     elegida && 'ui-mesa--elegida',
     className,
   );

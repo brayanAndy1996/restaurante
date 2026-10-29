@@ -1,5 +1,6 @@
 import type { CampoError } from '@restaurante/contratos';
 import { ErrorAplicacion } from '../../nucleo/errores/error-aplicacion';
+import { MENSAJE_OPERACION_CONCURRENTE } from '../../nucleo/errores/filtro-global-errores';
 
 /**
  * Errores del módulo de pedidos (historia 004). Un id de otra empresa, de otra sucursal y uno inexistente dan
@@ -131,3 +132,35 @@ export const ordenConConsumo = (): ErrorAplicacion =>
     'ORDEN_CON_CONSUMO',
     'La orden tiene consumo: anúlala con la clave de un supervisor',
   );
+
+/** 409 `ORDEN_SIN_CONSUMO` (criterio 50): la orden no tiene ningún ítem con cantidad vigente que mostrar. */
+export const ordenSinConsumo = (): ErrorAplicacion =>
+  new ErrorAplicacion(409, 'ORDEN_SIN_CONSUMO', 'La orden no tiene ítems vigentes');
+
+/**
+ * 409 `CONFLICTO` de una operación que perdió la carrera con otra sobre las mismas órdenes o mesas (criterio 48):
+ * el mismo mensaje que la traducción de un abrazo mortal, así la PWA la repite sin distinguirlos.
+ */
+export const operacionConcurrente = (): ErrorAplicacion =>
+  new ErrorAplicacion(409, 'CONFLICTO', MENSAJE_OPERACION_CONCURRENTE);
+
+/** 400 `DATOS_INVALIDOS` (criterio 45): una orden con varias mesas necesita saber cuál se mueve. */
+export const mesaOrigenRequerida = (): ErrorAplicacion =>
+  new ErrorAplicacion(400, 'DATOS_INVALIDOS', 'Indica cuál de las mesas de la orden se mueve', [
+    { campo: 'mesaOrigenId', mensaje: 'Obligatoria cuando la orden tiene varias mesas' },
+  ]);
+
+/** 422 `REFERENCIA_INVALIDA` (criterio 45): la mesa de origen existe pero no es una de las mesas de la orden. */
+export const mesaOrigenInvalida = (): ErrorAplicacion =>
+  new ErrorAplicacion(
+    422,
+    'REFERENCIA_INVALIDA',
+    'Una de las referencias no existe o no está activa',
+    [{ campo: 'mesaOrigenId', mensaje: 'No es una mesa de la orden' }],
+  );
+
+/** 422 `DATOS_INVALIDOS` (criterio 46): la unión dejaría a la orden con más mesas de las permitidas. */
+export const demasiadasMesas = (maximo: number): ErrorAplicacion =>
+  new ErrorAplicacion(422, 'DATOS_INVALIDOS', `Una orden admite como máximo ${maximo} mesas`, [
+    { campo: 'mesaIds', mensaje: `La orden quedaría con más de ${maximo} mesas` },
+  ]);

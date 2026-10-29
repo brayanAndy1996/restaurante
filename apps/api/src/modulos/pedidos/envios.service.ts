@@ -485,9 +485,14 @@ function rechazoDeLinea(indice: number, error: unknown): RechazoDeLinea | undefi
     };
   }
   if (error instanceof ErrorSeleccionInvalida) {
-    const detalle = (error.campos ?? []).map((c) =>
-      c.campo.startsWith('grupos.') ? `${c.mensaje} (${c.campo})` : c.mensaje,
-    );
+    // Un modificador desconocido (de otra empresa o inexistente) se informa sin el id: el cuerpo es el mismo
+    // para los dos (criterio 85).
+    const detalle = (error.campos ?? []).map((c) => {
+      if (c.campo.startsWith('grupos.')) return `${c.mensaje} (${c.campo})`;
+      return c.mensaje.startsWith('MODIFICADOR_DESCONOCIDO')
+        ? 'MODIFICADOR_DESCONOCIDO'
+        : c.mensaje;
+    });
     return {
       codigo: error.codigo,
       mensaje: error.message,

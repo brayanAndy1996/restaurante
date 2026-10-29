@@ -276,3 +276,102 @@ describe('CuadriculaDeMesas', () => {
     expect(screen.getAllByRole('button').filter((b) => b.tabIndex === 0)).toHaveLength(1);
   });
 });
+
+describe('Modo selección (mover y unir mesas)', () => {
+  const mesasSeleccion: MesaDeCuadricula[] = [
+    {
+      id: 'a',
+      nombre: '4',
+      capacidad: 4,
+      forma: 'CUADRADA',
+      columna: 1,
+      fila: 1,
+      estado: 'OCUPADA',
+      noElegible: 'es de esta cuenta',
+    },
+    {
+      id: 'b',
+      nombre: '5',
+      capacidad: 4,
+      forma: 'CUADRADA',
+      columna: 2,
+      fila: 1,
+      estado: 'OCUPADA',
+    },
+    { id: 'c', nombre: '6', capacidad: 4, forma: 'CUADRADA', columna: 3, fila: 1, estado: 'LIBRE' },
+  ];
+
+  it('una mesa no elegible se ve pero no se toca, y su etiqueta dice por qué', () => {
+    const alElegir = vi.fn();
+    render(
+      <CuadriculaDeMesas
+        etiqueta="Mesas"
+        columnas={3}
+        filas={1}
+        mesas={mesasSeleccion}
+        onElegirMesa={alElegir}
+      />,
+    );
+    expect(screen.queryByRole('button', { name: /^Mesa 4,/ })).toBeNull();
+    const inerte = screen.getByRole('img', { name: /^Mesa 4,/ });
+    expect(inerte).toHaveAccessibleName(/Ocupada, es de esta cuenta$/);
+    expect(inerte).toHaveClass('ui-mesa--no-elegible');
+    // El estado sigue dicho con texto.
+    expect(within(inerte).getByText('Ocupada')).toBeInTheDocument();
+  });
+
+  it('el foco itinerante empieza en la primera mesa que se puede tocar', () => {
+    render(
+      <CuadriculaDeMesas
+        etiqueta="Mesas"
+        columnas={3}
+        filas={1}
+        mesas={mesasSeleccion}
+        onElegirMesa={() => undefined}
+      />,
+    );
+    expect(screen.getByRole('button', { name: /^Mesa 5,/ })).toHaveAttribute('tabindex', '0');
+    expect(screen.getByRole('button', { name: /^Mesa 6,/ })).toHaveAttribute('tabindex', '-1');
+  });
+
+  it('las flechas saltan las mesas no elegibles', async () => {
+    render(
+      <CuadriculaDeMesas
+        etiqueta="Mesas"
+        columnas={3}
+        filas={1}
+        mesas={mesasSeleccion}
+        onElegirMesa={() => undefined}
+      />,
+    );
+    const cinco = screen.getByRole('button', { name: /^Mesa 5,/ });
+    cinco.focus();
+    await userEvent.keyboard('{ArrowLeft}');
+    // A la izquierda solo está la mesa 4, que no se toca: el foco no se mueve.
+    expect(cinco).toHaveFocus();
+    await userEvent.keyboard('{ArrowRight}');
+    expect(screen.getByRole('button', { name: /^Mesa 6,/ })).toHaveFocus();
+  });
+
+  it('varias mesas elegidas a la vez llevan la marca y se anuncian como presionadas', () => {
+    render(
+      <CuadriculaDeMesas
+        etiqueta="Mesas"
+        columnas={3}
+        filas={1}
+        mesas={mesasSeleccion}
+        mesasElegidasIds={['b', 'c']}
+        onElegirMesa={() => undefined}
+      />,
+    );
+    expect(screen.getByRole('button', { name: /^Mesa 5,/ })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+    expect(screen.getByRole('button', { name: /^Mesa 6,/ })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+    expect(screen.getByRole('button', { name: /^Mesa 5,/ })).toHaveClass('ui-mesa--elegida');
+  });
+});
