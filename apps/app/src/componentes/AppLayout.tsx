@@ -1,11 +1,10 @@
 import {
   Cenefa,
   ContenidoDeDestino,
-  IconoCandado,
+  IconoAjustes,
   IconoCarta,
   IconoDisponibilidad,
   IconoInicio,
-  IconoUsuarios,
   Navegacion,
 } from '@restaurante/ui';
 import { NavLink, Outlet } from 'react-router-dom';
@@ -43,11 +42,9 @@ export function AppLayout() {
           },
         ]
       : []),
+    // "Ajustes" agrupa Usuarios, Acceso y Mapa de mesas; queda activo en cualquiera de ellos.
     ...(sesion?.esAdministrador
-      ? [
-          { a: '/administracion/usuarios', etiqueta: 'Usuarios', icono: IconoUsuarios, fin: false },
-          { a: '/administracion/acceso', etiqueta: 'Acceso', icono: IconoCandado, fin: false },
-        ]
+      ? [{ a: '/administracion', etiqueta: 'Ajustes', icono: IconoAjustes, fin: false }]
       : []),
   ];
   return (

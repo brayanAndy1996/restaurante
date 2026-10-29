@@ -176,9 +176,12 @@ test('la sesión se cierra por inactividad según la sucursal y vuelve a la pant
   await expect(
     admin.getByRole('heading', { name: `Hola, ${administrador.primerNombre}` }),
   ).toBeVisible();
-  await admin.getByRole('link', { name: 'Acceso', exact: true }).click();
+  await admin.getByRole('link', { name: 'Ajustes', exact: true }).click();
+  await admin.getByRole('button', { name: 'Acceso', exact: true }).click();
   await expect(admin.getByRole('heading', { name: 'Cierre por inactividad' })).toBeVisible();
-  const campo = admin.getByLabel(`${escenario.sucursalNombre}: minutos sin uso`);
+  const campo = admin
+    .getByRole('group', { name: escenario.sucursalNombre })
+    .getByLabel('Cierre por inactividad (minutos)', { exact: true });
   await expect(campo).toHaveValue('5');
   await campo.fill('1');
   await admin.getByRole('button', { name: 'Guardar cambios' }).click();
@@ -231,7 +234,11 @@ test('el administrador revoca el equipo de un trabajador y su sesión deja de va
   await expect(
     admin.getByRole('heading', { name: `Hola, ${administrador.primerNombre}` }),
   ).toBeVisible();
-  await admin.getByRole('link', { name: 'Usuarios', exact: true }).click();
+  await admin.getByRole('link', { name: 'Ajustes', exact: true }).click();
+  await expect(admin.getByRole('button', { name: 'Usuarios', exact: true })).toHaveAttribute(
+    'aria-pressed',
+    'true',
+  );
   await admin
     .getByRole('link', { name: new RegExp(mozo.nombre) })
     .first()

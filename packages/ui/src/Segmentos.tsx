@@ -1,4 +1,5 @@
-import { Icono, IconoOk } from './iconos';
+import type { ReactNode } from 'react';
+import { Icono, IconoOk, type LucideIcon } from './iconos';
 import { clases } from './utilidades';
 
 export interface OpcionDeSegmento<T extends string> {
@@ -12,6 +13,8 @@ interface PropsSegmentos<T extends string> {
   opciones: readonly OpcionDeSegmento<T>[];
   valor: T;
   onCambio: (valor: T) => void;
+  /** Algo más al final de la cuadrícula (por ejemplo, un `BotonDeSegmento` para agregar). */
+  children?: ReactNode;
 }
 
 /**
@@ -23,6 +26,7 @@ export function Segmentos<T extends string>({
   opciones,
   valor,
   onCambio,
+  children,
 }: PropsSegmentos<T>) {
   return (
     <div className="ui-segmentos" role="group" aria-label={etiqueta}>
@@ -43,6 +47,32 @@ export function Segmentos<T extends string>({
           </button>
         );
       })}
+      {children}
     </div>
+  );
+}
+
+/** Baldosa de segmento que no elige nada, sino que agrega (contorno punteado, como "agregar tramo"). */
+export function BotonDeSegmento({
+  icono,
+  children,
+  onClick,
+  disabled,
+}: {
+  icono?: LucideIcon;
+  children: ReactNode;
+  onClick: () => void;
+  disabled?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      className="ui-segmento ui-segmento--agregar"
+      onClick={onClick}
+      disabled={disabled}
+    >
+      {icono ? <Icono icono={icono} tamano={16} /> : null}
+      {children}
+    </button>
   );
 }

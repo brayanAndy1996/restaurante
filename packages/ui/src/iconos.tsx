@@ -61,6 +61,11 @@ export {
   PackageCheck as IconoDisponibilidad,
   History as IconoHistorial,
   Hourglass as IconoPendiente,
+  Settings as IconoAjustes,
+  LayoutGrid as IconoMapa,
+  Square as IconoFormaCuadrada,
+  Circle as IconoFormaRedonda,
+  RectangleHorizontal as IconoFormaRectangular,
 } from 'lucide-react';
 
 interface PropsIcono {

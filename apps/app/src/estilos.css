@@ -1130,3 +1130,130 @@ body,
 .aviso-global__texto {
   margin: 0;
 }
+
+/* Ajustes (004): el cambio de sección arriba, como la Carta */
+.ajustes__secciones .ui-segmentos {
+  /* Cada baldosa mide lo que su texto: las tres caben en una fila a 360 px; a 320 px la última pasa a otra */
+  display: flex;
+  flex-wrap: wrap;
+}
+
+.ajustes__secciones .ui-segmento {
+  flex: 1 1 auto;
+  padding-inline: var(--espacio-sm);
+  font-size: 0.9375rem;
+}
+
+@media (min-width: 768px) {
+  .ajustes__secciones {
+    max-width: 40rem;
+  }
+}
+
+/* Acceso: una sucursal con sus dos tiempos de inactividad */
+.acceso__sucursal {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espacio-md);
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.acceso__sucursal + .acceso__sucursal {
+  padding-top: var(--espacio-xl);
+  border-top: 1px solid var(--color-junta);
+}
+
+.acceso__sucursal > legend {
+  float: left;
+  width: 100%;
+  margin-bottom: var(--espacio-md);
+  padding: 0;
+}
+
+.acceso__sucursal > legend + * {
+  clear: both;
+}
+
+/* Mapa de mesas (004): zonas, cuadrícula y el formulario que se abre debajo */
+.mapa__herramientas {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--espacio-sm) var(--espacio-lg);
+}
+
+.mapa__panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espacio-lg);
+  padding-top: var(--espacio-xl);
+  border-top: 1px solid var(--color-junta);
+  scroll-margin-bottom: 6rem;
+}
+
+.mapa__medidas {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--espacio-md);
+}
+
+.mapa__forma {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espacio-sm);
+}
+
+.mapa__mover {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espacio-sm);
+}
+
+/* Cuatro flechas de 48 px en cruz, separadas 8 px */
+.mapa__cruz {
+  display: grid;
+  grid-template-columns: repeat(3, var(--alto-control));
+  grid-template-rows: repeat(2, var(--alto-control));
+  gap: var(--espacio-sm);
+}
+
+.mapa__flecha {
+  border: 1px solid var(--color-borde-control);
+  border-radius: var(--radio-baldosa);
+  background: var(--color-baldosa);
+}
+
+.mapa__flecha--arriba {
+  grid-column: 2;
+  grid-row: 1;
+}
+
+.mapa__flecha--izquierda {
+  grid-column: 1;
+  grid-row: 2;
+}
+
+.mapa__flecha--abajo {
+  grid-column: 2;
+  grid-row: 2;
+}
+
+.mapa__flecha--derecha {
+  grid-column: 3;
+  grid-row: 2;
+}
+
+/* El aviso de por qué no se pudo mover ocupa el sitio de siempre para que la pantalla no salte */
+.mapa__aviso-mover {
+  min-height: 2.5rem;
+}
+
+.mapa__desactivadas {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espacio-sm);
+  padding-top: var(--espacio-xl);
+  border-top: 1px solid var(--color-junta);
+}

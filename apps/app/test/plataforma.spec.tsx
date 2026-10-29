@@ -206,7 +206,7 @@ describe('empresas y soporte', () => {
     expect(within(banner).getByText(/Ana Torres · hasta las/)).toBeInTheDocument();
     expect(screen.getByText('Estás en la cuenta de Inversiones Sol del Norte')).toBeInTheDocument();
     // En soporte se ven las opciones de Administrador.
-    expect(screen.getByRole('link', { name: /^Usuarios$/ })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /^Ajustes$/ })).toBeInTheDocument();
 
     await userEvent.click(within(banner).getByRole('button', { name: 'Terminar' }));
     expect(await screen.findByRole('heading', { name: 'Empresas' })).toBeInTheDocument();

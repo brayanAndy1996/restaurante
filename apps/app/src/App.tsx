@@ -37,6 +37,11 @@ const AccesoSucursalPagina = lazy(() =>
     default: m.AccesoSucursalPagina,
   })),
 );
+const MapaDeMesasPagina = lazy(() =>
+  import('./modulos/administracion/mesas/MapaDeMesasPagina').then((m) => ({
+    default: m.MapaDeMesasPagina,
+  })),
+);
 const CartaPagina = lazy(() =>
   import('./modulos/carta/CartaPagina').then((m) => ({ default: m.CartaPagina })),
 );
@@ -234,10 +239,15 @@ export function App() {
                 <Route path="/disponibilidad" element={<DisponibilidadPagina />} />
               </Route>
               <Route element={<RutaDeAdministrador />}>
+                <Route
+                  path="/administracion"
+                  element={<Navigate to="/administracion/usuarios" replace />}
+                />
                 <Route path="/administracion/usuarios" element={<UsuariosPagina />} />
                 <Route path="/administracion/usuarios/nuevo" element={<UsuarioNuevoPagina />} />
                 <Route path="/administracion/usuarios/:id" element={<UsuarioEditarPagina />} />
                 <Route path="/administracion/acceso" element={<AccesoSucursalPagina />} />
+                <Route path="/administracion/mesas" element={<MapaDeMesasPagina />} />
               </Route>
             </Route>
           </Route>

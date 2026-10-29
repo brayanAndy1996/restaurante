@@ -116,7 +116,11 @@ test('el Administrador ve el aviso de gracia y luego el de suspensión, y no pue
   await expect(suspendida.getByRole('button')).toHaveCount(0);
   await page.screenshot({ path: 'e2e/resultados/aviso-2-suspendida.png' });
   await page.getByRole('link', { name: 'Administrar usuarios' }).click();
-  await expect(page.getByRole('heading', { name: 'Usuarios' }).first()).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Ajustes' }).first()).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Usuarios', exact: true })).toHaveAttribute(
+    'aria-pressed',
+    'true',
+  );
   await expect(suspendida).toBeVisible();
 
   // Un pago (o un ajuste) la reactiva y el aviso desaparece en la siguiente lectura de la sesión.

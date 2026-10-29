@@ -19,3 +19,5 @@ export * from './Plegable';
 export * from './FilaOrdenable';
 export * from './SelectorDeFoto';
 export * from './Cantidad';
+export * from './BaldosaDeMesa';
+export * from './CuadriculaDeMesas';

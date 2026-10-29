@@ -1205,6 +1205,10 @@ button.ui-fila:active {
 .ui-segmento:active {
   background: var(--color-accion-suave);
 }
+.ui-segmento--agregar {
+  border-style: dashed;
+  color: var(--color-accion);
+}
 .ui-segmento--elegido {
   background: var(--color-accion-suave);
   border-color: var(--color-accion);
@@ -1583,4 +1587,154 @@ button.ui-fila:active {
   font-weight: 700;
   line-height: 1.5rem;
   font-variant-numeric: tabular-nums;
+}
+
+/* ---------- Mesas y cuadrícula del mapa ---------- */
+.ui-cuadricula-marco {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espacio-sm);
+  min-width: 0;
+}
+/* La pared de azulejos: las juntas son el fondo y cada celda, una baldosa. Si las columnas no caben,
+   solo la cuadrícula se desplaza; la página nunca. */
+.ui-cuadricula {
+  max-width: 100%;
+  /* Una zona alta (hasta 30 filas) se desplaza dentro de su marco: lo que sigue queda a mano */
+  max-height: 70vh;
+  max-height: 70dvh;
+  overflow: auto;
+  padding: var(--espacio-sm);
+  border: 1px solid var(--color-junta);
+  border-radius: var(--radio-baldosa);
+  background: var(--color-junta);
+}
+.ui-cuadricula__rejilla {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espacio-xs);
+  width: max-content;
+}
+.ui-cuadricula__fila {
+  display: flex;
+  gap: var(--espacio-xs);
+}
+.ui-cuadricula__celda {
+  flex: none;
+  width: var(--celda-mesa);
+  height: var(--celda-mesa);
+}
+.ui-cuadricula__pista {
+  margin: 0;
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+  color: var(--color-tinta-suave);
+}
+
+.ui-celda-vacia {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  border: 1px dashed var(--color-borde-control);
+  border-radius: var(--radio-baldosa);
+  background: var(--color-fondo);
+  color: var(--color-tinta-suave);
+}
+.ui-celda-vacia--quieta {
+  border: 0;
+}
+button.ui-celda-vacia:active {
+  background: var(--color-accion-suave);
+}
+.ui-celda-vacia--elegida {
+  border: 2px solid var(--color-accion);
+  background: var(--color-accion-suave);
+  color: var(--color-accion);
+}
+
+.ui-mesa {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 2px;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  padding: 4px;
+  border: 1px solid var(--color-borde-control);
+  border-radius: var(--radio-baldosa);
+  background: var(--color-baldosa);
+  color: var(--color-tinta);
+  font: inherit;
+  text-align: left;
+  overflow: hidden;
+}
+button.ui-mesa:active {
+  background: var(--color-accion-suave);
+}
+.ui-mesa__nombre {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 1rem;
+  line-height: 1.25rem;
+  font-weight: 700;
+}
+.ui-mesa__datos {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--espacio-xs);
+  font-size: 0.875rem;
+  line-height: 1rem;
+  color: var(--color-tinta-suave);
+  font-variant-numeric: tabular-nums;
+}
+.ui-mesa__estado {
+  font-size: 0.8125rem;
+  line-height: 1rem;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+.ui-mesa--libre .ui-mesa__estado {
+  color: var(--color-exito);
+}
+.ui-mesa--ocupada {
+  border-color: var(--color-peligro);
+  background: var(--color-peligro-suave);
+}
+.ui-mesa--ocupada .ui-mesa__estado,
+.ui-mesa--ocupada .ui-mesa__datos {
+  color: var(--color-peligro-oscuro);
+}
+.ui-mesa--en-precuenta {
+  border-color: var(--color-aviso-texto);
+  background: var(--color-aviso-suave);
+}
+.ui-mesa--en-precuenta .ui-mesa__estado,
+.ui-mesa--en-precuenta .ui-mesa__datos {
+  color: var(--color-aviso-texto);
+}
+.ui-mesa--elegida {
+  padding: 3px;
+  border: 2px solid var(--color-accion);
+  background: var(--color-accion-suave);
+  color: var(--color-accion-oscuro);
+}
+.ui-mesa--elegida .ui-mesa__datos {
+  color: var(--color-accion-oscuro);
+}
+.ui-mesa--elegida .ui-mesa__nombre {
+  padding-right: 16px;
+}
+.ui-mesa__marca {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  display: grid;
+  color: var(--color-accion);
 }
