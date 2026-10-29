@@ -107,14 +107,29 @@ export class AnulacionesService {
     const anulacionId = entrada.id.toLowerCase();
 
     const orden = await bloquearOrden(this.conexion, ordenId, sucursalId);
+    // El ítem es de esta ruta si está en la orden o si lo envió la orden original y esta es una de las que
+    // ocupó después de unirse (cadena `unida_a_orden_id`): la réplica de una anulación hecha antes de unir se
+    // reconoce por la ruta de la orden original y por la de la principal (criterio 37).
     const items = await this.conexion.query<ItemAnulable>(
-      `SELECT ${COLUMNAS_ITEM} FROM item i WHERE i.id = $1 AND i.orden_id = $2 FOR UPDATE`,
+      `SELECT ${COLUMNAS_ITEM}
+         FROM item i JOIN envio e ON e.id = i.envio_id AND e.empresa_id = i.empresa_id
+        WHERE i.id = $1
+          AND (i.orden_id = $2
+               OR $2::uuid IN (
+                    WITH RECURSIVE cadena AS (
+                      SELECT o.id, o.empresa_id, o.unida_a_orden_id FROM orden o WHERE o.id = e.orden_id
+                      UNION
+                      SELECT s.id, s.empresa_id, s.unida_a_orden_id
+                        FROM cadena c JOIN orden s ON s.id = c.unida_a_orden_id AND s.empresa_id = c.empresa_id)
+                    SELECT id FROM cadena))
+          FOR UPDATE OF i`,
       { bind: [itemId, orden.id], type: QueryTypes.SELECT },
     );
     const item = items[0];
     if (item === undefined) throw itemNoEncontrado();
 
-    // Réplica por el id de la anulación (criterio 37): antes del estado de la orden y de la cantidad.
+    // Réplica por el id de la anulación (criterio 37): antes del estado de la orden y de la cantidad, así llega
+    // aunque la orden se haya anulado o unido después.
     const huella = huellaDeAnulacion({
       itemId: item.id,
       cantidad: entrada.cantidad,
@@ -132,6 +147,7 @@ export class AnulacionesService {
       return this.vista.armarAnulacion(anulacionId, sucursalId);
     }
 
+    // Una anulación nueva por la ruta de una orden `UNIDA`: 409 con la orden a la que se unió (criterio 29).
     exigirOrdenAbierta(orden);
     const vigente = item.cantidad - item.cantidad_anulada;
     if (vigente === 0) throw itemNoAnulable();

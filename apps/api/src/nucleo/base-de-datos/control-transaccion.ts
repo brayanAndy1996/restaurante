@@ -264,6 +264,15 @@ export const NOMBRES_PROHIBIDOS: readonly string[] = [
   'pg_notify',
   'pg_listening_channels',
   'pg_locks',
+  // La función que está detrás de la vista `pg_locks` (ronda 2 del ataque a 3a): leer `pg_lock_status()` da lo
+  // mismo sin nombrar la vista. Las otras dos revelan si otra sesión espera un cerrojo y cuánto se llenó la cola
+  // de avisos (`pg_notification_queue_usage`), y `pg_prepared_xacts` / `pg_prepared_xact` listan las
+  // transacciones preparadas de todas las empresas con su dueño.
+  'pg_lock_status',
+  'pg_isolation_test_session_is_blocked',
+  'pg_notification_queue_usage',
+  'pg_prepared_xacts',
+  'pg_prepared_xact',
   'pg_blocking_pids',
   'pg_safe_snapshot_blocking_pids',
   'pg_advisory_lock',

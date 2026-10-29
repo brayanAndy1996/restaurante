@@ -1,7 +1,7 @@
 import type { SesionRespuesta } from '@restaurante/contratos';
 import type { Modulo, Rol } from '@restaurante/dominio';
 import { permisosDeRol } from '@restaurante/dominio';
-import { screen, within } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { guardarTokenDeSesion } from '../src/lib/almacen';
 import { espera } from '../src/lib/api';
@@ -150,7 +150,8 @@ describe('navegación en la app', () => {
     renderApp('/cocina');
     expect(await screen.findByRole('heading', { name: 'Salón', level: 1 })).toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'Cocina' })).toBeNull();
-    expect(s.de('GET', '/salon').length).toBeGreaterThan(0);
+    // El encabezado se pinta al montar la pantalla; la petición sale después, desde la consulta.
+    await waitFor(() => expect(s.de('GET', '/salon').length).toBeGreaterThan(0));
   });
 
   it('Cocina/Barra no abre el Salón', async () => {

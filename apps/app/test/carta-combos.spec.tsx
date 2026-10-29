@@ -168,6 +168,13 @@ async function elegirTipo(nombre: 'Simple' | 'Combo' | 'Menú del día') {
   await userEvent.click(screen.getByRole('button', { name: nombre }));
 }
 
+// Pega el texto de una vez en vez de pulsar tecla por tecla: el formulario entero se vuelve a pintar
+// con cada pulsación, y lo que la prueba comprueba es el valor que llega al envío, no el tecleo.
+async function escribir(u: ReturnType<typeof userEvent.setup>, etiqueta: string, texto: string) {
+  await u.click(screen.getByLabelText(etiqueta));
+  await u.paste(texto);
+}
+
 describe('formulario de combo: alta', () => {
   it('el selector ofrece los tres tipos; al elegir Combo se van la estación y "Se vende solo" y aparecen los componentes', async () => {
     carta(administrador());
@@ -199,16 +206,19 @@ describe('formulario de combo: alta', () => {
       'POST /carta/productos': () => json(201, creado),
       [`GET /carta/productos/${P_COMBO}`]: () => json(200, creado),
     });
+    // Sin la espera de un tick entre cada pulsación: el formulario se vuelve a pintar con cada una
+    // y, con la máquina cargada, esos ticks son los que llevaban la prueba al límite de tiempo.
+    const u = userEvent.setup({ delay: null });
     renderApp('/carta/productos/nuevo');
     await screen.findByRole('heading', { name: 'Datos' });
-    await elegirTipo('Combo');
-    await userEvent.type(screen.getByLabelText('Nombre'), 'Combo hamburguesa');
-    await userEvent.selectOptions(screen.getByLabelText('Familia'), FAM);
-    await userEvent.type(screen.getByLabelText('Precio base con IGV'), '22.9');
-    await userEvent.click(screen.getByRole('radio', { name: /Por unidades/ }));
+    await u.click(screen.getByRole('button', { name: 'Combo' }));
+    await escribir(u, 'Nombre', 'Combo hamburguesa');
+    await u.selectOptions(screen.getByLabelText('Familia'), FAM);
+    await escribir(u, 'Precio base con IGV', '22.9');
+    await u.click(screen.getByRole('radio', { name: /Por unidades/ }));
 
     // Componentes: solo productos simples y activos, no el combo, ni el menú, ni el inactivo.
-    await userEvent.click(screen.getByRole('button', { name: 'Agregar un componente' }));
+    await u.click(screen.getByRole('button', { name: 'Agregar un componente' }));
     const ofrecidos = await screen.findByRole('list', { name: 'Productos que puedes agregar' });
     expect(
       within(ofrecidos)
@@ -220,21 +230,21 @@ describe('formulario de combo: alta', () => {
       expect.stringContaining('Lomo saltado'),
     ]);
     expect(within(ofrecidos).getByText(/No se vende solo/)).toBeInTheDocument();
-    await userEvent.click(
+    await u.click(
       within(ofrecidos).getByRole('button', { name: 'Agregar Hamburguesa clásica' }),
     );
     const componentes = screen.getByRole('list', { name: 'Componentes de este producto' });
     expect(within(componentes).getByText('Hamburguesa clásica')).toBeInTheDocument();
-    await userEvent.click(
+    await u.click(
       screen.getByRole('button', { name: 'Agregar una unidad de Hamburguesa clásica' }),
     );
     expect(within(componentes).getByRole('status')).toHaveTextContent('× 2');
 
     // Grupos de opciones, reutilizando los de la carta.
-    await userEvent.click(screen.getByRole('button', { name: 'Agregar un grupo' }));
-    await userEvent.click(await screen.findByRole('button', { name: 'Agregar Bebida' }));
-    await userEvent.click(screen.getByRole('button', { name: 'Agregar un grupo' }));
-    await userEvent.click(await screen.findByRole('button', { name: 'Agregar Acompañamiento' }));
+    await u.click(screen.getByRole('button', { name: 'Agregar un grupo' }));
+    await u.click(await screen.findByRole('button', { name: 'Agregar Bebida' }));
+    await u.click(screen.getByRole('button', { name: 'Agregar un grupo' }));
+    await u.click(await screen.findByRole('button', { name: 'Agregar Acompañamiento' }));
 
     // Vista previa: por defecto las primeras opciones, sin recargo.
     const vista = screen
@@ -242,14 +252,14 @@ describe('formulario de combo: alta', () => {
       .closest('section')!;
     const total = within(vista).getByText('Precio con estas opciones').closest('[role="status"]')!;
     expect(total).toHaveTextContent('S/ 22.90');
-    await userEvent.click(within(vista).getByRole('radio', { name: /Cerveza/ }));
+    await u.click(within(vista).getByRole('radio', { name: /Cerveza/ }));
     expect(total).toHaveTextContent('S/ 27.40');
-    await userEvent.click(within(vista).getByRole('radio', { name: /Ensalada/ }));
+    await u.click(within(vista).getByRole('radio', { name: /Ensalada/ }));
     expect(total).toHaveTextContent('S/ 28.40');
-    await userEvent.click(within(vista).getByRole('radio', { name: /Inca Kola/ }));
+    await u.click(within(vista).getByRole('radio', { name: /Inca Kola/ }));
     expect(total).toHaveTextContent('S/ 23.90');
 
-    await userEvent.click(screen.getByRole('button', { name: 'Crear producto' }));
+    await u.click(screen.getByRole('button', { name: 'Crear producto' }));
     expect(await screen.findByText('Producto creado')).toBeInTheDocument();
     const llamada = s.de('POST', '/carta/productos')[0];
     expect(llamada?.cuerpo).toEqual({

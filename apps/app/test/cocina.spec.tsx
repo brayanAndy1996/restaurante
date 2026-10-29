@@ -452,7 +452,8 @@ describe('Cocina: las transiciones (criterios 58 y 59)', () => {
     // La comanda sigue en pantalla, sin marcar.
     expect(await screen.findByRole('article', { name: /Mesa 1/ })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Listo: Lomo saltado' })).toBeInTheDocument();
-    expect(s.de('GET', '/cocina/comandas').length).toBeGreaterThan(1);
+    // La alerta se pinta al fallar la escritura; la nueva lectura la lanza la consulta un poco después.
+    await waitFor(() => expect(s.de('GET', '/cocina/comandas').length).toBeGreaterThan(1));
   });
 });
 

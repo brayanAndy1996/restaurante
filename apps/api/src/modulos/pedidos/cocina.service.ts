@@ -8,6 +8,7 @@ import {
 } from '@restaurante/dominio';
 import { QueryTypes, type Sequelize } from 'sequelize';
 import { CONEXION_API } from '../../nucleo/base-de-datos';
+import { ContextoEmpresa } from '../../nucleo/contexto-empresa';
 import { RELOJ, type Reloj } from '../../nucleo/reloj';
 import { CartaConsultaService } from '../carta';
 import { MesasConsultaService } from '../salon';
@@ -76,8 +77,13 @@ const COLUMNAS_COMANDA = `c.id, c.tipo, c.estacion_id, c.orden_id, c.origen_id, 
 const UNIR_MOTIVO = `LEFT JOIN anulacion_item a
          ON a.id = c.origen_id AND a.empresa_id = c.empresa_id AND c.tipo = 'ANULACION'`;
 
-/** Las líneas de una comanda que todavía no se terminan (las que tiene el índice parcial). */
-const LINEA_SIN_TERMINAR = `l.estado IN ('ENVIADO', 'EN_PREPARACION')`;
+/**
+ * Las líneas de una comanda o adición que todavía no se terminan: las que tiene el índice parcial
+ * `comanda_linea_pendiente_idx`. `cantidad IS NULL` deja fuera las líneas de las comandas `MARCHAR` y `ANULACION`
+ * (solo ellas guardan una cantidad fija), que nunca salen de `ENVIADO` (se marcan vistas, no listas) y llenarían el
+ * índice para siempre. Las dos condiciones deben coincidir con el predicado del índice.
+ */
+const LINEA_SIN_TERMINAR = `l.estado IN ('ENVIADO', 'EN_PREPARACION') AND l.cantidad IS NULL`;
 
 /**
  * Las que no están pendientes (criterio 56): una `MARCHAR` o `ANULACION` ya vista, o una `COMANDA` o `ADICION` sin
@@ -112,6 +118,7 @@ export class CocinaService {
   constructor(
     @Inject(CONEXION_API) private readonly conexion: Sequelize,
     @Inject(RELOJ) private readonly reloj: Reloj,
+    @Inject(ContextoEmpresa) private readonly contexto: ContextoEmpresa,
     @Inject(SesionActual) private readonly sesion: SesionActual,
     @Inject(CartaConsultaService) private readonly carta: CartaConsultaService,
     @Inject(MesasConsultaService) private readonly mesas: MesasConsultaService,
@@ -132,6 +139,7 @@ export class CocinaService {
     paraEtag: Omit<CocinaRespuesta, 'ahora'>;
   }> {
     const sucursalId = this.sesion.sucursalActiva();
+    const empresaId = this.contexto.empresaActual();
     const ahora = this.reloj.ahora();
 
     let ids: string[];
@@ -157,13 +165,16 @@ export class CocinaService {
           AND c.tipo IN ('MARCHAR', 'ANULACION') AND c.vista_en IS NULL`,
       { bind: [sucursalId, ids], type: QueryTypes.SELECT },
     );
+    // La subconsulta lleva la empresa (primera columna del índice): recorre solo las líneas sin terminar de esta
+    // empresa y no las de todas antes de que la RLS descarte las ajenas.
     const sinTerminar = await this.conexion.query<FilaComanda>(
       `SELECT ${COLUMNAS_COMANDA}
          FROM comanda c ${UNIR_MOTIVO}
         WHERE c.sucursal_id = $1 AND c.destino = 'KDS' AND c.estacion_id = ANY($2::uuid[])
           AND c.tipo IN ('COMANDA', 'ADICION')
-          AND c.id IN (SELECT l.comanda_id FROM comanda_linea l WHERE ${LINEA_SIN_TERMINAR})`,
-      { bind: [sucursalId, ids], type: QueryTypes.SELECT },
+          AND c.id IN (SELECT l.comanda_id FROM comanda_linea l
+                        WHERE l.empresa_id = $3 AND ${LINEA_SIN_TERMINAR})`,
+      { bind: [sucursalId, ids, empresaId], type: QueryTypes.SELECT },
     );
     const pendientes = ordenarPorLlegada([...noVistas, ...sinTerminar]);
     // Las recientes: las demás, por su última actividad en la última hora (una comanda vieja que se termina ahora
