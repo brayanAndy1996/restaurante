@@ -102,13 +102,26 @@ async function kdsDe(ordenId: string): Promise<ComandaKds[]> {
 function deTipo(comandas: ComandaKds[], tipo: ComandaKds['tipo']): ComandaKds {
   const c = comandas.find((x) => x.tipo === tipo);
   if (!c) {
-    throw new Error(`El KDS no muestra una comanda ${tipo}: ${comandas.map((x) => x.tipo).join(', ')}`);
+    throw new Error(
+      `El KDS no muestra una comanda ${tipo}: ${comandas.map((x) => x.tipo).join(', ')}`,
+    );
   }
   return c;
 }
 
+/** El id de la única línea de una comanda, leído de la base (solo lectura). */
+async function lineaIdDe(comandaId: string): Promise<string> {
+  const { rows } = await admin.query<{ id: string }>(
+    `SELECT id FROM comanda_linea WHERE comanda_id = $1 ORDER BY id`,
+    [comandaId],
+  );
+  expect(rows, `líneas de la comanda ${comandaId}`).toHaveLength(1);
+  return rows[0]!.id;
+}
+
 /** `[estado, cantidad]` de cada línea. */
-const formaDeLineas = (c: ComandaKds): [string, number][] => c.lineas.map((l) => [l.estado, l.cantidad]);
+const formaDeLineas = (c: ComandaKds): [string, number][] =>
+  c.lineas.map((l) => [l.estado, l.cantidad]);
 
 const eventosDeListo = (eventos: { nombre: string; datos: unknown }[]) =>
   eventos
@@ -298,9 +311,7 @@ describe.each([
       expect(orden.body.total).toBe('24975.00');
       const llamadas = ctx.inventario.alEnviarLlamadas();
       expect(llamadas).toHaveLength(1);
-      const parte = (llamadas[0]!.partes as { productoId: string; cantidad: number }[]).find(
-        (p) => p.productoId === b.componente,
-      );
+      const parte = llamadas[0]!.partes.find((p) => p.productoId === b.componente);
       expect(parte, 'parte de stock del componente').toMatchObject({ cantidad: unidades });
     });
 
@@ -321,33 +332,33 @@ describe.each([
     });
 
     it('PUT /cocina/lineas/:id/estado responde 200 en cada estado y avisa con la cantidad exacta (criterios 58 y 60)', async () => {
-      const { o } = await ordenConBandeja(porBandeja, 1);
-      const linea = lineaUnica(deTipo(await kdsDe(o.id), 'COMANDA'));
-      expect(linea.cantidad).toBe(unidades);
+      const { o, envio } = await ordenConBandeja(porBandeja, 1);
+      // El id de la línea se lee de la base para que esta prueba no dependa de `GET /cocina/comandas`.
+      const lineaId = await lineaIdDe(envio.comandas[0]!.id);
 
       for (const estado of ['EN_PREPARACION', 'ENVIADO'] as const) {
-        const res = await put(t().cocina, `/cocina/lineas/${linea.id}/estado`, { estado });
+        const res = await put(t().cocina, `/cocina/lineas/${lineaId}/estado`, { estado });
         exigirEstado(res, 200, `estado ${estado}`);
         const ahora = lineaUnica(deTipo(await kdsDe(o.id), 'COMANDA'));
-        expect([ahora.estado, ahora.cantidad]).toEqual([estado, unidades]);
+        expect([ahora.id, ahora.estado, ahora.cantidad]).toEqual([lineaId, estado, unidades]);
       }
 
       const { resultado, eventos } = await conEventos(ctx, () =>
-        put(t().cocina, `/cocina/lineas/${linea.id}/estado`, { estado: 'LISTO' }),
+        put(t().cocina, `/cocina/lineas/${lineaId}/estado`, { estado: 'LISTO' }),
       );
       exigirEstado(resultado, 200, 'estado LISTO');
       expect(eventosDeListo(eventos)).toMatchObject([
-        { ordenId: o.id, lineaId: linea.id, cantidad: unidades },
+        { ordenId: o.id, lineaId, cantidad: unidades },
       ]);
       const despues = lineaUnica(deTipo(await kdsDe(o.id), 'COMANDA'));
       expect([despues.estado, despues.cantidad]).toEqual(['LISTO', unidades]);
     });
 
     it('PUT /cocina/comandas/:id/listo responde 200 y deja la línea LISTO con la cantidad exacta (criterio 59)', async () => {
-      const { o } = await ordenConBandeja(porBandeja, 1);
-      const comanda = deTipo(await kdsDe(o.id), 'COMANDA');
+      const { o, envio } = await ordenConBandeja(porBandeja, 1);
+      const comandaId = envio.comandas[0]!.id;
       const { resultado, eventos } = await conEventos(ctx, () =>
-        put(t().cocina, `/cocina/comandas/${comanda.id}/listo`),
+        put(t().cocina, `/cocina/comandas/${comandaId}/listo`),
       );
       exigirEstado(resultado, 200, 'Todo listo');
       expect(eventosDeListo(eventos)).toMatchObject([{ ordenId: o.id, cantidad: unidades }]);
@@ -405,9 +416,7 @@ describe.each([
       const llamadas = ctx.inventario.alAnularLlamadas();
       expect(llamadas).toHaveLength(1);
       expect(llamadas[0]).toMatchObject({ destino: 'MERMA' });
-      const parte = (llamadas[0]!.partes as { productoId: string; cantidad: number }[]).find(
-        (p) => p.productoId === b.componente,
-      );
+      const parte = llamadas[0]!.partes.find((p) => p.productoId === b.componente);
       expect(parte, 'parte de stock del componente').toMatchObject({ cantidad: unidades });
 
       const comandas = await kdsDe(o.id);
@@ -432,9 +441,7 @@ describe.each([
       await anularItemOk(ctx, t().supervisor, o.id, item.id, 998);
       await anularItemOk(ctx, t().supervisor, o.id, item.id, 1);
       const anulaciones = (await kdsDe(o.id)).filter((c) => c.tipo === 'ANULACION');
-      expect(
-        anulaciones.map((c) => [c.lineas[0]!.nombre, c.lineas[0]!.cantidad]).sort(),
-      ).toEqual(
+      expect(anulaciones.map((c) => [c.lineas[0]!.nombre, c.lineas[0]!.cantidad]).sort()).toEqual(
         [
           [b.nombreComponente, 998 * porBandeja],
           [b.nombreComponente, porBandeja],
@@ -451,9 +458,7 @@ describe.each([
 
       const llamadas = ctx.inventario.alAnularLlamadas();
       expect(llamadas).toHaveLength(1);
-      const parte = (llamadas[0]!.partes as { productoId: string; cantidad: number }[]).find(
-        (p) => p.productoId === b.componente,
-      );
+      const parte = llamadas[0]!.partes.find((p) => p.productoId === b.componente);
       expect(parte, 'parte de stock del componente').toMatchObject({ cantidad: unidades });
 
       const anulacion = deTipo(await kdsDe(o.id), 'ANULACION');
@@ -493,7 +498,11 @@ describe('F2 · unir mesas ocupadas cuyas cuentas juntas pasan de 99999999.99 (c
   const unaUnidad = (productoId: string) => ({ productoId, modificadorIds: [], cantidad: 1 });
 
   const unir = (ordenId: string, mesaIds: string[]) =>
-    llamar(ctx, t().mozo, { metodo: 'post', ruta: `/ordenes/${ordenId}/union`, cuerpo: { mesaIds } });
+    llamar(ctx, t().mozo, {
+      metodo: 'post',
+      ruta: `/ordenes/${ordenId}/union`,
+      cuerpo: { mesaIds },
+    });
 
   /** Dos órdenes abiertas con 1 unidad de un producto cada una. */
   async function dosOrdenes(productoO1: string, productoO2: string) {
@@ -548,7 +557,9 @@ describe('F2 · unir mesas ocupadas cuyas cuentas juntas pasan de 99999999.99 (c
     const salon = await llamar(ctx, t().mozo, { metodo: 'get', ruta: '/salon' });
     exigirEstado(salon, 200, 'GET /salon');
     const mesas = (
-      salon.body.zonas as { mesas: { id: string; estado: string; orden: { id: string } | null }[] }[]
+      salon.body.zonas as {
+        mesas: { id: string; estado: string; orden: { id: string } | null }[];
+      }[]
     ).flatMap((z) => z.mesas);
     for (const o of [o1, o2]) {
       expect(mesas.find((m) => m.id === o.mesaId)).toMatchObject({
