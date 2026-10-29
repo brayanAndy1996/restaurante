@@ -1398,6 +1398,18 @@ button.ui-fila:active {
 .ui-opciones--error .ui-opcion {
   border-color: var(--color-peligro);
 }
+.ui-opcion--deshabilitada {
+  background: var(--color-inactivo);
+  border-color: var(--color-junta);
+  color: var(--color-tinta-suave);
+  cursor: not-allowed;
+}
+.ui-opcion--deshabilitada:active {
+  background: var(--color-inactivo);
+}
+.ui-opcion--deshabilitada .ui-opcion__ayuda {
+  color: var(--color-tinta-suave);
+}
 
 /* ---------- Sección plegable ---------- */
 .ui-plegable {

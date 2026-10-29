@@ -11,6 +11,7 @@ import {
   AHORA,
   MOZOS,
   mesa,
+  ordenDeMesa,
   salon,
   sesionDeRol,
   uuid,
@@ -38,6 +39,11 @@ function servidorDeSalon(
       cabeceras.get('If-None-Match') === `"${version}"`
         ? json(304)
         : json(200, actual, { ETag: `"${version}"` }),
+    // La cuenta a la que llevan abrir una mesa o tocar una ocupada: la mesa `n` si su id es uuid(900 + n).
+    'GET /ordenes/*': ({ url }) => {
+      const n = Number(url.pathname.split('/').pop()?.slice(-3)) - 900;
+      return json(200, ordenDeMesa(n >= 1 && n <= 9 ? n : 1));
+    },
     ...extra,
   });
   return {
@@ -341,7 +347,7 @@ describe('Salón: tocar una mesa', () => {
     renderApp('/salon');
     await screen.findByRole('grid', { name: 'Mesas de Salón principal' });
     await userEvent.click(botonMesa('2'));
-    expect(await screen.findByRole('heading', { name: 'Cuenta de la mesa' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Mesa 2' })).toBeInTheDocument();
   });
 });
 
@@ -408,7 +414,7 @@ describe('Abrir mesa (criterios 9, 10, 11 y 89)', () => {
     await userEvent.click(within(hoja).getByRole('button', { name: 'Agregar uno a comensales' }));
     await userEvent.click(within(hoja).getByRole('button', { name: 'Abrir mesa' }));
 
-    expect(await screen.findByRole('heading', { name: 'Cuenta de la mesa' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Mesa 1' })).toBeInTheDocument();
     const [llamada, ...otras] = s.de('POST', '/ordenes');
     expect(otras).toHaveLength(0);
     expect(llamada?.cuerpo).toEqual({
@@ -439,7 +445,7 @@ describe('Abrir mesa (criterios 9, 10, 11 y 89)', () => {
       await userEvent.click(within(hoja).getByRole('button', { name: /Lucía Salón/ }));
       await userEvent.click(within(hoja).getByRole('button', { name: 'Abrir mesa' }));
 
-      await screen.findByRole('heading', { name: 'Cuenta de la mesa' });
+      await screen.findByRole('heading', { name: 'Mesa 1' });
       expect(s.de('POST', '/ordenes')[0]?.cuerpo).toMatchObject({ mozoId: uuid(31) });
       expect(s.de('GET', '/usuarios')).toHaveLength(0);
     },
@@ -481,7 +487,7 @@ describe('Abrir mesa (criterios 9, 10, 11 y 89)', () => {
     await userEvent.click(within(hoja).getByRole('button', { name: 'Volver a mí' }));
     expect(within(hoja).getByText('Tú')).toBeInTheDocument();
     await userEvent.click(within(hoja).getByRole('button', { name: 'Abrir mesa' }));
-    await screen.findByRole('heading', { name: 'Cuenta de la mesa' });
+    await screen.findByRole('heading', { name: 'Mesa 1' });
     expect(s.de('POST', '/ordenes')[0]?.cuerpo).not.toHaveProperty('mozoId');
   });
 
@@ -496,7 +502,7 @@ describe('Abrir mesa (criterios 9, 10, 11 y 89)', () => {
     expect(within(hoja).getByText(/Elige quién atenderá la mesa/)).toBeInTheDocument();
     await userEvent.click(within(hoja).getByRole('button', { name: /Lucía Salón/ }));
     await userEvent.click(within(hoja).getByRole('button', { name: 'Abrir mesa' }));
-    await screen.findByRole('heading', { name: 'Cuenta de la mesa' });
+    await screen.findByRole('heading', { name: 'Mesa 1' });
     expect(s.de('POST', '/ordenes')[0]?.cuerpo).toMatchObject({ mozoId: uuid(31) });
   });
 
@@ -514,7 +520,7 @@ describe('Abrir mesa (criterios 9, 10, 11 y 89)', () => {
     const hoja = await abrirHoja('1');
     await userEvent.click(within(hoja).getByRole('button', { name: 'Abrir mesa' }));
 
-    expect(await screen.findByRole('heading', { name: 'Cuenta de la mesa' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Mesa 1' })).toBeInTheDocument();
     expect(screen.getByText('Otra persona acaba de abrir esta mesa')).toBeInTheDocument();
     // El mapa se vuelve a pedir para mostrar la mesa ocupada.
     await waitFor(() => expect(s.de('GET', '/salon').length).toBeGreaterThan(0));
@@ -533,7 +539,7 @@ describe('Abrir mesa (criterios 9, 10, 11 y 89)', () => {
     const hoja = await abrirHoja('1');
     await userEvent.click(within(hoja).getByRole('button', { name: 'Abrir mesa' }));
 
-    expect(await screen.findByRole('heading', { name: 'Cuenta de la mesa' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Mesa 1' })).toBeInTheDocument();
     const llamadas = s.de('POST', '/ordenes');
     expect(llamadas.length).toBeGreaterThanOrEqual(3);
     expect(new Set(llamadas.map((l) => l.cabeceras.get('Idempotency-Key'))).size).toBe(1);
@@ -556,7 +562,7 @@ describe('Abrir mesa (criterios 9, 10, 11 y 89)', () => {
     expect(await within(hoja).findByText('No pudimos abrir la mesa')).toBeInTheDocument();
     expect(within(hoja).getByText(/Esta mesa está desactivada/)).toBeInTheDocument();
     await userEvent.click(within(hoja).getByRole('button', { name: 'Abrir mesa' }));
-    await screen.findByRole('heading', { name: 'Cuenta de la mesa' });
+    await screen.findByRole('heading', { name: 'Mesa 1' });
   });
 
   it('cancelar cierra la hoja sin abrir nada', async () => {

@@ -1,0 +1,154 @@
+/* La cuenta de la mesa (criterio 90 de 004). Se carga con la pantalla, no con el paquete inicial. */
+
+.cuenta__cabecera {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--espacio-sm);
+}
+.cuenta__datos {
+  margin: 0;
+  font-size: 0.9375rem;
+  line-height: 1.375rem;
+  color: var(--color-tinta-suave);
+}
+
+/* Lo que falta enviar: un solo vistazo y un toque para seguir */
+.cuenta__borrador {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espacio-md);
+}
+.cuenta__borrador > .ui-fila {
+  border: 1px solid var(--color-borde-control);
+  border-radius: var(--radio-baldosa);
+}
+.cuenta__fila-derecha {
+  display: flex;
+  align-items: center;
+  gap: var(--espacio-sm);
+  color: var(--color-tinta);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Segundo tiempo por marchar */
+.cuenta__marcha {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--espacio-md);
+  padding: var(--espacio-md) 0;
+  border-block: 1px solid var(--color-junta);
+}
+.cuenta__marcha-texto {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  margin: 0;
+  font-size: 0.9375rem;
+  line-height: 1.375rem;
+  color: var(--color-tinta-suave);
+}
+.cuenta__marcha-texto b {
+  font-size: 1.0625rem;
+  color: var(--color-tinta);
+}
+
+/* Ítems agrupados por envío */
+.cuenta__envio {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espacio-sm);
+  min-width: 0;
+}
+.cuenta__envio-titulo {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--espacio-md);
+  font-size: 1.125rem;
+  line-height: 1.5rem;
+  font-weight: 700;
+}
+.cuenta__envio-quien {
+  font-size: 0.875rem;
+  font-weight: 400;
+  color: var(--color-tinta-suave);
+  text-align: right;
+}
+.cuenta__items {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border: 1px solid var(--color-junta);
+  border-radius: var(--radio-baldosa);
+  background: var(--color-baldosa);
+}
+.cuenta__items > li + li {
+  border-top: 1px solid var(--color-junta);
+}
+.item {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--espacio-md);
+  padding: var(--espacio-md) var(--espacio-lg);
+}
+.item__cantidad {
+  flex: none;
+  min-width: 2.25rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.item__texto {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.item__nombre {
+  font-size: 1.0625rem;
+  line-height: 1.375rem;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.item__detalle {
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+  color: var(--color-tinta-suave);
+  overflow-wrap: anywhere;
+}
+.item__etiquetas {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--espacio-xs);
+}
+.item__etiquetas:empty {
+  display: none;
+}
+.item__total {
+  flex: none;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.item--anulado .item__nombre,
+.item--anulado .item__cantidad {
+  color: var(--color-tinta-suave);
+  text-decoration: line-through;
+}
+
+.cuenta__total {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--espacio-md);
+  padding-top: var(--espacio-md);
+  border-top: 2px solid var(--color-tinta);
+  font-size: 1.0625rem;
+  font-weight: 600;
+}
+.cuenta__total b {
+  font-size: 1.5rem;
+  line-height: 2rem;
+  font-variant-numeric: tabular-nums;
+}

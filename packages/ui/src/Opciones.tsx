@@ -50,6 +50,8 @@ export interface OpcionConAyuda<T extends string> {
   titulo: string;
   /** Una línea que dice qué significa elegirla. */
   ayuda: string;
+  /** No se puede elegir (por ejemplo, agotada): sigue visible y su `ayuda` dice por qué. */
+  deshabilitada?: boolean;
 }
 
 interface PropsOpcionesConAyuda<T extends string> {
@@ -96,13 +98,21 @@ export function OpcionesConAyuda<T extends string>({
         {opciones.map((o) => {
           const elegida = o.valor === valor;
           return (
-            <label key={o.valor} className={clases('ui-opcion', elegida && 'ui-opcion--elegida')}>
+            <label
+              key={o.valor}
+              className={clases(
+                'ui-opcion',
+                elegida && 'ui-opcion--elegida',
+                o.deshabilitada && 'ui-opcion--deshabilitada',
+              )}
+            >
               <input
                 type="radio"
                 className="ui-opcion__entrada"
                 name={id}
                 value={o.valor}
                 checked={elegida}
+                disabled={o.deshabilitada}
                 onChange={() => onCambio(o.valor)}
               />
               <span className="ui-opcion__marca" aria-hidden="true">

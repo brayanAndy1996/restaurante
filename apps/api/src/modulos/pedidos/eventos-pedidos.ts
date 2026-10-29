@@ -1,4 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
+import type { TipoComanda } from '@restaurante/dominio';
 import { ContextoEmpresa } from '../../nucleo/contexto-empresa';
 import { PUBLICADOR_EVENTOS, type PublicadorEventos } from '../../nucleo/eventos';
 
@@ -23,6 +24,14 @@ export class EventosPedidos {
   /** `orden.cambio`: toda escritura de una orden. */
   ordenCambio(sucursalId: string, ordenId: string): void {
     this.publicar(sucursalId, 'orden.cambio', { ordenId });
+  }
+
+  /** `cocina.comanda` (criterios 31, 32, 38 y 42): llegó una comanda a una estación. */
+  cocinaComanda(
+    sucursalId: string,
+    comanda: { comandaId: string; estacionId: string; tipo: TipoComanda },
+  ): void {
+    this.publicar(sucursalId, 'cocina.comanda', { ...comanda });
   }
 
   private publicar(sucursalId: string, nombre: string, datos: Record<string, unknown>): void {

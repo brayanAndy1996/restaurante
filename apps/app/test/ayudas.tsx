@@ -125,7 +125,14 @@ export function servidor(manejadores: Record<string, Manejador>) {
       ...(binario ? { binario } : {}),
       cabeceras,
     });
-    const manejador = tabla[`${metodo} ${url.pathname}`];
+    // Una clave con `*` vale para cualquier valor en ese tramo de la ruta: 'GET /ordenes/*'.
+    const manejador =
+      tabla[`${metodo} ${url.pathname}`] ??
+      Object.entries(tabla).find(([clave]) => {
+        if (!clave.includes('*')) return false;
+        const patron = clave.replace(/[.+?^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '[^/]+');
+        return new RegExp(`^${patron}$`).test(`${metodo} ${url.pathname}`);
+      })?.[1];
     if (!manejador) {
       return json(501, {
         codigo: 'ERROR_INTERNO',

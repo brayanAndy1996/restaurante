@@ -61,3 +61,37 @@ export const mozoInvalido = (mensaje: string): ErrorAplicacion => {
     campos,
   );
 };
+
+/**
+ * 422 de un envío con líneas que no se pueden vender (criterios 17 y 18): una entrada de `campos` por cada línea
+ * rechazada (`lineas.<i>`, con el motivo o los errores de selección como mensaje); el código y el mensaje son los
+ * de la primera. Nada se guarda.
+ */
+export const lineasRechazadas = (
+  primera: Pick<ErrorAplicacion, 'codigo'> & { message: string },
+  campos: CampoError[],
+): ErrorAplicacion => new ErrorAplicacion(422, primera.codigo, primera.message, campos);
+
+/** 422 `MONTO_FUERA_DE_RANGO` (criterio 21): `lineas.<i>` por línea que pasa del tope o `lineas` por el total. */
+export const montoFueraDeRango = (campos: CampoError[]): ErrorAplicacion =>
+  new ErrorAplicacion(422, 'MONTO_FUERA_DE_RANGO', 'El monto supera el máximo permitido', campos);
+
+/** 409 `NADA_QUE_MARCHAR` (criterio 32): no hay ítems de segundo tiempo por marchar. */
+export const nadaQueMarchar = (): ErrorAplicacion =>
+  new ErrorAplicacion(409, 'NADA_QUE_MARCHAR', 'No hay ítems de segundo tiempo por marchar');
+
+/**
+ * 422 `DATOS_INVALIDOS` de una marcha con `itemIds` que no se pueden marchar (criterio 32): de primer tiempo, ya
+ * marchados, anulados, de otra orden, de otra empresa o inexistentes. Todos dan el mismo cuerpo: el mensaje nunca
+ * lleva el id.
+ */
+export const itemsNoMarchables = (indices: readonly number[]): ErrorAplicacion =>
+  new ErrorAplicacion(
+    422,
+    'DATOS_INVALIDOS',
+    'Algún ítem no se puede marchar',
+    indices.map((i) => ({
+      campo: `itemIds.${i}`,
+      mensaje: 'No es un ítem de segundo tiempo por marchar de esta orden',
+    })),
+  );

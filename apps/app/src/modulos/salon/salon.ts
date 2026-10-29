@@ -176,6 +176,9 @@ export function totalDeMesa(mesa: MesaDelSalon): string | null {
 /** Ruta de la cuenta de una mesa (T16 la dibuja completa). */
 export const rutaDeOrden = (ordenId: string) => `/salon/ordenes/${ordenId}`;
 
+/** Ruta del comandero de una cuenta (criterio 91). */
+export const rutaDeComandero = (ordenId: string) => `${rutaDeOrden(ordenId)}/agregar`;
+
 // --- Medidas del mapa -----------------------------------------------------------------------------
 
 /** Lado mínimo de una baldosa en el mapa: con menos, "Pre-cuenta" y "3 · 25 min" no caben en su línea. */

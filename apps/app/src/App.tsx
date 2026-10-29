@@ -73,6 +73,10 @@ const SalonPagina = lazy(() =>
 const OrdenPagina = lazy(() =>
   import('./modulos/salon/OrdenPagina').then((m) => ({ default: m.OrdenPagina })),
 );
+// El comandero (carta, hoja de producto y borrador) es otro bloque: solo se baja al tocar «Agregar».
+const ComanderoPagina = lazy(() =>
+  import('./modulos/salon/ComanderoPagina').then((m) => ({ default: m.ComanderoPagina })),
+);
 const CocinaPagina = lazy(() =>
   import('./modulos/cocina/CocinaPagina').then((m) => ({ default: m.CocinaPagina })),
 );
@@ -258,6 +262,7 @@ export function App() {
               <Route element={<RutaDeSalon />}>
                 <Route path="/salon" element={<SalonPagina />} />
                 <Route path="/salon/ordenes/:id" element={<OrdenPagina />} />
+                <Route path="/salon/ordenes/:id/agregar" element={<ComanderoPagina />} />
               </Route>
               <Route element={<RutaDeCocina />}>
                 <Route path="/cocina" element={<CocinaPagina />} />

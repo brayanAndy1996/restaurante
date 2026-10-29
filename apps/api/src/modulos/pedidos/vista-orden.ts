@@ -1,8 +1,21 @@
 import { Inject, Injectable } from '@nestjs/common';
-import type { ItemRespuesta, OrdenRespuesta } from '@restaurante/contratos';
-import { totalOrden, totalVigenteLinea, type TipoProducto } from '@restaurante/dominio';
+import type {
+  ComandaResumen,
+  EnvioRespuesta,
+  ItemRespuesta,
+  MarchaRespuesta,
+  OrdenRespuesta,
+} from '@restaurante/contratos';
+import {
+  totalOrden,
+  totalVigenteLinea,
+  type DestinoComanda,
+  type TipoComanda,
+  type TipoProducto,
+} from '@restaurante/dominio';
 import { QueryTypes, type Sequelize } from 'sequelize';
 import { CONEXION_API } from '../../nucleo/base-de-datos';
+import { CartaConsultaService } from '../carta';
 import { MesasConsultaService } from '../salon';
 import { UsuariosConsultaService } from '../seguridad';
 import { ordenNoEncontrada } from './errores-pedidos';
@@ -58,7 +71,78 @@ interface FilaConteo {
   n: string;
 }
 
+interface FilaComanda {
+  id: string;
+  estacion_id: string;
+  tipo: TipoComanda;
+  destino: DestinoComanda;
+}
+
 const iso = (fecha: Date): string => new Date(fecha).toISOString();
+
+const SIN_COCINA: ItemRespuesta['cocina'] = { enviado: 0, enPreparacion: 0, listo: 0, anulado: 0 };
+
+/** Cuenta las líneas de comanda de cada ítem por estado de cocina. */
+function contarCocina(conteos: readonly FilaConteo[]): Map<string, ItemRespuesta['cocina']> {
+  const cocinaDe = new Map<string, ItemRespuesta['cocina']>();
+  for (const c of conteos) {
+    const actual = cocinaDe.get(c.item_id) ?? { ...SIN_COCINA };
+    const n = Number(c.n);
+    if (c.estado === 'ENVIADO') actual.enviado += n;
+    else if (c.estado === 'EN_PREPARACION') actual.enPreparacion += n;
+    else if (c.estado === 'LISTO') actual.listo += n;
+    else actual.anulado += n;
+    cocinaDe.set(c.item_id, actual);
+  }
+  return cocinaDe;
+}
+
+/**
+ * El `itemRespuesta` de una fila. Con `comoSeEnvio`, el ítem tal como salió en su envío (nada anulado, sin
+ * marchar, en estado `ENVIADO`): es lo que devuelve la réplica de un envío, siempre igual a la primera respuesta
+ * aunque después se anule o se marche (criterio 26).
+ */
+function aItemRespuesta(
+  i: FilaItem,
+  cocina: ItemRespuesta['cocina'],
+  nombres: ReadonlyMap<string, string>,
+  comoSeEnvio: boolean,
+): ItemRespuesta {
+  const cantidadAnulada = comoSeEnvio ? 0 : i.cantidad_anulada;
+  return {
+    id: i.id,
+    envioNumero: i.envio_numero,
+    esAdicion: i.es_adicion,
+    productoId: i.producto_id,
+    nombre: i.nombre,
+    tipo: i.tipo_producto,
+    cantidad: i.cantidad,
+    cantidadAnulada,
+    cantidadVigente: i.cantidad - cantidadAnulada,
+    precioUnitario: i.precio_unitario,
+    totalVigente: totalVigenteLinea(i.precio_unitario, i.cantidad, cantidadAnulada),
+    modificadores: i.linea.modificadores.map((m) => ({
+      nombre: m.nombre,
+      precioExtra: m.precioExtra,
+    })),
+    componentes: i.linea.componentes.map((c) => ({ nombre: c.nombre, cantidad: c.cantidad })),
+    observacion: i.observacion,
+    tiempo: i.tiempo,
+    paraLlevar: i.para_llevar,
+    marchadoEn: comoSeEnvio || i.marchado_en === null ? null : iso(i.marchado_en),
+    estado: comoSeEnvio ? 'ENVIADO' : i.estado,
+    cocina,
+    comandadoPor:
+      i.comandado_por === null
+        ? null
+        : { id: i.comandado_por, nombre: nombres.get(i.comandado_por) ?? '' },
+    enviadoEn: iso(i.creado_en),
+  };
+}
+
+const COLUMNAS_ITEM = `i.id, e.numero AS envio_numero, i.es_adicion, i.producto_id, i.nombre, i.tipo_producto,
+              i.cantidad, i.cantidad_anulada, i.precio_unitario, i.linea, i.observacion, i.tiempo,
+              i.para_llevar, i.marchado_en, i.estado, i.creado_por_usuario_id AS comandado_por, i.creado_en`;
 
 /**
  * Arma `ordenRespuesta` (criterio 55) con una cantidad fija de consultas, sin importar cuántos ítems tenga la
@@ -72,7 +156,89 @@ export class VistaOrdenService {
     @Inject(CONEXION_API) private readonly conexion: Sequelize,
     @Inject(MesasConsultaService) private readonly mesas: MesasConsultaService,
     @Inject(UsuariosConsultaService) private readonly usuarios: UsuariosConsultaService,
+    @Inject(CartaConsultaService) private readonly estaciones: CartaConsultaService,
   ) {}
+
+  /**
+   * `envioRespuesta` (criterio 15) del envío tal como salió: sus ítems sin lo anulado ni lo marchado después, y
+   * sus comandas de envío (`COMANDA` o `ADICION`). La primera respuesta y toda réplica salen de aquí, así son
+   * idénticas aunque la orden cambie después (criterio 26). 404 si el envío no es de una orden de la sucursal.
+   */
+  async armarEnvio(envioId: string, sucursalId: string): Promise<EnvioRespuesta> {
+    const envios = await this.conexion.query<{
+      id: string;
+      orden_id: string;
+      numero: number;
+      es_adicion: boolean;
+    }>(
+      `SELECT e.id, e.orden_id, e.numero, e.es_adicion
+         FROM envio e JOIN orden o ON o.id = e.orden_id AND o.empresa_id = e.empresa_id
+        WHERE e.id = $1 AND o.sucursal_id = $2`,
+      { bind: [envioId, sucursalId], type: QueryTypes.SELECT },
+    );
+    const envio = envios[0];
+    if (envio === undefined) throw ordenNoEncontrada();
+
+    const items = await this.conexion.query<FilaItem>(
+      `SELECT ${COLUMNAS_ITEM}
+         FROM item i JOIN envio e ON e.id = i.envio_id AND e.empresa_id = i.empresa_id
+        WHERE i.envio_id = $1
+        ORDER BY i.posicion, i.id`,
+      { bind: [envio.id], type: QueryTypes.SELECT },
+    );
+    // Todas las líneas del envío siguen "enviadas" en esta vista: es el envío tal como salió.
+    const conteos = await this.conexion.query<FilaConteo>(
+      `SELECT cl.item_id, 'ENVIADO' AS estado, count(*) AS n
+         FROM comanda_linea cl JOIN comanda c ON c.id = cl.comanda_id AND c.empresa_id = cl.empresa_id
+        WHERE c.envio_id = $1 AND c.tipo IN ('COMANDA', 'ADICION')
+        GROUP BY cl.item_id`,
+      { bind: [envio.id], type: QueryTypes.SELECT },
+    );
+    const comandas = await this.conexion.query<FilaComanda>(
+      `SELECT id, estacion_id, tipo, destino FROM comanda
+        WHERE envio_id = $1 AND tipo IN ('COMANDA', 'ADICION')`,
+      { bind: [envio.id], type: QueryTypes.SELECT },
+    );
+    const nombres = await this.usuarios.nombres(
+      items.flatMap((i) => (i.comandado_por === null ? [] : [i.comandado_por])),
+    );
+    const cocinaDe = contarCocina(conteos);
+    return {
+      id: envio.id,
+      ordenId: envio.orden_id,
+      numero: envio.numero,
+      esAdicion: envio.es_adicion,
+      items: items.map((i) =>
+        aItemRespuesta(i, cocinaDe.get(i.id) ?? { ...SIN_COCINA }, nombres, true),
+      ),
+      comandas: await this.resumirComandas(comandas),
+    };
+  }
+
+  /** `{ id, comandas }` de una marcha (criterio 32): sus comandas `MARCHAR`, siempre en el mismo orden. */
+  async armarMarcha(marchaId: string): Promise<MarchaRespuesta> {
+    const comandas = await this.conexion.query<FilaComanda>(
+      `SELECT id, estacion_id, tipo, destino FROM comanda
+        WHERE origen_id = $1 AND tipo = 'MARCHAR'`,
+      { bind: [marchaId], type: QueryTypes.SELECT },
+    );
+    return { id: marchaId, comandas: await this.resumirComandas(comandas) };
+  }
+
+  /** Las comandas como `comandaResumen`, por nombre de estación y luego por id (orden estable). */
+  private async resumirComandas(comandas: readonly FilaComanda[]): Promise<ComandaResumen[]> {
+    const nombres = await this.estaciones.nombres(comandas.map((c) => c.estacion_id));
+    return comandas
+      .map((c): ComandaResumen => ({
+        id: c.id,
+        estacionId: c.estacion_id,
+        estacionNombre: nombres.get(c.estacion_id) ?? '',
+        tipo: c.tipo,
+        destino: c.destino,
+        motivo: null,
+      }))
+      .sort((a, b) => a.estacionNombre.localeCompare(b.estacionNombre) || a.id.localeCompare(b.id));
+  }
 
   /** 404 si la orden no existe, es de otra sucursal o de otra empresa. */
   async armar(ordenId: string, sucursalId: string): Promise<OrdenRespuesta> {
@@ -90,9 +256,7 @@ export class VistaOrdenService {
       { bind: [orden.id], type: QueryTypes.SELECT },
     );
     const items = await this.conexion.query<FilaItem>(
-      `SELECT i.id, e.numero AS envio_numero, i.es_adicion, i.producto_id, i.nombre, i.tipo_producto,
-              i.cantidad, i.cantidad_anulada, i.precio_unitario, i.linea, i.observacion, i.tiempo,
-              i.para_llevar, i.marchado_en, i.estado, i.creado_por_usuario_id AS comandado_por, i.creado_en
+      `SELECT ${COLUMNAS_ITEM}
          FROM item i JOIN envio e ON e.id = i.envio_id AND e.empresa_id = i.empresa_id
         WHERE i.orden_id = $1
         ORDER BY e.numero, i.posicion, i.id`,
@@ -125,51 +289,10 @@ export class VistaOrdenService {
     ];
     const nombresPersonas = await this.usuarios.nombres(personaIds);
 
-    const cocinaDe = new Map<string, ItemRespuesta['cocina']>();
-    for (const c of conteos) {
-      const actual = cocinaDe.get(c.item_id) ?? {
-        enviado: 0,
-        enPreparacion: 0,
-        listo: 0,
-        anulado: 0,
-      };
-      const n = Number(c.n);
-      if (c.estado === 'ENVIADO') actual.enviado += n;
-      else if (c.estado === 'EN_PREPARACION') actual.enPreparacion += n;
-      else if (c.estado === 'LISTO') actual.listo += n;
-      else actual.anulado += n;
-      cocinaDe.set(c.item_id, actual);
-    }
-
-    const itemsRespuesta: ItemRespuesta[] = items.map((i) => ({
-      id: i.id,
-      envioNumero: i.envio_numero,
-      esAdicion: i.es_adicion,
-      productoId: i.producto_id,
-      nombre: i.nombre,
-      tipo: i.tipo_producto,
-      cantidad: i.cantidad,
-      cantidadAnulada: i.cantidad_anulada,
-      cantidadVigente: i.cantidad - i.cantidad_anulada,
-      precioUnitario: i.precio_unitario,
-      totalVigente: totalVigenteLinea(i.precio_unitario, i.cantidad, i.cantidad_anulada),
-      modificadores: i.linea.modificadores.map((m) => ({
-        nombre: m.nombre,
-        precioExtra: m.precioExtra,
-      })),
-      componentes: i.linea.componentes.map((c) => ({ nombre: c.nombre, cantidad: c.cantidad })),
-      observacion: i.observacion,
-      tiempo: i.tiempo,
-      paraLlevar: i.para_llevar,
-      marchadoEn: i.marchado_en === null ? null : iso(i.marchado_en),
-      estado: i.estado,
-      cocina: cocinaDe.get(i.id) ?? { enviado: 0, enPreparacion: 0, listo: 0, anulado: 0 },
-      comandadoPor:
-        i.comandado_por === null
-          ? null
-          : { id: i.comandado_por, nombre: nombresPersonas.get(i.comandado_por) ?? '' },
-      enviadoEn: iso(i.creado_en),
-    }));
+    const cocinaDe = contarCocina(conteos);
+    const itemsRespuesta = items.map((i) =>
+      aItemRespuesta(i, cocinaDe.get(i.id) ?? { ...SIN_COCINA }, nombresPersonas, false),
+    );
 
     return {
       id: orden.id,

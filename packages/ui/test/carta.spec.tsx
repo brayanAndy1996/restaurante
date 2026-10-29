@@ -152,6 +152,28 @@ describe('OpcionesConAyuda', () => {
     expect(alCambiar).toHaveBeenCalledWith('SIN_CONTROL');
   });
 
+  it('una opción deshabilitada se ve, no se puede elegir y dice por qué', async () => {
+    const alCambiar = vi.fn();
+    render(
+      <OpcionesConAyuda
+        etiqueta="Bebida"
+        opciones={[
+          { valor: 'chicha', titulo: 'Chicha morada', ayuda: 'Sin recargo' },
+          { valor: 'cerveza', titulo: 'Cerveza', ayuda: 'No disponible', deshabilitada: true },
+        ]}
+        valor=""
+        onCambio={alCambiar}
+      />,
+    );
+    const cerveza = screen.getByRole('radio', { name: /Cerveza/ });
+    expect(cerveza).toBeDisabled();
+    expect(screen.getByText('No disponible')).toBeVisible();
+    await userEvent.click(cerveza);
+    expect(alCambiar).not.toHaveBeenCalled();
+    await userEvent.click(screen.getByRole('radio', { name: /Chicha morada/ }));
+    expect(alCambiar).toHaveBeenCalledWith('chicha');
+  });
+
   it('marca la elegida y anuncia el error', () => {
     render(
       <OpcionesConAyuda

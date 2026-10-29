@@ -1,0 +1,331 @@
+/*
+ * Comandero (criterios 91 y 92 de 004). Se carga junto con la pantalla (bloque aparte), no con el paquete
+ * inicial. Todo color y medida sale de los tokens de `packages/ui`.
+ */
+
+.comandero {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espacio-lg);
+  min-width: 0;
+}
+
+.comandero__panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espacio-lg);
+  min-width: 0;
+}
+
+.comandero__titulo {
+  font-size: 1.125rem;
+  line-height: 1.5rem;
+  font-weight: 700;
+}
+
+/* Tableta y escritorio: la carta a la izquierda y «Por enviar» siempre a la vista a la derecha. */
+.comandero--ancho {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 24rem;
+  gap: var(--espacio-xl);
+  align-items: start;
+}
+.comandero--ancho > .comandero__panel:last-child {
+  position: sticky;
+  top: calc(var(--alto-barra) + var(--espacio-lg));
+}
+
+/* Acción fija: lo que falta enviar y «Enviar» al alcance del pulgar */
+.comandero__pie {
+  display: flex;
+  align-items: center;
+  gap: var(--espacio-md);
+}
+.comandero__resumen {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+  color: var(--color-tinta-suave);
+}
+.comandero__resumen b {
+  font-size: 1.25rem;
+  line-height: 1.625rem;
+  color: var(--color-tinta);
+  font-variant-numeric: tabular-nums;
+}
+.comandero__pie .ui-boton {
+  flex: none;
+  min-width: 9.5rem;
+}
+
+/* La carta: baldosas de producto */
+.carta-comandero {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espacio-lg);
+}
+.carta-comandero__productos {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(9.25rem, 1fr));
+  gap: var(--espacio-sm);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.carta-comandero__productos > li {
+  display: flex;
+  min-width: 0;
+}
+.baldosa-producto {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: var(--espacio-sm);
+  min-width: 0;
+  min-height: 5rem;
+  padding: var(--espacio-md);
+  border: 1px solid var(--color-borde-control);
+  border-radius: var(--radio-baldosa);
+  background: var(--color-baldosa);
+  color: var(--color-tinta);
+  text-align: left;
+  transition: background-color var(--duracion-corta) var(--ease);
+}
+.baldosa-producto:active:not([aria-disabled='true']) {
+  background: var(--color-accion-suave);
+}
+.baldosa-producto__nombre {
+  font-size: 1.0625rem;
+  line-height: 1.375rem;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.baldosa-producto__pie {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--espacio-xs) var(--espacio-sm);
+}
+.baldosa-producto__precio {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.baldosa-producto__motivo {
+  font-size: 0.8125rem;
+  line-height: 1.125rem;
+  font-weight: 700;
+  color: var(--color-peligro);
+}
+.baldosa-producto--apagada {
+  background: var(--color-inactivo);
+  border-color: var(--color-junta);
+  color: var(--color-tinta-suave);
+  cursor: not-allowed;
+}
+.baldosa-producto--apagada .baldosa-producto__nombre {
+  font-weight: 400;
+}
+
+/* «Por enviar»: el borrador */
+.por-enviar {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espacio-md);
+  min-width: 0;
+}
+.por-enviar__lista {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border: 1px solid var(--color-junta);
+  border-radius: var(--radio-baldosa);
+  background: var(--color-baldosa);
+  overflow: hidden;
+}
+.por-enviar__lista > li + li {
+  border-top: 1px solid var(--color-junta);
+}
+.por-enviar__deshacer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--espacio-md);
+  margin: 0;
+  font-size: 0.9375rem;
+  line-height: 1.375rem;
+  color: var(--color-tinta-suave);
+}
+.por-enviar__total {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--espacio-md);
+  padding-top: var(--espacio-md);
+  border-top: 2px solid var(--color-tinta);
+  font-size: 1.0625rem;
+  font-weight: 600;
+}
+.por-enviar__total b {
+  font-size: 1.5rem;
+  line-height: 2rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.linea {
+  background: var(--color-baldosa);
+}
+.linea--rechazada {
+  background: var(--color-peligro-suave);
+  outline: 2px solid var(--color-peligro);
+  outline-offset: -2px;
+}
+.linea__fila {
+  display: flex;
+  align-items: stretch;
+}
+.linea__cuerpo {
+  display: flex;
+  flex: 1;
+  align-items: flex-start;
+  gap: var(--espacio-md);
+  min-width: 0;
+  min-height: var(--alto-baldosa-persona);
+  padding: var(--espacio-md) var(--espacio-lg);
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+}
+button.linea__cuerpo:active {
+  background: var(--color-accion-suave);
+}
+.linea__fila > .ui-boton-icono {
+  align-self: center;
+  margin-right: var(--espacio-sm);
+}
+.linea__cantidad {
+  flex: none;
+  min-width: 2.25rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.linea__texto {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.linea__nombre {
+  font-size: 1.0625rem;
+  line-height: 1.375rem;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.linea__detalle {
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+  color: var(--color-tinta-suave);
+  overflow-wrap: anywhere;
+}
+.linea__etiquetas {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--espacio-xs);
+  margin-top: 2px;
+}
+.linea__total {
+  flex: none;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.linea__rechazo {
+  display: flex;
+  gap: var(--espacio-sm);
+  margin: 0;
+  padding: 0 var(--espacio-lg) var(--espacio-md);
+  font-size: 0.9375rem;
+  line-height: 1.375rem;
+  color: var(--color-peligro-oscuro);
+}
+.linea__rechazo .ui-icono {
+  flex: none;
+  margin-top: 3px;
+  color: var(--color-peligro);
+}
+
+/* Hoja de producto */
+.hoja-producto .ui-hoja__cuerpo {
+  padding-bottom: 0;
+}
+.hoja-producto__formulario {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espacio-lg);
+}
+.hoja-producto__detalle {
+  margin: 0;
+  font-size: 0.9375rem;
+  line-height: 1.375rem;
+  color: var(--color-tinta-suave);
+}
+.hoja-producto__fila {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--espacio-md);
+}
+.hoja-producto__bloque {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espacio-sm);
+}
+.hoja-producto__grupo {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espacio-xs);
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.hoja-producto__grupo > legend {
+  padding: 0;
+}
+.hoja-producto__casillas {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espacio-sm);
+  margin-top: var(--espacio-xs);
+}
+/* El botón de agregar queda a la vista aunque la hoja tenga muchos grupos */
+.hoja-producto__pie {
+  position: sticky;
+  bottom: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--espacio-sm);
+  margin: 0 calc(var(--espacio-lg) * -1);
+  padding: var(--espacio-md) var(--espacio-lg) max(var(--espacio-lg), env(safe-area-inset-bottom));
+  border-top: 1px solid var(--color-junta);
+  background: var(--color-baldosa);
+}
+.hoja-producto__faltas {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--espacio-sm);
+  margin: 0;
+  font-size: 0.9375rem;
+  line-height: 1.375rem;
+  color: var(--color-peligro-oscuro);
+}
+.hoja-producto__faltas .ui-icono {
+  flex: none;
+  margin-top: 3px;
+  color: var(--color-peligro);
+}

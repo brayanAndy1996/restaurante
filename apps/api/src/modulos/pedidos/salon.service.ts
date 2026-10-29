@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import type { MesaDelSalon, SalonRespuesta } from '@restaurante/contratos';
+import type { MesaDelSalon, SalonRespuesta, StockSalonRespuesta } from '@restaurante/contratos';
 import { estadoDeMesa, totalOrden, type EstadoOrden } from '@restaurante/dominio';
 import { QueryTypes, type Sequelize } from 'sequelize';
 import { CONEXION_API } from '../../nucleo/base-de-datos';
@@ -7,6 +7,7 @@ import { ErrorAplicacion } from '../../nucleo/errores/error-aplicacion';
 import { RELOJ, type Reloj } from '../../nucleo/reloj';
 import { MesasConsultaService } from '../salon';
 import { SesionActual, UsuariosConsultaService } from '../seguridad';
+import { INVENTARIO, type InventarioPuerto } from './inventario';
 
 interface FilaOrdenAbierta {
   id: string;
@@ -46,7 +47,28 @@ export class SalonService {
     @Inject(SesionActual) private readonly sesion: SesionActual,
     @Inject(MesasConsultaService) private readonly mesas: MesasConsultaService,
     @Inject(UsuariosConsultaService) private readonly usuarios: UsuariosConsultaService,
+    @Inject(INVENTARIO) private readonly inventario: InventarioPuerto,
   ) {}
+
+  /**
+   * `GET /salon/stock?productoIds=…` (criterio 73, decisión 2): lo que responde el puerto de inventario para los
+   * productos pedidos de la sucursal activa. Con `InventarioNulo` (hasta la sección 6) es siempre
+   * `{ productos: [] }`: el comandero no muestra "quedan N". Solo se devuelven los productos pedidos.
+   */
+  async stock(consulta: { productoIds: readonly string[] }): Promise<StockSalonRespuesta> {
+    const sucursalId = this.sesion.principal().sucursalId;
+    if (sucursalId === null) {
+      throw new ErrorAplicacion(409, 'SUCURSAL_NO_ELEGIDA', 'Elige una sucursal para continuar');
+    }
+    const pedidos = [...new Set(consulta.productoIds.map((id) => id.toLowerCase()))];
+    const disponibles = await this.inventario.disponibles({ sucursalId, productoIds: pedidos });
+    return {
+      productos: pedidos.flatMap((productoId) => {
+        const disponible = disponibles.get(productoId);
+        return disponible === undefined ? [] : [{ productoId, disponible }];
+      }),
+    };
+  }
 
   async mapa(): Promise<MapaDelSalon> {
     const sucursalId = this.sesion.principal().sucursalId;

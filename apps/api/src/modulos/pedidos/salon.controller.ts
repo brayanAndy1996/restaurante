@@ -1,14 +1,18 @@
-import { Controller, Get, Headers, Inject, Res } from '@nestjs/common';
-import type { SalonRespuesta } from '@restaurante/contratos';
+import { Controller, Get, Headers, Inject, Query, Res } from '@nestjs/common';
+import {
+  stockSalonConsultaSchema,
+  type SalonRespuesta,
+  type StockSalonRespuesta,
+} from '@restaurante/contratos';
 import type { Response } from 'express';
-import { noImplementado } from '../../nucleo/errores/no-implementado';
+import { PipeZod } from '../../nucleo/errores/pipes';
 import { coincideConEtag, etagDeVista } from '../../nucleo/http/etag';
 import { Permiso, RequiereModulo } from '../seguridad';
 import { SalonService } from './salon.service';
 
 /**
  * El mapa del salón con estados y el stock del comandero (historia 004, criterios 7 y 73). Ambas rutas llevan
- * `ATENDER_MESA` y `SALON`; el stock sigue como firma de la fase A (sin lógica) hasta su tarea.
+ * `ATENDER_MESA` y `SALON`.
  */
 @Controller('salon')
 export class SalonController {
@@ -37,10 +41,16 @@ export class SalonController {
     return vista;
   }
 
+  /**
+   * 200 `{ productos: [{ productoId, disponible }] }` con lo que responde el puerto de inventario; 400 si
+   * `productoIds` no son UUID; 403; 409 `SUCURSAL_NO_ELEGIDA`. Con `InventarioNulo`, siempre `{ productos: [] }`.
+   */
   @Get('stock')
   @RequiereModulo('SALON')
   @Permiso('ATENDER_MESA')
-  stock(): never {
-    throw noImplementado();
+  stock(
+    @Query(new PipeZod(stockSalonConsultaSchema)) consulta: { productoIds: string[] },
+  ): Promise<StockSalonRespuesta> {
+    return this.salon.stock(consulta);
   }
 }
