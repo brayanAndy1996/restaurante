@@ -5,6 +5,13 @@
 
 /** Minutos de inactividad de una sesión PIN cuando la sucursal activa no los configuró (criterios 39 y 40). */
 export const MINUTOS_INACTIVIDAD_PIN_POR_DEFECTO = 5;
+/**
+ * Minutos de inactividad de una sesión PIN o de contraseña cuyo rol en la sucursal activa es Cocina/Barra, si la
+ * sucursal no los configuró (historia 004, criterios 63b y 63c, decisión 11).
+ */
+export const MINUTOS_INACTIVIDAD_COCINA_POR_DEFECTO = 60;
+/** Inactividad de una sesión de contraseña, en minutos (criterio 14 de 002). */
+export const MINUTOS_INACTIVIDAD_CONTRASENA = 30;
 /** Duración máxima de una sesión PIN desde que se creó (criterio 39). */
 export const HORAS_MAXIMAS_PIN = 12;
 

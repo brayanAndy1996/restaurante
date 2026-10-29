@@ -18,6 +18,7 @@ import { Credenciales } from './credenciales';
 import { bloqueoTemporal } from './errores-acceso';
 import { EquiposService, equipoNoReconocido, tokenEquipoDeCabecera } from './equipos.service';
 import { HorarioService } from './horario.service';
+import { minutosDeInactividad } from './inactividad';
 import { SesionesService } from './sesiones.service';
 import { armarTokenSesion, type TokenEquipo } from './tokens';
 
@@ -178,7 +179,16 @@ export class IngresoPinService {
       elegibles.length === 1
         ? elegibles[0]!.id
         : (elegibles.find((s) => s.id === persona.ultima_sucursal_id)?.id ?? null);
-    const minutos = await this.minutosDeInactividad(sucursalId);
+    // La columna `minutos_inactividad` guarda los de la sucursal (1 a 120); el tiempo de Cocina/Barra se decide
+    // al validar (criterio 63b), y aquí solo se usa para el vencimiento que devuelve el ingreso.
+    const delAcceso = await this.sesiones.minutosDeSucursal(sucursalId);
+    const minutos = delAcceso.minutosSucursal ?? MINUTOS_INACTIVIDAD_PIN_POR_DEFECTO;
+    const minutosQueRigen = minutosDeInactividad({
+      tipo: 'PIN',
+      rol: elegibles.find((s) => s.id === sucursalId)?.rol ?? null,
+      ...delAcceso,
+      minutosSesion: minutos,
+    });
 
     const secreto = this.credenciales.generarSecreto();
     const expira = new Date(ahora.getTime() + HORAS_MAXIMAS_PIN * HORA_MS);
@@ -227,20 +237,10 @@ export class IngresoPinService {
       sucursalId,
       elegibles,
       debeCambiarContrasena: false,
-      expiraPorInactividadEn: new Date(ahora.getTime() + minutos * MINUTO_MS),
+      expiraPorInactividadEn: new Date(ahora.getTime() + minutosQueRigen * MINUTO_MS),
       equipo: { id: equipo.id, nombre: equipo.nombre, equipoRecordadoId: persona.recordado_id },
     });
     return { ok: { token: armarTokenSesion(empresaId, filas[0]!.id, secreto), sesion } };
-  }
-
-  /** Minutos de inactividad de la sucursal (5 por defecto, y también sin sucursal activa). */
-  private async minutosDeInactividad(sucursalId: string | null): Promise<number> {
-    if (sucursalId === null) return MINUTOS_INACTIVIDAD_PIN_POR_DEFECTO;
-    const filas = await this.conexion.query<{ minutos_inactividad: number }>(
-      'SELECT minutos_inactividad FROM sucursal_acceso WHERE sucursal_id = $1',
-      { bind: [sucursalId], type: QueryTypes.SELECT },
-    );
-    return filas[0]?.minutos_inactividad ?? MINUTOS_INACTIVIDAD_PIN_POR_DEFECTO;
   }
 
   /**

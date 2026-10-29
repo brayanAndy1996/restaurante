@@ -11,8 +11,8 @@ import {
   type Principal,
 } from '../../nucleo/principal';
 import { RELOJ, type Reloj } from '../../nucleo/reloj';
-import { MINUTOS_INACTIVIDAD_PIN_POR_DEFECTO } from './constantes-acceso';
 import { Credenciales } from './credenciales';
+import { minutosDeInactividad } from './inactividad';
 import {
   PERMITE_CONTRASENA_TEMPORAL,
   PUBLICA,
@@ -52,6 +52,10 @@ interface FilaSesion {
   recordado_revocado_en: Date | null;
   /** Minutos de inactividad configurados en la sucursal activa (nulo si no se configuraron). */
   minutos_sucursal: number | null;
+  /** Minutos de inactividad de Cocina/Barra configurados en la sucursal activa (nulo si no se configuraron). */
+  minutos_cocina: number | null;
+  /** El rol de la persona en la sucursal activa (nulo si no tiene acceso o no hay sucursal activa). */
+  rol_en_sucursal: Exclude<Principal['rol'], null> | null;
 }
 
 const MENSAJE_NO_AUTENTICADO = 'Se requiere autenticación para esta operación';
@@ -180,7 +184,8 @@ export class AutenticacionGuard implements CanActivate {
    *
    * Sesión PIN (criterio 37 y 39): exige el `X-Equipo` del mismo equipo (con el secreto correcto) y que el
    * equipo recordado (equipo, persona) siga activo; su inactividad es la de la sucursal activa (5 minutos por
-   * defecto, también sin sucursal activa). Toda sesión asociada a un equipo recordado se cierra cuando ese
+   * defecto, también sin sucursal activa). Si el rol en la sucursal activa es Cocina/Barra, en PIN y en
+   * contraseña rige `minutosInactividadCocina` (60 por defecto; criterio 63b): ver `minutosDeInactividad`. Toda sesión asociada a un equipo recordado se cierra cuando ese
    * equipo recordado se revoca (criterio 30).
    */
   private async validarYRenovar(
@@ -193,13 +198,17 @@ export class AutenticacionGuard implements CanActivate {
               s.sucursal_id, s.huella_secreto, s.ultima_actividad_en, s.expira_en, s.minutos_inactividad,
               s.cerrada_en, u.activo AS usuario_activo, u.es_administrador, u.contrasena_temporal,
               e.huella_secreto AS equipo_huella, er.id AS recordado_id,
-              er.revocado_en AS recordado_revocado_en, sa.minutos_inactividad AS minutos_sucursal
+              er.revocado_en AS recordado_revocado_en, sa.minutos_inactividad AS minutos_sucursal,
+              sa.minutos_inactividad_cocina AS minutos_cocina, ac.rol AS rol_en_sucursal
          FROM sesion s
          LEFT JOIN usuario u ON u.id = s.usuario_id AND u.empresa_id = s.empresa_id
          LEFT JOIN equipo e ON e.id = s.equipo_id AND e.empresa_id = s.empresa_id
          LEFT JOIN equipo_recordado er
            ON er.id = s.equipo_recordado_id AND er.empresa_id = s.empresa_id
          LEFT JOIN sucursal_acceso sa ON sa.sucursal_id = s.sucursal_id AND sa.empresa_id = s.empresa_id
+         LEFT JOIN acceso_sucursal ac
+           ON ac.usuario_id = s.usuario_id AND ac.sucursal_id = s.sucursal_id
+          AND ac.empresa_id = s.empresa_id
         WHERE s.id = $1`,
       { bind: [partes.sesionId], type: QueryTypes.SELECT },
     );
@@ -223,10 +232,19 @@ export class AutenticacionGuard implements CanActivate {
     }
 
     const ahora = this.reloj.ahora();
-    const minutosInactividad =
-      sesion.tipo === 'PIN'
-        ? (sesion.minutos_sucursal ?? MINUTOS_INACTIVIDAD_PIN_POR_DEFECTO)
-        : sesion.minutos_inactividad;
+    // El rol de la sucursal activa es el mismo que más abajo da los permisos de la petición (criterio 63b); el
+    // Administrador y el soporte no tienen fila de acceso y no cambian.
+    const rolParaInactividad: Principal['rol'] =
+      sesion.tipo === 'SOPORTE' || sesion.es_administrador === true
+        ? 'ADMINISTRADOR'
+        : sesion.rol_en_sucursal;
+    const minutosInactividad = minutosDeInactividad({
+      tipo: sesion.tipo,
+      rol: rolParaInactividad,
+      minutosSucursal: sesion.minutos_sucursal,
+      minutosCocina: sesion.minutos_cocina,
+      minutosSesion: sesion.minutos_inactividad,
+    });
     const venceInactividad = sesion.ultima_actividad_en.getTime() + minutosInactividad * MINUTO_MS;
     if (ahora.getTime() >= sesion.expira_en.getTime() || ahora.getTime() >= venceInactividad) {
       await this.cerrar(sesion.id, ahora, 'EXPIRADA');
@@ -277,16 +295,13 @@ export class AutenticacionGuard implements CanActivate {
       const esAdministrador = sesion.es_administrador === true;
       let rol: Principal['rol'] = esAdministrador ? 'ADMINISTRADOR' : null;
       if (!esAdministrador && sesion.sucursal_id !== null) {
-        const accesos = await this.conexion.query<{ rol: Exclude<Principal['rol'], null> }>(
-          'SELECT rol FROM acceso_sucursal WHERE usuario_id = $1 AND sucursal_id = $2',
-          { bind: [sesion.usuario_id, sesion.sucursal_id], type: QueryTypes.SELECT },
-        );
-        if (accesos[0] === undefined) {
+        // El rol sale de la misma consulta que fijó el tiempo de inactividad (criterio 63b).
+        if (sesion.rol_en_sucursal === null) {
           // Le quitaron el acceso a la sucursal activa: la sesión se cierra (criterio 6).
           await this.cerrar(sesion.id, ahora, 'ACCESO_QUITADO');
           return { error: noAutenticado() };
         }
-        rol = accesos[0].rol;
+        rol = sesion.rol_en_sucursal;
       }
       principal = {
         tipo: sesion.tipo,

@@ -19,6 +19,7 @@ import {
   restablecerContrasenaEntradaSchema,
   sesionRespuestaSchema,
   sucursalAccesoEntradaSchema,
+  sucursalAccesoRespuestaSchema,
   usuarioCrearEntradaSchema,
   usuarioModificarEntradaSchema,
   CODIGOS_ERROR,
@@ -481,6 +482,52 @@ describe('usuarioModificarEntradaSchema (criterios 21b y 22)', () => {
         false,
       );
     }
+  });
+
+  it('sucursalAccesoEntrada acepta minutosInactividadCocina de 1 a 720, solo o con el otro campo (004, criterio 63c)', () => {
+    for (const bueno of [1, 60, 720]) {
+      expect(
+        sucursalAccesoEntradaSchema.safeParse({ minutosInactividadCocina: bueno }).success,
+        String(bueno),
+      ).toBe(true);
+    }
+    expect(
+      sucursalAccesoEntradaSchema.safeParse({
+        minutosInactividad: 10,
+        minutosInactividadCocina: 90,
+      }).success,
+    ).toBe(true);
+    for (const malo of [0, 721, 1.5, '10', null, -1, true]) {
+      const resultado = sucursalAccesoEntradaSchema.safeParse({ minutosInactividadCocina: malo });
+      expect(resultado.success, String(malo)).toBe(false);
+      expect(campos(resultado)).toContain('minutosInactividadCocina');
+    }
+  });
+
+  it('sucursalAccesoEntrada exige al menos un campo, rechaza los desconocidos y no mezcla un campo bueno con uno malo', () => {
+    expect(sucursalAccesoEntradaSchema.safeParse({}).success).toBe(false);
+    expect(
+      sucursalAccesoEntradaSchema.safeParse({ minutosInactividadCocina: 10, otro: 1 }).success,
+    ).toBe(false);
+    // minutosInactividad sigue de 1 a 120 aunque Cocina/Barra llegue a 720.
+    expect(sucursalAccesoEntradaSchema.safeParse({ minutosInactividad: 121 }).success).toBe(false);
+    const mezcla = sucursalAccesoEntradaSchema.safeParse({
+      minutosInactividad: 30,
+      minutosInactividadCocina: 721,
+    });
+    expect(mezcla.success).toBe(false);
+    expect(campos(mezcla)).toEqual(['minutosInactividadCocina']);
+  });
+
+  it('sucursalAccesoRespuesta trae los dos valores', () => {
+    const buena = { sucursalId: ID_1, minutosInactividad: 5, minutosInactividadCocina: 60 };
+    expect(sucursalAccesoRespuestaSchema.safeParse(buena).success).toBe(true);
+    expect(
+      sucursalAccesoRespuestaSchema.safeParse({ sucursalId: ID_1, minutosInactividad: 5 }).success,
+    ).toBe(false);
+    expect(
+      sucursalAccesoRespuestaSchema.safeParse({ ...buena, minutosInactividadCocina: 721 }).success,
+    ).toBe(false);
   });
 });
 
