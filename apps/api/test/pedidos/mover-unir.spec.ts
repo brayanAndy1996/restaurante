@@ -601,3 +601,71 @@ describe('criterio 48 · carreras', () => {
     expect(ocupantes).toHaveLength(1);
   });
 });
+
+describe('Idempotency-Key en mover y unir', () => {
+  it('mover: la réplica con la misma clave devuelve la misma respuesta sin volver a mover ni publicar', async () => {
+    const o = await abrir({ conItems: true });
+    const libre = await mesas.siguiente();
+    const clave = randomUUID();
+    const pedir = () =>
+      llamar(ctx, mozo, {
+        metodo: 'post',
+        ruta: `/ordenes/${o.id}/movimiento`,
+        cuerpo: { mesaDestinoId: libre.id },
+        cabeceras: { 'Idempotency-Key': clave },
+      });
+    const primera = await pedir();
+    exigirEstado(primera, 200, 'mover');
+    const filas = (await relaciones(o.id)).length;
+    await asentar();
+    ctx.publicador.limpiar();
+    const replica = await pedir();
+    exigirEstado(replica, 200, 'réplica');
+    expect(replica.body).toEqual(primera.body);
+    expect((await relaciones(o.id)).length).toBe(filas);
+    await asentar();
+    expect(ctx.publicador.eventos()).toEqual([]);
+    // La misma clave con otro cuerpo no es una réplica.
+    const otra = await mesas.siguiente();
+    esperarError(
+      await llamar(ctx, mozo, {
+        metodo: 'post',
+        ruta: `/ordenes/${o.id}/movimiento`,
+        cuerpo: { mesaDestinoId: otra.id },
+        cabeceras: { 'Idempotency-Key': clave },
+      }),
+      422,
+      'CLAVE_IDEMPOTENCIA_REUTILIZADA',
+    );
+    expect(await vigentes(o.id)).toEqual([libre.id]);
+  });
+
+  it('unir: la réplica con la misma clave devuelve la misma respuesta sin volver a unir, auditar ni publicar', async () => {
+    const principal = await abrir({ conItems: true });
+    const absorbida = await abrir({ conItems: true });
+    const clave = randomUUID();
+    const pedir = () =>
+      llamar(ctx, mozo, {
+        metodo: 'post',
+        ruta: `/ordenes/${principal.id}/union`,
+        cuerpo: { mesaIds: [absorbida.mesa.id] },
+        cabeceras: { 'Idempotency-Key': clave },
+      });
+    const primera = await pedir();
+    exigirEstado(primera, 200, 'unir');
+    await asentar();
+    ctx.publicador.limpiar();
+    const replica = await pedir();
+    exigirEstado(replica, 200, 'réplica');
+    expect(replica.body).toEqual(primera.body);
+    expect(
+      await auditoriaSalon(admin, e.A.empresaId, {
+        accion: 'unir_ordenes',
+        entidadId: principal.id,
+      }),
+    ).toHaveLength(1);
+    expect((await leerOrden(ctx, mozo, principal.id)).items).toHaveLength(4);
+    await asentar();
+    expect(ctx.publicador.eventos()).toEqual([]);
+  });
+});

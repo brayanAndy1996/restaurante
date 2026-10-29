@@ -13,7 +13,7 @@ import {
   type UnirEntrada,
 } from '@restaurante/contratos';
 import { PipeUuid, PipeZod } from '../../nucleo/errores/pipes';
-import { IdempotenteObligatoria } from '../../nucleo/idempotencia';
+import { Idempotente, IdempotenteObligatoria } from '../../nucleo/idempotencia';
 import { ClaveDespuesDeValidar, Permiso, RequiereModulo } from '../seguridad';
 import { AnulacionesService } from './anulaciones.service';
 import { MovimientosService } from './movimientos.service';
@@ -69,10 +69,12 @@ export class OrdenesController {
    * 200 `ordenRespuesta` (también si la orden ya está en la mesa de destino); 400 (`mesaOrigenId` obligatoria si
    * la orden tiene varias mesas); 403; 404 (orden o mesa de otra sucursal, de otra empresa o inexistente);
    * 409 `ORDEN_NO_ABIERTA`, `MESA_OCUPADA` (con `ordenId`) o `CONFLICTO` (mesa inactiva); 422
-   * `REFERENCIA_INVALIDA` (la mesa de origen no es de la orden).
+   * `REFERENCIA_INVALIDA` (la mesa de origen no es de la orden). Acepta `Idempotency-Key` (opcional, el criterio no
+   * la exige): la réplica de la misma clave devuelve la misma respuesta sin volver a mover.
    */
   @Post(':id/movimiento')
   @HttpCode(200)
+  @Idempotente()
   @RequiereModulo('SALON')
   @Permiso('MOVER_UNIR_MESAS')
   mover(
@@ -85,10 +87,12 @@ export class OrdenesController {
   /**
    * 200 `ordenRespuesta` (también si no queda ninguna mesa por unir); 400; 403; 404; 409 `ORDEN_NO_ABIERTA` o
    * `CONFLICTO` (mesa inactiva o una carrera con otra operación, que se puede repetir); 422 `DATOS_INVALIDOS`
-   * (la orden pasaría de 20 mesas).
+   * (la orden pasaría de 20 mesas). Acepta `Idempotency-Key` (opcional): la réplica de la misma clave devuelve la
+   * misma respuesta sin volver a unir.
    */
   @Post(':id/union')
   @HttpCode(200)
+  @Idempotente()
   @RequiereModulo('SALON')
   @Permiso('MOVER_UNIR_MESAS')
   unir(
