@@ -2,7 +2,7 @@ import { CanActivate, ExecutionContext, Injectable } from '@nestjs/common';
 import type { Request } from 'express';
 import { ErrorAplicacion } from '../../nucleo/errores/error-aplicacion';
 import { noImplementado } from '../../nucleo/errores/no-implementado';
-import { parsearTokenPuente, parsearTokenVinculacion } from './tokens-puente';
+import { parsearTokenPuente, parsearTokenVinculacion } from '../seguridad';
 
 const MENSAJE = 'Se requiere autenticación para esta operación';
 

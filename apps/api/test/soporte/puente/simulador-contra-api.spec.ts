@@ -55,24 +55,25 @@ describe('el simulador del puente contra la API de la fase A de 3b', () => {
 
   it('las rutas del puente con un token pu. bien formado reciben "No implementado"; con otro token, 401', async () => {
     const servidor = app.getHttpServer();
+    const llamar = (metodo: 'get' | 'post', ruta: string, token?: string) => {
+      const base = request(servidor);
+      const peticion = metodo === 'get' ? base.get(ruta) : base.post(ruta);
+      return (
+        token === undefined ? peticion : peticion.set('Authorization', `Bearer ${token}`)
+      ).send({});
+    };
     for (const [metodo, ruta] of [
       ['get', '/puente/configuracion'],
       ['get', '/puente/trabajos'],
       ['post', `/puente/trabajos/${randomUUID()}/resultado`],
       ['post', '/puente/latido'],
     ] as const) {
-      const conPuente = await request(servidor)
-        [metodo](ruta)
-        .set('Authorization', `Bearer ${tokenPuente()}`)
-        .send({});
+      const conPuente = await llamar(metodo, ruta, tokenPuente());
       expect(conPuente.status, `${metodo} ${ruta}`).toBe(500);
-      const sin = await request(servidor)[metodo](ruta).send({});
+      const sin = await llamar(metodo, ruta);
       expect(sin.status, `${metodo} ${ruta} sin credencial`).toBe(401);
       expect(sin.body).toMatchObject({ codigo: 'NO_AUTENTICADO' });
-      const otro = await request(servidor)
-        [metodo](ruta)
-        .set('Authorization', `Bearer ${tokenVinculacion()}`)
-        .send({});
+      const otro = await llamar(metodo, ruta, tokenVinculacion());
       expect(otro.status, `${metodo} ${ruta} con un vi.`).toBe(401);
     }
   });

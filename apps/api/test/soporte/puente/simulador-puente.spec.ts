@@ -355,7 +355,7 @@ describe('SimuladorPuente', () => {
       api.agregarImpresoraBluetooth();
       const simulador = await vinculado({ versionApp: '2.0.0' });
       await simulador.iniciar();
-      await simulador.esperarHasta(() => api.latidos.length >= 1);
+      await simulador.esperarHasta(() => simulador.latidos.length >= 1);
       const latido = api.latidos[0]!;
       expect(latido.versionApp).toBe('2.0.0');
       expect(latido.impresoras).toHaveLength(2);
