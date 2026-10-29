@@ -5,8 +5,11 @@ import {
   ErrorDeCarga,
   EsqueletoDeLista,
   EstadoVacio,
+  CONSULTA_TABLET,
+  Icono,
+  IconoArriba,
   IconoCarta,
-  Segmentos,
+  IconoIzquierda,
   useCoincide,
 } from '@restaurante/ui';
 import { useQueryClient } from '@tanstack/react-query';
@@ -88,7 +91,7 @@ function Comandero({
   const consultaCarta = useVistaDeSucursal(sucursalId);
   const clave = claveDeBorrador(empresaId, usuarioId, ordenId);
   const borrador = useBorrador(clave);
-  const ancha = useCoincide('(min-width: 900px)');
+  const ancha = useCoincide(CONSULTA_TABLET);
 
   const [panel, setPanel] = useState<Panel>(
     llegada.vista ?? (borrador.envioId !== null ? 'borrador' : 'carta'),
@@ -191,13 +194,34 @@ function Comandero({
   const mesas = orden ? tituloDeMesas(orden.mesas) : 'la cuenta';
   const hayQueEnviar = borrador.lineas.length > 0 || borrador.porReintentar;
 
+  const totalPorEnviar = montoEnSoles(totalDelBorrador(borrador.lineas));
+  // En el celular, tocar el resumen lleva a revisar lo que falta enviar; en pantallas anchas ya está a la vista.
+  const resumenTocable = !ancha && panel === 'carta' && borrador.lineas.length > 0;
+
   const pie =
     abierta && hayQueEnviar ? (
       <div className="comandero__pie">
-        <div className="comandero__resumen">
-          <span>{textoDeItems(unidades)} por enviar</span>
-          <b>{montoEnSoles(totalDelBorrador(borrador.lineas))}</b>
-        </div>
+        {resumenTocable ? (
+          <button
+            type="button"
+            className="comandero__resumen comandero__resumen--boton"
+            aria-label={`Revisar lo que falta enviar: ${textoDeItems(unidades)}, ${totalPorEnviar}`}
+            onClick={() => setPanel('borrador')}
+          >
+            <span className="comandero__resumen-texto">
+              <span>{textoDeItems(unidades)} por enviar</span>
+              <b>{totalPorEnviar}</b>
+            </span>
+            <Icono icono={IconoArriba} tamano={20} />
+          </button>
+        ) : (
+          <div className="comandero__resumen">
+            <span className="comandero__resumen-texto">
+              <span>{textoDeItems(unidades)} por enviar</span>
+              <b>{totalPorEnviar}</b>
+            </span>
+          </div>
+        )}
         <Boton
           variante="principal"
           cargando={borrador.fase !== null}
@@ -235,27 +259,13 @@ function Comandero({
         </Aviso>
       ) : null}
 
-      {!ancha ? (
-        <Segmentos
-          etiqueta="Qué ver"
-          opciones={[
-            { valor: 'carta', etiqueta: 'Carta' },
-            {
-              valor: 'borrador',
-              etiqueta: unidades > 0 ? `Por enviar · ${unidades}` : 'Por enviar',
-            },
-          ]}
-          valor={panel}
-          onCambio={(valor) => setPanel(valor)}
-        />
-      ) : null}
-
       <div className={ancha ? 'comandero comandero--ancho' : 'comandero'}>
         {verCarta ? (
           <section className="comandero__panel" aria-label="Carta">
             {bloqueado ? (
               <Aviso tipo="alerta" titulo="Primero termina el envío">
-                Hay un envío sin terminar. Reinténtalo desde «Por enviar» antes de agregar más.
+                Hay un envío sin terminar. Reinténtalo desde «Por enviar» antes de agregar más
+                productos.
               </Aviso>
             ) : consultaCarta.isPending ? (
               <EsqueletoDeLista filas={5} conInicial={false} etiqueta="Cargando la carta" />
@@ -286,7 +296,14 @@ function Comandero({
 
         {verPorEnviar ? (
           <section className="comandero__panel" aria-label="Por enviar">
-            {ancha ? <h2 className="comandero__titulo">Por enviar</h2> : null}
+            <div className="comandero__encabezado">
+              <h2 className="comandero__titulo">Por enviar</h2>
+              {ancha ? null : (
+                <Boton variante="texto" icono={IconoIzquierda} onClick={() => setPanel('carta')}>
+                  Seguir agregando
+                </Boton>
+              )}
+            </div>
             <PorEnviar borrador={borrador} onEditar={editar} />
           </section>
         ) : null}

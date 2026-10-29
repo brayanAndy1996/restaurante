@@ -60,7 +60,7 @@ async function agregarLomo(cantidad = 1) {
 }
 
 async function verPorEnviar() {
-  await userEvent.click(screen.getByRole('button', { name: /^Por enviar/ }));
+  await userEvent.click(screen.getByRole('button', { name: /^Revisar lo que falta enviar/ }));
 }
 
 describe('Comandero: la carta (criterio 91)', () => {
@@ -295,9 +295,10 @@ describe('Comandero: el borrador (criterio 91)', () => {
     );
     renderApp(RUTA);
     await screen.findByRole('list', { name: 'Productos de Fondos' });
+    // Nada por enviar: ni resumen abajo ni botón para revisarlo.
     expect(screen.queryByText(/por enviar$/)).toBeNull();
-    await verPorEnviar();
-    expect(await screen.findByText('Nada por enviar')).toBeVisible();
+    expect(screen.queryByRole('button', { name: /^Revisar lo que falta enviar/ })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Enviar' })).toBeNull();
   });
 
   it('un borrador dañado en el almacenamiento no rompe la pantalla', async () => {
@@ -305,8 +306,8 @@ describe('Comandero: el borrador (criterio 91)', () => {
     servidorDeCuenta();
     renderApp(RUTA);
     await screen.findByRole('list', { name: 'Productos de Fondos' });
-    await verPorEnviar();
-    expect(await screen.findByText('Nada por enviar')).toBeVisible();
+    expect(screen.queryByRole('button', { name: /^Revisar lo que falta enviar/ })).toBeNull();
+    expect(screen.getByRole('searchbox', { name: 'Buscar un producto' })).toBeVisible();
   });
 });
 
@@ -435,7 +436,7 @@ describe('Comandero: enviar (criterios 15, 26 y 92)', () => {
     await userEvent.click(await screen.findByRole('button', { name: 'Enviar' }));
     await screen.findByRole('button', { name: 'Reintentar el envío' });
 
-    await userEvent.click(screen.getByRole('button', { name: 'Carta' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Seguir agregando' }));
     expect(await screen.findByText('Primero termina el envío')).toBeVisible();
     expect(screen.queryByRole('list', { name: 'Productos de Fondos' })).toBeNull();
   });

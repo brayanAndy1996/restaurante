@@ -22,11 +22,17 @@
   line-height: 1.5rem;
   font-weight: 700;
 }
+.comandero__encabezado {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--espacio-md);
+}
 
 /* Tableta y escritorio: la carta a la izquierda y «Por enviar» siempre a la vista a la derecha. */
 .comandero--ancho {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 24rem;
+  grid-template-columns: minmax(0, 1fr) 22rem;
   gap: var(--espacio-xl);
   align-items: start;
 }
@@ -44,13 +50,38 @@
 .comandero__resumen {
   display: flex;
   flex: 1;
+  align-items: center;
+  justify-content: flex-start;
+  gap: var(--espacio-sm);
+  min-width: 0;
+  min-height: var(--alto-principal);
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+}
+.comandero__resumen--boton {
+  padding-inline: var(--espacio-sm);
+  margin-inline: calc(var(--espacio-sm) * -1);
+  border-radius: var(--radio-baldosa);
+}
+.comandero__resumen--boton:active {
+  background: var(--color-accion-suave);
+}
+.comandero__resumen--boton .ui-icono {
+  flex: none;
+  color: var(--color-accion);
+}
+.comandero__resumen-texto {
+  display: flex;
   flex-direction: column;
   min-width: 0;
   font-size: 0.875rem;
   line-height: 1.25rem;
   color: var(--color-tinta-suave);
 }
-.comandero__resumen b {
+.comandero__resumen-texto b {
   font-size: 1.25rem;
   line-height: 1.625rem;
   color: var(--color-tinta);
@@ -191,7 +222,7 @@
 .linea__cuerpo {
   display: flex;
   flex: 1;
-  align-items: flex-start;
+  align-items: center;
   gap: var(--espacio-md);
   min-width: 0;
   min-height: var(--alto-baldosa-persona);
