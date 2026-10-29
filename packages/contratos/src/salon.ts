@@ -332,6 +332,8 @@ export const comandaResumenSchema = z.object({
   estacionNombre: z.string(),
   tipo: tipoComandaSchema,
   destino: destinoComandaSchema,
+  /** El motivo de la anulación en las comandas `ANULACION` (criterio 38); `null` en las demás. */
+  motivo: z.string().nullable(),
 });
 
 export const envioRespuestaSchema = z.object({
@@ -474,6 +476,8 @@ export const comandaKdsSchema = z.object({
   tipo: tipoComandaSchema,
   creadaEn: instanteSchema,
   vistaEn: instanteSchema.nullable(),
+  /** El motivo de la anulación en las comandas `ANULACION` (criterio 38); `null` en las demás. */
+  motivo: z.string().nullable(),
   estacion: z.object({ id: uuidSchema, nombre: z.string() }),
   orden: z.object({
     id: uuidSchema,
