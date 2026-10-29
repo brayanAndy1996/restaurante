@@ -327,14 +327,24 @@ const deB = (b: Sembrada, objetivo: Objetivo): string =>
  * de la relación vigente). Nunca tocan la columna que se prueba ni los valores que compartiría con la fila de B:
  * si un índice único dejara ver la fila de B, el error sería 23505 y no 23503, y la prueba lo señala.
  */
-function sinChocarConA(tabla: TablaSalon, columna: string, a: Sembrada): Record<string, unknown> {
+function sinChocarConA(
+  tabla: TablaSalon,
+  columna: string,
+  a: Sembrada,
+  control: boolean,
+): Record<string, unknown> {
   switch (tabla) {
     case 'zona':
       return { nombre: unico('Zona copia') };
     case 'mesa':
       return { nombre: unico('M copia'), columna: 3, fila: 2 };
     case 'orden_mesa':
-      return columna === 'orden_id' ? { mesa_id: a.filas.mesaLibre } : {};
+      return control || columna === 'orden_id' ? { mesa_id: a.filas.mesaLibre } : {};
+    // En el control la copia comparte la orden con la fila de A: otro número, y sin ser la vigente.
+    case 'envio':
+      return control ? { numero: 2 } : {};
+    case 'precuenta':
+      return control ? { numero: 2, invalidada_en: new Date().toISOString() } : {};
     default:
       return {};
   }
@@ -347,7 +357,7 @@ describe.each(REFERENCIAS)(
     const insertarCopia = (a: Sembrada, valor: string | null) => {
       const cambios: Record<string, unknown> = {
         id: randomUUID(),
-        ...sinChocarConA(tabla, columna, a),
+        ...sinChocarConA(tabla, columna, a, valor === null),
         ...(valor === null ? {} : { [columna]: valor, ...acompanan }),
       };
       return apiCliente.query(
