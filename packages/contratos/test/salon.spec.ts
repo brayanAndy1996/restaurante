@@ -17,6 +17,7 @@ import {
   moverEntradaSchema,
   ordenModificarEntradaSchema,
   precuentaEntradaSchema,
+  precuentaRespuestaSchema,
   stockSalonConsultaSchema,
   unirEntradaSchema,
   zonaEntradaSchema,
@@ -395,5 +396,35 @@ describe('códigos de error de 3a y ordenId (criterios 11, 29 y los de la tabla 
     expect(errorRespuestaSchema.safeParse(base).success).toBe(true);
     expect(errorRespuestaSchema.safeParse({ ...base, ordenId: ID_1 }).success).toBe(true);
     expect(errorRespuestaSchema.safeParse({ ...base, ordenId: 'x' }).success).toBe(false);
+  });
+});
+
+describe('precuentaRespuestaSchema · impresion (criterio 102)', () => {
+  const base = {
+    id: ID_1,
+    numero: 1,
+    emitidaEn: '2026-10-29T17:10:00.000Z',
+    orden: {
+      id: ID_2,
+      mesas: [{ id: ID_3, nombre: '4' }],
+      mozo: { id: ID_1, nombre: 'Ana' },
+      comensales: 2,
+    },
+    lineas: [],
+    total: '0.00',
+    nota: 'x',
+  };
+
+  it('exige impresion y acepta EN_COLA y SIN_IMPRESORA', () => {
+    expect(precuentaRespuestaSchema.safeParse({ ...base, impresion: 'EN_COLA' }).success).toBe(
+      true,
+    );
+    expect(
+      precuentaRespuestaSchema.safeParse({ ...base, impresion: 'SIN_IMPRESORA' }).success,
+    ).toBe(true);
+    expect(precuentaRespuestaSchema.safeParse(base).success).toBe(false);
+    expect(precuentaRespuestaSchema.safeParse({ ...base, impresion: 'IMPRESA' }).success).toBe(
+      false,
+    );
   });
 });

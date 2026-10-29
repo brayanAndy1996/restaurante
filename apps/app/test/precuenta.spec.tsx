@@ -101,6 +101,7 @@ function precuentaDe(extra: Partial<PrecuentaRespuesta> = {}): PrecuentaRespuest
     ],
     total: '169.20',
     nota: NOTA,
+    impresion: 'SIN_IMPRESORA',
     ...extra,
   };
 }

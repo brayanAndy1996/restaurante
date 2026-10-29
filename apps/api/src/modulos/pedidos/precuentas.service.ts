@@ -224,6 +224,8 @@ export class PrecuentasService {
       })),
       total: fila.total,
       nota: conIcbper ? `${NOTA_PRECUENTA} ${NOTA_ICBPER}` : NOTA_PRECUENTA,
+      // Hasta T40 no hay impresoras de caja: la pre-cuenta se emite sin papel (criterio 102).
+      impresion: 'SIN_IMPRESORA',
     };
   }
 }

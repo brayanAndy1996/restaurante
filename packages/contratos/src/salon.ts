@@ -444,6 +444,12 @@ export const precuentaRespuestaSchema = z.object({
   total: z.string(),
   /** "Precios con IGV incluido. No es un comprobante de pago." y, con ICBPER, "El ICBPER se suma al cobrar.". */
   nota: z.string(),
+  /**
+   * Qué pasó con el papel (criterio 102, entrega 3b): `EN_COLA` si se creó un trabajo `PRECUENTA` para la impresora
+   * de caja; `SIN_IMPRESORA` si la sucursal no tiene impresora de caja (la pre-cuenta se emite igual). Una réplica
+   * devuelve el mismo valor que la primera respuesta.
+   */
+  impresion: z.enum(['EN_COLA', 'SIN_IMPRESORA']),
 });
 
 // ---------------------------------------------------------------------------------------------------
