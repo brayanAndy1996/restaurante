@@ -17,6 +17,7 @@ import {
 import { Credenciales } from './credenciales';
 import { bloqueoTemporal } from './errores-acceso';
 import { EquiposService, equipoNoReconocido, tokenEquipoDeCabecera } from './equipos.service';
+import { DesconexionDeSesiones } from './desconexion-de-sesiones';
 import { HorarioService } from './horario.service';
 import { minutosDeInactividad } from './inactividad';
 import { SesionesService } from './sesiones.service';
@@ -70,6 +71,7 @@ export class IngresoPinService {
     @Inject(AuditoriaService) private readonly auditoria: AuditoriaService,
     @Inject(EquiposService) private readonly equipos: EquiposService,
     @Inject(SesionesService) private readonly sesiones: SesionesService,
+    @Inject(DesconexionDeSesiones) private readonly desconexion: DesconexionDeSesiones,
   ) {}
 
   /** `POST /sesiones/pin` con la cabecera `X-Equipo`. */
@@ -163,11 +165,14 @@ export class IngresoPinService {
     }
 
     // Cambio rápido de usuario: un equipo tiene como máximo una sesión PIN abierta (criterio 38).
-    await this.conexion.query(
+    const anteriores = await this.conexion.query<{ id: string }>(
       `UPDATE sesion SET cerrada_en = $2, motivo_cierre = 'CAMBIO_DE_USUARIO', actualizado_en = $2
-        WHERE equipo_id = $1 AND tipo = 'PIN' AND cerrada_en IS NULL`,
-      { bind: [equipo.id, ahora] },
+        WHERE equipo_id = $1 AND tipo = 'PIN' AND cerrada_en IS NULL
+        RETURNING id`,
+      { bind: [equipo.id, ahora], type: QueryTypes.SELECT },
     );
+    // La conexión de tiempo real de la persona anterior se cierra al confirmar (historia 004, criterio 66).
+    this.desconexion.alConfirmar(anteriores.map((a) => a.id));
 
     // Sucursal inicial (criterio 33): la única a la que tiene acceso o, si tiene varias, la última que
     // eligió en este equipo mientras siga teniendo acceso; si no, ninguna.

@@ -23,6 +23,7 @@ import { BloqueosService, decidirReserva, type FilaBloqueo } from './bloqueos.se
 import { CupoScrypt, GRUPO_SIN_CUENTA } from './cupo-scrypt';
 import { MINUTOS_INACTIVIDAD_CONTRASENA } from './constantes-acceso';
 import { Credenciales } from './credenciales';
+import { DesconexionDeSesiones } from './desconexion-de-sesiones';
 import { bloqueoTemporal, credencialesInvalidas, errorDeReserva } from './errores-acceso';
 import { HorarioService } from './horario.service';
 import { minutosDeInactividad } from './inactividad';
@@ -97,6 +98,7 @@ export class SesionesService {
     @Inject(SucursalesConsultaService) private readonly sucursales: SucursalesConsultaService,
     @Inject(TopeDeIntentos) private readonly tope: TopeDeIntentos,
     @Inject(CupoScrypt) private readonly cupo: CupoScrypt,
+    @Inject(DesconexionDeSesiones) private readonly desconexion: DesconexionDeSesiones,
   ) {}
 
   // ---- Ingreso con contraseña ------------------------------------------------------------------
@@ -606,6 +608,9 @@ export class SesionesService {
       'UPDATE sesion SET sucursal_id = $2, actualizado_en = $3 WHERE id = $1',
       { bind: [principal.sesionId, sucursalId, ahora] },
     );
+    // Cambió de sucursal activa: sus conexiones de tiempo real se cierran al confirmar y la PWA se reconecta
+    // a las salas de la sucursal nueva (historia 004, criterio 66).
+    this.desconexion.alConfirmar([principal.sesionId]);
     if (principal.tipo === 'PIN' && principal.equipoRecordadoId !== null) {
       // Queda como la última sucursal de esa persona en ese equipo (criterios 17 y 33).
       await this.conexion.query(
@@ -698,11 +703,13 @@ export class SesionesService {
       { bind: [usuario.id, hash, ahora] },
     );
     // Se cierran las demás sesiones de la persona; esta sigue. Los equipos recordados se conservan.
-    await this.conexion.query(
+    const otras = await this.conexion.query<{ id: string }>(
       `UPDATE sesion SET cerrada_en = $3, motivo_cierre = 'CONTRASENA_CAMBIADA', actualizado_en = $3
-        WHERE usuario_id = $1 AND id <> $2 AND cerrada_en IS NULL`,
-      { bind: [usuario.id, principal.sesionId, ahora] },
+        WHERE usuario_id = $1 AND id <> $2 AND cerrada_en IS NULL
+        RETURNING id`,
+      { bind: [usuario.id, principal.sesionId, ahora], type: QueryTypes.SELECT },
     );
+    this.desconexion.alConfirmar(otras.map((o) => o.id));
     // Contraseña actual correcta: la cuenta de fallos vuelve a cero; un bloqueo vigente no se toca (criterio 61).
     await this.bloqueos.resolverExito('CONTRASENA_USUARIO', usuario.id, ahora);
     await this.auditoria.registrar({
@@ -726,6 +733,8 @@ export class SesionesService {
         WHERE id = $1 AND cerrada_en IS NULL RETURNING id`,
       { bind: [principal.sesionId, ahora], type: QueryTypes.SELECT },
     );
+    // La conexión de tiempo real de la sesión se cierra al confirmar (historia 004, criterio 66).
+    this.desconexion.alConfirmar(cerradas.map((c) => c.id));
     if (cerradas.length > 0 && principal.tipo === 'SOPORTE') {
       await this.auditoria.registrar({
         accion: 'fin_soporte',

@@ -1,15 +1,18 @@
 import type { INestApplication } from '@nestjs/common';
 import { afterEach, describe, expect, it } from 'vitest';
 import { crearAplicacion } from '../../src/aplicacion';
-import { ServidorTiempoReal } from '../../src/nucleo/tiempo-real';
+import { EntornoInvalidoError } from '../../src/config/entorno';
+import { PUBLICADOR_EVENTOS, PublicadorEnMemoria, PublicadorNulo } from '../../src/nucleo/eventos';
+import { PublicadorSocketIo, ServidorTiempoReal } from '../../src/nucleo/tiempo-real';
 import { ClienteTiempoReal } from '../soporte';
 import { abrirCliente, fijarEntornoDePrueba } from '../utilidades';
 
-// Fase A de la historia 004 (T3 y T5): el servidor de Socket.IO existe en `/tiempo-real` pero rechaza toda
-// conexión con "No implementado" (T10 lo reemplaza por la autenticación y estas pruebas se actualizan), y el
-// rol `restaurante_tiempo_real` lo crea `db:preparar` sin privilegios sobre `public`. No es una prueba protegida.
+// Historia 004, T3, T5 y T10: el servidor de Socket.IO vive en `/tiempo-real` y rechaza con `NO_AUTENTICADO` toda
+// conexión sin una sesión válida (la autenticación completa, las salas, las desconexiones y los casos de varias
+// instancias los prueban las protegidas de `test/salon-critica/`); el rol `restaurante_tiempo_real` lo crea
+// `db:preparar` sin privilegios sobre `public`. No es una prueba protegida.
 
-describe('servidor de Socket.IO (fase A)', () => {
+describe('servidor de Socket.IO', () => {
   let app: INestApplication | undefined;
   afterEach(async () => {
     await app?.close();
@@ -26,15 +29,42 @@ describe('servidor de Socket.IO (fase A)', () => {
     expect(error).not.toBeNull();
   });
 
-  it('habilitado con crearAplicacion({ tiempoReal }) rechaza toda conexión con "No implementado"', async () => {
+  it('habilitado con crearAplicacion({ tiempoReal }) rechaza con NO_AUTENTICADO la conexión sin una sesión válida', async () => {
     fijarEntornoDePrueba();
     app = await crearAplicacion({ tiempoReal: { habilitado: true } });
     await app.listen(0, '127.0.0.1');
     expect(app.get(ServidorTiempoReal).habilitado).toBe(true);
     for (const auth of [{}, { token: 'se.x.y.z' }, { token: 'se.x.y.z', equipo: 'eq.a.b.c' }]) {
       const resultado = await ClienteTiempoReal.intentarConectar(app, auth);
-      expect(resultado).toEqual({ cliente: null, error: 'No implementado' });
+      expect(resultado).toEqual({ cliente: null, error: 'NO_AUTENTICADO' });
     }
+  });
+
+  it('habilitado sin DATABASE_TIEMPO_REAL_URL no arranca y lo dice', async () => {
+    fijarEntornoDePrueba({ extra: { DATABASE_TIEMPO_REAL_URL: undefined } });
+    await expect(crearAplicacion({ tiempoReal: { habilitado: true } })).rejects.toThrow(
+      EntornoInvalidoError,
+    );
+    await expect(crearAplicacion({ tiempoReal: { habilitado: true } })).rejects.toThrow(
+      /DATABASE_TIEMPO_REAL_URL es obligatoria/,
+    );
+    // Con el tiempo real apagado, la variable puede faltar (las pruebas de 001 arman entornos sin ella).
+    app = await crearAplicacion({ tiempoReal: { habilitado: false } });
+    expect(app.get(ServidorTiempoReal).habilitado).toBe(false);
+    fijarEntornoDePrueba();
+  });
+
+  it('PublicadorSocketIo reemplaza al PublicadorNulo solo con el tiempo real habilitado, y un publicador explícito manda', async () => {
+    fijarEntornoDePrueba();
+    app = await crearAplicacion({ tiempoReal: { habilitado: true } });
+    expect(app.get(PUBLICADOR_EVENTOS)).toBeInstanceOf(PublicadorSocketIo);
+    await app.close();
+    app = await crearAplicacion({ tiempoReal: { habilitado: false } });
+    expect(app.get(PUBLICADOR_EVENTOS)).toBeInstanceOf(PublicadorNulo);
+    await app.close();
+    const propio = new PublicadorEnMemoria();
+    app = await crearAplicacion({ tiempoReal: { habilitado: true }, publicadorEventos: propio });
+    expect(app.get(PUBLICADOR_EVENTOS)).toBe(propio);
   });
 
   it('TIEMPO_REAL=habilitado en el entorno lo enciende sin la opción', async () => {

@@ -279,3 +279,18 @@ export function exigirEntornoDeProduccion(entorno: Entorno): void {
   }
   if (problemas.length > 0) throw new EntornoInvalidoError(problemas);
 }
+
+/**
+ * Con el tiempo real habilitado (`TIEMPO_REAL=habilitado`, o la opción de `crearAplicacion`), el adaptador de
+ * Socket.IO necesita su propia conexión: `DATABASE_TIEMPO_REAL_URL`, con el rol `restaurante_tiempo_real`
+ * (historia 004, criterio 70). No está en `exigirEntornoDeProduccion` porque depende de si el tiempo real está
+ * habilitado, que `crearAplicacion` decide con su opción y el entorno. Lanza `EntornoInvalidoError`.
+ */
+export function exigirEntornoDeTiempoReal(entorno: Entorno, habilitado: boolean): void {
+  if (habilitado && entorno.DATABASE_TIEMPO_REAL_URL === undefined) {
+    throw new EntornoInvalidoError([
+      'DATABASE_TIEMPO_REAL_URL es obligatoria con TIEMPO_REAL=habilitado: es la conexión del adaptador ' +
+        'de Socket.IO, con el rol restaurante_tiempo_real (ver db:preparar)',
+    ]);
+  }
+}

@@ -1,4 +1,8 @@
 export { IDEMPOTENTE, Idempotente } from './idempotente.decorator';
+export {
+  ClaveObligatoriaInterceptor,
+  IdempotenteObligatoria,
+} from './idempotente-obligatoria.decorator';
 export { IdempotenciaInterceptor } from './idempotencia.interceptor';
 export { leerClaveIdempotencia } from './clave';
 export {

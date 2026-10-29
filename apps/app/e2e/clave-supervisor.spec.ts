@@ -1,6 +1,7 @@
 import { expect, test, type BrowserContext } from '@playwright/test';
 import {
   CELULAR,
+  afirmarSesionDe,
   ajustarVencimiento,
   crearEscenario,
   escribirPin,
@@ -35,9 +36,10 @@ test('un Cajero pide la clave de un Supervisor, y las claves malas dicen todas l
   const page = await celular.newPage();
   await page.goto('/');
   await ingresarConContrasena(page, cajero.usuario, cajero.contrasena);
-  await expect(page.getByRole('heading', { name: `Hola, ${cajero.primerNombre}` })).toBeVisible();
+  await afirmarSesionDe(page, cajero);
 
-  await page.getByRole('link', { name: /Demostración de la clave de supervisor/ }).click();
+  // La demostración solo existe en desarrollo y ya no cuelga de Inicio (el Cajero entra en el Salón): se abre por su dirección.
+  await page.goto('/demo/clave-supervisor');
   // Para un Cajero, anular un ítem enviado exige la clave de un supervisor.
   await page.getByRole('button', { name: 'Pedir clave de supervisor' }).click();
   const ventana = page.getByRole('dialog', { name: 'Clave de supervisor' });
@@ -95,9 +97,7 @@ test('el Administrador ve el aviso de gracia y luego el de suspensión, y no pue
   // El celular ya recuerda al Cajero (PIN): la Administradora entra por usuario y contraseña.
   await page.goto('/ingreso');
   await ingresarConContrasena(page, administrador.usuario, administrador.contrasena);
-  await expect(
-    page.getByRole('heading', { name: `Hola, ${administrador.primerNombre}` }),
-  ).toBeVisible();
+  await afirmarSesionDe(page, administrador);
   const gracia = page.getByRole('status').filter({ hasText: 'de gracia' });
   await expect(gracia).toContainText(`${escenario.sucursalNombre}: quedan 5 días de gracia`);
   await expect(gracia).toContainText('Se suspenderá el');

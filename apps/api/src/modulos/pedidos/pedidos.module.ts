@@ -6,15 +6,19 @@ import { SeguridadModule } from '../seguridad';
 import { AnulacionesController } from './anulaciones.controller';
 import { CocinaController } from './cocina.controller';
 import { EnviosController } from './envios.controller';
+import { EventosPedidos } from './eventos-pedidos';
 import { IMPRESION, ImpresionSoloKds } from './impresion';
 import { OrdenesController } from './ordenes.controller';
+import { OrdenesService } from './ordenes.service';
 import { PedidosConsultaService } from './pedidos-consulta.service';
 import { PrecuentasController } from './precuentas.controller';
 import { SalonController } from './salon.controller';
+import { SalonService } from './salon.service';
+import { VistaOrdenService } from './vista-orden';
 
 /**
  * Pedidos (historia 004): dueño de `orden`, `orden_mesa`, `envio`, `marcha`, `item`, `comanda`,
- * `comanda_linea`, `anulacion_item` y `precuenta` (las tablas llegan con sus migraciones de la fase C). Usa
+ * `comanda_linea` (migración `202610300002-pedidos`), `anulacion_item` y `precuenta` (T22). Usa
  * `MesasConsultaService` (salón), `CartaVentaService` y `CartaConsultaService` (carta) y `UsuariosConsultaService`
  * (seguridad); nunca consulta tablas ajenas. `INVENTARIO` lo provee `InventarioModule` (global). Exporta solo
  * `PedidosConsultaService`, que usará la sección 4.
@@ -29,7 +33,14 @@ import { SalonController } from './salon.controller';
     SalonController,
     CocinaController,
   ],
-  providers: [PedidosConsultaService, { provide: IMPRESION, useClass: ImpresionSoloKds }],
+  providers: [
+    PedidosConsultaService,
+    OrdenesService,
+    SalonService,
+    VistaOrdenService,
+    EventosPedidos,
+    { provide: IMPRESION, useClass: ImpresionSoloKds },
+  ],
   exports: [PedidosConsultaService],
 })
 export class PedidosModule {}

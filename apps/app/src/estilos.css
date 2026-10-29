@@ -1257,3 +1257,73 @@ body,
   padding-top: var(--espacio-xl);
   border-top: 1px solid var(--color-junta);
 }
+
+/* Salón (criterios 88 y 89 de 004) */
+.salon {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espacio-lg);
+  min-width: 0;
+}
+
+/* Conteo por estado a la izquierda y el interruptor "Lista" a la derecha; en pantallas angostas se apilan. */
+.salon__barra {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--espacio-sm) var(--espacio-lg);
+}
+
+/* Mesas unidas de la zona: una línea por cuenta, con el eslabón del mapa */
+.salon__grupos {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espacio-xs);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 0.9375rem;
+  line-height: 1.375rem;
+  color: var(--color-tinta-suave);
+}
+.salon__grupos li {
+  display: flex;
+  align-items: center;
+  gap: var(--espacio-sm);
+}
+
+.salon__fila-estado {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: var(--espacio-xs);
+}
+.salon__fila-total {
+  font-size: 0.9375rem;
+  line-height: 1.25rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Hoja "Abrir mesa" */
+.salon-apertura__bloque {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espacio-sm);
+}
+.salon-apertura__persona {
+  display: flex;
+  align-items: center;
+  gap: var(--espacio-md);
+  min-height: var(--alto-baldosa-persona);
+  padding: var(--espacio-sm) var(--espacio-md);
+  border: 1px solid var(--color-junta);
+  border-radius: var(--radio-baldosa);
+  background: var(--color-baldosa);
+}
+.salon-apertura__personas {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espacio-sm);
+}

@@ -17,6 +17,7 @@ import { AuditoriaService } from '../auditoria';
 import { SucursalesConsultaService } from '../plataforma/sucursales-consulta.service';
 import { Credenciales } from './credenciales';
 import { CupoScrypt } from './cupo-scrypt';
+import { DesconexionDeSesiones } from './desconexion-de-sesiones';
 import { EquiposService, type EquipoRevocado } from './equipos.service';
 import { actorDePrincipal } from './resolutor-empresa-sesion';
 import { SesionActual } from './sesion-actual';
@@ -78,6 +79,7 @@ export class UsuariosService {
     @Inject(CupoScrypt) private readonly cupo: CupoScrypt,
     @Inject(SesionActual) private readonly sesion: SesionActual,
     @Inject(SucursalesConsultaService) private readonly sucursales: SucursalesConsultaService,
+    @Inject(DesconexionDeSesiones) private readonly desconexion: DesconexionDeSesiones,
   ) {}
 
   // ---- Scrypt fuera de la transacción ----------------------------------------------------------
@@ -312,12 +314,14 @@ export class UsuariosService {
     if (actual.activo && !activo) {
       await this.cerrarSesiones(id, 'USUARIO_DESACTIVADO', ahora);
     } else if (huboCambioDeAccesos && !esAdministrador) {
-      await this.conexion.query(
+      const cerradas = await this.conexion.query<{ id: string }>(
         `UPDATE sesion SET cerrada_en = $3, motivo_cierre = 'ACCESO_QUITADO', actualizado_en = $3
           WHERE usuario_id = $1 AND cerrada_en IS NULL AND sucursal_id IS NOT NULL
-            AND NOT (sucursal_id = ANY($2::uuid[]))`,
-        { bind: [id, accesos.map((a) => a.sucursalId), ahora] },
+            AND NOT (sucursal_id = ANY($2::uuid[]))
+          RETURNING id`,
+        { bind: [id, accesos.map((a) => a.sucursalId), ahora], type: QueryTypes.SELECT },
       );
+      this.desconexion.alConfirmar(cerradas.map((c) => c.id));
     }
     if (nuevoPin !== null) await this.cerrarSesiones(id, 'PIN_REGENERADO', ahora, 'PIN');
 
@@ -517,11 +521,14 @@ export class UsuariosService {
     ahora: Date,
     tipo?: 'PIN' | 'CONTRASENA',
   ): Promise<void> {
-    await this.conexion.query(
+    const cerradas = await this.conexion.query<{ id: string }>(
       `UPDATE sesion SET cerrada_en = $3, motivo_cierre = $2, actualizado_en = $3
-        WHERE usuario_id = $1 AND cerrada_en IS NULL AND ($4::text IS NULL OR tipo = $4)`,
-      { bind: [usuarioId, motivo, ahora, tipo ?? null] },
+        WHERE usuario_id = $1 AND cerrada_en IS NULL AND ($4::text IS NULL OR tipo = $4)
+        RETURNING id`,
+      { bind: [usuarioId, motivo, ahora, tipo ?? null], type: QueryTypes.SELECT },
     );
+    // Sus conexiones de tiempo real se cierran al confirmar (historia 004, criterio 66).
+    this.desconexion.alConfirmar(cerradas.map((c) => c.id));
   }
 
   /** Antes y después de los campos que cambiaron, sin secretos (criterio 26). */

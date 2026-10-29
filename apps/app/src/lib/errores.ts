@@ -20,6 +20,8 @@ export class ErrorApi extends Error {
   readonly seQuita: SeQuita | undefined;
   /** La escritura se reintentó por un corte antes de fallar: pudo haberse aplicado una vez. */
   readonly reintentada: boolean;
+  /** Solo en `MESA_OCUPADA` y `ORDEN_NO_ABIERTA`: la orden que ya está abierta o a la que se unió (004). */
+  readonly ordenId: string | undefined;
 
   constructor(datos: {
     estado: number;
@@ -30,6 +32,7 @@ export class ErrorApi extends Error {
     usadoEn?: UsadoEn;
     seQuita?: SeQuita;
     reintentada?: boolean;
+    ordenId?: string;
   }) {
     super(datos.mensaje);
     this.name = 'ErrorApi';
@@ -40,6 +43,7 @@ export class ErrorApi extends Error {
     this.usadoEn = datos.usadoEn;
     this.seQuita = datos.seQuita;
     this.reintentada = datos.reintentada ?? false;
+    this.ordenId = datos.ordenId;
   }
 
   /** `true` si el servidor no llegó a contestar (red caída, tiempo agotado). */
@@ -63,6 +67,7 @@ export function errorDeRespuesta(estado: number, cuerpo: unknown, reintentada = 
         : { reintentarEnSegundos: e.reintentarEnSegundos }),
       ...(e.usadoEn === undefined ? {} : { usadoEn: e.usadoEn }),
       ...(e.seQuita === undefined ? {} : { seQuita: e.seQuita }),
+      ...(e.ordenId === undefined ? {} : { ordenId: e.ordenId }),
       reintentada,
     });
   }
@@ -131,6 +136,8 @@ export function mensajeDeError(error: unknown, porCodigo: Record<string, string>
       return 'Este equipo ya no está registrado. Ingresa con tu usuario y contraseña.';
     case 'PLAN_INVALIDO':
       return 'El plan elegido no existe o está desactivado. Elige otro.';
+    case 'MESA_OCUPADA':
+      return 'Otra persona acaba de abrir esta mesa.';
     case 'CLAVE_IDEMPOTENCIA_REUTILIZADA':
       return 'Esta operación ya se había enviado con otros datos. Vuelve a abrir la pantalla e inténtalo de nuevo.';
     case 'CONFLICTO':

@@ -33,7 +33,7 @@ const PROHIBIDO_NOMBRE =
   'Dentro de ContextoEmpresa.ejecutar no se pueden nombrar funciones ni objetos que cambien el ' +
   'contexto o la sesión, ejecuten SQL armado como texto o muestren sesiones, consultas u objetos ' +
   'grandes ajenos (set_config, pg_settings, ts_rewrite, *_to_xml*, pg_stat_activity, ' +
-  'pg_cancel_backend, lo_*…)';
+  'pg_cancel_backend, lo_*, pg_notify, pg_locks, los cerrojos de sesión pg_advisory_lock*…)';
 
 const PROHIBIDO_SENTENCIA =
   'Dentro de ContextoEmpresa.ejecutar solo se admiten sentencias que empiecen por SELECT, INSERT, ' +

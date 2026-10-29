@@ -2,7 +2,11 @@ import { NestFactory } from '@nestjs/core';
 import type { INestApplication, LogLevel, Type } from '@nestjs/common';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import { AppModule } from './app.module';
-import { cargarEntorno, exigirEntornoDeProduccion } from './config/entorno';
+import {
+  cargarEntorno,
+  exigirEntornoDeProduccion,
+  exigirEntornoDeTiempoReal,
+} from './config/entorno';
 import {
   AlmacenEnDisco,
   descartarCuerpoDeFotoAlResponder,
@@ -63,6 +67,9 @@ export async function crearAplicacion(
 ): Promise<INestApplication> {
   const entorno = cargarEntorno(process.env); // falla antes de construir nada
   exigirEntornoDeProduccion(entorno); // en producción exige PIN_PEPPER y ORIGENES_PERMITIDOS
+  const tiempoRealHabilitado =
+    opciones.tiempoReal?.habilitado ?? entorno.TIEMPO_REAL === 'habilitado';
+  exigirEntornoDeTiempoReal(entorno, tiempoRealHabilitado); // con el tiempo real exige DATABASE_TIEMPO_REAL_URL
   const app = await NestFactory.create<NestExpressApplication>(
     AppModule.registrar({
       controladoresExtra: opciones.controladoresExtra,
@@ -70,9 +77,7 @@ export async function crearAplicacion(
       publicadorEventos: opciones.publicadorEventos,
       almacenArchivos: opciones.almacenArchivos,
       inventario: opciones.inventario,
-      tiempoReal: {
-        habilitado: opciones.tiempoReal?.habilitado ?? entorno.TIEMPO_REAL === 'habilitado',
-      },
+      tiempoReal: { habilitado: tiempoRealHabilitado },
     }),
     {
       // En pruebas se silencia el registro de Nest; los errores de arranque se propagan como excepción.

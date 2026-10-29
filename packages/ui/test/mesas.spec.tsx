@@ -23,22 +23,44 @@ describe('BaldosaDeMesa', () => {
   });
 
   it.each([
-    ['LIBRE', undefined, 'Libre'],
-    ['OCUPADA', '3 · 25 min', 'Ocupada · 3 · 25 min'],
-    ['EN_PRECUENTA', undefined, 'Pre-cuenta'],
-  ] as const)('el estado %s se dice con texto, no solo con color', (estado, detalle, texto) => {
+    ['LIBRE', undefined, 'Libre', 'Libre'],
+    ['OCUPADA', '3 · 25 min', 'Ocupada', 'Ocupada · 3 · 25 min'],
+    ['EN_PRECUENTA', undefined, 'Pre-cuenta', 'Pre-cuenta'],
+  ] as const)(
+    'el estado %s se dice con texto, no solo con color',
+    (estado, detalle, visible, accesible) => {
+      render(
+        <BaldosaDeMesa
+          nombre="5"
+          capacidad={4}
+          forma="CUADRADA"
+          estado={estado}
+          {...(detalle ? { detalle } : {})}
+          onClick={() => undefined}
+        />,
+      );
+      expect(screen.getByText(visible)).toBeInTheDocument();
+      // El detalle va en su propia línea (así cabe en la baldosa) y la etiqueta accesible lo junta.
+      if (detalle) expect(screen.getByText(detalle)).toBeInTheDocument();
+      expect(screen.getByRole('button').getAttribute('aria-label')).toContain(accesible);
+    },
+  );
+
+  it('las mesas unidas dicen "Grupo con 5, 6" en su etiqueta y llevan el eslabón', () => {
     render(
       <BaldosaDeMesa
-        nombre="5"
+        nombre="4"
         capacidad={4}
         forma="CUADRADA"
-        estado={estado}
-        {...(detalle ? { detalle } : {})}
+        estado="OCUPADA"
+        detalle="3 · 25 min"
+        grupo="5, 6"
         onClick={() => undefined}
       />,
     );
-    expect(screen.getByText(texto)).toBeInTheDocument();
-    expect(screen.getByRole('button').getAttribute('aria-label')).toContain(texto);
+    const boton = screen.getByRole('button');
+    expect(boton.getAttribute('aria-label')).toContain('Ocupada · 3 · 25 min, Grupo con 5, 6');
+    expect(boton.querySelector('.ui-mesa__grupo')).not.toBeNull();
   });
 
   it('la elegida se anuncia como presionada y lleva su marca', async () => {
@@ -224,7 +246,8 @@ describe('CuadriculaDeMesas', () => {
         onElegirMesa={() => undefined}
       />,
     );
-    expect(screen.getByText('Ocupada · 3 · 25 min')).toBeInTheDocument();
+    expect(screen.getByText('Ocupada')).toBeInTheDocument();
+    expect(screen.getByText('3 · 25 min')).toBeInTheDocument();
     expect(screen.getByText('Pre-cuenta')).toBeInTheDocument();
     expect(screen.getByText('Libre')).toBeInTheDocument();
   });

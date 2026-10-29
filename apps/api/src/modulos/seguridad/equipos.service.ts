@@ -17,6 +17,7 @@ import { RELOJ, type Reloj } from '../../nucleo/reloj';
 import { AuditoriaService } from '../auditoria';
 import type { MotivoRevocacion } from './constantes-acceso';
 import { Credenciales } from './credenciales';
+import { DesconexionDeSesiones } from './desconexion-de-sesiones';
 import { SesionActual } from './sesion-actual';
 import { armarTokenEquipo, parsearTokenEquipo, type TokenEquipo } from './tokens';
 
@@ -74,6 +75,7 @@ export class EquiposService {
     @Inject(Credenciales) private readonly credenciales: Credenciales,
     @Inject(AuditoriaService) private readonly auditoria: AuditoriaService,
     @Inject(SesionActual) private readonly actual: SesionActual,
+    @Inject(DesconexionDeSesiones) private readonly desconexion: DesconexionDeSesiones,
   ) {}
 
   // ---- Reconocer un equipo ---------------------------------------------------------------------
@@ -436,11 +438,14 @@ export class EquiposService {
       { bind: [ahora, motivo, valor], type: QueryTypes.SELECT },
     );
     if (filas.length > 0) {
-      await this.conexion.query(
+      const cerradas = await this.conexion.query<{ id: string }>(
         `UPDATE sesion SET cerrada_en = $1, motivo_cierre = $2, actualizado_en = $1
-          WHERE equipo_recordado_id = ANY($3::uuid[]) AND cerrada_en IS NULL`,
-        { bind: [ahora, `EQUIPO_${motivo}`, filas.map((f) => f.id)] },
+          WHERE equipo_recordado_id = ANY($3::uuid[]) AND cerrada_en IS NULL
+          RETURNING id`,
+        { bind: [ahora, `EQUIPO_${motivo}`, filas.map((f) => f.id)], type: QueryTypes.SELECT },
       );
+      // Sus conexiones de tiempo real se cierran al confirmar (historia 004, criterio 66).
+      this.desconexion.alConfirmar(cerradas.map((c) => c.id));
     }
     return filas.map((f) => ({
       equipoRecordadoId: f.id,

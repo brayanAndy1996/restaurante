@@ -5,6 +5,7 @@ import {
   IconoFormaRectangular,
   IconoFormaRedonda,
   IconoOk,
+  IconoUnidas,
   IconoUsuarios,
   type LucideIcon,
 } from './iconos';
@@ -35,8 +36,13 @@ export interface PropsBaldosaDeMesa {
   forma: FormaMesa;
   /** Estado en el salón. Sin él (el editor del mapa) la baldosa solo muestra el nombre y los datos de la mesa. */
   estado?: EstadoMesa;
-  /** Lo que sigue al estado: "3 · 25 min" da "Ocupada · 3 · 25 min". */
+  /** Lo que sigue al estado: "3 · 25 min" da "Ocupada · 3 · 25 min" (en la baldosa, en una línea aparte). */
   detalle?: string;
+  /**
+   * Las otras mesas de la misma cuenta ("5, 6"): dice "Grupo con 5, 6" en la etiqueta accesible y marca la
+   * baldosa con un eslabón, para que las mesas unidas se reconozcan sin leer.
+   */
+  grupo?: string;
   /** Mesa elegida: lleva una marca además del color y se anuncia como presionada. */
   elegida?: boolean;
   /** Se toca (botón). Sin él, la baldosa es solo informativa. */
@@ -65,6 +71,7 @@ export function BaldosaDeMesa({
   forma,
   estado,
   detalle,
+  grupo,
   elegida,
   onClick,
   tabIndex,
@@ -74,33 +81,48 @@ export function BaldosaDeMesa({
   const textoEstado = estado
     ? `${TEXTO_DE_ESTADO_DE_MESA[estado]}${detalle ? ` · ${detalle}` : ''}`
     : undefined;
+  const textoGrupo = grupo ? `Grupo con ${grupo}` : undefined;
   const etiqueta = [
     nombreAccesibleDeMesa(nombre),
     `${capacidad} ${capacidad === 1 ? 'persona' : 'personas'}`,
     TEXTO_DE_FORMA_DE_MESA[forma],
     textoEstado,
+    textoGrupo,
   ]
     .filter(Boolean)
     .join(', ');
   const clase = clases(
     'ui-mesa',
     estado && `ui-mesa--${estado.toLowerCase().replace('_', '-')}`,
+    grupo && 'ui-mesa--grupo',
     elegida && 'ui-mesa--elegida',
     className,
   );
+  // Una mesa con orden dice su estado en una línea y su detalle ("3 · 25 min") en otra; la libre, su
+  // capacidad y su forma. Así el texto cabe en la baldosa sin cortarse.
+  const conDetalle = estado !== undefined && estado !== 'LIBRE' && detalle !== undefined;
   const interior = (
     <>
       <span className="ui-mesa__nombre">{nombre}</span>
-      <span className="ui-mesa__datos" aria-hidden="true">
-        <Icono icono={IconoUsuarios} tamano={16} />
-        <span>{capacidad}</span>
-        <Icono icono={ICONO_DE_FORMA[forma]} tamano={16} />
-      </span>
-      {textoEstado ? (
-        <span className="ui-mesa__estado" aria-hidden="true">
-          {textoEstado}
+      {estado ? (
+        <span className="ui-mesa__fila-estado" aria-hidden="true">
+          <span className="ui-mesa__estado">
+            {conDetalle ? TEXTO_DE_ESTADO_DE_MESA[estado] : textoEstado}
+          </span>
+          {grupo ? <Icono icono={IconoUnidas} tamano={16} className="ui-mesa__grupo" /> : null}
         </span>
       ) : null}
+      {conDetalle ? (
+        <span className="ui-mesa__detalle" aria-hidden="true">
+          {detalle}
+        </span>
+      ) : (
+        <span className="ui-mesa__datos" aria-hidden="true">
+          <Icono icono={IconoUsuarios} tamano={16} />
+          <span>{capacidad}</span>
+          <Icono icono={ICONO_DE_FORMA[forma]} tamano={16} />
+        </span>
+      )}
       {elegida ? (
         <span className="ui-mesa__marca" aria-hidden="true">
           <Icono icono={IconoOk} tamano={16} />

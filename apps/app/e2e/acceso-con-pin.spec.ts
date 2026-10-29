@@ -3,6 +3,7 @@ import {
   CELULAR,
   COMPUTADORA,
   abrirSesion,
+  afirmarSesionDe,
   crearEscenario,
   escribirPin,
   ingresarConContrasena,
@@ -59,7 +60,7 @@ test('ingresa con usuario y contraseña y el celular queda recordado', async () 
   await page.getByLabel('Contraseña nueva', { exact: true }).fill(mozo.contrasena);
   await page.getByLabel('Repite la contraseña nueva').fill(mozo.contrasena);
   await page.getByRole('button', { name: 'Guardar contraseña' }).click();
-  await expect(page.getByRole('heading', { name: `Hola, ${mozo.primerNombre}` })).toBeVisible();
+  await afirmarSesionDe(page, mozo);
 
   // Sin pedirle nada, el equipo la recuerda: guarda el token de equipo de su empresa.
   await expect
@@ -107,7 +108,7 @@ test('entra con PIN en un celular que la recuerda, y un PIN equivocado no la dej
   await expect(page.getByRole('status').filter({ hasText: '0 de 4 dígitos' })).toBeAttached();
 
   await escribirPin(page, mozo.pin);
-  await expect(page.getByRole('heading', { name: `Hola, ${mozo.primerNombre}` })).toBeVisible();
+  await afirmarSesionDe(page, mozo);
   await expect(page.getByText('Escribe tu PIN')).toHaveCount(0);
   await page.close();
 });
@@ -118,16 +119,14 @@ test('una segunda persona usa el mismo celular y se cambia de usuario con un toq
   const { mozo, administrador } = escenario;
   const page = await abrirDeNuevo();
   await escribirPin(page, mozo.pin);
-  await expect(page.getByRole('heading', { name: `Hola, ${mozo.primerNombre}` })).toBeVisible();
+  await afirmarSesionDe(page, mozo);
 
   // "Cambiar usuario": vuelve a la pantalla de PIN y desde ahí entra otra persona con su contraseña.
   await cambiarUsuario(page);
   await expect(page.getByRole('heading', { name: 'Escribe tu PIN' })).toBeVisible();
   await page.getByRole('link', { name: 'Ingresar con usuario y contraseña' }).click();
   await ingresarConContrasena(page, administrador.usuario, administrador.contrasena);
-  await expect(
-    page.getByRole('heading', { name: `Hola, ${administrador.primerNombre}` }),
-  ).toBeVisible();
+  await afirmarSesionDe(page, administrador);
 
   // Ahora el equipo recuerda a dos personas: elegir el nombre y escribir el PIN de cada una.
   await expect(async () => {
@@ -143,9 +142,7 @@ test('una segunda persona usa el mismo celular y se cambia de usuario con un toq
   await page.getByRole('button', { name: new RegExp(administrador.nombre) }).click();
   await expect(page.getByText('PIN de 6 dígitos')).toBeVisible();
   await escribirPin(page, administrador.pin);
-  await expect(
-    page.getByRole('heading', { name: `Hola, ${administrador.primerNombre}` }),
-  ).toBeVisible();
+  await afirmarSesionDe(page, administrador);
   const tokenDelAdministrador = await tokenDeSesion(page);
   const equipo = (await tokensDeEquipo(page))[escenario.empresaId]!;
   expect(tokenDelAdministrador).toMatch(/^se\./);
@@ -154,7 +151,7 @@ test('una segunda persona usa el mismo celular y se cambia de usuario con un toq
   await cambiarUsuario(page);
   await page.getByRole('button', { name: new RegExp(mozo.nombre) }).click();
   await escribirPin(page, mozo.pin);
-  await expect(page.getByRole('heading', { name: `Hola, ${mozo.primerNombre}` })).toBeVisible();
+  await afirmarSesionDe(page, mozo);
   const anterior = await llamarApi(request, '/sesion', {
     token: tokenDelAdministrador,
     equipo,
@@ -173,9 +170,7 @@ test('la sesión se cierra por inactividad según la sucursal y vuelve a la pant
   const admin = await computadora.newPage();
   await admin.goto('/');
   await ingresarConContrasena(admin, administrador.usuario, administrador.contrasena);
-  await expect(
-    admin.getByRole('heading', { name: `Hola, ${administrador.primerNombre}` }),
-  ).toBeVisible();
+  await afirmarSesionDe(admin, administrador);
   await admin.getByRole('link', { name: 'Ajustes', exact: true }).click();
   await admin.getByRole('button', { name: 'Acceso', exact: true }).click();
   await expect(admin.getByRole('heading', { name: 'Cierre por inactividad' })).toBeVisible();
@@ -194,7 +189,7 @@ test('la sesión se cierra por inactividad según la sucursal y vuelve a la pant
   await expect(page.getByRole('heading', { name: '¿Quién eres?' })).toBeVisible();
   await page.getByRole('button', { name: new RegExp(mozo.nombre) }).click();
   await escribirPin(page, mozo.pin);
-  await expect(page.getByRole('heading', { name: `Hola, ${mozo.primerNombre}` })).toBeVisible();
+  await afirmarSesionDe(page, mozo);
   const token = await tokenDeSesion(page);
   const equipo = (await tokensDeEquipo(page))[escenario.empresaId]!;
 
@@ -221,9 +216,7 @@ test('el administrador revoca el equipo de un trabajador y su sesión deja de va
   const celularDeLucia = await abrirDeNuevo();
   await celularDeLucia.getByRole('button', { name: new RegExp(mozo.nombre) }).click();
   await escribirPin(celularDeLucia, mozo.pin);
-  await expect(
-    celularDeLucia.getByRole('heading', { name: `Hola, ${mozo.primerNombre}` }),
-  ).toBeVisible();
+  await afirmarSesionDe(celularDeLucia, mozo);
 
   // Desde su computadora, la administradora abre a Lucía y olvida su celular.
   // Su computadora ya la recuerda (entró con contraseña en el paso anterior): entra con su PIN de 6 dígitos.
@@ -231,9 +224,7 @@ test('el administrador revoca el equipo de un trabajador y su sesión deja de va
   await admin.goto('/');
   await expect(admin.getByRole('heading', { name: 'Escribe tu PIN' })).toBeVisible();
   await escribirPin(admin, administrador.pin);
-  await expect(
-    admin.getByRole('heading', { name: `Hola, ${administrador.primerNombre}` }),
-  ).toBeVisible();
+  await afirmarSesionDe(admin, administrador);
   await admin.getByRole('link', { name: 'Ajustes', exact: true }).click();
   await expect(admin.getByRole('button', { name: 'Usuarios', exact: true })).toHaveAttribute(
     'aria-pressed',
@@ -263,9 +254,7 @@ test('el administrador revoca el equipo de un trabajador y su sesión deja de va
   // Para volver a entrar con PIN, Lucía tiene que ingresar otra vez con su contraseña.
   await celularDeLucia.getByRole('link', { name: 'Ingresar con usuario y contraseña' }).click();
   await ingresarConContrasena(celularDeLucia, mozo.usuario, mozo.contrasena);
-  await expect(
-    celularDeLucia.getByRole('heading', { name: `Hola, ${mozo.primerNombre}` }),
-  ).toBeVisible();
+  await afirmarSesionDe(celularDeLucia, mozo);
   await celularDeLucia.close();
   await admin.close();
 });

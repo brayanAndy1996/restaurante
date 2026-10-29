@@ -231,6 +231,12 @@ export function contieneControlDeTransaccion(texto: string): boolean {
  * - Texto de consultas y sesiones ajenas (38b y 38c): `pg_stat_activity`, `pg_stat_get_activity`,
  *   `pg_cancel_backend`, `pg_terminate_backend` y `pg_signal_backend`.
  * - Objetos grandes (38d): `pg_largeobject`, `pg_largeobject_metadata`, `loread` y `lowrite`.
+ * - Canal lateral entre empresas (historia 004, criterio 70): `pg_notify` (los canales y los avisos son globales a
+ *   la base), `pg_listening_channels`, `pg_locks`, `pg_blocking_pids` y `pg_safe_snapshot_blocking_pids` (metadatos
+ *   de la actividad de otras sesiones del mismo rol) y los cerrojos consultivos de sesión (`pg_advisory_lock`,
+ *   `pg_advisory_lock_shared`, `pg_try_advisory_lock`, `pg_try_advisory_lock_shared`, `pg_advisory_unlock`,
+ *   `pg_advisory_unlock_shared` y `pg_advisory_unlock_all`), que sobreviven a la transacción y se ven entre
+ *   empresas. Los de transacción (`pg_advisory_xact_lock`, `pg_try_advisory_xact_lock`) siguen permitidos.
  *
  * Donde no hay superusuario (producción, criterio 38e) las revocaciones de `pg_catalog` no existen y
  * esta lista, aplicada en la guarda de la API y en la de plataforma, es la barrera de esos objetos.
@@ -252,6 +258,21 @@ export const NOMBRES_PROHIBIDOS: readonly string[] = [
   'pg_largeobject_metadata',
   'loread',
   'lowrite',
+  // Canal lateral de PostgreSQL (historia 004, criterio 70): avisos y cerrojos de sesión que ven todas las
+  // empresas por igual, y metadatos de bloqueos ajenos. `pg_advisory_xact_lock` NO está aquí: lo usan la carta
+  // y el salón, y el cerrojo de transacción se suelta solo al terminar (no sobrevive a la petición).
+  'pg_notify',
+  'pg_listening_channels',
+  'pg_locks',
+  'pg_blocking_pids',
+  'pg_safe_snapshot_blocking_pids',
+  'pg_advisory_lock',
+  'pg_advisory_lock_shared',
+  'pg_try_advisory_lock',
+  'pg_try_advisory_lock_shared',
+  'pg_advisory_unlock',
+  'pg_advisory_unlock_shared',
+  'pg_advisory_unlock_all',
 ];
 
 /**

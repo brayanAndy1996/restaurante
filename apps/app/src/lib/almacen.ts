@@ -165,3 +165,38 @@ export function guardarEstacion(empresaId: string, estacionId: string | null): v
     // Sin almacenamiento no hay nada que recordar.
   }
 }
+
+// --- Salón: zona y vista de este equipo ------------------------------------------------------------------
+
+const PREFIJO_SALON = 'restaurante.salon.';
+
+export type VistaDelSalon = 'mapa' | 'lista';
+
+/** Lo que el equipo recuerda del salón: la última zona vista y si prefirió el mapa o la lista. */
+export interface PreferenciaDelSalon {
+  zonaId: string | null;
+  vista: VistaDelSalon | null;
+}
+
+/** Es del equipo, de la empresa y de la sucursal (otra sucursal tiene otras zonas); nunca una credencial. */
+export function preferenciaDelSalon(empresaId: string, sucursalId: string): PreferenciaDelSalon {
+  const dato = leerJson<{ zonaId?: unknown; vista?: unknown }>(
+    local(),
+    `${PREFIJO_SALON}${empresaId}.${sucursalId}`,
+  );
+  return {
+    zonaId: typeof dato?.zonaId === 'string' ? dato.zonaId : null,
+    vista: dato?.vista === 'mapa' || dato?.vista === 'lista' ? dato.vista : null,
+  };
+}
+
+export function guardarPreferenciaDelSalon(
+  empresaId: string,
+  sucursalId: string,
+  cambios: Partial<PreferenciaDelSalon>,
+): void {
+  guardarJson(local(), `${PREFIJO_SALON}${empresaId}.${sucursalId}`, {
+    ...preferenciaDelSalon(empresaId, sucursalId),
+    ...cambios,
+  });
+}

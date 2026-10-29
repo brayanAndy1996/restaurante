@@ -314,3 +314,11 @@ export async function ajustarVencimiento(
   });
   expect(r.estado, 'ajuste del vencimiento').toBe(200);
 }
+
+/**
+ * La barra de la sesión dice quién entró. Es la señal común a todos los roles, sea cual sea su pantalla
+ * inicial (Salón o Cocina, criterio 87 de 004).
+ */
+export async function afirmarSesionDe(pagina: Page, persona: { nombre: string }): Promise<void> {
+  await expect(pagina.getByRole('button', { name: `Sesión de ${persona.nombre}` })).toBeVisible();
+}

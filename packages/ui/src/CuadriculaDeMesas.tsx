@@ -23,6 +23,8 @@ export interface MesaDeCuadricula {
   /** Estado en el salón; el editor del mapa no lo usa. */
   estado?: EstadoMesa;
   detalle?: string;
+  /** Las otras mesas de la misma cuenta ("5, 6"): la baldosa dice "Grupo con 5, 6" y lleva un eslabón. */
+  grupo?: string;
 }
 
 export interface CeldaDeCuadricula {
@@ -206,6 +208,7 @@ export function CuadriculaDeMesas({
                         forma={mesa.forma}
                         {...(mesa.estado ? { estado: mesa.estado } : {})}
                         {...(mesa.detalle ? { detalle: mesa.detalle } : {})}
+                        {...(mesa.grupo ? { grupo: mesa.grupo } : {})}
                         {...(onElegirMesa
                           ? {
                               onClick: () => onElegirMesa(mesa.id),

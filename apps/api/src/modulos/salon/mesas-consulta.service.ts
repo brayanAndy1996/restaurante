@@ -28,6 +28,22 @@ export class MesasConsultaService {
   }
 
   /**
+   * El nombre de cada mesa pedida (para dibujar la cuenta de una orden), en una sola consulta. Un id de otra
+   * empresa o inexistente no aparece.
+   */
+  async nombres(
+    mesaIds: readonly string[],
+    transaccion?: Transaction,
+  ): Promise<Map<string, string>> {
+    const ids = [...new Set(mesaIds.map((id) => id.toLowerCase()))];
+    const filas = await this.conexion.query<{ id: string; nombre: string }>(
+      'SELECT m.id, m.nombre FROM mesa m WHERE m.id = ANY($1::uuid[])',
+      { bind: [ids], type: QueryTypes.SELECT, transaction: transaccion },
+    );
+    return new Map(filas.map((f) => [f.id, f.nombre]));
+  }
+
+  /**
    * Bloquea las mesas (`FOR UPDATE`, en orden de id) y las devuelve. Lanza 404 `NO_ENCONTRADO` si alguna no
    * existe o no es de la sucursal (con el mismo cuerpo para una de otra empresa). Quien lo llama decide si una
    * mesa inactiva es un error.

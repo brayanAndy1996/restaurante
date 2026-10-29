@@ -12,7 +12,7 @@ export { BaseDeDatosModule } from './base-de-datos.module';
 export { ConsultaProhibidaError, RolPrivilegiadoError } from './errores';
 export { SQLSTATE, restriccionDe, sqlstateDe } from './errores-pg';
 export { TIEMPO_LIMITE_SALUD_MS, comprobarConexion } from './salud';
-export { verificarRolDeConexion } from './verificar-roles';
+export { verificarRolDeConexion, verificarRolDePool } from './verificar-roles';
 export type { MotivoSinEmpresa } from './consultas-sin-empresa';
 export {
   ejecutarConEstado,

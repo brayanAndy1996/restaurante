@@ -66,6 +66,10 @@ export {
   Square as IconoFormaCuadrada,
   Circle as IconoFormaRedonda,
   RectangleHorizontal as IconoFormaRectangular,
+  Link2 as IconoUnidas,
+  List as IconoLista,
+  Armchair as IconoSalon,
+  CookingPot as IconoCocina,
 } from 'lucide-react';
 
 interface PropsIcono {

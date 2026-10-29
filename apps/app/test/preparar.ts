@@ -38,7 +38,12 @@ if (!window.matchMedia) {
 // Cada prueba empieza sin sesión ni tokens guardados, ni avisos de envíos cancelados de la prueba anterior.
 import { beforeEach } from 'vitest';
 import { avisosDeEnvio } from '../src/lib/envios-cancelados';
+import { detenerTiempoReal } from '../src/lib/tiempo-real';
+import { instalarSocketsFalsos } from './ayudas-tiempo-real';
 beforeEach(() => {
+  // Ninguna prueba abre un socket de verdad ni arrastra la conexión de la anterior.
+  detenerTiempoReal();
+  instalarSocketsFalsos();
   sessionStorage.clear();
   localStorage.clear();
   avisosDeEnvio.descartar();

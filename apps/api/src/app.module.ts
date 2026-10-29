@@ -5,7 +5,7 @@ import { BaseDeDatosModule } from './nucleo/base-de-datos';
 import { ContextoEmpresaModule } from './nucleo/contexto-empresa';
 import { ErroresModule } from './nucleo/errores';
 import { EventosModule, type PublicadorEventos } from './nucleo/eventos';
-import { TiempoRealModule } from './nucleo/tiempo-real';
+import { PublicadorSocketIo, TiempoRealModule } from './nucleo/tiempo-real';
 import { RelojModule, type Reloj } from './nucleo/reloj';
 import { AuditoriaModule } from './modulos/auditoria';
 import { CartaModule } from './modulos/carta';
@@ -48,14 +48,19 @@ export interface OpcionesAppModule {
 export class AppModule {
   /** `AppModule` más controladores extra, que pueden inyectar `ContextoEmpresa` y los servicios. */
   static registrar(opciones: OpcionesAppModule = {}): DynamicModule {
+    const tiempoReal = opciones.tiempoReal?.habilitado ?? false;
     return {
       module: AppModule,
       imports: [
         RelojModule.registrar(opciones.reloj),
-        EventosModule.registrar(opciones.publicadorEventos),
+        // Con el tiempo real habilitado y sin un publicador de prueba, los eventos van por Socket.IO.
+        EventosModule.registrar(
+          opciones.publicadorEventos,
+          tiempoReal ? PublicadorSocketIo : undefined,
+        ),
         ArchivosModule.registrar(opciones.almacenArchivos),
         InventarioModule.registrar(opciones.inventario),
-        TiempoRealModule.registrar({ habilitado: opciones.tiempoReal?.habilitado ?? false }),
+        TiempoRealModule.registrar({ habilitado: tiempoReal }),
       ],
       controllers: opciones.controladoresExtra ?? [],
     };
