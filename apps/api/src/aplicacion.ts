@@ -8,6 +8,7 @@ import {
   descartarCuerpoDeFotoAlResponder,
   type AlmacenArchivos,
 } from './nucleo/archivos';
+import type { InventarioPuerto } from './modulos/pedidos';
 import type { PublicadorEventos } from './nucleo/eventos';
 import type { Reloj } from './nucleo/reloj';
 import { LIMITE_CUERPO_BYTES, traducirErrorDeCuerpo } from './nucleo/errores/filtro-global-errores';
@@ -35,6 +36,17 @@ export interface OpcionesAplicacion {
    * `AlmacenEnMemoria`.
    */
   almacenArchivos?: AlmacenArchivos;
+  /**
+   * Puerto de inventario (`INVENTARIO`) que el envío y las anulaciones llaman dentro de su transacción; por
+   * defecto el `InventarioNulo`, que no hace nada. Las pruebas pasan un `InventarioDePrueba`.
+   */
+  inventario?: InventarioPuerto;
+  /**
+   * Socket.IO (`/tiempo-real`): `habilitado` lo enciende o apaga; por defecto lo decide `TIEMPO_REAL` del
+   * entorno (apagado con `NODE_ENV=test`). Las pruebas de tiempo real lo habilitan y escuchan un puerto con
+   * `app.listen(0)`.
+   */
+  tiempoReal?: { habilitado: boolean };
 }
 
 /**
@@ -57,6 +69,10 @@ export async function crearAplicacion(
       reloj: opciones.reloj,
       publicadorEventos: opciones.publicadorEventos,
       almacenArchivos: opciones.almacenArchivos,
+      inventario: opciones.inventario,
+      tiempoReal: {
+        habilitado: opciones.tiempoReal?.habilitado ?? entorno.TIEMPO_REAL === 'habilitado',
+      },
     }),
     {
       // En pruebas se silencia el registro de Nest; los errores de arranque se propagan como excepción.

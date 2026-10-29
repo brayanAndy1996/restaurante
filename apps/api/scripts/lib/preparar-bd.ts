@@ -2,6 +2,8 @@ import { Client } from 'pg';
 import {
   BASE_DE_DATOS_POR_DEFECTO,
   ROLES,
+  ROL_TIEMPO_REAL,
+  contrasenaDeTiempoReal,
   contrasenasDeRoles,
   exigirUrlAdmin,
   urlAdminDeMantenimiento,
@@ -497,6 +499,9 @@ const BLOQUEO_PREPARAR = "hashtext('restaurante:preparar-bd')";
 const ESPERA_BLOQUEO_PREPARAR_MS = 60_000;
 const SQLSTATE_BLOQUEO_NO_DISPONIBLE = '55P03';
 
+/** `insufficient_privilege` de PostgreSQL. */
+const SQLSTATE_PRIVILEGIO_INSUFICIENTE = '42501';
+
 /** Atributos que `ALTER ROLE` rechaza nombrar a un administrador que no es superusuario (PostgreSQL 16). */
 const ATRIBUTOS_RESERVADOS_A_SUPERUSUARIO = [
   ['rolsuper', 'SUPERUSER'],
@@ -527,6 +532,7 @@ export async function prepararBaseDeDatos(opciones: OpcionesPrepararBd = {}): Pr
   const adminUrl = opciones.adminUrl ?? exigirUrlAdmin(env);
   const baseDeDatos = validarNombreDeBase(opciones.baseDeDatos ?? BASE_DE_DATOS_POR_DEFECTO);
   const contrasenas = contrasenasDeRoles(env);
+  const contrasenaTiempoReal = contrasenaDeTiempoReal(env);
   const { omitir } = leerProteccionCatalogo(env);
   const esperaMs = opciones.esperaBloqueoMs ?? ESPERA_BLOQUEO_PREPARAR_MS;
 
@@ -572,7 +578,13 @@ export async function prepararBaseDeDatos(opciones: OpcionesPrepararBd = {}): Pr
     }
 
     // 1. Roles (CREATE o ALTER: deja siempre los mismos atributos y la contraseña vigente).
-    for (const [clave, nombre] of Object.entries(ROLES) as [keyof typeof ROLES, string][]) {
+    const rolesPorPreparar: [string, string][] = [
+      ...(Object.entries(ROLES) as [keyof typeof ROLES, string][]).map(
+        ([clave, nombre]): [string, string] => [nombre, contrasenas[clave]],
+      ),
+      [ROL_TIEMPO_REAL, contrasenaTiempoReal],
+    ];
+    for (const [nombre, contrasena] of rolesPorPreparar) {
       const existe = await admin.query('SELECT 1 FROM pg_roles WHERE rolname = $1', [nombre]);
       // PostgreSQL 16: un administrador que no es superusuario no puede nombrar SUPERUSER, BYPASSRLS
       // ni REPLICATION en ALTER ROLE ni siquiera para negarlos (CREATE ROLE sí lo admite). Se omiten
@@ -581,21 +593,34 @@ export async function prepararBaseDeDatos(opciones: OpcionesPrepararBd = {}): Pr
       const replicacion = existe.rowCount && !esSuperusuario ? '' : ' NOREPLICATION';
       const atributos =
         `LOGIN ${reservados}NOCREATEDB NOCREATEROLE NOINHERIT${replicacion} ` +
-        `PASSWORD ${admin.escapeLiteral(contrasenas[clave])}`;
+        `PASSWORD ${admin.escapeLiteral(contrasena)}`;
+      let sinPermisoParaModificarlo = false;
       try {
         await admin.query(
           `${existe.rowCount ? 'ALTER' : 'CREATE'} ROLE ${admin.escapeIdentifier(nombre)} ${atributos}`,
         );
       } catch (error) {
-        if (existe.rowCount && !esSuperusuario) {
+        // El rol del tiempo real (historia 004) se agregó después de los tres primeros: un administrador que no
+        // es superusuario y que no lo creó no tiene ADMIN OPTION sobre él (el escenario del criterio 38e solo lo
+        // concede sobre los otros tres). No se modifica —queda con la contraseña que ya tiene— pero se sigue
+        // comprobando abajo que no tenga atributos privilegiados.
+        if (
+          nombre === ROL_TIEMPO_REAL &&
+          existe.rowCount &&
+          !esSuperusuario &&
+          (error as { code?: string }).code === SQLSTATE_PRIVILEGIO_INSUFICIENTE
+        ) {
+          sinPermisoParaModificarlo = true;
+        } else if (existe.rowCount && !esSuperusuario) {
           const motivo = error instanceof Error ? error.message : String(error);
           throw new Error(
             `No se pudo modificar el rol ${nombre} con ${usuario} (${motivo}). Un administrador que no ` +
               `es superusuario necesita CREATEROLE y ADMIN OPTION sobre ${nombre}; los tiene si ` +
               'creó el rol.',
           );
+        } else {
+          throw error;
         }
-        throw error;
       }
       if (existe.rowCount && !esSuperusuario) {
         const { rows } = await admin.query<Record<string, boolean>>(
@@ -612,7 +637,15 @@ export async function prepararBaseDeDatos(opciones: OpcionesPrepararBd = {}): Pr
           }
         }
       }
-      registrar(`rol ${nombre}: ${existe.rowCount ? 'actualizado' : 'creado'}`);
+      registrar(
+        `rol ${nombre}: ${
+          sinPermisoParaModificarlo
+            ? 'ya existía y no se pudo actualizar (sin ADMIN OPTION)'
+            : existe.rowCount
+              ? 'actualizado'
+              : 'creado'
+        }`,
+      );
     }
     await admin.query(
       `ALTER ROLE ${admin.escapeIdentifier(ROLES.api)} SET idle_in_transaction_session_timeout = '30s'`,
@@ -642,10 +675,10 @@ export async function prepararBaseDeDatos(opciones: OpcionesPrepararBd = {}): Pr
       registrar(`base ${baseDeDatos}: creada`);
     }
 
-    // 3. Permisos de la base: nada para PUBLIC (CONNECT, CREATE, TEMPORARY); CONNECT para los dos roles.
+    // 3. Permisos de la base: nada para PUBLIC (CONNECT, CREATE, TEMPORARY); CONNECT para los roles de la aplicación.
     await admin.query(`REVOKE ALL ON DATABASE ${base} FROM PUBLIC`);
     await admin.query(
-      `GRANT CONNECT ON DATABASE ${base} TO ${admin.escapeIdentifier(ROLES.api)}, ${admin.escapeIdentifier(ROLES.plataforma)}`,
+      `GRANT CONNECT ON DATABASE ${base} TO ${admin.escapeIdentifier(ROLES.api)}, ${admin.escapeIdentifier(ROLES.plataforma)}, ${admin.escapeIdentifier(ROL_TIEMPO_REAL)}`,
     );
 
     if (aplicarProtecciones) {

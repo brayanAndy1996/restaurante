@@ -21,7 +21,7 @@ export interface OpcionesEntornoDePrueba {
 
 /**
  * Fija en `process.env` las variables de la app de prueba (DATABASE_URL como `restaurante_api`,
- * DATABASE_PLATAFORMA_URL como `restaurante_plataforma`, NODE_ENV, EMPRESA_POR_HEADER, DB_POOL_MAX,
+ * DATABASE_PLATAFORMA_URL como `restaurante_plataforma`, DATABASE_TIEMPO_REAL_URL como `restaurante_tiempo_real`, NODE_ENV, EMPRESA_POR_HEADER, DB_POOL_MAX,
  * PIN_PEPPER, ORIGENES_PERMITIDOS y ARCHIVOS_DRIVER) y devuelve lo aplicado. Llámala antes de `crearAplicacion()`; se puede llamar varias veces en
  * el mismo proceso para crear apps con configuraciones distintas.
  */
@@ -32,6 +32,7 @@ export function fijarEntornoDePrueba(
   const aplicado: Record<string, string | undefined> = {
     DATABASE_URL: urlDeRol('api'),
     DATABASE_PLATAFORMA_URL: urlDeRol('plataforma'),
+    DATABASE_TIEMPO_REAL_URL: urlDeRol('tiempoReal'),
     NODE_ENV: nodeEnv,
     EMPRESA_POR_HEADER: opciones.empresaPorHeader === false ? undefined : 'habilitado',
     DB_POOL_MAX: String(opciones.poolMax ?? 2),

@@ -1,5 +1,7 @@
 import { Injectable } from '@nestjs/common';
+import { noImplementado } from '../../nucleo/errores/no-implementado';
 import { principalActual, type Principal } from '../../nucleo/principal';
+import type { AutorizacionConsumida } from './autorizacion.service';
 
 /**
  * Acceso al principal de la petición en curso (quién hace la petición): tipo de sesión, empresa, persona,
@@ -22,5 +24,16 @@ export class SesionActual {
   /** El principal, o `undefined` fuera de una petición autenticada. */
   principalOpcional(): Principal | undefined {
     return principalActual();
+  }
+
+  /**
+   * La autorización de supervisor que `@Permiso` consumió en esta petición, o `undefined` si la acción no la
+   * necesitó (historia 004, criterio 41): para la fila de auditoría de la acción y el `autorizadoPor` de la
+   * respuesta. La guarda `PermisoInterceptor` al consumirla; una réplica de la misma clave no la consume.
+   *
+   * Fase A: solo la firma; lanza `Error('No implementado')` hasta la tarea T22.
+   */
+  autorizacionConsumida(): (AutorizacionConsumida & { autorizacionId: string }) | undefined {
+    throw noImplementado();
   }
 }

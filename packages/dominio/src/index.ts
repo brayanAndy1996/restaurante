@@ -32,3 +32,4 @@ export type {
   ResultadoEstadoSuscripcion,
 } from './suscripcion';
 export * from './carta';
+export * from './salon';

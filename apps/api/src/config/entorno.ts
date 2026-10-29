@@ -20,6 +20,10 @@ const MINIMO_BYTES_PIN_PEPPER = 32;
 export const DRIVERS_DE_ARCHIVOS = ['memoria', 'disco', 'r2'] as const;
 export type DriverDeArchivos = (typeof DRIVERS_DE_ARCHIVOS)[number];
 
+/** Valores de `TIEMPO_REAL`. */
+export const ESTADOS_TIEMPO_REAL = ['habilitado', 'deshabilitado'] as const;
+export type EstadoTiempoReal = (typeof ESTADOS_TIEMPO_REAL)[number];
+
 const entornoSchema = z.object({
   // Sin valor por defecto: un despliegue que olvide `NODE_ENV=production` no debe arrancar con
   // el resolutor por cabecera ni con contraseñas conocidas (criterio 29b).
@@ -42,13 +46,17 @@ const entornoSchema = z.object({
   R2_ACCESS_KEY_ID: z.string().optional(),
   R2_SECRET_ACCESS_KEY: z.string().optional(),
   R2_BUCKET: z.string().optional(),
+  // Tiempo real (historia 004): `TIEMPO_REAL` enciende o apaga el servidor de Socket.IO; el adaptador de
+  // PostgreSQL usa su propio rol (`restaurante_tiempo_real`) y su propia conexión.
+  TIEMPO_REAL: z.enum(ESTADOS_TIEMPO_REAL).optional(),
+  DATABASE_TIEMPO_REAL_URL: urlPostgres.optional(),
 });
 
 type EntornoLeido = z.infer<typeof entornoSchema>;
 
 export interface Entorno extends Omit<
   EntornoLeido,
-  'PIN_PEPPER' | 'ORIGENES_PERMITIDOS' | 'ARCHIVOS_DRIVER'
+  'PIN_PEPPER' | 'ORIGENES_PERMITIDOS' | 'ARCHIVOS_DRIVER' | 'TIEMPO_REAL'
 > {
   /**
    * Secreto con el que se calcula la huella de los PIN (base64, 32 bytes o más). Con `NODE_ENV`
@@ -72,6 +80,14 @@ export interface Entorno extends Omit<
    * (`http://localhost:<PORT>/archivos`); con `r2` es obligatoria (el dominio público del bucket).
    */
   ARCHIVOS_URL_PUBLICA: string | undefined;
+  /**
+   * Si la API sirve Socket.IO: `habilitado` salvo con `NODE_ENV=test` (las pruebas de tiempo real lo
+   * habilitan con `crearAplicacion({ tiempoReal: { habilitado: true } })`). Con `habilitado`, el adaptador de
+   * PostgreSQL necesita `DATABASE_TIEMPO_REAL_URL`.
+   */
+  TIEMPO_REAL: EstadoTiempoReal;
+  /** Conexión del adaptador de Socket.IO con el rol `restaurante_tiempo_real` (2 conexiones); puede faltar. */
+  DATABASE_TIEMPO_REAL_URL?: string | undefined;
 }
 
 /** Carpeta del almacén en disco si no se define `ARCHIVOS_DIRECTORIO`. */
@@ -181,6 +197,8 @@ export function cargarEntorno(env: NodeJS.ProcessEnv = process.env): Entorno {
     ARCHIVOS_DRIVER: driverFinal,
     ARCHIVOS_DIRECTORIO: resultado.data.ARCHIVOS_DIRECTORIO ?? ARCHIVOS_DIRECTORIO_LOCAL,
     ARCHIVOS_URL_PUBLICA: urlPublica?.replace(/\/+$/, ''),
+    TIEMPO_REAL:
+      resultado.data.TIEMPO_REAL ?? (limpio.NODE_ENV === 'test' ? 'deshabilitado' : 'habilitado'),
   };
 }
 

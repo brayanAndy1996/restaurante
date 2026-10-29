@@ -14,4 +14,9 @@ export function prepararEntornoDeScript(): void {
     'plataforma',
     BASE_DE_DATOS_POR_DEFECTO,
   );
+  process.env.DATABASE_TIEMPO_REAL_URL ??= urlParaRol(
+    admin,
+    'tiempoReal',
+    BASE_DE_DATOS_POR_DEFECTO,
+  );
 }

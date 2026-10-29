@@ -26,8 +26,10 @@ import { SesionActual } from './sesion-actual';
 import { SesionController } from './sesion.controller';
 import { SesionesController } from './sesiones.controller';
 import { SesionesService } from './sesiones.service';
+import { UsuariosConsultaService } from './usuarios-consulta.service';
 import { UsuariosController } from './usuarios.controller';
 import { UsuariosService } from './usuarios.service';
+import { ValidadorDeSesion } from './validador-de-sesion';
 
 /**
  * Dueño de las tablas de acceso (`usuario`, `acceso_sucursal`, `sucursal_acceso`, `equipo`,
@@ -60,6 +62,8 @@ import { UsuariosService } from './usuarios.service';
     IngresoPinService,
     AccesoSucursalService,
     UsuariosService,
+    UsuariosConsultaService,
+    ValidadorDeSesion,
     ResolutorEmpresaSesion,
     { provide: RESOLUTOR_EMPRESA, useExisting: ResolutorEmpresaSesion },
     {
@@ -85,6 +89,8 @@ import { UsuariosService } from './usuarios.service';
     IngresoPinService,
     AccesoSucursalService,
     UsuariosService,
+    UsuariosConsultaService,
+    ValidadorDeSesion,
     ResolutorEmpresaSesion,
     RESOLUTOR_EMPRESA,
     AutenticacionGuard,
