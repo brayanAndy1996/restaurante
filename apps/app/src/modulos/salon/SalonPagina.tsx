@@ -272,7 +272,19 @@ function ListaDeZona({
         const total = totalDeMesa(mesa);
         return (
           <li key={mesa.id}>
-            <button type="button" className={claseFila()} onClick={() => onTocar(mesa)}>
+            <button
+              type="button"
+              className={claseFila()}
+              aria-label={[
+                nombreAccesibleDeMesa(mesa.nombre),
+                ayudaDeFila(mesa, ahora),
+                TEXTO_DE_ESTADO[mesa.estado],
+                total,
+              ]
+                .filter(Boolean)
+                .join(', ')}
+              onClick={() => onTocar(mesa)}
+            >
               <ContenidoDeFila
                 titulo={nombreAccesibleDeMesa(mesa.nombre)}
                 ayuda={ayudaDeFila(mesa, ahora)}

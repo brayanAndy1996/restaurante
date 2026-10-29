@@ -151,8 +151,17 @@ export function datosDeCocinaListo(datos: unknown): EventoCocinaListo['datos'] |
   return analizado.success ? analizado.data : null;
 }
 
-function invalidar(cliente: QueryClient, queryKey: readonly unknown[]): void {
-  void cliente.invalidateQueries({ queryKey });
+function invalidar(
+  cliente: QueryClient,
+  queryKey: readonly unknown[],
+  { respetarLoEnCurso = false }: { respetarLoEnCurso?: boolean } = {},
+): void {
+  // Un aviso de cambio obliga a pedir de nuevo aunque haya una lectura en curso (pudo salir antes del
+  // cambio). Al conectar no: la lectura que ya va en camino sirve y no se baja dos veces.
+  void cliente.invalidateQueries(
+    { queryKey },
+    respetarLoEnCurso ? { cancelRefetch: false } : undefined,
+  );
 }
 
 /** Qué consultas se vuelven a pedir con cada evento. Un dato mal formado invalida más, nunca menos. */
@@ -196,10 +205,11 @@ function alLlegarEvento(cliente: QueryClient, nombre: NombreDeEvento, datos: unk
 
 /** Al conectar o reconectar pudo haberse perdido algún aviso: se vuelve a pedir todo lo que está en pantalla. */
 function invalidarTodo(cliente: QueryClient): void {
-  invalidar(cliente, CLAVES_TIEMPO_REAL.salon);
-  invalidar(cliente, CLAVES_TIEMPO_REAL.ordenes);
-  invalidar(cliente, CLAVES_TIEMPO_REAL.cocina);
-  invalidar(cliente, CLAVES_TIEMPO_REAL.disponibilidad);
+  const opciones = { respetarLoEnCurso: true };
+  invalidar(cliente, CLAVES_TIEMPO_REAL.salon, opciones);
+  invalidar(cliente, CLAVES_TIEMPO_REAL.ordenes, opciones);
+  invalidar(cliente, CLAVES_TIEMPO_REAL.cocina, opciones);
+  invalidar(cliente, CLAVES_TIEMPO_REAL.disponibilidad, opciones);
 }
 
 // --- La conexión de la sesión ----------------------------------------------------------------
