@@ -191,6 +191,7 @@ describe('Anular un ítem con clave de supervisor (Mozo y Cajero; criterios 35 a
     // La ventana de 002 dice qué se autoriza y trae el motivo ya elegido, sin pedirlo otra vez.
     const ventana = await screen.findByRole('dialog', { name: 'Clave de supervisor' });
     expect(ventana).toHaveTextContent('Anular ítem: Lomo saltado × 3 · S/ 84.00');
+    expect(ventana.textContent).toContain('S/\u00a084.00');
     expect(ventana).toHaveTextContent('Motivo: Error al comandar');
     expect(within(ventana).queryByLabelText('Motivo')).toBeNull();
     await pin('123456');
@@ -624,7 +625,7 @@ describe('Anular la orden (criterios 42 y 43)', () => {
 });
 
 describe('Liberar la mesa sin consumo (decisión 7, criterio 44)', () => {
-  it('una mesa sin nada enviado se libera sin clave, con una confirmación', async () => {
+  it('una mesa que nunca tuvo envíos se libera sin clave, con una confirmación', async () => {
     const s = servidorDeCuenta({
       sesion: sesionDeRol('MOZO'),
       orden: ordenDeMesa(4),
@@ -653,7 +654,7 @@ describe('Liberar la mesa sin consumo (decisión 7, criterio 44)', () => {
     expect(screen.queryByRole('button', { name: 'Liberar la mesa' })).toBeNull();
   });
 
-  it('con algo vigente en la cuenta no se ofrece liberar, solo anular la orden', async () => {
+  it('con ítems enviados no se ofrece liberar, solo anular la orden', async () => {
     servidorDeCuenta({ sesion: sesionDeRol('MOZO'), orden: cuenta() });
     renderApp(RUTA);
     await screen.findByText('Lomo saltado');
@@ -661,13 +662,23 @@ describe('Liberar la mesa sin consumo (decisión 7, criterio 44)', () => {
     expect(screen.getByRole('button', { name: 'Anular la orden' })).toBeVisible();
   });
 
-  it('con todo anulado se ofrece liberar; si la API dice que hubo consumo, ofrece «Anular la orden»', async () => {
-    const s = servidorDeCuenta({
+  it('con todo anulado la cuenta ya tuvo envíos: no se ofrece liberar, solo «Anular la orden»', async () => {
+    servidorDeCuenta({
       sesion: sesionDeRol('MOZO'),
       orden: cuenta({
         total: '0.00',
         items: [itemDeOrden(1, { estado: 'ANULADO', cantidadAnulada: 1, cantidadVigente: 0 })],
       }),
+    });
+    renderApp(RUTA);
+    expect(await screen.findByRole('button', { name: 'Anular la orden' })).toBeVisible();
+    expect(screen.queryByRole('button', { name: 'Liberar la mesa' })).toBeNull();
+  });
+
+  it('si la API dice que hubo consumo (409), lo explica y ofrece «Anular la orden»', async () => {
+    const s = servidorDeCuenta({
+      sesion: sesionDeRol('MOZO'),
+      orden: ordenDeMesa(4),
       extra: {
         [`POST ${RUTA_LIBERAR}`]: () =>
           json(409, { codigo: 'ORDEN_CON_CONSUMO', mensaje: 'La orden tuvo un envío' }),

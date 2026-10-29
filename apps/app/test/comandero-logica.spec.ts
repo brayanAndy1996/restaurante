@@ -129,7 +129,7 @@ describe('grupos de modificadores', () => {
 
   it('dice cuánto cuesta cada opción', () => {
     expect(recargoDeOpcion('0.00')).toBe('Sin recargo');
-    expect(recargoDeOpcion('2.50')).toBe('+ S/ 2.50');
+    expect(recargoDeOpcion('2.50')).toBe('+ S/\u00a02.50');
   });
 
   it('el precio sale de calcularLinea: base más extras por la cantidad', () => {

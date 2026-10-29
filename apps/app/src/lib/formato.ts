@@ -150,11 +150,14 @@ export function montoEsCero(valor: string): boolean {
   return comoDecimal(valor)?.isZero() ?? false;
 }
 
-/** "S/ 1,234.50" a partir de un monto en texto decimal; `null` si el texto no es un monto. */
+/**
+ * "S/ 1,234.50" a partir de un monto en texto decimal; `null` si el texto no es un monto. El espacio es duro
+ * (`\u00a0`): el monto no se parte entre "S/" y la cifra al cambiar de línea en pantallas de 360 px.
+ */
 export function montoEnSoles(valor: string | null | undefined): string | null {
   if (valor === null || valor === undefined) return null;
   const formateado = formatearMonto(valor);
-  return formateado === null ? null : `S/ ${formateado}`;
+  return formateado === null ? null : `S/\u00a0${formateado}`;
 }
 
 /** Mismo texto sin tildes ni mayúsculas, para buscar por nombre sin que importen. */

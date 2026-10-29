@@ -31,9 +31,9 @@ import {
   type BorradorDeSucursal,
 } from './sucursales-form';
 
-/** "S/ 38.00" con espacio duro: el monto no se parte entre dos líneas. */
+/** "S/ 38.00" (`montoEnSoles` ya usa espacio duro: el monto no se parte entre dos líneas). */
 function soles(monto: string | null): string | null {
-  return montoEnSoles(monto)?.replace('S/ ', 'S/\u00a0') ?? null;
+  return montoEnSoles(monto);
 }
 
 /** Nota de las filas que quien consulta no puede cambiar (criterio 73). */

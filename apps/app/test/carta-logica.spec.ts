@@ -88,7 +88,7 @@ describe('montoComoTexto', () => {
   });
 
   it('montoEnSoles formatea con miles y cifras fijas, y deja pasar lo que no hay', () => {
-    expect(montoEnSoles('1284.5')).toBe('S/ 1,284.50');
+    expect(montoEnSoles('1284.5')).toBe('S/\u00a01,284.50');
     expect(montoEnSoles(null)).toBeNull();
     expect(montoEnSoles(undefined)).toBeNull();
   });

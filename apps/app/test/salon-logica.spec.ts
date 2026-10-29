@@ -150,7 +150,7 @@ describe('estado y detalle de cada mesa (criterio 88)', () => {
 
   it('el total sale tal como lo calculó la API, en soles', () => {
     expect(totalDeMesa(mesa(1, '1'))).toBeNull();
-    expect(totalDeMesa(mesa(1, '1', { orden: { total: '1284.5' } }))).toBe('S/ 1,284.50');
+    expect(totalDeMesa(mesa(1, '1', { orden: { total: '1284.5' } }))).toBe('S/\u00a01,284.50');
   });
 });
 

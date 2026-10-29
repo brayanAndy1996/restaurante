@@ -68,16 +68,20 @@ describe('Comandero: la carta (criterio 91)', () => {
     servidorDeCuenta();
     renderApp(RUTA);
     const productos = await screen.findByRole('list', { name: 'Productos de Fondos' });
-    expect(within(productos).getByRole('button', { name: 'Lomo saltado, S/ 28.00' })).toBeVisible();
     expect(
-      within(productos).getByRole('button', { name: 'Combo hamburguesa, S/ 22.90' }),
+      within(productos).getByRole('button', { name: 'Lomo saltado, S/\u00a028.00' }),
+    ).toBeVisible();
+    expect(
+      within(productos).getByRole('button', { name: 'Combo hamburguesa, S/\u00a022.90' }),
     ).toBeVisible();
     // Un ingrediente que no se vende solo no se ofrece.
     expect(screen.queryByText('Huevo frito')).toBeNull();
 
     await userEvent.click(screen.getByRole('button', { name: 'Bebidas' }));
     const bebidas = await screen.findByRole('list', { name: 'Productos de Bebidas' });
-    expect(within(bebidas).getByRole('button', { name: 'Gaseosa 1 L, S/ 9.00' })).toBeVisible();
+    expect(
+      within(bebidas).getByRole('button', { name: 'Gaseosa 1 L, S/\u00a09.00' }),
+    ).toBeVisible();
   });
 
   it('lo que no se puede vender se ve apagado con el motivo y no abre nada', async () => {
@@ -86,7 +90,7 @@ describe('Comandero: la carta (criterio 91)', () => {
     await screen.findByRole('list', { name: 'Productos de Fondos' });
     // Menú sin armar (familia Fondos) y chicha agotada (familia Bebidas).
     const menu = tile(/^Menú del día/);
-    expect(menu).toHaveAccessibleName('Menú del día, S/ 12.00, Menú sin armar');
+    expect(menu).toHaveAccessibleName('Menú del día, S/\u00a012.00, Menú sin armar');
     expect(menu).toHaveAttribute('aria-disabled', 'true');
     expect(within(menu).getByText('Menú sin armar')).toBeVisible();
     await userEvent.click(menu);
@@ -94,7 +98,7 @@ describe('Comandero: la carta (criterio 91)', () => {
 
     await userEvent.click(screen.getByRole('button', { name: 'Bebidas' }));
     const chicha = await screen.findByRole('button', { name: /^Chicha morada/ });
-    expect(chicha).toHaveAccessibleName('Chicha morada, S/ 8.00, Agotado');
+    expect(chicha).toHaveAccessibleName('Chicha morada, S/\u00a08.00, Agotado');
     expect(within(chicha).getByText('Agotado')).toBeVisible();
     await userEvent.click(chicha);
     expect(screen.queryByRole('dialog')).toBeNull();
@@ -150,12 +154,12 @@ describe('Comandero: la hoja de producto (criterio 91)', () => {
     await userEvent.click(await screen.findByRole('button', { name: /^Lomo saltado/ }));
     const hoja = await screen.findByRole('dialog', { name: 'Lomo saltado' });
     await userEvent.click(within(hoja).getByRole('radio', { name: /Jugoso/ }));
-    expect(within(hoja).getByRole('button', { name: 'Agregar · S/ 28.00' })).toBeEnabled();
+    expect(within(hoja).getByRole('button', { name: 'Agregar · S/\u00a028.00' })).toBeEnabled();
 
     await userEvent.click(within(hoja).getByRole('checkbox', { name: /Huevo/ }));
-    expect(within(hoja).getByRole('button', { name: 'Agregar · S/ 30.50' })).toBeEnabled();
+    expect(within(hoja).getByRole('button', { name: 'Agregar · S/\u00a030.50' })).toBeEnabled();
     await userEvent.click(within(hoja).getByRole('button', { name: /Agregar una unidad/ }));
-    expect(within(hoja).getByRole('button', { name: 'Agregar · S/ 61.00' })).toBeEnabled();
+    expect(within(hoja).getByRole('button', { name: 'Agregar · S/\u00a061.00' })).toBeEnabled();
   });
 
   it('con el máximo elegido, las demás opciones del grupo quedan bloqueadas y lo dicen', async () => {

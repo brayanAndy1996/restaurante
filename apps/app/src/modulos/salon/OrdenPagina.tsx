@@ -235,12 +235,11 @@ function Cuenta({
   const grupos = agruparPorEnvio(orden.items);
   const porMarchar = itemsPorMarchar(orden);
   const hayBorrador = borrador.lineas.length > 0;
-  // "Liberar la mesa" solo si nada se envió o todo está anulado; si la API dijo que hubo consumo, "Anular la orden".
+  // "Liberar la mesa" solo si la cuenta nunca tuvo un envío (criterio 44); en cualquier otro caso de cuenta
+  // abierta, "Anular la orden". Si la API dijo que hubo consumo (409), también "Anular la orden".
   const ofreceLiberar = puedeLiberar && sePuedeLiberar(orden) && !conConsumo;
   const ofreceAnularOrden =
-    puedeAnularOrden &&
-    sePuedeAnularOrden(orden) &&
-    (!sePuedeLiberar(orden) || !puedeLiberar || conConsumo);
+    puedeAnularOrden && (sePuedeAnularOrden(orden) || (conConsumo && abierta));
 
   return (
     <Pagina

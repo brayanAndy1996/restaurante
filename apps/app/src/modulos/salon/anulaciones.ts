@@ -75,12 +75,12 @@ export const sePuedeAnularItem = (item: Pick<ItemRespuesta, 'estado' | 'cantidad
   item.estado !== 'ANULADO' && item.cantidadVigente > 0;
 
 /**
- * "Liberar la mesa" aparece con la cuenta abierta y sin nada vigente: nada se envió o todo está anulado
- * (decisión 7). Si la cuenta tuvo algún envío, la API responde 409 `ORDEN_CON_CONSUMO` y la pantalla
- * ofrece "Anular la orden".
+ * "Liberar la mesa" aparece solo con la cuenta abierta que nunca tuvo un envío (decisión 7, criterio 44):
+ * con cualquier envío, aunque todo esté anulado, la API responde 409 `ORDEN_CON_CONSUMO` y se ofrece "Anular
+ * la orden". Los ítems de la cuenta son los enviados, así que sin ítems no hubo envíos.
  */
 export const sePuedeLiberar = (orden: Pick<OrdenRespuesta, 'estado' | 'items'>) =>
-  estaAbierta(orden) && orden.items.every((i) => !sePuedeAnularItem(i));
+  estaAbierta(orden) && orden.items.length === 0;
 
 /** "Anular la orden" aparece con la cuenta abierta y al menos un ítem enviado. */
 export const sePuedeAnularOrden = (orden: Pick<OrdenRespuesta, 'estado' | 'items'>) =>
