@@ -47,6 +47,15 @@ Dos límites que conviene conocer:
   cambio a otra persona ni aplicarlo en otra sucursal. La pantalla (o, si ya no está, un aviso global
   hasta que se toca "Entendido") dice, por ejemplo, "No se envió: cambiaste de usuario".
 
+## Salón y tiempo real
+
+El destino inicial sale del rol y del plan (`modulos/acceso/navegacion.ts`): "Salón" para quien atiende mesas,
+"Cocina" para quien solo usa la cocina. `lib/tiempo-real.ts` abre una conexión de Socket.IO por sesión
+(`socket.io-client` se carga bajo demanda, no cuenta en el paquete inicial), invalida las consultas de
+TanStack Query con cada evento y se reconecta a 1, 2, 5 y 10 s. Sin conexión, las pantallas en vivo se
+refrescan cada 30 s con `ETag` y `X-Actividad: segundo-plano` (`useIntervaloDeSondeo`). Se cierra al salir,
+al cambiar de usuario y al cambiar de sucursal. En las pruebas, `test/preparar.ts` instala sockets de mentira.
+
 ## Ver las fotos de los productos en desarrollo
 
 Las fotos de la carta las guarda y las sirve la API. En desarrollo, arranca la API con

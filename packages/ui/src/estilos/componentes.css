@@ -1747,9 +1747,8 @@ button.ui-mesa:active {
 /* Lo que sigue al estado ("3 · 25 min"): una línea aparte, con cifras tabulares */
 .ui-mesa__detalle {
   max-width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  /* Un tiempo largo ("2 · 1 h 18 min") pasa a una segunda línea en vez de cortarse: la baldosa tiene sitio */
+  overflow-wrap: anywhere;
   font-size: 0.8125rem;
   line-height: 1rem;
   font-variant-numeric: tabular-nums;
