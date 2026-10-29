@@ -4,12 +4,11 @@ import {
   BaldosaDeOpcion,
   Boton,
   ContadorGrande,
-  EsqueletoDeLista,
   Hoja,
   IconoPersona,
   Inicial,
 } from '@restaurante/ui';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useId, useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AvisoPendiente } from '../../componentes/PendienteDeEnvio';
@@ -17,9 +16,7 @@ import { nuevaClaveDeIdempotencia } from '../../lib/api';
 import { MUTACION_SIN_PAUSA, useEnvioPendiente } from '../../lib/envios';
 import { ErrorApi, erroresPorCampo, mensajeDeError } from '../../lib/errores';
 import { CLAVES_TIEMPO_REAL } from '../../lib/tiempo-real';
-import { CLAVE_USUARIOS, listarUsuarios } from '../administracion/usuarios';
 import { useSesionActiva } from '../acceso/sesion';
-import { personasQueAtienden } from './personas';
 import { abrirOrden, rutaDeOrden } from './salon';
 
 export interface MesaPorAbrir {
@@ -40,9 +37,12 @@ const MENSAJES = {
  */
 export function AbrirMesaHoja({
   mesa,
+  mozos,
   onCerrar,
 }: {
   mesa: MesaPorAbrir | null;
+  /** Las personas que pueden atender mesas en la sucursal (`mozos` de `GET /salon`), por nombre. */
+  mozos: readonly { id: string; nombre: string }[];
   onCerrar: () => void;
 }) {
   return (
@@ -55,12 +55,22 @@ export function AbrirMesaHoja({
           : 'Abrir mesa'
       }
     >
-      {mesa ? <FormularioDeApertura key={mesa.id} mesa={mesa} onCerrar={onCerrar} /> : null}
+      {mesa ? (
+        <FormularioDeApertura key={mesa.id} mesa={mesa} mozos={mozos} onCerrar={onCerrar} />
+      ) : null}
     </Hoja>
   );
 }
 
-function FormularioDeApertura({ mesa, onCerrar }: { mesa: MesaPorAbrir; onCerrar: () => void }) {
+function FormularioDeApertura({
+  mesa,
+  mozos,
+  onCerrar,
+}: {
+  mesa: MesaPorAbrir;
+  mozos: readonly { id: string; nombre: string }[];
+  onCerrar: () => void;
+}) {
   const sesion = useSesionActiva();
   const navegar = useNavigate();
   const clientes = useQueryClient();
@@ -70,9 +80,9 @@ function FormularioDeApertura({ mesa, onCerrar }: { mesa: MesaPorAbrir; onCerrar
   const yo = sesion.usuario;
   // Una sesión de soporte no es una persona de la empresa: tiene que elegir quién atiende (criterio 10).
   const debeElegir = yo === null;
-  // La lista de personas la da `GET /usuarios`, que es del Administrador. Para los demás roles hace falta
-  // un endpoint que no está en el contrato de 3a (ver el informe de T11): por ahora abren a su nombre.
-  const puedeElegir = sesion.esAdministrador;
+  // Las demás personas que atienden mesas (las trae `GET /salon`); sin ellas no hay a quién cambiar.
+  const otras = mozos.filter((m) => m.id !== yo?.id);
+  const puedeElegir = otras.length > 0;
 
   // El `id` de la orden lo genera esta pantalla y se conserva en los reintentos: abrir dos veces la misma
   // mesa con el mismo `id` devuelve la misma orden, no abre otra (criterio 12).
@@ -83,14 +93,6 @@ function FormularioDeApertura({ mesa, onCerrar }: { mesa: MesaPorAbrir; onCerrar
   const [eligiendo, setEligiendo] = useState(debeElegir);
   const [mozoId, setMozoId] = useState<string | null>(yo?.id ?? null);
   const [fallo, setFallo] = useState<string | null>(null);
-
-  const usuarios = useQuery({
-    queryKey: CLAVE_USUARIOS,
-    queryFn: ({ signal }) => listarUsuarios(signal),
-    enabled: puedeElegir && eligiendo,
-  });
-  const sucursalId = sesion.sucursal?.id ?? '';
-  const personas = usuarios.data ? personasQueAtienden(usuarios.data, sucursalId) : [];
 
   const abrir = useMutation({
     ...MUTACION_SIN_PAUSA,
@@ -180,14 +182,6 @@ function FormularioDeApertura({ mesa, onCerrar }: { mesa: MesaPorAbrir; onCerrar
           </div>
         ) : (
           <div className="salon-apertura__personas" role="group" aria-labelledby={idDelMozo}>
-            {usuarios.isPending ? (
-              <EsqueletoDeLista filas={3} etiqueta="Cargando personas" />
-            ) : null}
-            {usuarios.isError ? (
-              <Aviso tipo="error" titulo="No pudimos cargar a las personas">
-                <Boton onClick={() => void usuarios.refetch()}>Reintentar</Boton>
-              </Aviso>
-            ) : null}
             {yo ? (
               <BaldosaDeOpcion
                 titulo="Tú"
@@ -196,18 +190,15 @@ function FormularioDeApertura({ mesa, onCerrar }: { mesa: MesaPorAbrir; onCerrar
                 onElegir={() => setMozoId(yo.id)}
               />
             ) : null}
-            {personas
-              .filter((p) => p.id !== yo?.id)
-              .map((p) => (
-                <BaldosaDeOpcion
-                  key={p.id}
-                  titulo={p.nombre}
-                  detalle={p.rol}
-                  activa={mozoId === p.id}
-                  onElegir={() => setMozoId(p.id)}
-                />
-              ))}
-            {usuarios.data && personas.length === 0 && !yo ? (
+            {otras.map((p) => (
+              <BaldosaDeOpcion
+                key={p.id}
+                titulo={p.nombre}
+                activa={mozoId === p.id}
+                onElegir={() => setMozoId(p.id)}
+              />
+            ))}
+            {otras.length === 0 && !yo ? (
               <Aviso tipo="alerta" titulo="No hay quién atienda mesas">
                 Ninguna persona de esta sucursal puede atender mesas. Revisa los usuarios en
                 Ajustes.

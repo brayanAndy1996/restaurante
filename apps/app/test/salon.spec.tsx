@@ -7,7 +7,17 @@ import { espera } from '../src/lib/api';
 import { estadoDeTiempoReal } from '../src/lib/tiempo-real';
 import { ID, json, renderApp, servidor, sesionDe, type Manejador } from './ayudas';
 import { socketVigente } from './ayudas-tiempo-real';
-import { AHORA, mesa, salon, sesionDeRol, uuid, zona, Z_SALON, Z_TERRAZA } from './ayudas-salon';
+import {
+  AHORA,
+  MOZOS,
+  mesa,
+  salon,
+  sesionDeRol,
+  uuid,
+  zona,
+  Z_SALON,
+  Z_TERRAZA,
+} from './ayudas-salon';
 
 // spec: 004-salon-cocina, criterios 7, 8, 9, 10, 11, 88, 89 y 97 (pantalla del salón; pruebas no protegidas).
 
@@ -370,8 +380,7 @@ describe('Abrir mesa (criterios 9, 10, 11 y 89)', () => {
     expect(within(hoja).getByText('Mozo responsable')).toBeInTheDocument();
     expect(within(hoja).getByText('Tú')).toBeInTheDocument();
     expect(within(hoja).getByText('Marta Pérez')).toBeInTheDocument();
-    // Un Mozo abre a su nombre: la lista de personas es del Administrador.
-    expect(within(hoja).queryByRole('button', { name: 'Cambiar' })).toBeNull();
+    expect(within(hoja).getByRole('button', { name: 'Cambiar' })).toBeInTheDocument();
     expect(within(hoja).getByRole('button', { name: 'Abrir mesa' })).toBeEnabled();
   });
 
@@ -412,79 +421,64 @@ describe('Abrir mesa (criterios 9, 10, 11 y 89)', () => {
     expect(llamada?.cuerpo).not.toHaveProperty('mozoId');
   });
 
-  it('el Administrador puede elegir a otra persona que atienda mesas', async () => {
-    const OTRA = uuid(31);
-    const usuarios = [
-      {
-        id: ID.usuario,
-        nombre: 'Marta Pérez',
-        nombreUsuario: 'marta',
-        esAdministrador: true,
-        accesos: [],
-        activo: true,
-        horario: null,
-        largoPin: 6,
-        contrasenaTemporal: false,
-        equiposRecordados: 0,
-        creadoEn: AHORA,
-        actualizadoEn: AHORA,
-      },
-      {
-        id: OTRA,
-        nombre: 'Lucía Salón',
-        nombreUsuario: 'lucia',
-        esAdministrador: false,
-        accesos: [{ sucursalId: ID.sucursalA, rol: 'MOZO' }],
-        activo: true,
-        horario: null,
-        largoPin: 4,
-        contrasenaTemporal: false,
-        equiposRecordados: 0,
-        creadoEn: AHORA,
-        actualizadoEn: AHORA,
-      },
-      {
-        id: uuid(32),
-        nombre: 'Pedro Cocina',
-        nombreUsuario: 'pedro',
-        esAdministrador: false,
-        accesos: [{ sucursalId: ID.sucursalA, rol: 'COCINA_BARRA' }],
-        activo: true,
-        horario: null,
-        largoPin: 4,
-        contrasenaTemporal: false,
-        equiposRecordados: 0,
-        creadoEn: AHORA,
-        actualizadoEn: AHORA,
-      },
-    ];
-    const s = servidorDeSalon(sesionDeRol('ADMINISTRADOR'), grande(), {
-      'GET /usuarios': () => json(200, usuarios),
-      'POST /ordenes': () => json(201, orden({ mozo: { id: OTRA, nombre: 'Lucía Salón' } })),
-    });
-    renderApp('/salon');
-    const hoja = await abrirHoja('1');
-    await userEvent.click(within(hoja).getByRole('button', { name: 'Cambiar' }));
+  it.each(['MOZO', 'CAJERO', 'SUPERVISOR', 'ADMINISTRADOR'] as const)(
+    '%s puede elegir a otra persona que atienda mesas, de la lista de GET /salon',
+    async (rol) => {
+      const s = servidorDeSalon(sesionDeRol(rol), grande(), {
+        'POST /ordenes': () => json(201, orden({ mozo: { id: uuid(31), nombre: 'Lucía Salón' } })),
+      });
+      renderApp('/salon');
+      const hoja = await abrirHoja('1');
+      await userEvent.click(within(hoja).getByRole('button', { name: 'Cambiar' }));
 
-    // Solo quienes atienden mesas: Cocina/Barra no aparece.
-    expect(await within(hoja).findByRole('button', { name: /Lucía Salón/ })).toBeInTheDocument();
-    expect(within(hoja).queryByRole('button', { name: /Pedro Cocina/ })).toBeNull();
-    await userEvent.click(within(hoja).getByRole('button', { name: /Lucía Salón/ }));
-    await userEvent.click(within(hoja).getByRole('button', { name: 'Abrir mesa' }));
+      // La lista es la de `mozos` (Cocina/Barra no está) y no hace falta pedir usuarios.
+      expect(within(hoja).getByRole('button', { name: /Lucía Salón/ })).toBeInTheDocument();
+      expect(within(hoja).getByRole('button', { name: /Carla Caja/ })).toBeInTheDocument();
+      expect(within(hoja).getByRole('button', { name: /^Tú/ })).toBeInTheDocument();
+      expect(within(hoja).queryByRole('button', { name: /Pedro Cocina/ })).toBeNull();
+      await userEvent.click(within(hoja).getByRole('button', { name: /Lucía Salón/ }));
+      await userEvent.click(within(hoja).getByRole('button', { name: 'Abrir mesa' }));
 
-    await screen.findByRole('heading', { name: 'Cuenta de la mesa' });
-    expect(s.de('POST', '/ordenes')[0]?.cuerpo).toMatchObject({ mozoId: OTRA });
-  });
+      await screen.findByRole('heading', { name: 'Cuenta de la mesa' });
+      expect(s.de('POST', '/ordenes')[0]?.cuerpo).toMatchObject({ mozoId: uuid(31) });
+      expect(s.de('GET', '/usuarios')).toHaveLength(0);
+    },
+  );
 
-  it('el Administrador puede volver a "Tú" después de mirar la lista', async () => {
-    const s = servidorDeSalon(sesionDeRol('ADMINISTRADOR'), grande(), {
-      'GET /usuarios': () => json(200, []),
+  it('un Cajero que abre para un mozo ve marcada a la persona elegida antes de abrir', async () => {
+    servidorDeSalon(sesionDeRol('CAJERO'), grande(), {
       'POST /ordenes': () => json(201, orden()),
     });
     renderApp('/salon');
     const hoja = await abrirHoja('1');
     await userEvent.click(within(hoja).getByRole('button', { name: 'Cambiar' }));
-    await userEvent.click(await within(hoja).findByRole('button', { name: 'Volver a mí' }));
+    await userEvent.click(within(hoja).getByRole('button', { name: /Lucía Salón/ }));
+    // La elegida queda marcada y "Tú" deja de estarlo.
+    expect(within(hoja).getByRole('button', { name: /Lucía Salón/ })).toHaveAttribute(
+      'aria-current',
+      'true',
+    );
+    expect(within(hoja).getByRole('button', { name: /^Tú/ })).not.toHaveAttribute('aria-current');
+  });
+
+  it('sin otras personas que atiendan, no ofrece "Cambiar"', async () => {
+    servidorDeSalon(
+      sesionDeRol('MOZO'),
+      salon([zona(Z_SALON, 'Salón principal', [mesa(1, '1')])], [MOZOS[0]!]),
+    );
+    renderApp('/salon');
+    const hoja = await abrirHoja('1');
+    expect(within(hoja).queryByRole('button', { name: 'Cambiar' })).toBeNull();
+  });
+
+  it('se puede volver a "Tú" después de mirar la lista, y entonces no se manda mozoId', async () => {
+    const s = servidorDeSalon(sesionDeRol('CAJERO'), grande(), {
+      'POST /ordenes': () => json(201, orden()),
+    });
+    renderApp('/salon');
+    const hoja = await abrirHoja('1');
+    await userEvent.click(within(hoja).getByRole('button', { name: 'Cambiar' }));
+    await userEvent.click(within(hoja).getByRole('button', { name: 'Volver a mí' }));
     expect(within(hoja).getByText('Tú')).toBeInTheDocument();
     await userEvent.click(within(hoja).getByRole('button', { name: 'Abrir mesa' }));
     await screen.findByRole('heading', { name: 'Cuenta de la mesa' });
@@ -492,36 +486,18 @@ describe('Abrir mesa (criterios 9, 10, 11 y 89)', () => {
   });
 
   it('una sesión de soporte tiene que elegir quién atiende antes de poder abrir', async () => {
-    const OTRA = uuid(41);
     const soporte = { ...sesionDeRol('ADMINISTRADOR'), usuario: null };
     const s = servidorDeSalon(soporte, grande(), {
-      'GET /usuarios': () =>
-        json(200, [
-          {
-            id: OTRA,
-            nombre: 'Lucía Salón',
-            nombreUsuario: 'lucia',
-            esAdministrador: false,
-            accesos: [{ sucursalId: ID.sucursalA, rol: 'MOZO' }],
-            activo: true,
-            horario: null,
-            largoPin: 4,
-            contrasenaTemporal: false,
-            equiposRecordados: 0,
-            creadoEn: AHORA,
-            actualizadoEn: AHORA,
-          },
-        ]),
       'POST /ordenes': () => json(201, orden()),
     });
     renderApp('/salon');
     const hoja = await abrirHoja('1');
     expect(within(hoja).getByRole('button', { name: 'Abrir mesa' })).toBeDisabled();
     expect(within(hoja).getByText(/Elige quién atenderá la mesa/)).toBeInTheDocument();
-    await userEvent.click(await within(hoja).findByRole('button', { name: /Lucía Salón/ }));
+    await userEvent.click(within(hoja).getByRole('button', { name: /Lucía Salón/ }));
     await userEvent.click(within(hoja).getByRole('button', { name: 'Abrir mesa' }));
     await screen.findByRole('heading', { name: 'Cuenta de la mesa' });
-    expect(s.de('POST', '/ordenes')[0]?.cuerpo).toMatchObject({ mozoId: OTRA });
+    expect(s.de('POST', '/ordenes')[0]?.cuerpo).toMatchObject({ mozoId: uuid(31) });
   });
 
   it('si otra persona abrió la mesa antes, lo dice y lleva a su cuenta', async () => {

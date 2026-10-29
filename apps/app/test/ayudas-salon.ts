@@ -81,6 +81,16 @@ export function zona(
   return { id, nombre, columnas: extra.columnas ?? 3, filas: extra.filas ?? 2, mesas };
 }
 
-export function salon(zonas: SalonRespuesta['zonas']): SalonRespuesta {
-  return { sucursalId: ID.sucursalA, ahora: AHORA, zonas };
+/** Las personas que atienden mesas en la sucursal, por defecto Marta (quien entra), Lucía y Carla. */
+export const MOZOS = [
+  { id: ID.usuario, nombre: 'Marta Pérez' },
+  { id: uuid(31), nombre: 'Lucía Salón' },
+  { id: uuid(33), nombre: 'Carla Caja' },
+];
+
+export function salon(
+  zonas: SalonRespuesta['zonas'],
+  mozos: SalonRespuesta['mozos'] = MOZOS,
+): SalonRespuesta {
+  return { sucursalId: ID.sucursalA, ahora: AHORA, zonas, mozos };
 }

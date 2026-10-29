@@ -181,7 +181,11 @@ function SalonDeSucursal({
           </>
         ) : null}
       </div>
-      <AbrirMesaHoja mesa={porAbrir} onCerrar={() => setPorAbrir(null)} />
+      <AbrirMesaHoja
+        mesa={porAbrir}
+        mozos={datos?.salon.mozos ?? []}
+        onCerrar={() => setPorAbrir(null)}
+      />
     </Pagina>
   );
 }

@@ -1,6 +1,4 @@
-import type { UsuarioRespuesta } from '@restaurante/contratos';
 import { describe, expect, it } from 'vitest';
-import { personasQueAtienden } from '../src/modulos/salon/personas';
 import {
   CELDA_MAXIMA,
   CELDA_MINIMA,
@@ -174,58 +172,6 @@ describe('medidas del mapa', () => {
     expect(cabeElMapa(600, 7)).toBe(false);
     // Sin medida todavía, el mapa es lo normal.
     expect(cabeElMapa(0, 12)).toBe(true);
-  });
-});
-
-describe('personas que pueden ser el mozo responsable (decisión 8)', () => {
-  const S1 = '33333333-3333-4333-8333-333333333333';
-  const S2 = '44444444-4444-4444-8444-444444444444';
-  const usuario = (
-    n: number,
-    nombre: string,
-    accesos: UsuarioRespuesta['accesos'],
-    extra: Partial<UsuarioRespuesta> = {},
-  ): UsuarioRespuesta => ({
-    id: uuid(n),
-    nombre,
-    nombreUsuario: nombre.toLowerCase(),
-    esAdministrador: false,
-    accesos,
-    activo: true,
-    horario: null,
-    largoPin: 4,
-    contrasenaTemporal: false,
-    equiposRecordados: 0,
-    creadoEn: AHORA,
-    actualizadoEn: AHORA,
-    ...extra,
-  });
-
-  it('incluye Mozo, Cajero, Supervisor y Administrador de la sucursal; no Cocina/Barra ni otras sucursales ni inactivos', () => {
-    const lista = [
-      usuario(1, 'Zoila', [{ sucursalId: S1, rol: 'MOZO' }]),
-      usuario(2, 'Carla', [{ sucursalId: S1, rol: 'CAJERO' }]),
-      usuario(3, 'Pedro', [{ sucursalId: S1, rol: 'COCINA_BARRA' }]),
-      usuario(4, 'Sofía', [{ sucursalId: S1, rol: 'SUPERVISOR' }]),
-      usuario(5, 'Luis', [{ sucursalId: S2, rol: 'MOZO' }]),
-      usuario(6, 'Inés', [{ sucursalId: S1, rol: 'MOZO' }], { activo: false }),
-      usuario(7, 'Dueño', [], { esAdministrador: true }),
-    ];
-    expect(personasQueAtienden(lista, S1).map((p) => [p.nombre, p.rol])).toEqual([
-      ['Carla', 'Cajero'],
-      ['Dueño', 'Administrador'],
-      ['Sofía', 'Supervisor'],
-      ['Zoila', 'Mozo'],
-    ]);
-  });
-
-  it('un usuario con rol distinto en cada sucursal cuenta según la sucursal pedida', () => {
-    const mixto = usuario(8, 'Mixto', [
-      { sucursalId: S1, rol: 'COCINA_BARRA' },
-      { sucursalId: S2, rol: 'MOZO' },
-    ]);
-    expect(personasQueAtienden([mixto], S1)).toEqual([]);
-    expect(personasQueAtienden([mixto], S2)).toHaveLength(1);
   });
 });
 
