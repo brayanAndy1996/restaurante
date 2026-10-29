@@ -1556,11 +1556,14 @@ describe('criterio 70 · el arranque rechaza roles privilegiados en DATABASE_TIE
 // (al final del archivo: adelantan el reloj compartido y las sesiones de arriba dejan de valer)
 // ------------------------------------------------------------------------------------------------
 describe('criterios 64 y 66 · inactividad y vencimiento (con el reloj de la API)', () => {
+  /** Las sesiones de arriba pueden haber vencido con el reloj adelantado: el Administrador entra de nuevo. */
+  const adminNuevo = (m: Mundo) => sesionContrasena(ctx, m.e.A.base.admin, null);
+
   /** Sesión de contraseña de una persona con acceso solo a S1. */
   async function sesionNueva(
     m: Mundo,
   ): Promise<{ token: string; persona: Awaited<ReturnType<typeof crearPersona>> }> {
-    const persona = await crearPersona(ctx, m.tokens.A.adminSin, [
+    const persona = await crearPersona(ctx, await adminNuevo(m), [
       { sucursalId: m.e.A.S1, rol: 'MOZO' },
     ]);
     return { token: await sesionContrasena(ctx, persona, m.e.A.S1), persona };
@@ -1607,7 +1610,7 @@ describe('criterios 64 y 66 · inactividad y vencimiento (con el reloj de la API
 
   it('revisarAhora() desconecta una sesión de PIN a los 6 minutos sin uso (5 por defecto) y no a los 4', async () => {
     const m = await mundo();
-    const persona = await crearPersona(ctx, m.tokens.A.adminSin, [
+    const persona = await crearPersona(ctx, await adminNuevo(m), [
       { sucursalId: m.e.A.S1, rol: 'MOZO' },
     ]);
     const equipo = await equipoDe(ctx, persona);
