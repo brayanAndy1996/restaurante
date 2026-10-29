@@ -13,13 +13,13 @@ Entregas 3a (Salón y Cocina) y 3b (Impresión básica en la nube), aprobadas po
   - Pruebas en `test/salon/`.
 - `packages/contratos`: `src/salon.ts` (esquemas de 3a), `src/errores.ts` (códigos nuevos y `ordenId`), `src/usuarios.ts` (`sucursalAccesoEntradaSchema` con los dos campos opcionales y al menos uno; `sucursalAccesoRespuestaSchema` con `minutosInactividadCocina`).
 - `apps/api`:
-  - `src/modulos/salon/` (nuevo, dueño de `zona` y `mesa`): `zonas.controller.ts` / `zonas.service.ts`, `mesas.controller.ts` / `mesas.service.ts`, `mesas-consulta.service.ts` (exportado: mesas de una sucursal y bloqueo de mesas por id para pedidos).
+  - `src/modulos/salon/` (nuevo, dueño de `zona` y `mesa`): `zonas.controller.ts` / `zonas.service.ts`, `mesas.controller.ts` / `mesas.service.ts`, `mesas-consulta.service.ts` (exportado: mesas de una sucursal y bloqueo de mesas por id para pedidos), `uso-de-mesas.ts` (`UsoDeMesas`, exportado: donde pedidos registra cómo saber qué mesas tienen una orden abierta; falla cerrado, ver "Mesas en uso").
   - `src/modulos/pedidos/` (nuevo, dueño de `orden`, `orden_mesa`, `envio`, `marcha`, `item`, `comanda`, `comanda_linea`, `anulacion_item`, `precuenta`): ver "Estructura del módulo `pedidos`".
   - `src/nucleo/tiempo-real/` (nuevo): servidor Socket.IO, adaptador, `PublicadorSocketIo`, revisión de sesiones; ver "Tiempo real".
   - `src/nucleo/eventos/publicador-eventos.ts`: `SalaDeEvento` gana `{ tipo: 'puente', puenteId }`.
   - `src/nucleo/base-de-datos/control-transaccion.ts`: nombres nuevos en `NOMBRES_PROHIBIDOS` (70).
   - `src/nucleo/base-de-datos/verificar-roles.ts` y `scripts/db-preparar`: rol `restaurante_tiempo_real` y esquema `tiempo_real` (70).
-  - `src/modulos/seguridad/`: `ValidadorDeSesion` (extraído de `ResolutorEmpresaSesion`, mismo comportamiento), `UsuariosConsultaService.puedenAtenderMesa`, `SesionActual.autorizacionConsumida()` (y `PermisoInterceptor` la guarda), cierre de sockets al cerrar sesión (llamando al puerto de tiempo real con `alConfirmar`). Inactividad de Cocina/Barra (63b, 63c; decisión 11): `inactividad.ts` (nuevo, con `minutosDeInactividad`), `constantes-acceso.ts` (`MINUTOS_INACTIVIDAD_COCINA_POR_DEFECTO = 60`), `autenticacion.guard.ts`, `sesiones.service.ts`, `ingreso-pin.service.ts`, `acceso-sucursal.service.ts` y `acceso-sucursal.controller.ts`, y `ValidadorDeSesion`; sesiones de PIN y de contraseña; ver "Inactividad de Cocina/Barra".
+  - `src/modulos/seguridad/`: `ValidadorDeSesion` (extraído de `ResolutorEmpresaSesion`, mismo comportamiento), `UsuariosConsultaService.puedenAtenderMesa` y `quienesAtiendenMesa` (la lista `mozos` de `GET /salon`, con la misma regla), `SesionActual.autorizacionConsumida()` (la guarda quien consume la autorización), `ClaveDiferidaInterceptor` y el decorador `@ClaveDespuesDeValidar` (`clave-diferida.interceptor.ts` y `decoradores.ts`; ver "Anular un ítem"), cierre de sockets al cerrar sesión (llamando al puerto de tiempo real con `alConfirmar`). Inactividad de Cocina/Barra (63b, 63c; decisión 11): `inactividad.ts` (nuevo, con `minutosDeInactividad`), `constantes-acceso.ts` (`MINUTOS_INACTIVIDAD_COCINA_POR_DEFECTO = 60`), `autenticacion.guard.ts`, `sesiones.service.ts`, `ingreso-pin.service.ts`, `acceso-sucursal.service.ts` y `acceso-sucursal.controller.ts`, y `ValidadorDeSesion`; sesiones de PIN y de contraseña; ver "Inactividad de Cocina/Barra".
   - `src/modulos/carta/`: `CartaConsultaService` exportado (estaciones activas).
   - `src/aplicacion.ts`: opciones `inventario` y `tiempoReal`; arranque del servidor de Socket.IO sobre el servidor HTTP de Nest.
   - `src/config/entorno.ts`: `TIEMPO_REAL`, `DATABASE_TIEMPO_REAL_URL`, `DB_PASSWORD_TIEMPO_REAL`.
@@ -94,7 +94,7 @@ Una sola transacción (la de la petición):
 
 1. Forma (`PipeZod`): 400. `@Idempotente()`: réplica de la misma clave.
 2. `bloquearOrden(id)`: `SELECT … FROM orden WHERE id = $1 AND sucursal_id = $2 FOR UPDATE` (404 si no). Serializa los envíos, marchas, anulaciones, uniones y pre-cuentas de la misma orden; el número del envío y "es adición" se calculan con la orden bloqueada (28).
-3. **Réplica por id** (26): `SELECT … FROM envio WHERE id = $1` (bajo RLS). Si existe, compara su `huella_entrada` (SHA-256 de la entrada normalizada: ids en minúsculas, modificadores ordenados, valores por defecto) y su orden; igual → responde el envío guardado armado con `vista-orden.ts` (201), sin efectos; distinta → 422. Va antes del estado de la orden y de la validación de las líneas, para que una réplica después de un agotado o una anulación devuelva el éxito original. Réplicas concurrentes: la segunda espera el bloqueo de la orden del paso 2 y, al seguir, ya encuentra el envío (27).
+3. **Réplica por id** (26): `SELECT … FROM envio WHERE id = $1` (bajo RLS). Si existe, compara su `huella_entrada` (SHA-256 de la entrada normalizada: ids en minúsculas, modificadores ordenados, valores por defecto) y su orden; igual → responde el envío guardado armado con `vista-orden.ts` (201), sin efectos; distinta → 422. La respuesta de la réplica es una **instantánea del envío original** (decisión del orquestador del 2026-10-29, ronda 1): el mismo cuerpo que dio la primera respuesta (sus ítems con la cantidad enviada, sin anulaciones, en estado `ENVIADO` y con el conteo de cocina de ese momento, y sus comandas), aunque después se hayan anulado ítems, unido la orden o cambiado estados en el KDS; así el criterio 25 ("el mismo estado y cuerpo") vale igual para la réplica por id (26) y para la de la misma clave. Va antes del estado de la orden y de la validación de las líneas, para que una réplica después de un agotado o una anulación devuelva el éxito original. Réplicas concurrentes: la segunda espera el bloqueo de la orden del paso 2 y, al seguir, ya encuentra el envío (27).
 4. Estado: `UNIDA` → 409 con `unidaA`; `ANULADA`/`CERRADA` → 409.
 5. Para cada línea, `CartaVentaService.prepararLinea({ …, instante: reloj.ahora() })`; junta los rechazos de todas (17) y, si hay alguno, lanza 422 con `campos` por línea. Las líneas que comparten producto se preparan igual una por una (la carta ya cachea poco; con 50 líneas como máximo son ≤ 50 llamadas de 7 consultas: ver "Riesgos").
 6. Montos: `excedeMontoMaximo(linea.total)` por línea y `excedeMontoMaximo(totalOrden(ítems vigentes + nuevos))` (21).
@@ -114,40 +114,61 @@ Bloquea la orden, busca la réplica por `marcha.id`, elige los ítems (`tiempo =
 
 ### Anular un ítem (34 a 41, ruta crítica)
 
-Orden de los interceptores de la ruta: autenticación y rol, idempotencia (réplica de la misma clave: devuelve lo guardado sin pasar por `@Permiso`), permiso (consume la autorización y guarda en `SesionActual` la consumida), módulo, controlador. Si el orden por defecto de Nest no deja la idempotencia antes del permiso, se aplica `IdempotenciaInterceptor` de forma explícita antes en estas rutas (las rutas de 002 no combinan los dos con una acción `clave`, así que no cambian).
+**Clave diferida** (`ClaveDiferidaInterceptor`, decisión del orquestador del 2026-10-29, ronda 1). En las rutas con clave de esta sección (`POST …/items/:itemId/anulaciones` y `POST …/anulacion`), `PermisoInterceptor` solo comprueba el rol (403 `PROHIBIDO`) y deja el consumo de la autorización a `ClaveDiferidaInterceptor`, que lo aplica el decorador `@ClaveDespuesDeValidar({ cuerpo, uuids })`. Ese interceptor corre después de `PermisoInterceptor`, `ModuloInterceptor`, `IdempotenciaInterceptor` (si la misma `Idempotency-Key` ya tiene respuesta guardada, la devuelve y la clave ni se mira: la réplica no consume de nuevo) y la exigencia de `Idempotency-Key` (400 sin ella). Como los pipes de Nest corren después de todos los interceptores, valida antes la entrada con los mismos esquemas de la ruta (`cuerpo`) y los parámetros UUID (`uuids`), así un cuerpo inválido responde 400 sin consumir; recién entonces, si el rol de la sucursal activa tiene la acción como `clave`, consume la autorización (403 `CLAVE_REQUERIDA` o `AUTORIZACION_INVALIDA`) en la transacción de la petición y la deja en `SesionActual.autorizacionConsumida()`. Si la acción falla después, el consumo se revierte con la transacción (36). Es el orden de rechazos de "Contrato" (403 de rol, 409 de sucursal, 403 de módulo, 400 de forma, réplica de la misma clave, 403 de clave, 404, réplica del mismo id, 409, 422).
+
+Orden de los decoradores: los interceptores de una ruta corren en el orden en que se aplican los decoradores, de abajo hacia arriba, así que `@ClaveDespuesDeValidar` va **encima** de los demás:
+
+```ts
+@Post('anulaciones')
+@ClaveDespuesDeValidar({ cuerpo: anularItemEntradaSchema, uuids: ['id', 'itemId'] })
+@IdempotenteObligatoria()
+@RequiereModulo('SALON')
+@Permiso('ANULAR_ITEM_ENVIADO')
+```
+
+`POST …/anulacion` usa el mismo orden con `anularOrdenEntradaSchema`, `uuids: ['id']` y `@Permiso('ANULAR_ORDEN')`. Las rutas de 002 no llevan `@ClaveDespuesDeValidar` y no cambian: en ellas `@Permiso` sigue consumiendo la clave como antes.
 
 1. Bloquea la orden (404 si el ítem no es de esa orden de la sucursal activa).
-2. Réplica por `anulacion_item.id` con `huella_entrada` (37).
+2. Réplica por `anulacion_item.id` con `huella_entrada` (37): SHA-256 del ítem, la cantidad y el destino del stock, sin el motivo. Mismo id y misma huella (aunque cambie el motivo) → devuelve la anulación existente; otra huella → 422.
 3. Estado de la orden (409), ítem (`ITEM_NO_ANULABLE`), cantidad (422).
-4. `UPDATE item SET cantidad_anulada = cantidad_anulada + $n, estado = CASE …`; `INSERT anulacion_item` con `autorizado_por_id` y `autorizacion_id` de `SesionActual.autorizacionConsumida()`.
+4. `UPDATE item SET cantidad_anulada = cantidad_anulada + $n, estado = CASE …`; `INSERT anulacion_item` con `autorizado_por_id` y `autorizacion_id` de `SesionActual.autorizacionConsumida()` (la consumió `ClaveDiferidaInterceptor`).
 5. Comandas `ANULACION`: para cada estación de las partes del ítem (recalculadas con `partesDeComanda` sobre la `linea` guardada), una comanda con líneas de `cantidad` fija = `cantidad_por_item × n`. Las líneas originales con vigente 0 pasan a `ANULADO`.
 6. `INVENTARIO.alAnular({ partes: partesDeStock(linea, n), destino })`.
 7. Pre-cuenta: invalidar si estaba `EN_PRECUENTA`, también en una anulación parcial (decisión 10). `orden.version += 1`.
 8. `AuditoriaService.registrar({ accion: 'anular_item', entidad: 'item', … })` (41).
 9. Eventos.
 
-Anular la orden (42, 43) hace los pasos 4 a 6 para cada ítem vigente con la orden bloqueada, cierra `orden_mesa` y deja una sola fila `anular_orden`.
+Anular la orden (42, 43) hace los pasos 4 a 6 para cada ítem vigente con la orden bloqueada, cierra `orden_mesa` y deja una sola fila `anular_orden`. Liberar sin consumo (44) bloquea la orden, comprueba que no tenga envíos, la deja `ANULADA` con `sin_consumo`, cierra `orden_mesa`, deja la fila `liberar_mesa` y registra con `alConfirmar` `salon.cambio` y `orden.cambio` (decisión del orquestador del 2026-10-29, ronda 1).
 
 ### Mover y unir (45 a 49)
 
 - `bloqueos-orden.ts` toma, en una sola consulta ordenada por id, las órdenes involucradas (`FOR UPDATE`) y luego las mesas (`MesasConsultaService.bloquear`, también por id). Siempre órdenes antes que mesas; la apertura toma solo la mesa, y el envío solo la orden, así que no se forman ciclos. Lo que se escape responde 409 `CONFLICTO` (traducción de `40P01` de 003).
 - Para saber qué órdenes ocupan las mesas pedidas se lee `orden_mesa` sin bloqueo, se bloquean esas órdenes y se vuelve a leer; si cambió, se repite una vez y luego 409 `CONFLICTO`.
+- **Tope del total al unir** (criterio 21; falla F2 de la ronda 1): con las órdenes ya bloqueadas y antes de cualquier `UPDATE`, se calcula `totalOrden` con los ítems vigentes de la principal y de todas las órdenes que absorbe; si `excedeMontoMaximo` da `true`, 422 `MONTO_FUERA_DE_RANGO` y la transacción no cambia nada (ni auditoría ni eventos).
 - Unir con otra orden: `UPDATE item SET orden_id = principal WHERE orden_id = O2`; `UPDATE orden_mesa SET orden_id = principal WHERE orden_id = O2 AND hasta IS NULL` (cerrando y abriendo filas para conservar el historial); O2 `UNIDA`, `unida_a_orden_id`; comensales sumados; versiones e invalidación de pre-cuentas; auditoría `unir_ordenes`.
 - Los envíos guardan su `orden_id` de origen (no cambia), así el número de envío y "es adición" de la orden absorbida se conservan en sus ítems; la vista de la orden agrupa por envío.
 
+### Mesas en uso (criterio 4)
+
+`salon` no puede consultar `orden` ni importar `PedidosModule`; para responder 409 `EN_USO` al desactivar una mesa con orden abierta usa `UsoDeMesas`, donde `PedidosConsultaService` registra al arrancar su comprobador (qué mesas de la lista tienen una orden abierta). `UsoDeMesas` **falla cerrado** (decisión del orquestador del 2026-10-29, tras la ronda 1 y la revisión de 3a): si no hay ningún comprobador registrado (un error de arranque o de módulos), no da las mesas por libres; `conOrdenAbierta` lanza un error interno (500 sin detalles) y la mesa no se desactiva. Un comprobador que lanza tampoco se trata como "sin uso": el error sube y la transacción se revierte.
+
 ### Pre-cuenta (50 a 54)
 
-Bloquea la orden, busca la réplica por id, comprueba la pre-cuenta vigente (`version_orden = orden.version` → la devuelve), si no inserta una nueva con `numero` siguiente, sus `lineas` y `total = totalOrden(...)` (con `excedeMontoMaximo`, que nunca debería fallar por el criterio 21), pone `EN_PRECUENTA`. En 3b, `IMPRESION.encolar` del trabajo `PRECUENTA` (también cuando devuelve la vigente, salvo réplica del mismo id o clave).
+Bloquea la orden, busca la réplica por id, comprueba la pre-cuenta vigente: si existe una con `invalidada_en IS NULL` y `version_orden = orden.version`, la devuelve (52); si existe una sin invalidar con otra versión, le pone `invalidada_en = ahora` (decisión del orquestador del 2026-10-29, ronda 1; el índice único parcial `(orden_id) WHERE invalidada_en IS NULL` exige invalidarla antes de insertar la siguiente). Después inserta una nueva con `numero` siguiente, sus `lineas` y `total = totalOrden(...)` (con `excedeMontoMaximo`, que nunca debería fallar por el criterio 21), pone `EN_PRECUENTA`. En 3b, `IMPRESION.encolar` del trabajo `PRECUENTA` (también cuando devuelve la vigente, salvo réplica del mismo id o clave).
 
 ### Vista de la orden y del salón (7, 55)
 
 - `vista-orden.ts` arma `ordenRespuesta` con consultas fijas: orden, mesas vigentes, ítems con su autor (nombre por `UsuariosConsultaService`), conteo de líneas por estado y por ítem, pre-cuenta vigente. `total` y `totalVigente` con `packages/dominio`.
-- `GET /salon`: zonas y mesas (`MesasConsultaService`), órdenes abiertas de la sucursal con sus mesas vigentes y sus ítems vigentes (para `totalOrden`), y nombres de mozos: cinco consultas, sin importar cuántas mesas. `ETag` con el mismo ayudante de la carta (`etag-carta.ts` pasa a `nucleo/http/etag.ts` para compartirlo; la carta lo reexporta).
+- `GET /salon`: zonas y mesas (`MesasConsultaService`), órdenes abiertas de la sucursal con sus mesas vigentes y sus ítems vigentes (para `totalOrden`), nombres de mozos y la lista `mozos` de quienes pueden ser mozo responsable (`UsuariosConsultaService.quienesAtiendenMesa(sucursalId)`, con la misma regla que `puedenAtenderMesa`; criterios 7, 10 y 89): un número fijo de consultas, sin importar cuántas mesas. El `ETag` cubre también `mozos`, así un cambio de rol o de acceso de una persona invalida el 304. `ETag` con el mismo ayudante de la carta (`etag-carta.ts` pasa a `nucleo/http/etag.ts` para compartirlo; la carta lo reexporta).
 
 ### KDS (56 a 63)
 
 - `GET /cocina/comandas`: tres consultas fijas (comandas de la sucursal con líneas pendientes o no vistas, más las recientes; sus líneas; las órdenes con mesas y mozo). En 3b, solo `destino = 'KDS'`.
+- **Recientes** (56; decisión del orquestador del 2026-10-29, ronda 1): comandas no pendientes cuya actividad, `greatest(comanda.creado_en, comanda.vista_en, max(comanda_linea.estado_en))`, cae en los últimos 60 minutos del reloj de la API; hasta 30, en orden de llegada.
+- **Índices parciales del KDS** (migración `202610300006`): `comanda_linea (comanda_id) WHERE estado IN ('ENVIADO','EN_PREPARACION')` para las líneas pendientes y `comanda (sucursal_id, creado_en) WHERE vista_en IS NULL AND tipo IN ('MARCHAR','ANULACION')` para las comandas sin ver, así la consulta de pendientes no recorre las comandas terminadas.
 - `PUT /cocina/lineas/:id/estado`: bloquea la línea `FOR UPDATE`, valida con `transicionKdsValida`, actualiza `estado` y `estado_en`, y registra `cocina.linea` y, si pasa a `LISTO`, `cocina.listo` con los destinatarios (mozo de la orden vigente del ítem y `creado_por_usuario_id` del ítem).
+- `PUT /cocina/comandas/:id/listo` (59): bloquea las líneas de la comanda en orden de id y pasa a `LISTO` solo las `ENVIADO` o `EN_PREPARACION` que no esperan la marcha (`esperar = false`); las de segundo tiempo sin marchar siguen `ENVIADO` y no generan `cocina.linea` ni `cocina.listo`.
+- `PUT /cocina/comandas/:id/visto` (59): si `vista_en` es nulo, lo fija y registra `cocina.visto` `{ comandaId }` con `alConfirmar`; si ya estaba vista, responde igual sin publicar. La PWA lo usa para quitar la comanda de pendientes en los demás KDS, sin sonido.
 
 ### Inactividad de Cocina/Barra (63b, 63c; decisión 11)
 
@@ -225,6 +246,12 @@ Puente (3b)    --wss /tiempo-real (espacio "/puente")-->        |
 | Inactividad de Cocina/Barra como columna de `sucursal_acceso` y campo de `GET`/`PATCH /sucursales/:id/acceso` (decisión 11) | Una ruta nueva solo para Cocina/Barra; un valor por usuario | Es la misma configuración de acceso de la sucursal, del mismo módulo y con la misma auditoría; el costo es ajustar la forma exacta de la respuesta en dos pruebas protegidas de 002 (P0) |
 | Un solo cálculo de la inactividad (`minutosDeInactividad`) | Calcularla en cada lugar | El guard, `GET /sesion`, el ingreso con PIN o contraseña y Socket.IO deben dar el mismo vencimiento |
 | T19 primero en C1 (decisión del orquestador, 2026-10-29) | Dejarla en C4, junto al KDS | P0 ajusta tres aserciones protegidas de 002; implementarlas en la primera tarea de la fase C evita que 002 quede en rojo entre commits |
+| Cantidades en `integer` con la migración `202610300006` (falla F1 de la ronda 1) | Seguir con `smallint` y acotar la cantidad de los componentes | 33 × 999 = 32 967 pasa de 32 767; `integer` cubre cualquier combinación de los límites de 003 y de esta sección sin cambiar ninguna regla de negocio |
+| `ClaveDiferidaInterceptor` con `@ClaveDespuesDeValidar` en las rutas con clave de pedidos | Cambiar el orden global de los interceptores de 002; consumir la clave dentro del servicio | Cumple el orden de rechazos de "Contrato" (400 y la réplica de la misma clave antes del 403 de clave) sin tocar las rutas de 002; el consumo sigue en la transacción de la petición |
+| `UsoDeMesas` falla cerrado | Sin comprobador, ninguna mesa en uso | Un error de módulos no debe permitir desactivar una mesa con una cuenta abierta |
+| La réplica del envío es una instantánea del envío original | Armar la réplica con el estado actual de los ítems | El criterio 25 pide el mismo cuerpo; con el estado actual, una réplica después de una anulación respondería otra cosa |
+| Huella de la anulación sin el motivo (criterio 37) | Incluir el motivo | El motivo es texto libre que no cambia qué se anula; lo que identifica la anulación para no repetirla es el ítem, la cantidad y el destino del stock |
+| Tope del total también al unir (criterio 21, falla F2) | Comprobarlo solo al enviar | Unir suma totales de varias órdenes y podía dejar una orden por encima de `NUMERIC(10,2)` |
 
 ## Migraciones
 
@@ -236,7 +263,8 @@ Con fecha posterior a `202610290005`. Todas las tablas de `public` con `sqlTabla
 - `202610300002-pedidos.ts` (C2 y C3): `orden` (con `version`), `orden_mesa`, `envio`, `item`, `comanda`, `comanda_linea`, `marcha`. Clave primaria `(empresa_id, id)` en `orden`, `envio` y `marcha`.
 - `202610300003-anulaciones-precuentas.ts` (C5 y C6): `anulacion_item`, `precuenta` (las dos con clave primaria `(empresa_id, id)`).
 - `202610300004-tiempo-real.ts` (C2): esquema `tiempo_real` y `socket_io_attachments`, `GRANT` al rol `restaurante_tiempo_real` (que crea `db:preparar`, porque los roles no se crean en migraciones). `down` borra el esquema.
-- `202610300005-inactividad-cocina.ts` (C1, primera migración que se aplica en la fase C aunque su número sea el último; decisión 11): columna `sucursal_acceso.minutos_inactividad_cocina` (1 a 720, por defecto 60). Es una tabla del módulo seguridad de 002; la migración solo agrega la columna.
+- `202610300005-inactividad-cocina.ts` (C1, primera migración que se aplica en la fase C aunque su número sea el último de las cinco originales; decisión 11): columna `sucursal_acceso.minutos_inactividad_cocina` (1 a 720, por defecto 60). Es una tabla del módulo seguridad de 002; la migración solo agrega la columna.
+- `202610300006-cantidades-integer.ts` (fase D, ronda 1; falla F1): `ALTER COLUMN … TYPE integer` en `item.cantidad`, `item.cantidad_anulada`, `comanda_linea.cantidad_por_item`, `comanda_linea.cantidad` y `anulacion_item.cantidad` (sus `CHECK` siguen iguales), y los dos índices parciales del KDS ("KDS"). No escribe datos. `down` borra los índices y vuelve las columnas a `smallint`; solo funciona si ningún valor pasa de 32 767 (en T32 se revierte sobre una base sin datos). Las migraciones ya aplicadas (`202610300002` y `202610300003`) no se editan.
 
 **3b**
 
@@ -251,7 +279,7 @@ Ninguna migración escribe datos. `pnpm db:revertir` de cada una deja el esquema
 - **Doble envío por cambio de usuario.** Es el riesgo principal de RNF-10 y lo cubren el id del envío y el borrador por persona (26, 92). Queda un caso: el primer mozo nunca vuelve y otro reescribe el pedido a mano en su equipo con otro id. Mitigación: la cuenta muestra "Comanda enviada hace 1 min por Ana" y el KDS el autor.
 - **Costo de `prepararLinea` por línea.** Cada llamada hace las siete consultas del cargador de 003 restringidas al producto; un envío de 50 líneas son 350 consultas pequeñas, del orden de 100 a 300 ms. Aceptable para RNF-02 (5 s); si molesta, `CartaVentaService` puede ganar `prepararLineas` (un solo cargador para varias), sin cambiar el contrato.
 - **Bloqueo de la orden con transacciones largas.** El envío dentro de la transacción llama a la carta y al puerto de inventario; si la sección 6 lo hace lento, retiene la orden más tiempo. Mitigación: la sección 6 debe mantener `alEnviar` en consultas fijas por envío.
-- **Interceptores en el orden correcto.** Que la réplica de la misma clave no vuelva a consumir la autorización depende del orden de `@Idempotente()` y `@Permiso()`. Lo prueba P3 (criterio 37) y lo revisa el adversarial.
+- **Interceptores en el orden correcto.** Que la réplica de la misma clave no vuelva a consumir la autorización y que un 400 salga antes que el 403 de clave depende de que `@ClaveDespuesDeValidar` quede encima de `@IdempotenteObligatoria()`, `@RequiereModulo()` y `@Permiso()` ("Anular un ítem"), y de que su `validacion` repita exactamente los esquemas de la ruta. Lo prueba P3 (criterio 37) y lo revisó el adversarial en la ronda 1; una ruta nueva con clave en la sección 4 debe seguir el mismo orden.
 - **Socket.IO y las sesiones.** Una conexión puede quedar viva hasta 60 s después de que la sesión vence por inactividad; solo recibe ids y estados de su sucursal. Se acepta; los cierres explícitos son inmediatos.
 - **`NOTIFY` y su carga.** Todos los eventos de todas las empresas pasan por el mismo canal de PostgreSQL y cada instancia los recibe. Con pocas instancias y eventos chicos, el costo es bajo; el aislamiento depende de que las salas lleven la empresa (67) y de que nadie más escuche el canal (70). El adversarial debe intentarlo.
 - **`pg_notify` en producción.** Sin superusuario no se puede quitar `EXECUTE` de `pg_notify` a `PUBLIC`; queda la guarda de la API como barrera, igual que con las funciones del criterio 38e de 001.
@@ -260,4 +288,6 @@ Ninguna migración escribe datos. `pnpm db:revertir` de cada una deja el esquema
 - **Impresoras genéricas.** Las páginas de códigos varían entre marcas; por eso el juego de caracteres es configurable y hay página de prueba. La lista recomendada sale de las pruebas manuales de 3c.
 - **Duplicados de impresión.** Con "al menos una vez", un corte entre la impresión y el reporte imprime dos veces; se acepta (el cocinero ve "REIMPRESIÓN" solo en las pedidas a mano; un duplicado automático es raro).
 - **Tamaño de la sección.** Aun dividida, 3a tiene 100 criterios. Mitigación: commits por historia (C1 a C6), y los grupos C5 (anulaciones) y C6 (mover, unir y pre-cuenta) se pueden reordenar si hace falta.
-- **Tamaño de la PWA.** Socket.IO cliente y el QR suman unos 35 KB; el QR va bajo demanda en Ajustes. El presupuesto de 170 KB gzip de 003 (160.6 KB usados) se excede con el cliente de Socket.IO en el paquete inicial: se carga bajo demanda al abrir Salón o Cocina, y si aun así no alcanza, el revisor propone subir el presupuesto con su motivo.
+- **Tamaño de la PWA.** Socket.IO cliente y el QR suman unos 35 KB; el QR va bajo demanda en Ajustes. El presupuesto de 170 KB gzip de 003 (160.6 KB usados) se excede con el cliente de Socket.IO en el paquete inicial: se carga bajo demanda al abrir Salón o Cocina, y si aun así no alcanza, el revisor propone subir el presupuesto con su motivo. Al cierre de la revisión de 3a quedan unos 2.9 kB de margen (riesgo aceptado, `spec.md`, "Riesgos aceptados"): el QR de 3b va bajo demanda y todo lo nuevo de 3b debe ir igual.
+- **Riesgos aceptados de 3a** (`spec.md`, "Riesgos aceptados"): la autorización de clave atada a sesión, persona, sucursal y acción pero no al ítem ni a la orden; la sesión vencida sin cerrar que revive si el Administrador cambia el rol o alarga la inactividad antes de su siguiente petición; la cantidad fija de las líneas `MARCHAR`; el margen de la PWA. No se corrigen en 3a.
+- **Migración de tipos sobre tablas con datos.** `202610300006` cambia el tipo de columnas de tablas que en producción ya podrían tener filas; `ALTER COLUMN … TYPE integer` reescribe la tabla con un bloqueo exclusivo. Mientras 3a no esté en producción no hay filas que reescribir; si se aplicara con datos, conviene hacerlo fuera del horario de atención.
