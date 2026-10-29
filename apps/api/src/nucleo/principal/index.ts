@@ -7,4 +7,8 @@ export {
 } from './almacen';
 export type { AutorizacionDePeticion, PeticionConPrincipal } from './almacen';
 export { PrincipalInterceptor } from './principal.interceptor';
-export { METADATO_SUPERADMINISTRADOR } from './metadatos';
+export {
+  METADATO_PUENTE,
+  METADATO_SUPERADMINISTRADOR,
+  METADATO_VINCULACION_PUENTE,
+} from './metadatos';

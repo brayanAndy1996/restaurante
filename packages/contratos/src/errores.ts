@@ -51,6 +51,9 @@ export const CODIGOS_ERROR = [
   'ITEM_NO_ANULABLE',
   'TRANSICION_INVALIDA',
   'MONTO_FUERA_DE_RANGO',
+  // Entrega 3b (impresión): la vinculación del puente y la reimpresión sin impresora.
+  'VINCULACION_INVALIDA',
+  'SIN_IMPRESORA',
 ] as const;
 
 export const codigoErrorSchema = z.enum(CODIGOS_ERROR);

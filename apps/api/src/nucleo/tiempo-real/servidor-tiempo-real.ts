@@ -6,6 +6,7 @@ import {
   type OnModuleDestroy,
 } from '@nestjs/common';
 import { HttpAdapterHost } from '@nestjs/core';
+import { ESPACIO_PUENTE } from '@restaurante/contratos';
 import { Server, type Socket } from 'socket.io';
 import { ENTORNO, type Entorno } from '../../config/entorno';
 import { verificarRolDePool } from '../base-de-datos/verificar-roles';
@@ -28,6 +29,7 @@ export const INTERVALO_DE_REVISION_MS = 60_000;
 /** Los mensajes de error con los que se rechaza una conexión. */
 const NO_AUTENTICADO = 'NO_AUTENTICADO';
 const ERROR_INTERNO = 'ERROR_INTERNO';
+const NO_IMPLEMENTADO = 'No implementado';
 
 /** Peso a partir del cual un evento es un error de programación (criterio 69). */
 const PESO_MAXIMO_DE_EVENTO = 4096;
@@ -102,6 +104,9 @@ export class ServidorTiempoReal implements OnApplicationBootstrap, OnModuleDestr
       void this.autenticar(socket, siguiente);
     });
     io.on('connection', (socket) => this.alConectar(socket));
+    // Espacio del puente de impresión (3b, criterio 111). Firma de la fase A (T35): rechaza toda conexión hasta
+    // que T40 verifique el token `pu.…` y asigne la sala del puente.
+    io.of(ESPACIO_PUENTE).use((_socket, siguiente) => siguiente(new Error(NO_IMPLEMENTADO)));
     this.io = io;
     // Listo para recibir lo que publiquen las otras instancias antes de que `app.init()` termine.
     await pool.esperarEscucha(CANAL_DEL_ESPACIO_PWA);

@@ -3,7 +3,9 @@ import { Reflector } from '@nestjs/core';
 import { ResolutorEmpresaPorCabecera } from '../../nucleo/contexto-empresa/resolutor-empresa-por-cabecera';
 import { ErrorAplicacion } from '../../nucleo/errores/error-aplicacion';
 import {
+  METADATO_PUENTE,
   METADATO_SUPERADMINISTRADOR,
+  METADATO_VINCULACION_PUENTE,
   type PeticionConPrincipal,
   type Principal,
 } from '../../nucleo/principal';
@@ -22,8 +24,9 @@ const ACTIVIDAD_SEGUNDO_PLANO = 'segundo-plano';
 
 /**
  * Guard global de autenticación (historia 002, criterios 1 a 9): toda ruta exige sesión salvo las
- * marcadas `@Publica()` (lista cerrada) y las de `/plataforma/*` con `@Superadministrador()`, que valida
- * su propio guard. Una ruta nueva sin decorador queda cerrada, no abierta.
+ * marcadas `@Publica()` (lista cerrada), las de `/plataforma/*` con `@Superadministrador()` y las de `/puente/*`
+ * con `@Puente()` o `@VinculacionPuente()` (entrega 3b), que validan su propio guard. Una ruta nueva sin
+ * decorador queda cerrada, no abierta.
  *
  * Con sesión: parsea `Authorization: Bearer se.<empresa>.<sesión>.<secreto>` (cualquier otra forma,
  * incluidos los tokens `sa.` y `eq.`, es 401 sin consultar nada), la valida con `ValidadorDeSesion` (el mismo
@@ -53,7 +56,14 @@ export class AutenticacionGuard implements CanActivate {
         contexto.getHandler(),
         contexto.getClass(),
       ]) === true;
-    if (marca(PUBLICA) || marca(METADATO_SUPERADMINISTRADOR)) return true;
+    if (
+      marca(PUBLICA) ||
+      marca(METADATO_SUPERADMINISTRADOR) ||
+      marca(METADATO_PUENTE) ||
+      marca(METADATO_VINCULACION_PUENTE)
+    ) {
+      return true;
+    }
 
     const peticion = contexto.switchToHttp().getRequest<PeticionConPrincipal>();
     const autorizacion = peticion.headers.authorization;

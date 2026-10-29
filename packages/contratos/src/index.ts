@@ -9,3 +9,5 @@ export * from './autorizaciones';
 export * from './suscripciones';
 export * from './carta';
 export * from './salon';
+export * from './impresion';
+export * from './puente';
