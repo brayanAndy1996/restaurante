@@ -700,7 +700,7 @@ const CLAVES_DE_EVENTO: Record<string, string[]> = {
   'salon.cambio': ['mesaIds', 'ordenId'],
   'orden.cambio': ['ordenId'],
   'cocina.comanda': ['comandaId', 'estacionId', 'tipo'],
-  'cocina.linea': ['comandaId', 'lineaId', 'estado'],
+  'cocina.linea': ['comandaId', 'estado', 'lineaId'],
   'cocina.listo': ['cantidad', 'destinatarios', 'itemId', 'lineaId', 'mesas', 'nombre', 'ordenId'],
 };
 
