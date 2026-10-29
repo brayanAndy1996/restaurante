@@ -1,4 +1,5 @@
-# PostgreSQL 16 para desarrollo local. Puerto 5433 para no chocar con un PostgreSQL instalado.
+# PostgreSQL 16 para desarrollo local. Puerto 5433 para no chocar con un PostgreSQL instalado; si también
+# está ocupado, define DB_PUERTO_LOCAL en .env (Docker Compose lee ese archivo) y cambia las URL de abajo.
 services:
   postgres:
     image: postgres:16
@@ -7,7 +8,7 @@ services:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
     ports:
-      - '5433:5432'
+      - '${DB_PUERTO_LOCAL:-5433}:5432'
     volumes:
       - postgres_datos:/var/lib/postgresql/data
     healthcheck:

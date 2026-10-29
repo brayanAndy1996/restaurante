@@ -1,4 +1,5 @@
 import { join } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { Sequelize } from 'sequelize';
 import { SequelizeStorage, Umzug } from 'umzug';
 import type { ContextoMigracion } from '../../src/migraciones/tipos';
@@ -21,7 +22,9 @@ export function crearUmzug(sequelize: Sequelize, carpeta: string = CARPETA_MIGRA
     migrations: {
       glob: ['[0-9]*-*.{ts,js}', { cwd: carpeta, ignore: ['**/*.d.ts'] }],
       resolve: ({ name, path }) => {
-        const cargar = async () => (await import(path as string)) as ModuloMigracion;
+        // En Windows, `import()` no acepta rutas como `C:\...`: hay que pasarle una URL `file://`.
+        const cargar = async () =>
+          (await import(pathToFileURL(path as string).href)) as ModuloMigracion;
         return {
           name,
           path,
