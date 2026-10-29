@@ -1,5 +1,6 @@
 // spec: 002-plataforma-y-acceso (pruebas protegidas)
 // Ajustado por 003-carta, decisión del usuario 5 (2026-10-28): EDITAR_CARTA permitido para el Cajero.
+// Ajustado por 004-salon-cocina, decisión 11 (2026-10-29): inactividad aparte para Cocina/Barra.
 //
 // P5 · Criterios 33 a 42 (ingreso con PIN, cambio rápido e inactividad): el PIN solo sirve en equipos
 // que recuerdan a la persona, bloqueo por persona en el equipo (5.º y 10.º fallo) y olvido al 15.º,
@@ -655,7 +656,11 @@ describe('criterio 40 · configurar la inactividad de la sucursal', () => {
     const admin = await tokenAdmin(app(), A);
     const inicial = await llamar(app(), 'get', `/sucursales/${S(2)}/acceso`, { token: admin });
     expect(inicial.status).toBe(200);
-    expect(inicial.body).toEqual({ sucursalId: S(2), minutosInactividad: 5 });
+    expect(inicial.body).toEqual({
+      sucursalId: S(2),
+      minutosInactividad: 5,
+      minutosInactividadCocina: 60,
+    });
 
     const deEstaSucursal = async () =>
       (await filasAuditoria(A.id, 'configurar_acceso_sucursal')).filter(
@@ -668,7 +673,11 @@ describe('criterio 40 · configurar la inactividad de la sucursal', () => {
       cuerpo: { minutosInactividad: 10 },
     });
     expect(cambio.status).toBe(200);
-    expect(cambio.body).toEqual({ sucursalId: S(2), minutosInactividad: 10 });
+    expect(cambio.body).toEqual({
+      sucursalId: S(2),
+      minutosInactividad: 10,
+      minutosInactividadCocina: 60,
+    });
     const leido = await llamar(app(), 'get', `/sucursales/${S(2)}/acceso`, { token: admin });
     expect(leido.body.minutosInactividad).toBe(10);
 
