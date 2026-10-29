@@ -14,6 +14,7 @@ import { NavLink, Outlet } from 'react-router-dom';
 import { VigilanteDeInactividad } from '../modulos/acceso/inactividad';
 import { destinosDeNavegacion, type IdDeDestino } from '../modulos/acceso/navegacion';
 import { useSesion } from '../modulos/acceso/sesion';
+import { AvisosDeListoDeSesion, BannerDeAvisosDeListo } from './AvisosDeListo';
 import {
   BannerDeConexion,
   BannerDeSoporte,
@@ -46,6 +47,7 @@ export function AppLayout() {
   return (
     <div className={rielAncho ? 'app app--riel-ancho' : 'app'}>
       <TiempoRealDeSesion />
+      <AvisosDeListoDeSesion />
       <a className="saltar" href="#contenido">
         Saltar al contenido
       </a>
@@ -54,6 +56,7 @@ export function AppLayout() {
         <BannerDeConexion />
         <BannerDeSoporte />
         <BannerDeSuscripcion />
+        <BannerDeAvisosDeListo />
         <VigilanteDeInactividad />
       </div>
       <div className="app__marco">

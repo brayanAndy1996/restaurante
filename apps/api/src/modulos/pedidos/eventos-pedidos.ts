@@ -1,4 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
+import type { EventoCocinaLinea, EventoCocinaListo } from '@restaurante/contratos';
 import type { TipoComanda } from '@restaurante/dominio';
 import { ContextoEmpresa } from '../../nucleo/contexto-empresa';
 import { PUBLICADOR_EVENTOS, type PublicadorEventos } from '../../nucleo/eventos';
@@ -32,6 +33,23 @@ export class EventosPedidos {
     comanda: { comandaId: string; estacionId: string; tipo: TipoComanda },
   ): void {
     this.publicar(sucursalId, 'cocina.comanda', { ...comanda });
+  }
+
+  /** `cocina.linea` (criterio 58): una línea cambió de estado; los demás KDS actualizan su pantalla. */
+  cocinaLinea(sucursalId: string, datos: EventoCocinaLinea['datos']): void {
+    this.publicar(sucursalId, 'cocina.linea', { ...datos });
+  }
+
+  /**
+   * `cocina.listo` (criterio 60): una línea pasó a `LISTO`; la PWA lo muestra solo a los `destinatarios` (el mozo
+   * responsable de la orden y quien comandó el ítem).
+   */
+  cocinaListo(sucursalId: string, datos: EventoCocinaListo['datos']): void {
+    this.publicar(sucursalId, 'cocina.listo', {
+      ...datos,
+      mesas: datos.mesas.map((m) => ({ ...m })),
+      destinatarios: [...datos.destinatarios],
+    });
   }
 
   private publicar(sucursalId: string, nombre: string, datos: Record<string, unknown>): void {

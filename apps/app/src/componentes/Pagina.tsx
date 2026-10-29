@@ -10,8 +10,11 @@ interface PropsPagina {
   atras?: { a: string; etiqueta: string };
   /** Contenido a la derecha de la barra; por defecto, la sucursal y la sesión. */
   derecha?: ReactNode;
-  /** `estrecho` limita la columna a 720 px (formularios); `ancho`, a 1120 px (tablas). */
-  ancho?: 'estrecho' | 'ancho';
+  /**
+   * `estrecho` limita la columna a 720 px (formularios); `ancho`, a 1120 px (tablas); `completo` usa todo el
+   * ancho (la pantalla de cocina, que reparte las comandas en columnas).
+   */
+  ancho?: 'estrecho' | 'ancho' | 'completo';
   /** Barra de tinta oscura del panel de plataforma. */
   plataforma?: boolean;
   /** Acción principal fija sobre la navegación, al alcance del pulgar. */

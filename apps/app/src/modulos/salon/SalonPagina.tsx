@@ -29,6 +29,7 @@ import { useAnchoDe } from '../../lib/medidas';
 import { useEstadoTiempoReal } from '../../lib/tiempo-real';
 import { useSesionActiva } from '../acceso/sesion';
 import { AbrirMesaHoja, type MesaPorAbrir } from './AbrirMesaHoja';
+import { ListaDeAvisos } from './ListaDeAvisos';
 import {
   TEXTO_DE_ESTADO,
   TONO_DE_ESTADO,
@@ -112,6 +113,7 @@ function SalonDeSucursal({
   return (
     <Pagina titulo="Salón" ancho="ancho">
       <div className="salon" ref={marco}>
+        <ListaDeAvisos />
         {datos === undefined && consulta.isPending ? (
           <EsqueletoDeLista filas={5} conInicial={false} etiqueta="Cargando el salón" />
         ) : null}

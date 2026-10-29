@@ -73,6 +73,10 @@ body,
   max-width: 1120px;
 }
 
+.pagina__contenido--completo {
+  max-width: none;
+}
+
 @media (min-width: 768px) {
   .pagina__contenido {
     padding-inline: var(--espacio-xl);

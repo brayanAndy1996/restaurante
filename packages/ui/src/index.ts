@@ -21,3 +21,5 @@ export * from './SelectorDeFoto';
 export * from './Cantidad';
 export * from './BaldosaDeMesa';
 export * from './CuadriculaDeMesas';
+export * from './Temporizador';
+export * from './TarjetaKds';

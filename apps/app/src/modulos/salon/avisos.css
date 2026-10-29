@@ -1,0 +1,62 @@
+/* Lista "Avisos" del salón: los «Listo» de la cocina, cada uno hasta que se toca. */
+.avisos {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espacio-sm);
+}
+
+.avisos__cabecera {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--espacio-md);
+}
+
+.avisos__titulo {
+  margin: 0;
+  font-size: 1.125rem;
+  line-height: 1.5rem;
+  font-weight: 700;
+}
+
+.avisos__lista {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espacio-sm);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.avisos__fila {
+  display: flex;
+  align-items: center;
+  gap: var(--espacio-md);
+  width: 100%;
+  min-height: 64px;
+  padding: var(--espacio-sm) var(--espacio-md);
+  border: 1px solid var(--color-exito-borde);
+  border-radius: var(--radio-baldosa);
+  background: var(--color-exito-suave);
+  color: var(--color-exito-oscuro);
+  font: inherit;
+  text-align: left;
+}
+
+.avisos__fila:active {
+  background: var(--color-exito-borde);
+}
+
+.avisos__texto {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  font-size: 1.0625rem;
+  line-height: 1.5rem;
+}
+
+.avisos__hora {
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+}

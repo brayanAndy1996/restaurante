@@ -95,3 +95,15 @@ export const itemsNoMarchables = (indices: readonly number[]): ErrorAplicacion =
       mensaje: 'No es un ítem de segundo tiempo por marchar de esta orden',
     })),
   );
+
+/** 404 de una línea de comanda de otra sucursal, de otra empresa, de una estación con impresora o inexistente. */
+export const lineaDeComandaNoEncontrada = (): ErrorAplicacion =>
+  new ErrorAplicacion(404, 'NO_ENCONTRADO', 'La línea no existe');
+
+/** 404 de una comanda de otra sucursal, de otra empresa, de una estación con impresora o inexistente. */
+export const comandaNoEncontrada = (): ErrorAplicacion =>
+  new ErrorAplicacion(404, 'NO_ENCONTRADO', 'La comanda no existe');
+
+/** 409 `TRANSICION_INVALIDA` (criterios 58 y 59): la línea o la comanda no admite ese cambio. */
+export const transicionInvalida = (mensaje: string): ErrorAplicacion =>
+  new ErrorAplicacion(409, 'TRANSICION_INVALIDA', mensaje);

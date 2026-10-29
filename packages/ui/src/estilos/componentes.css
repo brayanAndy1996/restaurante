@@ -390,6 +390,15 @@ select.ui-campo__control {
   background: var(--color-peligro);
   color: var(--color-sobre-peligro);
 }
+.ui-banner--huacatay {
+  align-items: center;
+  background: var(--color-exito);
+  color: var(--color-sobre-accion);
+}
+/* El aviso de "Listo" es corto: su acción se queda a la derecha, sin ocupar una fila entera */
+.ui-banner--huacatay .ui-banner__accion .ui-boton {
+  white-space: nowrap;
+}
 .ui-banner--soporte {
   align-items: center;
   padding-block: var(--espacio-sm);
@@ -1812,4 +1821,290 @@ button.ui-mesa:active {
   right: 2px;
   display: grid;
   color: var(--color-accion);
+}
+
+/* ---------- Temporizador y tarjeta del KDS ---------- */
+/* Tiempo transcurrido: grande para leerlo de lejos; ají a los 10 minutos y rocoto a los 20, siempre con palabra e icono */
+.ui-temporizador {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+  flex: none;
+  padding: var(--espacio-xs) var(--espacio-sm);
+  border: 2px solid transparent;
+  border-radius: var(--radio-etiqueta);
+  color: var(--color-tinta);
+  font-variant-numeric: tabular-nums;
+}
+.ui-temporizador__tiempo {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--espacio-xs);
+  font-size: 1.75rem;
+  line-height: 2rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.ui-temporizador__nivel {
+  font-size: 0.9375rem;
+  line-height: 1.125rem;
+  font-weight: 700;
+}
+.ui-temporizador--demora {
+  background: var(--color-aviso-suave);
+  color: var(--color-aviso-texto);
+  border-color: var(--color-aviso-borde);
+}
+.ui-temporizador--atraso {
+  background: var(--color-peligro);
+  border-color: var(--color-peligro);
+  color: var(--color-sobre-peligro);
+}
+
+.ui-kds {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espacio-md);
+  min-width: 0;
+  padding: var(--espacio-md) var(--espacio-lg) var(--espacio-lg);
+  border: 2px solid var(--color-junta-teclado);
+  border-radius: var(--radio-baldosa);
+  background: var(--color-baldosa);
+  color: var(--color-tinta);
+}
+.ui-kds--demora {
+  border-color: var(--color-aviso-texto);
+}
+.ui-kds--atraso {
+  border-color: var(--color-peligro);
+}
+.ui-kds--anulacion {
+  background: var(--color-peligro-suave);
+  border-color: var(--color-peligro);
+}
+.ui-kds--nueva {
+  outline: 3px solid var(--color-accion);
+  outline-offset: 2px;
+}
+.ui-kds__cabecera {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--espacio-md);
+}
+.ui-kds__titulo {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espacio-xs);
+  min-width: 0;
+}
+.ui-kds__marcas {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--espacio-xs);
+}
+.ui-kds__mesa {
+  margin: 0;
+  font-size: 1.5rem;
+  line-height: 1.875rem;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+.ui-kds__ayuda {
+  margin: 0;
+  font-size: 0.9375rem;
+  line-height: 1.25rem;
+  color: var(--color-tinta-suave);
+  overflow-wrap: anywhere;
+}
+.ui-kds__hace {
+  flex: none;
+  font-size: 0.9375rem;
+  line-height: 1.25rem;
+  font-weight: 700;
+  color: var(--color-tinta-suave);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.ui-kds__anulacion,
+.ui-kds__marchar {
+  margin: 0;
+  padding: var(--espacio-sm) var(--espacio-md);
+  border-radius: var(--radio-baldosa);
+  font-size: 1.0625rem;
+  line-height: 1.5rem;
+}
+.ui-kds__anulacion {
+  background: var(--color-peligro);
+  color: var(--color-sobre-peligro);
+}
+.ui-kds__marchar {
+  background: var(--color-aviso-suave);
+  color: var(--color-aviso-texto);
+  border: 1px solid var(--color-aviso-borde);
+}
+.ui-kds__lineas {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.ui-kds__linea {
+  display: grid;
+  grid-template-columns: 3.25rem minmax(0, 1fr);
+  gap: var(--espacio-sm);
+  padding-block: var(--espacio-md);
+  border-top: 1px solid var(--color-junta);
+}
+.ui-kds__cantidad {
+  font-size: 1.75rem;
+  line-height: 1.75rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.ui-kds__detalle {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--espacio-xs);
+  min-width: 0;
+}
+.ui-kds__nombre-fila {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--espacio-sm);
+}
+.ui-kds__nombre {
+  font-size: 1.25rem;
+  line-height: 1.75rem;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+.ui-kds__contexto {
+  font-size: 0.9375rem;
+  line-height: 1.25rem;
+  color: var(--color-tinta-suave);
+}
+.ui-kds__modificadores {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 1.0625rem;
+  line-height: 1.5rem;
+}
+.ui-kds__observacion {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--espacio-sm);
+  margin: var(--espacio-xs) 0 0;
+  padding: var(--espacio-sm) var(--espacio-md);
+  border: 1px solid var(--color-aviso-borde);
+  border-radius: var(--radio-baldosa);
+  background: var(--color-aviso-suave);
+  color: var(--color-aviso-texto);
+  font-size: 1.0625rem;
+  line-height: 1.5rem;
+  overflow-wrap: anywhere;
+}
+.ui-kds__observacion .ui-icono {
+  flex: none;
+  margin-top: 2px;
+}
+/* "Esperar" y "Para llevar" se leen de lejos: palabra corta en mayúsculas, con icono y fondo propios */
+.ui-kds__banderas {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--espacio-sm);
+}
+.ui-kds__bandera {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--espacio-xs);
+  min-height: 28px;
+  padding: 0 var(--espacio-sm);
+  border-radius: var(--radio-etiqueta);
+  font-size: 0.9375rem;
+  line-height: 1.25rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+.ui-kds__bandera--esperar {
+  background: var(--color-aviso-suave);
+  color: var(--color-aviso-texto);
+  border: 1px solid var(--color-aviso-borde);
+}
+.ui-kds__bandera--llevar {
+  background: var(--color-tinta);
+  color: var(--color-baldosa);
+}
+.ui-kds__acciones {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--espacio-sm);
+  grid-column: 1 / -1;
+  margin-top: var(--espacio-xs);
+}
+.ui-kds__accion {
+  min-height: 56px;
+  padding-inline: var(--espacio-sm);
+  font-size: 1rem;
+}
+/* "Preparando" ya elegido: es una selección (cobalto suave con marca), no un botón nuevo */
+.ui-kds__accion[aria-pressed='true'] {
+  background: var(--color-accion-suave);
+  border-color: var(--color-accion);
+  color: var(--color-accion-oscuro);
+}
+.ui-kds__pie {
+  margin-top: var(--espacio-xs);
+}
+.ui-kds__deshacer {
+  grid-column: 1 / -1;
+  justify-self: start;
+}
+.ui-kds__linea--lista .ui-kds__nombre,
+.ui-kds__linea--lista .ui-kds__cantidad {
+  color: var(--color-tinta-suave);
+}
+.ui-kds__linea--anulada .ui-kds__nombre,
+.ui-kds__linea--anulada .ui-kds__cantidad {
+  color: var(--color-tinta-suave);
+  text-decoration: line-through;
+}
+/* Recientes: compactas, sin el tiempo grande */
+.ui-kds--reciente {
+  gap: var(--espacio-sm);
+  padding: var(--espacio-sm) var(--espacio-md) var(--espacio-md);
+  border-color: var(--color-junta);
+}
+.ui-kds--reciente .ui-kds__mesa {
+  font-size: 1.125rem;
+  line-height: 1.5rem;
+}
+.ui-kds--reciente .ui-kds__linea {
+  padding-block: var(--espacio-sm);
+}
+.ui-kds--reciente .ui-kds__cantidad {
+  font-size: 1.25rem;
+  line-height: 1.75rem;
+}
+.ui-kds--reciente .ui-kds__nombre {
+  font-size: 1.0625rem;
+  line-height: 1.5rem;
+}
+@media (max-width: 479px) {
+  .ui-temporizador__tiempo {
+    font-size: 1.5rem;
+    line-height: 1.75rem;
+  }
+}
+/* El tipo de comanda ("Comanda", "Adición", "Marchar", "Anulación") se lee de lejos: un poco más grande que una etiqueta */
+.ui-kds__marcas .ui-etiqueta {
+  min-height: 28px;
+  font-size: 0.9375rem;
+  line-height: 1.25rem;
 }

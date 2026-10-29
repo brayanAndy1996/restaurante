@@ -44,7 +44,7 @@ export function Cenefa({ estado }: { estado: EstadoCenefa }) {
 }
 
 interface PropsBanner {
-  tono: 'aji' | 'rocoto' | 'soporte';
+  tono: 'aji' | 'rocoto' | 'soporte' | 'huacatay';
   icono: LucideIcon;
   titulo: ReactNode;
   children?: ReactNode;
