@@ -1,6 +1,6 @@
 # 004 · Plan técnico
 
-Entregas 3a (Salón y Cocina) y 3b (Impresión básica en la nube). Los números entre paréntesis son criterios de `spec.md`. Lo que depende de una pregunta abierta lo dice; si la respuesta cambia, se ajusta antes de la fase B.
+Entregas 3a (Salón y Cocina) y 3b (Impresión básica en la nube), aprobadas por el usuario el 2026-10-29; la app Android del puente es la entrega 3c, que se especifica aparte (decisiones 1 y 13). Los números entre paréntesis son criterios de `spec.md`; "decisión N" remite a "Decisiones del usuario (2026-10-29)" de `spec.md`. Se ejecuta 3a completa y después 3b.
 
 ## Módulos afectados
 
@@ -11,7 +11,7 @@ Entregas 3a (Salón y Cocina) y 3b (Impresión básica en la nube). Los números
   - `src/salon/montos.ts` (ruta crítica): `totalVigenteLinea`, `totalOrden`, `excedeMontoMaximo`, `MONTO_MAXIMO` (76), con `decimal.js` y la misma validación de texto de `precios.ts` de 003.
   - `src/salon/estados.ts` y `src/salon/catalogos.ts`: estados, tipos, formas, destinos, límites, `estadoDeMesa`, `esOrdenAbierta`, `transicionKdsValida` (77).
   - Pruebas en `test/salon/`.
-- `packages/contratos`: `src/salon.ts` (esquemas de 3a), `src/errores.ts` (códigos nuevos y `ordenId`).
+- `packages/contratos`: `src/salon.ts` (esquemas de 3a), `src/errores.ts` (códigos nuevos y `ordenId`), `src/usuarios.ts` (`sucursalAccesoEntradaSchema` con los dos campos opcionales y al menos uno; `sucursalAccesoRespuestaSchema` con `minutosInactividadCocina`).
 - `apps/api`:
   - `src/modulos/salon/` (nuevo, dueño de `zona` y `mesa`): `zonas.controller.ts` / `zonas.service.ts`, `mesas.controller.ts` / `mesas.service.ts`, `mesas-consulta.service.ts` (exportado: mesas de una sucursal y bloqueo de mesas por id para pedidos).
   - `src/modulos/pedidos/` (nuevo, dueño de `orden`, `orden_mesa`, `envio`, `marcha`, `item`, `comanda`, `comanda_linea`, `anulacion_item`, `precuenta`): ver "Estructura del módulo `pedidos`".
@@ -19,16 +19,16 @@ Entregas 3a (Salón y Cocina) y 3b (Impresión básica en la nube). Los números
   - `src/nucleo/eventos/publicador-eventos.ts`: `SalaDeEvento` gana `{ tipo: 'puente', puenteId }`.
   - `src/nucleo/base-de-datos/control-transaccion.ts`: nombres nuevos en `NOMBRES_PROHIBIDOS` (70).
   - `src/nucleo/base-de-datos/verificar-roles.ts` y `scripts/db-preparar`: rol `restaurante_tiempo_real` y esquema `tiempo_real` (70).
-  - `src/modulos/seguridad/`: `ValidadorDeSesion` (extraído de `ResolutorEmpresaSesion`, mismo comportamiento), `UsuariosConsultaService.puedenAtenderMesa`, `SesionActual.autorizacionConsumida()` (y `PermisoInterceptor` la guarda), cierre de sockets al cerrar sesión (llamando al puerto de tiempo real con `alConfirmar`). Si se aprueba la pregunta 11: el tiempo de inactividad de Cocina/Barra en `sucursal_acceso` y en el cálculo de expiración.
+  - `src/modulos/seguridad/`: `ValidadorDeSesion` (extraído de `ResolutorEmpresaSesion`, mismo comportamiento), `UsuariosConsultaService.puedenAtenderMesa`, `SesionActual.autorizacionConsumida()` (y `PermisoInterceptor` la guarda), cierre de sockets al cerrar sesión (llamando al puerto de tiempo real con `alConfirmar`). Inactividad de Cocina/Barra (63b, 63c; decisión 11): `inactividad.ts` (nuevo, con `minutosDeInactividad`), `constantes-acceso.ts` (`MINUTOS_INACTIVIDAD_COCINA_POR_DEFECTO = 60`), `autenticacion.guard.ts`, `sesiones.service.ts`, `ingreso-pin.service.ts`, `acceso-sucursal.service.ts` y `acceso-sucursal.controller.ts`, y `ValidadorDeSesion`; ver "Inactividad de Cocina/Barra".
   - `src/modulos/carta/`: `CartaConsultaService` exportado (estaciones activas).
   - `src/aplicacion.ts`: opciones `inventario` y `tiempoReal`; arranque del servidor de Socket.IO sobre el servidor HTTP de Nest.
   - `src/config/entorno.ts`: `TIEMPO_REAL`, `DATABASE_TIEMPO_REAL_URL`, `DB_PASSWORD_TIEMPO_REAL`.
   - `src/migraciones/`: ver "Migraciones".
-  - Pruebas no protegidas en `test/salon/`, `test/pedidos/`, `test/cocina/`, `test/tiempo-real/`; protegidas en `test/salon-critica/` (fase B).
+  - Pruebas no protegidas en `test/salon/`, `test/pedidos/`, `test/cocina/`, `test/tiempo-real/`; protegidas en `test/salon-critica/` (fase B), más el ajuste de P0 en `test/acceso/pin.spec.ts` y `test/acceso/sesion-rutas.spec.ts` (protegidas de 002).
 - `apps/app`:
   - `src/modulos/salon/`: `SalonPagina` (mapa y lista), `AbrirMesaHoja`, `OrdenPagina`, `ComanderoPagina`, `HojaDeProducto`, `Borrador` y `borrador.ts` (almacenamiento por persona y orden), `AnularItemHoja`, `AnularOrdenHoja`, `SeleccionDeMesas` (mover y unir), `PrecuentaVista`, `AvisosDeListo`, `salon.ts` y `ordenes.ts` (consultas y mutaciones).
   - `src/modulos/cocina/`: `CocinaPagina` (KDS), `TarjetaDeComanda`, `cocina.ts`.
-  - `src/modulos/ajustes/`: `AjustesPagina` (agrupa lo de administración de 002) y `mapa/` (`EditorDeMapa`, `ZonaFormulario`, `MesaFormulario`).
+  - `src/modulos/ajustes/`: `AjustesPagina` (agrupa lo de administración de 002) y `mapa/` (`EditorDeMapa`, `ZonaFormulario`, `MesaFormulario`); la pantalla "Acceso" de 002 gana el campo de Cocina y Barra (63c), y su prueba `apps/app/test/equipos.spec.tsx` (no protegida) actualiza el simulacro de la respuesta.
   - `src/lib/tiempo-real.ts`: cliente de Socket.IO, reconexión e invalidación de consultas.
   - `src/componentes/AppLayout.tsx` y `src/App.tsx`: navegación por rol (87) y rutas.
 - `packages/ui` (skill `impeccable`): `BaldosaDeMesa`, `CuadriculaDeMesas`, `ContadorGrande` (− y + de 48 px), `Temporizador` (tiempo transcurrido con umbrales), `TarjetaKds`.
@@ -122,7 +122,7 @@ Orden de los interceptores de la ruta: autenticación y rol, idempotencia (répl
 4. `UPDATE item SET cantidad_anulada = cantidad_anulada + $n, estado = CASE …`; `INSERT anulacion_item` con `autorizado_por_id` y `autorizacion_id` de `SesionActual.autorizacionConsumida()`.
 5. Comandas `ANULACION`: para cada estación de las partes del ítem (recalculadas con `partesDeComanda` sobre la `linea` guardada), una comanda con líneas de `cantidad` fija = `cantidad_por_item × n`. Las líneas originales con vigente 0 pasan a `ANULADO`.
 6. `INVENTARIO.alAnular({ partes: partesDeStock(linea, n), destino })`.
-7. Pre-cuenta: invalidar si estaba `EN_PRECUENTA` (pregunta 10). `orden.version += 1`.
+7. Pre-cuenta: invalidar si estaba `EN_PRECUENTA`, también en una anulación parcial (decisión 10). `orden.version += 1`.
 8. `AuditoriaService.registrar({ accion: 'anular_item', entidad: 'item', … })` (41).
 9. Eventos.
 
@@ -148,6 +148,13 @@ Bloquea la orden, busca la réplica por id, comprueba la pre-cuenta vigente (`ve
 
 - `GET /cocina/comandas`: tres consultas fijas (comandas de la sucursal con líneas pendientes o no vistas, más las recientes; sus líneas; las órdenes con mesas y mozo). En 3b, solo `destino = 'KDS'`.
 - `PUT /cocina/lineas/:id/estado`: bloquea la línea `FOR UPDATE`, valida con `transicionKdsValida`, actualiza `estado` y `estado_en`, y registra `cocina.linea` y, si pasa a `LISTO`, `cocina.listo` con los destinatarios (mozo de la orden vigente del ítem y `creado_por_usuario_id` del ítem).
+
+### Inactividad de Cocina/Barra (63b, 63c; decisión 11)
+
+- **Una sola regla:** `minutosDeInactividad({ tipo, rol, minutosSucursal, minutosCocina, minutosSesion })` en `apps/api/src/modulos/seguridad/inactividad.ts`: sesión PIN con rol `COCINA_BARRA` → `minutosCocina ?? 60`; otra sesión PIN → `minutosSucursal ?? 5` (también sin sucursal activa); contraseña y soporte → `minutosSesion` (sin cambios). La usan el guard, `GET /sesion` (`expiraPorInactividadEn`), el ingreso con PIN (la expiración que devuelve al entrar) y `ValidadorDeSesion` (Socket.IO), para que no haya dos cálculos.
+- **Orden en el guard:** hoy `autenticacion.guard.ts` calcula el vencimiento antes de resolver el rol. La consulta de la sesión agrega `sa.minutos_inactividad_cocina` y el rol de `acceso_sucursal` de la sucursal activa (un `LEFT JOIN` más en la misma consulta, sin otra ida a la base); el rol que se usa es el mismo que luego da los permisos de la petición.
+- **Configuración:** `AccesoSucursalService` lee y escribe las dos columnas; el `PATCH` con un solo campo deja el otro igual; la fila de auditoría `configurar_acceso_sucursal` lleva el antes y el después de los campos cambiados.
+- **Migración:** `ALTER TABLE sucursal_acceso ADD COLUMN minutos_inactividad_cocina smallint NOT NULL DEFAULT 60 CHECK (… BETWEEN 1 AND 720)`; el trigger de trazabilidad de 002 no cambia. `down` borra la columna.
 
 ### Tiempo real (64 a 71)
 
@@ -185,6 +192,7 @@ Puente (3b)    --wss /tiempo-real (espacio "/puente")-->        |
 - **ESC/POS (123 a 126):** `renderizarTicket(documento, { anchoMm, juegoCaracteres })` devuelve un `Uint8Array`: `ESC @`; `ESC t n` (PC437 = 0, PC850 = 2, PC858 = 19, WPC1252 = 16; `SIN_TILDES` usa PC437 con texto transliterado); textos codificados con tablas propias (sin dependencias nativas); `ESC E` negrita, `GS !` tamaño, `ESC a` alineación; ajuste de línea por palabras a 32 o 48 columnas; `ESC d 4` y `GS V 66 0`. Las columnas de montos se alinean a la derecha con cifras de ancho fijo. El pulso de gaveta (`ESC p 0 25 250`) queda en el renderizador para la sección 4.
 - **Estado (120 a 122):** el latido actualiza `puente.ultima_senal_en` y `estado_impresoras`; compara con lo anterior para decidir si publica `impresion.estado`. El espacio `/puente` actualiza la señal al conectarse y al desconectarse.
 - **Simulador y emulador (134, 135):** `SimuladorPuente` usa `fetch` y `socket.io-client`, y `net.Socket` para la impresora; `EmuladorEscPos` es un `net.Server` con un intérprete de los comandos de arriba. El E2E de 3b levanta la API, la PWA, el emulador y el simulador.
+- **Bluetooth y gaveta (decisión 12):** en 3b solo se configuran y se validan; el simulador imprime solo por red, y una impresora Bluetooth queda `DESCONOCIDO` con sus trabajos pendientes. El pulso de gaveta queda en el renderizador sin ningún trabajo que lo use.
 
 ### PWA
 
@@ -198,8 +206,8 @@ Puente (3b)    --wss /tiempo-real (espacio "/puente")-->        |
 
 | Decisión | Alternativa descartada | Motivo |
 | --- | --- | --- |
-| Dividir en 3a, 3b y 3c (pregunta 1 y 13) | Una entrega de 140 criterios con la app Android | Commits y revisiones manejables; la app usa otra cadena de herramientas y pruebas manuales |
-| Puerto de inventario en la transacción (pregunta 2) | Descontar stock aquí; no dejar enganche | La sección 6 implementa sin tocar el envío; el envío ya prueba que llama una vez y que un error lo revierte todo |
+| Dividir en 3a, 3b y 3c (decisiones 1 y 13) | Una entrega de 142 criterios con la app Android | Commits y revisiones manejables; la app usa otra cadena de herramientas y pruebas manuales |
+| Puerto de inventario en la transacción (decisión 2) | Descontar stock aquí; no dejar enganche | La sección 6 implementa sin tocar el envío; el envío ya prueba que llama una vez y que un error lo revierte todo |
 | Borrador en la PWA | Ítems "por enviar" guardados en la API | Un envío = una operación idempotente; sin endpoints de borrador ni estados intermedios en la base |
 | Id del cliente más `Idempotency-Key` | Solo `Idempotency-Key` | La clave de 002 está atada al actor; el id cubre el cambio rápido de usuario y la recarga. Prepara el modo offline (UUID) |
 | Clave primaria `(empresa_id, id)` en las tablas con id del cliente | `id` sola como en 003 | Un UUID repetido en otra empresa no choca ni revela nada |
@@ -214,6 +222,8 @@ Puente (3b)    --wss /tiempo-real (espacio "/puente")-->        |
 | Entrega "al menos una vez" con ids recordados en el puente | "Exactamente una vez" | Sin confirmación de la impresora no se puede garantizar; recordar ids evita casi todos los duplicados |
 | Vencimiento por día operativo calculado al leer | Tarea del worker que vence trabajos | Sin colas todavía; el cálculo es puro y probado, como el agotado de 003 |
 | `ADMINISTRAR` para mapa, impresoras, destinos y puente | Una acción nueva `CONFIGURAR_SALON` | La fila "Usuarios, sucursales, equipos y configuración" ya lo cubre; la matriz no cambia |
+| Inactividad de Cocina/Barra como columna de `sucursal_acceso` y campo de `GET`/`PATCH /sucursales/:id/acceso` (decisión 11) | Una ruta nueva solo para Cocina/Barra; un valor por usuario | Es la misma configuración de acceso de la sucursal, del mismo módulo y con la misma auditoría; el costo es ajustar la forma exacta de la respuesta en dos pruebas protegidas de 002 (P0) |
+| Un solo cálculo de la inactividad (`minutosDeInactividad`) | Calcularla en cada lugar | El guard, `GET /sesion`, el ingreso con PIN y Socket.IO deben dar el mismo vencimiento |
 
 ## Migraciones
 
@@ -225,7 +235,7 @@ Con fecha posterior a `202610290005`. Todas las tablas de `public` con `sqlTabla
 - `202610300002-pedidos.ts` (C2 y C3): `orden` (con `version`), `orden_mesa`, `envio`, `item`, `comanda`, `comanda_linea`, `marcha`. Clave primaria `(empresa_id, id)` en `orden`, `envio` y `marcha`.
 - `202610300003-anulaciones-precuentas.ts` (C5 y C6): `anulacion_item`, `precuenta` (las dos con clave primaria `(empresa_id, id)`).
 - `202610300004-tiempo-real.ts` (C2): esquema `tiempo_real` y `socket_io_attachments`, `GRANT` al rol `restaurante_tiempo_real` (que crea `db:preparar`, porque los roles no se crean en migraciones). `down` borra el esquema.
-- Si se aprueba la pregunta 11: `202610300005-inactividad-cocina.ts`, columna `sucursal_acceso.minutos_inactividad_cocina` (1 a 720, por defecto 60).
+- `202610300005-inactividad-cocina.ts` (C4; decisión 11): columna `sucursal_acceso.minutos_inactividad_cocina` (1 a 720, por defecto 60). Es una tabla del módulo seguridad de 002; la migración solo agrega la columna.
 
 **3b**
 
@@ -245,8 +255,8 @@ Ninguna migración escribe datos. `pnpm db:revertir` de cada una deja el esquema
 - **`NOTIFY` y su carga.** Todos los eventos de todas las empresas pasan por el mismo canal de PostgreSQL y cada instancia los recibe. Con pocas instancias y eventos chicos, el costo es bajo; el aislamiento depende de que las salas lleven la empresa (67) y de que nadie más escuche el canal (70). El adversarial debe intentarlo.
 - **`pg_notify` en producción.** Sin superusuario no se puede quitar `EXECUTE` de `pg_notify` a `PUBLIC`; queda la guarda de la API como barrera, igual que con las funciones del criterio 38e de 001.
 - **Navegadores que suspenden la PWA.** iOS cierra el socket con la pantalla apagada; el KDS en un iPad debe quedarse en primer plano. Al volver, la PWA reconecta y refresca. Se documenta en el README.
-- **Inactividad del KDS** (pregunta 11). Si no se aprueba un tiempo aparte, el KDS se bloquea tras 5 minutos sin uso por defecto.
+- **Inactividad de Cocina/Barra** (decisión 11). Toca el guard de autenticación de 002, que es ruta crítica: un error podría alargar las sesiones de otros roles. Mitigación: P0 prueba también que el Mozo, el Cajero, el Supervisor y el Administrador siguen con sus minutos, que una sesión sin sucursal activa sigue con 5 y que un usuario Cocina/Barra en S1 y Mozo en S2 cambia de tiempo al cambiar de sucursal; el adversarial lo incluye en su ataque de permisos (T30).
 - **Impresoras genéricas.** Las páginas de códigos varían entre marcas; por eso el juego de caracteres es configurable y hay página de prueba. La lista recomendada sale de las pruebas manuales de 3c.
 - **Duplicados de impresión.** Con "al menos una vez", un corte entre la impresión y el reporte imprime dos veces; se acepta (el cocinero ve "REIMPRESIÓN" solo en las pedidas a mano; un duplicado automático es raro).
-- **Tamaño de la sección.** Aun dividida, 3a tiene 98 criterios. Mitigación: commits por historia (C1 a C6), y los grupos C5 (anulaciones) y C6 (mover, unir y pre-cuenta) se pueden reordenar si hace falta.
+- **Tamaño de la sección.** Aun dividida, 3a tiene 100 criterios. Mitigación: commits por historia (C1 a C6), y los grupos C5 (anulaciones) y C6 (mover, unir y pre-cuenta) se pueden reordenar si hace falta.
 - **Tamaño de la PWA.** Socket.IO cliente y el QR suman unos 35 KB; el QR va bajo demanda en Ajustes. El presupuesto de 170 KB gzip de 003 (160.6 KB usados) se excede con el cliente de Socket.IO en el paquete inicial: se carga bajo demanda al abrir Salón o Cocina, y si aun así no alcanza, el revisor propone subir el presupuesto con su motivo.
