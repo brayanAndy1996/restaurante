@@ -2026,7 +2026,7 @@ button.ui-mesa:active {
   flex: none;
   margin-top: 2px;
 }
-/* "Esperar" y "Para llevar" se leen de lejos: palabra corta en mayúsculas, con icono y fondo propios */
+/* "Esperar" y "Para llevar" se leen de lejos: palabra corta en negrita, con icono y fondo propios (sin mayúsculas) */
 .ui-kds__banderas {
   display: flex;
   flex-wrap: wrap;
@@ -2036,13 +2036,13 @@ button.ui-mesa:active {
   display: inline-flex;
   align-items: center;
   gap: var(--espacio-xs);
-  min-height: 28px;
+  min-height: 32px;
   padding: 0 var(--espacio-sm);
   border-radius: var(--radio-etiqueta);
-  font-size: 0.9375rem;
-  line-height: 1.25rem;
+  font-size: 1.0625rem;
+  line-height: 1.375rem;
   font-weight: 700;
-  text-transform: uppercase;
+  white-space: nowrap;
 }
 .ui-kds__bandera--esperar {
   background: var(--color-aviso-suave);

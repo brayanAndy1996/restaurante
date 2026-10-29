@@ -67,11 +67,21 @@ afterAll(async () => {
 
 const escribirEnA = <T>(fn: () => Promise<T>) => escribir(api, A().empresaId, fn);
 
-/** Hace que las comandas de la orden hayan llegado `minutos` antes (sin mover el reloj: la sesión vence). */
+/**
+ * Hace que todo lo de la orden haya pasado `minutos` antes (sin mover el reloj: la sesión vence): la llegada de
+ * sus comandas, cuándo se vieron y el último cambio de cada línea. Las recientes se miden por la última actividad.
+ */
 const envejecer = (ordenId: string, minutos: number) =>
   escribirEnA(async () => {
     await api.query(
-      `UPDATE comanda SET creado_en = creado_en - make_interval(mins => $2), actualizado_en = now()
+      `UPDATE comanda_linea SET estado_en = estado_en - make_interval(mins => $2), actualizado_en = now()
+        WHERE comanda_id IN (SELECT id FROM comanda WHERE orden_id = $1)`,
+      [ordenId, minutos],
+    );
+    await api.query(
+      `UPDATE comanda
+          SET creado_en = creado_en - make_interval(mins => $2),
+              vista_en = vista_en - make_interval(mins => $2), actualizado_en = now()
         WHERE orden_id = $1`,
       [ordenId, minutos],
     );
@@ -314,8 +324,8 @@ describe('criterio 56 · pendientes y recientes', () => {
         await api.query(
           `INSERT INTO comanda_linea (empresa_id, comanda_id, item_id, rol, producto_id, nombre, cantidad_por_item,
                                       modificadores, tiempo, para_llevar, esperar, estado, estado_en, creado_en, actualizado_en)
-           VALUES ($1, $2, $3, 'PRODUCTO', $4, 'Lomo', 1, '[]'::jsonb, 1, false, false, 'LISTO', now(), now(), now())`,
-          [A().empresaId, id, itemIds[0], esc.carta.lomo],
+           VALUES ($1, $2, $3, 'PRODUCTO', $4, 'Lomo', 1, '[]'::jsonb, 1, false, false, 'LISTO', $5, $5, $5)`,
+          [A().empresaId, id, itemIds[0], esc.carta.lomo, new Date(ahora - i * 1000)],
         );
       }
     });

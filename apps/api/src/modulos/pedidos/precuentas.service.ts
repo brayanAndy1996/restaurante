@@ -12,6 +12,7 @@ import { bloquearOrden, exigirOrdenAbierta } from './bloqueos-orden';
 import { idDeClienteReutilizado, montoFueraDeRango, ordenSinConsumo } from './errores-pedidos';
 import { EventosPedidos } from './eventos-pedidos';
 import { mesasVigentesDeOrden } from './mesas-de-orden';
+import { invalidarPrecuentaVigente } from './precuenta-invalidacion';
 
 /** Nota de toda pre-cuenta (criterio 51, decisión 5). */
 export const NOTA_PRECUENTA = 'Precios con IGV incluido. No es un comprobante de pago.';
@@ -72,17 +73,9 @@ export class PrecuentasService {
     @Inject(EventosPedidos) private readonly eventos: EventosPedidos,
   ) {}
 
-  /** La sucursal activa de la sesión; las rutas ya exigen una (`@RequiereModulo`). */
-  private sucursalActiva(): string {
-    const sucursalId = this.sesion.principal().sucursalId;
-    if (sucursalId === null) {
-      throw new ErrorAplicacion(409, 'SUCURSAL_NO_ELEGIDA', 'Elige una sucursal para continuar');
-    }
-    return sucursalId;
-  }
 
   async emitir(ordenId: string, entrada: PrecuentaEntrada): Promise<PrecuentaRespuesta> {
-    const sucursalId = this.sucursalActiva();
+    const sucursalId = this.sesion.sucursalActiva();
     const empresaId = this.contexto.empresaActual();
     const precuentaId = entrada.id.toLowerCase();
 
@@ -97,12 +90,22 @@ export class PrecuentasService {
     }
     exigirOrdenAbierta(orden);
 
-    // La vigente sin cambios (criterio 52): toda escritura que cambia los ítems la invalida.
-    const [vigente] = await this.conexion.query<FilaPrecuenta>(
-      `SELECT ${COLUMNAS} FROM precuenta WHERE orden_id = $1 AND invalidada_en IS NULL`,
+    // La vigente sin cambios (criterio 52): toda escritura que cambia los ítems la invalida, y además se compara
+    // su versión con la de la orden: si no coincide (algo cambió sin invalidarla) ya no vale y se emite la siguiente.
+    const [vigente] = await this.conexion.query<FilaPrecuenta & { version_orden: number }>(
+      `SELECT ${COLUMNAS}, version_orden FROM precuenta WHERE orden_id = $1 AND invalidada_en IS NULL`,
       { bind: [orden.id], type: QueryTypes.SELECT },
     );
-    if (vigente !== undefined) return this.armar(vigente, orden.id, sucursalId);
+    const [actual] = await this.conexion.query<{ version: number }>(
+      'SELECT version FROM orden WHERE id = $1',
+      { bind: [orden.id], type: QueryTypes.SELECT },
+    );
+    const versionActual = actual!.version;
+    if (vigente !== undefined && vigente.version_orden === versionActual) {
+      return this.armar(vigente, orden.id, sucursalId);
+    }
+    const ahora = this.reloj.ahora();
+    if (vigente !== undefined) await invalidarPrecuentaVigente(this.conexion, orden.id, ahora);
 
     const items = await this.conexion.query<FilaItemVigente>(
       `SELECT i.id, i.nombre, i.cantidad, i.cantidad_anulada, i.precio_unitario, i.aplica_icbper, i.linea
@@ -134,10 +137,8 @@ export class PrecuentasService {
       throw montoFueraDeRango([{ campo: 'total', mensaje: 'El total supera el máximo permitido' }]);
     }
 
-    const ahora = this.reloj.ahora();
-    const [datos] = await this.conexion.query<{ numero: number; version: number }>(
-      `SELECT (SELECT coalesce(max(numero), 0) + 1 FROM precuenta WHERE orden_id = $1) AS numero,
-              (SELECT version FROM orden WHERE id = $1) AS version`,
+    const [datos] = await this.conexion.query<{ numero: number }>(
+      'SELECT coalesce(max(numero), 0) + 1 AS numero FROM precuenta WHERE orden_id = $1',
       { bind: [orden.id], type: QueryTypes.SELECT },
     );
     const insertada = await this.conexion.query<FilaPrecuenta>(
@@ -155,7 +156,7 @@ export class PrecuentasService {
           JSON.stringify(lineas),
           total,
           ahora,
-          datos!.version,
+          versionActual,
         ],
         type: QueryTypes.SELECT,
       },

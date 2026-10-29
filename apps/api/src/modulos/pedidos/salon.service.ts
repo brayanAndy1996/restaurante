@@ -3,7 +3,6 @@ import type { MesaDelSalon, SalonRespuesta, StockSalonRespuesta } from '@restaur
 import { estadoDeMesa, totalOrden, type EstadoOrden } from '@restaurante/dominio';
 import { QueryTypes, type Sequelize } from 'sequelize';
 import { CONEXION_API } from '../../nucleo/base-de-datos';
-import { ErrorAplicacion } from '../../nucleo/errores/error-aplicacion';
 import { RELOJ, type Reloj } from '../../nucleo/reloj';
 import { MesasConsultaService } from '../salon';
 import { SesionActual, UsuariosConsultaService } from '../seguridad';
@@ -56,10 +55,7 @@ export class SalonService {
    * `{ productos: [] }`: el comandero no muestra "quedan N". Solo se devuelven los productos pedidos.
    */
   async stock(consulta: { productoIds: readonly string[] }): Promise<StockSalonRespuesta> {
-    const sucursalId = this.sesion.principal().sucursalId;
-    if (sucursalId === null) {
-      throw new ErrorAplicacion(409, 'SUCURSAL_NO_ELEGIDA', 'Elige una sucursal para continuar');
-    }
+    const sucursalId = this.sesion.sucursalActiva();
     const pedidos = [...new Set(consulta.productoIds.map((id) => id.toLowerCase()))];
     const disponibles = await this.inventario.disponibles({ sucursalId, productoIds: pedidos });
     return {
@@ -71,10 +67,7 @@ export class SalonService {
   }
 
   async mapa(): Promise<MapaDelSalon> {
-    const sucursalId = this.sesion.principal().sucursalId;
-    if (sucursalId === null) {
-      throw new ErrorAplicacion(409, 'SUCURSAL_NO_ELEGIDA', 'Elige una sucursal para continuar');
-    }
+    const sucursalId = this.sesion.sucursalActiva();
     const zonas = await this.mesas.listar(sucursalId);
     const abiertas = await this.conexion.query<FilaOrdenAbierta>(
       `SELECT o.id, o.estado, o.mozo_id, o.comensales, o.abierta_en, om.mesa_id

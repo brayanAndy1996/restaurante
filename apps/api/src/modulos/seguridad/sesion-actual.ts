@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { ErrorAplicacion } from '../../nucleo/errores/error-aplicacion';
 import {
   autorizacionConsumidaActual,
   principalActual,
@@ -22,6 +23,19 @@ export class SesionActual {
       );
     }
     return principal;
+  }
+
+  /**
+   * La sucursal activa de la sesión. Las rutas de sucursal ya exigen una (`@RequiereModulo`, `@RequiereSucursal`);
+   * sin ella, 409 `SUCURSAL_NO_ELEGIDA`. Es el único lugar donde se decide, para que ninguna operación de pedidos
+   * pueda correr sin sucursal por un olvido.
+   */
+  sucursalActiva(): string {
+    const sucursalId = this.principal().sucursalId;
+    if (sucursalId === null) {
+      throw new ErrorAplicacion(409, 'SUCURSAL_NO_ELEGIDA', 'Elige una sucursal para continuar');
+    }
+    return sucursalId;
   }
 
   /** El principal, o `undefined` fuera de una petición autenticada. */

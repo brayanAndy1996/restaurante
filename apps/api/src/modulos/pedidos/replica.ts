@@ -51,21 +51,20 @@ export const huellaDeMarcha = (itemIds: MarchaEntrada['itemIds']): Buffer =>
   );
 
 /**
- * Huella de la anulación de un ítem (criterio 37): el ítem, la cantidad, el destino del stock y el motivo. El
- * mismo `id` con otra cosa de esto es otra petición (422); con lo mismo, la misma. La orden va aparte (el ítem
- * ya la determina).
+ * Huella de la anulación de un ítem (criterio 37): el ítem, la cantidad y el destino del stock. El mismo `id` con
+ * otra cantidad, otro ítem u otro destino es otra petición (422); con lo mismo, la misma. El motivo no cuenta: es
+ * texto libre que la persona puede reescribir al reintentar sin que la anulación sea otra. La orden va aparte (el
+ * ítem ya la determina).
  */
 export const huellaDeAnulacion = (entrada: {
   itemId: string;
   cantidad: number;
-  motivo: string;
   destinoStock: string;
 }): Buffer =>
   sha256(
     jsonCanonico({
       itemId: entrada.itemId.toLowerCase(),
       cantidad: entrada.cantidad,
-      motivo: entrada.motivo,
       destinoStock: entrada.destinoStock,
     }),
   );

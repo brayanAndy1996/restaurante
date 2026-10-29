@@ -19,7 +19,6 @@ import {
   mesaOcupada,
   mozoInvalido,
   ordenConConsumo,
-  ordenNoAbierta,
 } from './errores-pedidos';
 import { EventosPedidos } from './eventos-pedidos';
 import { mesasVigentesDeOrden } from './mesas-de-orden';
@@ -49,14 +48,6 @@ export class OrdenesService {
     @Inject(VistaOrdenService) private readonly vista: VistaOrdenService,
   ) {}
 
-  /** La sucursal activa de la sesión; las rutas ya exigen una (`@RequiereModulo`). */
-  private sucursalActiva(): string {
-    const sucursalId = this.sesion.principal().sucursalId;
-    if (sucursalId === null) {
-      throw new ErrorAplicacion(409, 'SUCURSAL_NO_ELEGIDA', 'Elige una sucursal para continuar');
-    }
-    return sucursalId;
-  }
 
   /**
    * Criterios 9 a 12. Orden de las comprobaciones: réplica del mismo `id` (devuelve la orden tal como está, sin
@@ -66,7 +57,7 @@ export class OrdenesService {
    * red de seguridad. Los `INSERT` usan `ON CONFLICT DO NOTHING` para no abortar la transacción.
    */
   async abrir(entrada: AbrirOrdenEntrada): Promise<OrdenRespuesta> {
-    const sucursalId = this.sucursalActiva();
+    const sucursalId = this.sesion.sucursalActiva();
     const id = entrada.id.toLowerCase();
     const mesaId = entrada.mesaId.toLowerCase();
 
@@ -126,11 +117,9 @@ export class OrdenesService {
     ordenId: string,
     entrada: OrdenModificarEntrada,
   ): Promise<OrdenRespuesta> {
-    const sucursalId = this.sucursalActiva();
+    const sucursalId = this.sesion.sucursalActiva();
     const orden = await bloquearOrden(this.conexion, ordenId, sucursalId);
-    if (orden.estado !== 'ABIERTA' && orden.estado !== 'EN_PRECUENTA') {
-      throw ordenNoAbierta(orden.estado === 'UNIDA' ? orden.unidaA : null);
-    }
+    exigirOrdenAbierta(orden);
     if (orden.comensales !== entrada.comensales) {
       await this.conexion.query(
         `UPDATE orden SET comensales = $2, actualizado_en = $3 WHERE id = $1`,
@@ -150,7 +139,7 @@ export class OrdenesService {
    * 409 `ORDEN_NO_ABIERTA`.
    */
   async liberar(ordenId: string): Promise<OrdenRespuesta> {
-    const sucursalId = this.sucursalActiva();
+    const sucursalId = this.sesion.sucursalActiva();
     const orden = await bloquearOrden(this.conexion, ordenId, sucursalId);
     exigirOrdenAbierta(orden);
 
@@ -187,12 +176,13 @@ export class OrdenesService {
     });
 
     this.eventos.salonCambio(sucursalId, orden.id, mesaIds);
+    this.eventos.ordenCambio(sucursalId, orden.id);
     return this.vista.armar(orden.id, sucursalId);
   }
 
   /** Criterio 55: `GET /ordenes/:id` de la sucursal activa (404 si es de otra sucursal o de otra empresa). */
   consultar(ordenId: string): Promise<OrdenRespuesta> {
-    return this.vista.armar(ordenId, this.sucursalActiva());
+    return this.vista.armar(ordenId, this.sesion.sucursalActiva());
   }
 
   /** La orden con ese id en la empresa (la RLS la limita), de cualquier sucursal. */

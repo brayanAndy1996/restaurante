@@ -1,5 +1,6 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { ahoraDelServidor } from '../../lib/api';
 import { identidadActual } from '../../lib/identidad';
 import { useEnvioPendiente, type ExtraDeEscritura } from '../../lib/envios';
 import { mensajeDeError } from '../../lib/errores';
@@ -182,7 +183,8 @@ export function useAccionesDeCocina(sucursalId: string) {
       );
     },
     enterado(comandaId: string, mesa: string) {
-      const vistaEn = new Date().toISOString();
+      // La hora del servidor, no la del celular (puede estar desajustada): es la que verá la API.
+      const vistaEn = new Date(ahoraDelServidor()).toISOString();
       pedir(
         comandaId,
         `No pudimos marcar como enterado ${mesa}`,

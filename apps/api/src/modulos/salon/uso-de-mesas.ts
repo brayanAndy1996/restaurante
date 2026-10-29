@@ -13,8 +13,9 @@ export type ComprobadorDeMesasEnUso = (
 
 /**
  * Punto de enganche entre el mapa de mesas y las órdenes (criterio 4): desactivar una mesa con orden abierta
- * responde 409 `EN_USO`. Mientras ningún módulo registre su comprobador (antes de que existan las órdenes) ninguna
- * mesa está en uso. `PedidosModule` registra el suyo al arrancar con `registrar`.
+ * responde 409 `EN_USO`. `PedidosModule` registra su comprobador al arrancar con `registrar`. **Falla cerrado**: si
+ * ningún módulo registró uno, no se puede saber si una mesa está en uso y la consulta lanza un error (500) en vez
+ * de responder que está libre, lo que dejaría desactivar mesas con cuentas abiertas.
  */
 @Injectable()
 export class UsoDeMesas {
@@ -32,6 +33,12 @@ export class UsoDeMesas {
   ): Promise<Set<string>> {
     const enUso = new Set<string>();
     if (mesaIds.length === 0) return enUso;
+    if (this.comprobadores.length === 0) {
+      throw new Error(
+        'UsoDeMesas no tiene ningún comprobador: ningún módulo (PedidosModule) lo registró, así que no se puede ' +
+          'saber si las mesas tienen una orden abierta',
+      );
+    }
     for (const comprobador of this.comprobadores) {
       for (const id of await comprobador(mesaIds, transaccion)) enUso.add(id);
     }

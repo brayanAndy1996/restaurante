@@ -24,9 +24,13 @@ import { enviarComanda } from './ordenes';
  *   y la recarga lo reutilizan, así el servidor reconoce el mismo envío y no sale dos veces a cocina.
  * - Va por `enviarSinPerder`, la cola de "Pendiente de envío": una clave de idempotencia por intento lógico y
  *   reintentos con ella si la red no responde.
- * - Un rechazo definitivo del servidor (4xx) no guardó nada: libera el id, deja las líneas y marca las que no
- *   pasaron con su motivo. Todo lo demás (sin red, sesión cambiada, error del servidor) no sabe si llegó: el
- *   id se conserva y la cuenta ofrece "Reintentar el envío".
+ * - Solo un rechazo que demuestra que el envío no se guardó libera el id: los 422 por línea o por datos
+ *   (`DATOS_INVALIDOS`, `PRODUCTO_NO_VENDIBLE`, `SELECCION_INVALIDA`, `MONTO_FUERA_DE_RANGO`) y el 409 de una
+ *   orden que ya no está abierta (`ORDEN_NO_ABIERTA`). Entonces deja las líneas y marca las que no pasaron
+ *   con su motivo. Todo lo demás no prueba nada: sin red, error del servidor y también un 403 (`PROHIBIDO`,
+ *   `MODULO_NO_INCLUIDO`) o un 409 `SUCURSAL_NO_ELEGIDA`, que la API evalúa antes de reconocer una réplica;
+ *   si el primer intento sí se guardó, soltar el id duplicaría la comanda. El id se conserva, se dice el
+ *   motivo y la cuenta ofrece "Reintentar el envío".
  */
 
 export type ResultadoDeEnvio =
@@ -79,7 +83,27 @@ const MENSAJES = {
     'Este envío ya se había hecho con otros datos. Mira la cuenta antes de volver a enviar.',
   CONFLICTO: 'Otra persona estaba enviando a la misma cuenta. Vuelve a intentarlo.',
   MODULO_NO_INCLUIDO: 'El salón no está incluido en tu plan.',
+  PROHIBIDO: 'Tu usuario ya no puede enviar pedidos.',
+  SUCURSAL_NO_ELEGIDA: 'Elige una sucursal para poder enviar el pedido.',
 } as const;
+
+/** Los 422 con los que la API rechaza el contenido del envío antes de guardar nada. */
+const CODIGOS_DE_RECHAZO_DEL_CONTENIDO: ReadonlySet<string> = new Set([
+  'DATOS_INVALIDOS',
+  'PRODUCTO_NO_VENDIBLE',
+  'SELECCION_INVALIDA',
+  'MONTO_FUERA_DE_RANGO',
+]);
+
+/**
+ * ¿La respuesta demuestra que el envío no se guardó? Solo entonces es seguro soltar el id. Un 403 o un 409 de
+ * sucursal no lo demuestran: la API los decide antes de mirar si el id ya existía.
+ */
+export function demuestraQueNoSeGuardo(error: ErrorApi): boolean {
+  if (error.estado === 422) return CODIGOS_DE_RECHAZO_DEL_CONTENIDO.has(error.codigo);
+  if (error.estado === 409) return error.codigo === 'ORDEN_NO_ABIERTA';
+  return false;
+}
 
 /** Las líneas rechazadas (`lineas.<i>`) con su motivo, por posición en lo que se envió. */
 function rechazosPorLinea(error: ErrorApi): Map<number, string> {
@@ -113,12 +137,18 @@ function alFallar(clave: string, error: unknown): ResultadoDeEnvio {
     return { resultado: 'fallo' };
   }
 
-  const definitivo = error.estado >= 400 && error.estado < 500 && error.codigo !== 'CONFLICTO';
-  if (!definitivo) {
+  if (!demuestraQueNoSeGuardo(error)) {
     const sinRed = error.sinConexion;
+    // Un 4xx que no prueba nada (permiso, plan, sucursal): se dice el motivo y se conserva el id.
+    const rechazoSinPrueba = error.estado >= 400 && error.estado < 500;
     cambiarEstadoDeEnvio(clave, {
-      aviso:
-        error.codigo === 'ENVIO_CANCELADO'
+      aviso: rechazoSinPrueba
+        ? aviso(
+            'alerta',
+            'No pudimos confirmar el envío',
+            `${mensajeDeError(error, MENSAJES)} Reintenta el envío: si el pedido ya había llegado, no se duplicará.`,
+          )
+        : error.codigo === 'ENVIO_CANCELADO'
           ? aviso(
               'alerta',
               'El pedido no salió',

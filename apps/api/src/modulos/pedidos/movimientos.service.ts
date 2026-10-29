@@ -1,6 +1,11 @@
 import { Inject, Injectable } from '@nestjs/common';
 import type { MoverEntrada, OrdenRespuesta, UnirEntrada } from '@restaurante/contratos';
-import { MAXIMO_MESAS_ORDEN, totalVigenteLinea } from '@restaurante/dominio';
+import {
+  MAXIMO_MESAS_ORDEN,
+  excedeMontoMaximo,
+  totalOrden,
+  totalVigenteLinea,
+} from '@restaurante/dominio';
 import { QueryTypes, type Sequelize } from 'sequelize';
 import { CONEXION_API } from '../../nucleo/base-de-datos';
 import { ContextoEmpresa } from '../../nucleo/contexto-empresa';
@@ -16,6 +21,7 @@ import {
   mesaOcupada,
   mesaOrigenInvalida,
   mesaOrigenRequerida,
+  montoFueraDeRango,
   operacionConcurrente,
   ordenNoEncontrada,
 } from './errores-pedidos';
@@ -33,6 +39,12 @@ const INTENTOS_DE_BLOQUEO = 2;
 interface OcupacionDeMesa {
   mesaId: string;
   ordenId: string;
+}
+
+interface ItemParaTotal {
+  precio_unitario: string;
+  cantidad: number;
+  cantidad_anulada: number;
 }
 
 interface ItemAbsorbido {
@@ -77,14 +89,6 @@ export class MovimientosService {
     @Inject(VistaOrdenService) private readonly vista: VistaOrdenService,
   ) {}
 
-  /** La sucursal activa de la sesión; las rutas ya exigen una (`@RequiereModulo`). */
-  private sucursalActiva(): string {
-    const sucursalId = this.sesion.principal().sucursalId;
-    if (sucursalId === null) {
-      throw new ErrorAplicacion(409, 'SUCURSAL_NO_ELEGIDA', 'Elige una sucursal para continuar');
-    }
-    return sucursalId;
-  }
 
   /** Quién ocupa ahora cada una de las mesas (solo las de la sucursal y con una orden vigente). */
   private async ocupantes(
@@ -112,7 +116,7 @@ export class MovimientosService {
    * sus ítems, su pre-cuenta ni su mozo, y no se audita (queda el historial de `orden_mesa`).
    */
   async mover(ordenId: string, entrada: MoverEntrada): Promise<OrdenRespuesta> {
-    const sucursalId = this.sucursalActiva();
+    const sucursalId = this.sesion.sucursalActiva();
     const destinoId = entrada.mesaDestinoId.toLowerCase();
     const origenDado = entrada.mesaOrigenId?.toLowerCase();
 
@@ -178,7 +182,7 @@ export class MovimientosService {
    * invalida; la pre-cuenta de la absorbida también.
    */
   async unir(ordenId: string, entrada: UnirEntrada): Promise<OrdenRespuesta> {
-    const sucursalId = this.sucursalActiva();
+    const sucursalId = this.sesion.sucursalActiva();
     const empresaId = this.contexto.empresaActual();
     const pedidas = [...new Set(entrada.mesaIds.map((id) => id.toLowerCase()))];
 
@@ -228,6 +232,7 @@ export class MovimientosService {
       ...absorbidas.flatMap((a) => a.mesaIds),
     ]);
     if (mesasFinales.size > MAXIMO_MESAS_ORDEN) throw demasiadasMesas(MAXIMO_MESAS_ORDEN);
+    await this.exigirTotalEnRango(principal, absorbidas);
 
     // 3. Cambios.
     const ahora = this.reloj.ahora();
@@ -280,6 +285,34 @@ export class MovimientosService {
     this.eventos.ordenCambio(sucursalId, principal.id);
     for (const absorbida of absorbidas) this.eventos.ordenCambio(sucursalId, absorbida.orden.id);
     return this.vista.armar(principal.id, sucursalId);
+  }
+
+  /**
+   * El total de la orden resultante (sus ítems vigentes más los de las absorbidas) no puede pasar el tope de un
+   * monto (criterios 21 y 76), como en el envío: 422 `MONTO_FUERA_DE_RANGO` y no cambia nada. Unir solo mesas
+   * libres no agrega ítems, así que no hay nada que comprobar.
+   */
+  private async exigirTotalEnRango(
+    principal: OrdenBloqueada,
+    absorbidas: readonly Absorbida[],
+  ): Promise<void> {
+    if (absorbidas.every((a) => a.items.length === 0)) return;
+    const propios = await this.conexion.query<ItemParaTotal>(
+      'SELECT precio_unitario, cantidad, cantidad_anulada FROM item WHERE orden_id = $1',
+      { bind: [principal.id], type: QueryTypes.SELECT },
+    );
+    const total = totalOrden(
+      [...propios, ...absorbidas.flatMap((a) => a.items)].map((i) => ({
+        precioUnitario: i.precio_unitario,
+        cantidad: i.cantidad,
+        cantidadAnulada: i.cantidad_anulada,
+      })),
+    );
+    if (excedeMontoMaximo(total)) {
+      throw montoFueraDeRango([
+        { campo: 'mesaIds', mensaje: 'El total de la orden unida supera el máximo' },
+      ]);
+    }
   }
 
   /** Una mesa inactiva libre no se puede unir (409 `CONFLICTO`); una que ya está ocupada por una orden se une con ella. */

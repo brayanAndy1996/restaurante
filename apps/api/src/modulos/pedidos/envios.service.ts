@@ -21,7 +21,7 @@ import { ErrorAplicacion } from '../../nucleo/errores/error-aplicacion';
 import { RELOJ, type Reloj } from '../../nucleo/reloj';
 import { CartaVentaService, ErrorProductoNoVendible, ErrorSeleccionInvalida } from '../carta';
 import { SesionActual } from '../seguridad';
-import { bloquearOrden, type OrdenBloqueada } from './bloqueos-orden';
+import { bloquearOrden, exigirOrdenAbierta } from './bloqueos-orden';
 import { guardarComandas, type ParteParaGuardar } from './comandas';
 import {
   idDeClienteReutilizado,
@@ -29,7 +29,6 @@ import {
   lineasRechazadas,
   montoFueraDeRango,
   nadaQueMarchar,
-  ordenNoAbierta,
 } from './errores-pedidos';
 import { EventosPedidos } from './eventos-pedidos';
 import { IMPRESION, type ImpresionPuerto } from './impresion';
@@ -86,28 +85,14 @@ export class EnviosService {
     @Inject(VistaOrdenService) private readonly vista: VistaOrdenService,
   ) {}
 
-  /** La sucursal activa de la sesión; las rutas ya exigen una (`@RequiereModulo`). */
-  private sucursalActiva(): string {
-    const sucursalId = this.sesion.principal().sucursalId;
-    if (sucursalId === null) {
-      throw new ErrorAplicacion(409, 'SUCURSAL_NO_ELEGIDA', 'Elige una sucursal para continuar');
-    }
-    return sucursalId;
-  }
 
-  /** La orden de la ruta debe estar abierta: `ANULADA` o `CERRADA`, 409; `UNIDA`, 409 con la orden principal. */
-  private exigirAbierta(orden: OrdenBloqueada): void {
-    if (orden.estado !== 'ABIERTA' && orden.estado !== 'EN_PRECUENTA') {
-      throw ordenNoAbierta(orden.estado === 'UNIDA' ? orden.unidaA : null);
-    }
-  }
 
   // -------------------------------------------------------------------------------------------------
   // Enviar (criterios 15 a 31)
   // -------------------------------------------------------------------------------------------------
 
   async enviar(ordenId: string, entrada: EnvioEntradaValidada): Promise<EnvioRespuesta> {
-    const sucursalId = this.sucursalActiva();
+    const sucursalId = this.sesion.sucursalActiva();
     const empresaId = this.contexto.empresaActual();
     const envioId = entrada.id.toLowerCase();
 
@@ -123,7 +108,7 @@ export class EnviosService {
       }
       return this.vista.armarEnvio(envioId, sucursalId);
     }
-    this.exigirAbierta(orden);
+    exigirOrdenAbierta(orden);
 
     const ahora = this.reloj.ahora();
     const preparadas = await this.prepararLineas(sucursalId, entrada, ahora);
@@ -354,7 +339,7 @@ export class EnviosService {
   // -------------------------------------------------------------------------------------------------
 
   async marchar(ordenId: string, entrada: MarchaEntrada): Promise<MarchaRespuesta> {
-    const sucursalId = this.sucursalActiva();
+    const sucursalId = this.sesion.sucursalActiva();
     const empresaId = this.contexto.empresaActual();
     const marchaId = entrada.id.toLowerCase();
     const pedidos = entrada.itemIds?.map((id) => id.toLowerCase());
@@ -370,7 +355,7 @@ export class EnviosService {
       }
       return this.vista.armarMarcha(marchaId);
     }
-    this.exigirAbierta(orden);
+    exigirOrdenAbierta(orden);
 
     // Los ítems de segundo tiempo enviados, sin marchar y con cantidad vigente de la orden (los de una orden
     // unida ya están en la principal).

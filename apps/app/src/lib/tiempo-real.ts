@@ -119,6 +119,7 @@ export type NombreDeEvento =
   | 'orden.cambio'
   | 'cocina.comanda'
   | 'cocina.linea'
+  | 'cocina.visto'
   | 'cocina.listo'
   | 'carta.disponibilidad'
   | 'carta.actualizada';
@@ -128,6 +129,7 @@ const EVENTOS: readonly NombreDeEvento[] = [
   'orden.cambio',
   'cocina.comanda',
   'cocina.linea',
+  'cocina.visto',
   'cocina.listo',
   'carta.disponibilidad',
   'carta.actualizada',
@@ -183,7 +185,16 @@ function alLlegarEvento(cliente: QueryClient, nombre: NombreDeEvento, datos: unk
       break;
     }
     case 'cocina.comanda':
+      invalidar(cliente, CLAVES_TIEMPO_REAL.cocina);
+      break;
     case 'cocina.linea':
+      invalidar(cliente, CLAVES_TIEMPO_REAL.cocina);
+      // La cuenta del mozo muestra "Preparando" y "2 listos de 3" por ítem; el evento trae la comanda y la
+      // línea, no la orden, así que se piden de nuevo las cuentas abiertas (con `ETag`, lo que no cambió no se baja).
+      invalidar(cliente, CLAVES_TIEMPO_REAL.ordenes);
+      break;
+    case 'cocina.visto':
+      // Otro KDS marcó "Enterado": la marcha o anulación sale de pendientes aquí también. Sin sonido ni más avisos.
       invalidar(cliente, CLAVES_TIEMPO_REAL.cocina);
       break;
     case 'cocina.listo': {

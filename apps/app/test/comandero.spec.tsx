@@ -495,6 +495,67 @@ describe('Comandero: enviar (criterios 15, 26 y 92)', () => {
     expect((llamadas[1]?.cuerpo as { lineas: unknown[] }).lineas).toHaveLength(1);
   });
 
+  it.each([
+    [403, 'PROHIBIDO', 'Tu usuario ya no puede enviar pedidos.'],
+    [403, 'MODULO_NO_INCLUIDO', 'El salón no está incluido en tu plan.'],
+    [409, 'SUCURSAL_NO_ELEGIDA', 'Elige una sucursal para poder enviar el pedido.'],
+  ])(
+    'un %i %s no prueba que el envío no se guardó: conserva el id y el siguiente "Enviar" no duplica',
+    async (estado, codigo, motivo) => {
+      let intento = 0;
+      const s = servidorDeCuenta({
+        extra: {
+          [`POST ${RUTA_ENVIO}`]: () => {
+            intento += 1;
+            return intento === 1
+              ? json(estado, { codigo, mensaje: 'Rechazado antes de reconocer la réplica' })
+              : json(201, envioRespuesta());
+          },
+        },
+      });
+      renderApp(RUTA);
+      await agregarLomo();
+      await userEvent.click(await screen.findByRole('button', { name: 'Enviar' }));
+
+      // Se dice el motivo, sin afirmar que no salió nada, y el botón ofrece reintentar con el mismo id.
+      expect(await screen.findByText(motivo, { exact: false })).toBeVisible();
+      expect(screen.queryByText('No se envió nada a cocina')).toBeNull();
+      const primerId = (s.de('POST', RUTA_ENVIO)[0]?.cuerpo as { id: string }).id;
+      const guardado = JSON.parse(localStorage.getItem(CLAVE) ?? 'null');
+      expect(guardado.envioId).toBe(primerId);
+      expect(guardado.lineas).toHaveLength(1);
+
+      await userEvent.click(await screen.findByRole('button', { name: 'Reintentar el envío' }));
+      expect(await screen.findByText('Pedido enviado')).toBeVisible();
+      const llamadas = s.de('POST', RUTA_ENVIO);
+      expect(llamadas).toHaveLength(2);
+      expect((llamadas[1]?.cuerpo as { id: string }).id).toBe(primerId);
+      expect(localStorage.getItem(CLAVE)).toBeNull();
+    },
+  );
+
+  it.each([
+    [422, 'DATOS_INVALIDOS'],
+    [422, 'PRODUCTO_NO_VENDIBLE'],
+    [422, 'SELECCION_INVALIDA'],
+    [422, 'MONTO_FUERA_DE_RANGO'],
+    [409, 'ORDEN_NO_ABIERTA'],
+  ])('un %i %s demuestra que no se guardó: libera el id', async (estado, codigo) => {
+    servidorDeCuenta({
+      extra: {
+        [`POST ${RUTA_ENVIO}`]: () => json(estado, { codigo, mensaje: 'No se guardó nada' }),
+      },
+    });
+    renderApp(RUTA);
+    await agregarLomo();
+    await userEvent.click(await screen.findByRole('button', { name: 'Enviar' }));
+    expect(await screen.findByText('No se envió nada a cocina')).toBeVisible();
+    const guardado = JSON.parse(localStorage.getItem(CLAVE) ?? 'null');
+    expect(guardado.envioId).toBeNull();
+    expect(guardado.lineas).toHaveLength(1);
+    expect(screen.getByRole('button', { name: 'Enviar' })).toBeVisible();
+  });
+
   it('el motivo de cada línea sale en palabras, también para un componente o una opción', async () => {
     servidorDeCuenta({
       extra: {

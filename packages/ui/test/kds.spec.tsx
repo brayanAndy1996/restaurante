@@ -1,4 +1,6 @@
-import { render, screen, within } from '@testing-library/react';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { cleanup, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import {
@@ -167,6 +169,39 @@ describe('TarjetaKds', () => {
   it('con todo listo no ofrece "Todo listo"', () => {
     tarjeta({ lineas: [linea(1, { estado: 'LISTO' })] });
     expect(screen.queryByRole('button', { name: /Todo listo/ })).toBeNull();
+  });
+
+  it('"Todo listo" no se ofrece si lo único que queda espera la marcha, y sí si queda algo más', () => {
+    tarjeta({
+      lineas: [linea(1, { estado: 'LISTO' }), linea(2, { esperar: true })],
+    });
+    expect(screen.queryByRole('button', { name: /Todo listo/ })).toBeNull();
+    // Las líneas que esperan siguen teniendo sus botones propios.
+    expect(screen.getByRole('button', { name: 'Listo: Plato 2' })).toBeInTheDocument();
+    cleanup();
+
+    tarjeta({ lineas: [linea(1), linea(2, { esperar: true })] });
+    expect(screen.getByRole('button', { name: 'Todo listo, Mesa 4' })).toBeInTheDocument();
+  });
+
+  it('los comensales llevan un espacio duro: el conteo no se parte en dos renglones', () => {
+    tarjeta({ comensales: 3 });
+    const ayuda = screen.getByText(/Ana Ríos/);
+    expect(ayuda.textContent).toContain('3\u00a0comensales');
+    expect(ayuda.textContent).not.toContain('3 comensales');
+    cleanup();
+    tarjeta({ comensales: 1 });
+    expect(screen.getByText(/Ana Ríos/).textContent).toContain('1\u00a0comensal');
+  });
+
+  it('"Esperar" y "Para llevar" no van en mayúsculas forzadas: DESIGN.md dice "Sin mayúsculas"', () => {
+    const css = readFileSync(join(process.cwd(), 'src/estilos/componentes.css'), 'utf8');
+    const bloque = /\.ui-kds__bandera\s*\{([^}]*)\}/.exec(css)?.[1] ?? '';
+    expect(bloque).not.toBe('');
+    expect(bloque).not.toMatch(/text-transform/);
+    expect(bloque).toMatch(/font-weight:\s*700/);
+    const tamano = /font-size:\s*([\d.]+)rem/.exec(bloque)?.[1];
+    expect(Number(tamano)).toBeGreaterThanOrEqual(1.0625);
   });
 
   it('marchar y anulación piden "Enterado"; la anulación dice el motivo', async () => {

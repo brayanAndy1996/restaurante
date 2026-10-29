@@ -8,7 +8,6 @@ import {
 } from '@restaurante/dominio';
 import { QueryTypes, type Sequelize } from 'sequelize';
 import { CONEXION_API } from '../../nucleo/base-de-datos';
-import { ErrorAplicacion } from '../../nucleo/errores/error-aplicacion';
 import { RELOJ, type Reloj } from '../../nucleo/reloj';
 import { CartaConsultaService } from '../carta';
 import { MesasConsultaService } from '../salon';
@@ -33,7 +32,8 @@ interface FilaComanda {
   origen_id: string | null;
   creado_en: Date;
   vista_en: Date | null;
-  pendiente: boolean;
+  /** El motivo de la anulación de la que sale una comanda `ANULACION`; `null` en las demás. */
+  motivo: string | null;
 }
 
 interface FilaLinea {
@@ -67,6 +67,37 @@ interface FilaAviso {
   comandado_por: string | null;
 }
 
+/**
+ * Las columnas de una comanda tal como la lee el KDS, con el motivo de su anulación (criterio 38) unido en la misma
+ * consulta (`UNIR_MOTIVO`): ninguna consulta aparte según haya o no anulaciones.
+ */
+const COLUMNAS_COMANDA = `c.id, c.tipo, c.estacion_id, c.orden_id, c.origen_id, c.creado_en, c.vista_en,
+       a.motivo AS motivo`;
+const UNIR_MOTIVO = `LEFT JOIN anulacion_item a
+         ON a.id = c.origen_id AND a.empresa_id = c.empresa_id AND c.tipo = 'ANULACION'`;
+
+/** Las líneas de una comanda que todavía no se terminan (las que tiene el índice parcial). */
+const LINEA_SIN_TERMINAR = `l.estado IN ('ENVIADO', 'EN_PREPARACION')`;
+
+/**
+ * Las comandas pendientes (criterio 56): una `COMANDA` o `ADICION` con alguna línea sin terminar, y una `MARCHAR` o
+ * `ANULACION` todavía no vista. Se llega a ellas por los dos índices parciales (`comanda_linea_pendiente_idx` y
+ * `comanda_no_vista_idx`), así que el costo depende de lo que está pendiente y no del historial de la sucursal.
+ */
+const SOLO_PENDIENTES = `c.id IN (
+         SELECT l.comanda_id FROM comanda_linea l WHERE ${LINEA_SIN_TERMINAR}
+         UNION
+         SELECT n.id FROM comanda n
+          WHERE n.sucursal_id = $1 AND n.vista_en IS NULL AND n.tipo IN ('MARCHAR', 'ANULACION'))
+       AND (c.tipo IN ('COMANDA', 'ADICION') OR c.vista_en IS NULL)`;
+
+/** Las que no están pendientes: la negación exacta de `SOLO_PENDIENTES`. */
+const SIN_PENDIENTES = `((c.tipo IN ('MARCHAR', 'ANULACION') AND c.vista_en IS NOT NULL)
+         OR (c.tipo IN ('COMANDA', 'ADICION')
+             AND NOT EXISTS (SELECT 1 FROM comanda_linea l
+                              WHERE l.comanda_id = c.id AND l.empresa_id = c.empresa_id
+                                AND ${LINEA_SIN_TERMINAR})))`;
+
 /** Los tipos de comanda cuyas líneas se preparan y se marcan "Listo" (las demás se marcan vistas). */
 const TIPOS_PREPARABLES: readonly TipoComanda[] = ['COMANDA', 'ADICION'];
 
@@ -76,11 +107,13 @@ const TIPOS_PREPARABLES: readonly TipoComanda[] = ['COMANDA', 'ADICION'];
  * estación con impresora (destino `IMPRESORA`, criterio 61) o inexistente responde el mismo 404.
  *
  * `GET /cocina/comandas` se arma con una cantidad fija de consultas sin importar cuántas comandas haya: las
- * estaciones (`CartaConsultaService`), las comandas, sus líneas con la cantidad vigente del ítem, las órdenes con
- * sus mesas vigentes, los nombres de las mesas y los de las personas. Solo una consulta más, y únicamente cuando
- * hay una comanda `ANULACION` a la vista, lee el motivo.
+ * estaciones (`CartaConsultaService`), las pendientes, las recientes, sus líneas con la cantidad vigente del ítem,
+ * las órdenes con sus mesas vigentes, los nombres de las mesas y los de las personas. El motivo de una anulación
+ * viene unido a la consulta de las comandas. Las pendientes salen de índices parciales y las recientes se miden
+ * por su última actividad (`greatest(creado_en, vista_en, max(comanda_linea.estado_en))`): ninguna recorre el
+ * historial de la sucursal.
  *
- * Los eventos (`cocina.linea`, `cocina.listo`) se registran con `alConfirmar` y salen solo si la transacción se
+ * Los eventos (`cocina.linea`, `cocina.listo`, `cocina.visto`) se registran con `alConfirmar` y salen solo si la transacción se
  * confirma y algo cambió: repetir un estado o marcar listo lo que ya estaba listo no publica nada.
  */
 @Injectable()
@@ -95,13 +128,6 @@ export class CocinaService {
     @Inject(EventosPedidos) private readonly eventos: EventosPedidos,
   ) {}
 
-  private sucursalActiva(): string {
-    const sucursalId = this.sesion.principal().sucursalId;
-    if (sucursalId === null) {
-      throw new ErrorAplicacion(409, 'SUCURSAL_NO_ELEGIDA', 'Elige una sucursal para continuar');
-    }
-    return sucursalId;
-  }
 
   // -------------------------------------------------------------------------------------------------
   // Leer (criterios 56, 57, 61 y 62)
@@ -115,7 +141,7 @@ export class CocinaService {
     respuesta: CocinaRespuesta;
     paraEtag: Omit<CocinaRespuesta, 'ahora'>;
   }> {
-    const sucursalId = this.sucursalActiva();
+    const sucursalId = this.sesion.sucursalActiva();
     const ahora = this.reloj.ahora();
 
     let ids: string[];
@@ -130,25 +156,40 @@ export class CocinaService {
     }
 
     const desde = new Date(ahora.getTime() - MINUTOS_RECIENTES * 60_000);
-    const filas = await this.conexion.query<FilaComanda>(
-      `SELECT t.id, t.tipo, t.estacion_id, t.orden_id, t.origen_id, t.creado_en, t.vista_en, t.pendiente
-         FROM (SELECT c.id, c.tipo, c.estacion_id, c.orden_id, c.origen_id, c.creado_en, c.vista_en,
-                      CASE WHEN c.tipo IN ('COMANDA', 'ADICION')
-                           THEN EXISTS (SELECT 1 FROM comanda_linea l
-                                         WHERE l.comanda_id = c.id AND l.empresa_id = c.empresa_id
-                                           AND l.estado IN ('ENVIADO', 'EN_PREPARACION'))
-                           ELSE c.vista_en IS NULL END AS pendiente
-                 FROM comanda c
-                WHERE c.sucursal_id = $1 AND c.destino = 'KDS' AND c.estacion_id = ANY($2::uuid[])) t
-        WHERE t.pendiente OR t.creado_en >= $3`,
+    const pendientes = await this.conexion.query<FilaComanda>(
+      `SELECT ${COLUMNAS_COMANDA}
+         FROM comanda c ${UNIR_MOTIVO}
+        WHERE c.sucursal_id = $1 AND c.destino = 'KDS' AND c.estacion_id = ANY($2::uuid[])
+          AND ${SOLO_PENDIENTES}
+        ORDER BY c.creado_en, c.id`,
+      { bind: [sucursalId, ids], type: QueryTypes.SELECT },
+    );
+    // Las recientes: las demás, por su última actividad en la última hora (una comanda vieja que se termina ahora
+    // aparece aquí y se puede corregir). Los candidatos salen de los instantes con índice; las 30 más recientes
+    // se muestran en orden de llegada.
+    const recientes = await this.conexion.query<FilaComanda>(
+      `SELECT t.id, t.tipo, t.estacion_id, t.orden_id, t.origen_id, t.creado_en, t.vista_en, t.motivo
+         FROM (SELECT ${COLUMNAS_COMANDA},
+                      greatest(c.creado_en, c.vista_en,
+                               (SELECT max(l.estado_en) FROM comanda_linea l
+                                 WHERE l.comanda_id = c.id AND l.empresa_id = c.empresa_id)) AS actividad_en
+                 FROM comanda c ${UNIR_MOTIVO}
+                WHERE c.sucursal_id = $1 AND c.destino = 'KDS' AND c.estacion_id = ANY($2::uuid[])
+                  AND c.id IN (
+                        SELECT x.id FROM comanda x WHERE x.sucursal_id = $1 AND x.creado_en >= $3
+                        UNION
+                        SELECT x.id FROM comanda x WHERE x.sucursal_id = $1 AND x.vista_en >= $3
+                        UNION
+                        SELECT l.comanda_id FROM comanda_linea l WHERE l.estado_en >= $3)
+                  AND ${SIN_PENDIENTES}) t
+        WHERE t.actividad_en >= $3
+        ORDER BY t.actividad_en DESC, t.creado_en DESC, t.id DESC
+        LIMIT ${MAXIMO_RECIENTES}`,
       { bind: [sucursalId, ids, desde], type: QueryTypes.SELECT },
     );
 
-    const pendientes = ordenarPorLlegada(filas.filter((f) => f.pendiente));
-    const recientes = ordenarPorLlegada(
-      ordenarPorLlegada(filas.filter((f) => !f.pendiente)).slice(-MAXIMO_RECIENTES),
-    );
-    const armadas = await this.armar([...pendientes, ...recientes], nombresEstaciones);
+    const enOrden = [...pendientes, ...ordenarPorLlegada(recientes)];
+    const armadas = await this.armar(enOrden, nombresEstaciones);
     const paraEtag = {
       pendientes: armadas.slice(0, pendientes.length),
       recientes: armadas.slice(pendientes.length),
@@ -162,17 +203,7 @@ export class CocinaService {
     nombresEstaciones: Map<string, string>,
   ): Promise<ComandaKds[]> {
     // Las consultas corren aunque no haya comandas: así el total no depende de los datos.
-    const lineas = await this.conexion.query<FilaLinea>(
-      `SELECT cl.id, cl.comanda_id, cl.item_id, cl.rol, cl.nombre, cl.contexto,
-              coalesce(cl.cantidad, cl.cantidad_por_item * (i.cantidad - i.cantidad_anulada))::int AS cantidad,
-              cl.modificadores, cl.observacion, cl.tiempo, cl.esperar, cl.para_llevar, cl.estado
-         FROM comanda_linea cl
-         JOIN item i ON i.id = cl.item_id AND i.empresa_id = cl.empresa_id
-        WHERE cl.comanda_id = ANY($1::uuid[])
-        ORDER BY i.creado_en, i.posicion, i.id,
-                 CASE cl.rol WHEN 'PRODUCTO' THEN 0 WHEN 'COMPONENTE' THEN 1 ELSE 2 END, cl.nombre, cl.id`,
-      { bind: [filas.map((f) => f.id)], type: QueryTypes.SELECT },
-    );
+    const lineas = await this.lineas(filas.map((f) => f.id));
     // Si la orden de origen se unió a otra, la comanda se muestra con la orden en que quedó (sus mesas vigentes).
     const ordenes = await this.conexion.query<FilaOrdenDeComanda>(
       `WITH RECURSIVE cadena AS (
@@ -195,13 +226,12 @@ export class CocinaService {
     const nombresPersonas = await this.usuarios.nombres(
       ordenes.flatMap((o) => (o.mozo_id === null ? [] : [o.mozo_id])),
     );
-    const motivos = await this.motivosDeAnulacion(filas);
 
     const lineasDe = new Map<string, LineaKds[]>();
     for (const l of lineas) {
-      const lista = lineasDe.get(l.comanda_id) ?? [];
-      lista.push(aLinea(l));
-      lineasDe.set(l.comanda_id, lista);
+      const lista = lineasDe.get(l.comandaId) ?? [];
+      lista.push(l.linea);
+      lineasDe.set(l.comandaId, lista);
     }
     return filas.map((f): ComandaKds => {
       const orden = ordenDe.get(f.orden_id);
@@ -210,7 +240,7 @@ export class CocinaService {
         tipo: f.tipo,
         creadaEn: new Date(f.creado_en).toISOString(),
         vistaEn: f.vista_en === null ? null : new Date(f.vista_en).toISOString(),
-        motivo: f.origen_id === null ? null : (motivos.get(f.origen_id) ?? null),
+        motivo: f.motivo,
         estacion: { id: f.estacion_id, nombre: nombresEstaciones.get(f.estacion_id) ?? '' },
         orden: {
           id: orden?.id ?? f.orden_id,
@@ -226,24 +256,6 @@ export class CocinaService {
     });
   }
 
-  /**
-   * El motivo de cada comanda `ANULACION` (criterio 38), que guarda `anulacion_item.motivo`. Solo consulta si hay
-   * una comanda `ANULACION` a la vista.
-   */
-  private async motivosDeAnulacion(
-    filas: readonly FilaComanda[],
-  ): Promise<Map<string, string | null>> {
-    const origenes = filas.flatMap((f) =>
-      f.tipo === 'ANULACION' && f.origen_id !== null ? [f.origen_id] : [],
-    );
-    if (origenes.length === 0) return new Map();
-    const motivos = await this.conexion.query<{ id: string; motivo: string }>(
-      'SELECT id, motivo FROM anulacion_item WHERE id = ANY($1::uuid[])',
-      { bind: [origenes], type: QueryTypes.SELECT },
-    );
-    return new Map(motivos.map((m) => [m.id, m.motivo]));
-  }
-
   // -------------------------------------------------------------------------------------------------
   // Cambiar el estado de una línea (criterios 58 y 60)
   // -------------------------------------------------------------------------------------------------
@@ -255,7 +267,7 @@ export class CocinaService {
    * corresponde (`cocina.listo`).
    */
   async cambiarEstado(lineaId: string, hacia: EstadoLineaElegible): Promise<LineaKds> {
-    const sucursalId = this.sucursalActiva();
+    const sucursalId = this.sesion.sucursalActiva();
     const filas = await this.conexion.query<{
       id: string;
       comanda_id: string;
@@ -285,9 +297,9 @@ export class CocinaService {
         { bind: [linea.id, hacia, ahora] },
       );
     }
-    const [vista] = await this.lineasDe([linea.comanda_id], [linea.id]);
-    if (cambia) await this.publicarCambios(sucursalId, linea.comanda_id, [vista!]);
-    return vista!;
+    const [vista] = await this.lineas([linea.comanda_id], [linea.id]);
+    if (cambia) await this.publicarCambios(sucursalId, linea.comanda_id, [vista!.linea]);
+    return vista!.linea;
   }
 
   // -------------------------------------------------------------------------------------------------
@@ -296,10 +308,12 @@ export class CocinaService {
 
   /**
    * `PUT /cocina/comandas/:id/listo`: pone en `LISTO` todas las líneas no anuladas de una comanda `COMANDA` o
-   * `ADICION`; otro tipo, 409 `TRANSICION_INVALIDA`. Idempotente: solo avisa por las líneas que cambiaron.
+   * `ADICION`; otro tipo, 409 `TRANSICION_INVALIDA`. No toca las líneas que esperan la marcha (`esperar = true`,
+   * ítems de segundo tiempo que todavía no se marcharon): siguen `ENVIADO` y no avisan; una vez marchado el ítem
+   * (`esperar = false`), entran. Idempotente: solo avisa por las líneas que cambiaron.
    */
   async todoListo(comandaId: string): Promise<ComandaKds> {
-    const sucursalId = this.sucursalActiva();
+    const sucursalId = this.sesion.sucursalActiva();
     const fila = await this.comandaDeLaSucursal(comandaId, sucursalId);
     if (!TIPOS_PREPARABLES.includes(fila.tipo)) {
       throw transicionInvalida('Solo las comandas y las adiciones se marcan como listas');
@@ -312,24 +326,29 @@ export class CocinaService {
     const ahora = this.reloj.ahora();
     const cambiadas = await this.conexion.query<{ id: string }>(
       `UPDATE comanda_linea SET estado = 'LISTO', estado_en = $2, actualizado_en = $2
-        WHERE comanda_id = $1 AND estado IN ('ENVIADO', 'EN_PREPARACION')
+        WHERE comanda_id = $1 AND estado IN ('ENVIADO', 'EN_PREPARACION') AND esperar = false
         RETURNING id`,
       { bind: [fila.id, ahora], type: QueryTypes.SELECT },
     );
     if (cambiadas.length > 0) {
       const ids = new Set(cambiadas.map((c) => c.id));
-      const lineas = await this.lineasDe([fila.id], [...ids]);
-      await this.publicarCambios(sucursalId, fila.id, lineas);
+      const lineas = await this.lineas([fila.id], [...ids]);
+      await this.publicarCambios(
+        sucursalId,
+        fila.id,
+        lineas.map((l) => l.linea),
+      );
     }
     return this.comandaArmada(fila);
   }
 
   /**
    * `PUT /cocina/comandas/:id/visto`: marca como vista una comanda `MARCHAR` o `ANULACION` (sale de pendientes);
-   * otro tipo, 409 `TRANSICION_INVALIDA`. Repetirlo no cambia la fecha en que se vio.
+   * otro tipo, 409 `TRANSICION_INVALIDA`. Repetirlo no cambia la fecha en que se vio ni publica nada; la primera
+   * vez publica `cocina.visto` para que los demás KDS la saquen de pendientes.
    */
   async visto(comandaId: string): Promise<ComandaKds> {
-    const sucursalId = this.sucursalActiva();
+    const sucursalId = this.sesion.sucursalActiva();
     const fila = await this.comandaDeLaSucursal(comandaId, sucursalId);
     if (TIPOS_PREPARABLES.includes(fila.tipo)) {
       throw transicionInvalida('Solo las comandas de marcha y de anulación se marcan como vistas');
@@ -340,6 +359,7 @@ export class CocinaService {
         `UPDATE comanda SET vista_en = $2, actualizado_en = $2 WHERE id = $1 AND vista_en IS NULL`,
         { bind: [fila.id, ahora] },
       );
+      this.eventos.cocinaVisto(sucursalId, fila.id);
     }
     return this.comandaArmada(fila);
   }
@@ -350,10 +370,10 @@ export class CocinaService {
 
   private async comandaDeLaSucursal(comandaId: string, sucursalId: string): Promise<FilaComanda> {
     const filas = await this.conexion.query<FilaComanda>(
-      `SELECT c.id, c.tipo, c.estacion_id, c.orden_id, c.origen_id, c.creado_en, c.vista_en, false AS pendiente
-         FROM comanda c
+      `SELECT ${COLUMNAS_COMANDA}
+         FROM comanda c ${UNIR_MOTIVO}
         WHERE c.id = $1 AND c.sucursal_id = $2 AND c.destino = 'KDS'
-          FOR UPDATE`,
+          FOR UPDATE OF c`,
       { bind: [comandaId, sucursalId], type: QueryTypes.SELECT },
     );
     if (filas[0] === undefined) throw comandaNoEncontrada();
@@ -363,8 +383,7 @@ export class CocinaService {
   /** La comanda tal como está ahora (después de los cambios de la petición). */
   private async comandaArmada(fila: FilaComanda): Promise<ComandaKds> {
     const [actual] = await this.conexion.query<FilaComanda>(
-      `SELECT c.id, c.tipo, c.estacion_id, c.orden_id, c.origen_id, c.creado_en, c.vista_en, false AS pendiente
-         FROM comanda c WHERE c.id = $1`,
+      `SELECT ${COLUMNAS_COMANDA} FROM comanda c ${UNIR_MOTIVO} WHERE c.id = $1`,
       { bind: [fila.id], type: QueryTypes.SELECT },
     );
     const nombres = await this.carta.nombres([fila.estacion_id]);
@@ -372,23 +391,30 @@ export class CocinaService {
     return armada!;
   }
 
-  /** Las líneas de las comandas pedidas (o solo las `lineaIds`), con la misma forma que en `GET`. */
-  private async lineasDe(
+  /**
+   * Las líneas de las comandas pedidas (o solo las `lineaIds`), con la misma forma que en `GET`: la única consulta
+   * de líneas del KDS. La cantidad vigente es la fija de la línea (marcha y anulación) o la del ítem por la de la
+   * parte; las columnas son `integer`, así que `99 × 999` no desborda.
+   */
+  private async lineas(
     comandaIds: readonly string[],
-    lineaIds: readonly string[],
-  ): Promise<LineaKds[]> {
+    lineaIds?: readonly string[],
+  ): Promise<{ comandaId: string; linea: LineaKds }[]> {
     const filas = await this.conexion.query<FilaLinea>(
       `SELECT cl.id, cl.comanda_id, cl.item_id, cl.rol, cl.nombre, cl.contexto,
-              coalesce(cl.cantidad, cl.cantidad_por_item * (i.cantidad - i.cantidad_anulada))::int AS cantidad,
+              coalesce(cl.cantidad, cl.cantidad_por_item * (i.cantidad - i.cantidad_anulada)) AS cantidad,
               cl.modificadores, cl.observacion, cl.tiempo, cl.esperar, cl.para_llevar, cl.estado
          FROM comanda_linea cl
          JOIN item i ON i.id = cl.item_id AND i.empresa_id = cl.empresa_id
-        WHERE cl.comanda_id = ANY($1::uuid[]) AND cl.id = ANY($2::uuid[])
+        WHERE cl.comanda_id = ANY($1::uuid[]) AND ($2::uuid[] IS NULL OR cl.id = ANY($2::uuid[]))
         ORDER BY i.creado_en, i.posicion, i.id,
                  CASE cl.rol WHEN 'PRODUCTO' THEN 0 WHEN 'COMPONENTE' THEN 1 ELSE 2 END, cl.nombre, cl.id`,
-      { bind: [[...comandaIds], [...lineaIds]], type: QueryTypes.SELECT },
+      {
+        bind: [[...comandaIds], lineaIds === undefined ? null : [...lineaIds]],
+        type: QueryTypes.SELECT,
+      },
     );
-    return filas.map(aLinea);
+    return filas.map((f) => ({ comandaId: f.comanda_id, linea: aLinea(f) }));
   }
 
   /**

@@ -127,6 +127,33 @@ describe('cambios provisionales', () => {
     expect(cocina.recientes[0]?.lineas.map((l) => l.estado)).toEqual(['LISTO', 'LISTO', 'ANULADO']);
   });
 
+  it('"Todo listo" no toca las líneas que esperan la marcha (criterio 59)', () => {
+    const c = comandaKds(1, {
+      lineas: [
+        lineaKds(1),
+        lineaKds(2, { estado: 'EN_PREPARACION' }),
+        lineaKds(3, { tiempo: 2, esperar: true }),
+        lineaKds(4, { tiempo: 2, esperar: true, estado: 'EN_PREPARACION' }),
+      ],
+    });
+    const cocina = conTodoListo(cocinaDe([c]), c.id);
+    // Las dos de tiempo 2 siguen como estaban y la comanda sigue pendiente, a la espera de la marcha.
+    expect(cocina.pendientes).toHaveLength(1);
+    expect(cocina.recientes).toHaveLength(0);
+    expect(cocina.pendientes[0]?.lineas.map((l) => l.estado)).toEqual([
+      'LISTO',
+      'LISTO',
+      'ENVIADO',
+      'EN_PREPARACION',
+    ]);
+  });
+
+  it('con todas las líneas esperando la marcha, "Todo listo" no cambia nada', () => {
+    const c = comandaKds(1, { lineas: [lineaKds(1, { tiempo: 2, esperar: true })] });
+    const antes = cocinaDe([c]);
+    expect(conTodoListo(antes, c.id).pendientes[0]?.lineas[0]?.estado).toBe('ENVIADO');
+  });
+
   it('"Todo listo" no toca una marcha', () => {
     const marcha = comandaKds(1, { tipo: 'MARCHAR' });
     expect(conTodoListo(cocinaDe([marcha]), marcha.id).pendientes).toHaveLength(1);

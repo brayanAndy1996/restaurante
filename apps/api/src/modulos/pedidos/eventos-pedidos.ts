@@ -41,6 +41,14 @@ export class EventosPedidos {
   }
 
   /**
+   * `cocina.visto` (criterio 59): una comanda de marcha o de anulación se marcó vista; los demás KDS la sacan de
+   * pendientes. Solo lleva el id de la comanda.
+   */
+  cocinaVisto(sucursalId: string, comandaId: string): void {
+    this.publicar(sucursalId, 'cocina.visto', { comandaId });
+  }
+
+  /**
    * `cocina.listo` (criterio 60): una línea pasó a `LISTO`; la PWA lo muestra solo a los `destinatarios` (el mozo
    * responsable de la orden y quien comandó el ítem).
    */

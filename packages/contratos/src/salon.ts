@@ -533,6 +533,8 @@ export const eventoCocinaLineaDatosSchema = z.object({
   lineaId: uuidSchema,
   estado: estadoLineaKdsSchema,
 });
+/** Una comanda de marcha o de anulación se marcó vista: los demás KDS la sacan de pendientes. */
+export const eventoCocinaVistoDatosSchema = z.object({ comandaId: uuidSchema });
 export const eventoCocinaListoDatosSchema = z.object({
   ordenId: uuidSchema,
   itemId: uuidSchema,
@@ -559,6 +561,10 @@ export const eventoCocinaComandaSchema = eventoDeSucursal(
 export const eventoCocinaLineaSchema = eventoDeSucursal(
   'cocina.linea',
   eventoCocinaLineaDatosSchema,
+);
+export const eventoCocinaVistoSchema = eventoDeSucursal(
+  'cocina.visto',
+  eventoCocinaVistoDatosSchema,
 );
 export const eventoCocinaListoSchema = eventoDeSucursal(
   'cocina.listo',
@@ -603,4 +609,5 @@ export type EventoSalonCambio = z.infer<typeof eventoSalonCambioSchema>;
 export type EventoOrdenCambio = z.infer<typeof eventoOrdenCambioSchema>;
 export type EventoCocinaComanda = z.infer<typeof eventoCocinaComandaSchema>;
 export type EventoCocinaLinea = z.infer<typeof eventoCocinaLineaSchema>;
+export type EventoCocinaVisto = z.infer<typeof eventoCocinaVistoSchema>;
 export type EventoCocinaListo = z.infer<typeof eventoCocinaListoSchema>;

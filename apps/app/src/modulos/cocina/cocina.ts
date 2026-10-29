@@ -159,13 +159,18 @@ export function conLineaEn(
   );
 }
 
-/** Todas las líneas no anuladas de la comanda pasan a "Listo" (criterio 59). */
+/**
+ * Las líneas no anuladas de la comanda pasan a "Listo" (criterio 59), salvo las que esperan la marcha
+ * (`esperar`): "Todo listo" no las toca, siguen por preparar hasta que se marchen.
+ */
 export function conTodoListo(cocina: CocinaRespuesta, comandaId: string): CocinaRespuesta {
   return conComandas(cocina, (c) =>
     c.id === comandaId && esDeCocina(c)
       ? {
           ...c,
-          lineas: c.lineas.map((l) => (l.estado === 'ANULADO' ? l : { ...l, estado: 'LISTO' })),
+          lineas: c.lineas.map((l) =>
+            l.estado === 'ANULADO' || l.esperar ? l : { ...l, estado: 'LISTO' },
+          ),
         }
       : c,
   );

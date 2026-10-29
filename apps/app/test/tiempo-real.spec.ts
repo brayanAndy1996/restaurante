@@ -207,11 +207,39 @@ describe('qué consulta vuelve a pedirse con cada evento', () => {
     expect(invalidadas).toEqual([['orden'], [...CLAVES_TIEMPO_REAL.salon]]);
   });
 
-  it('las comandas y las líneas de cocina refrescan la cocina', async () => {
+  it('una comanda nueva refresca la cocina', async () => {
     const socket = await conectada();
     socket.desdeElServidor('cocina.comanda', {});
+    expect(invalidadas).toEqual([['cocina']]);
+  });
+
+  it('un cambio de línea refresca la cocina y también las cuentas, para que el mozo vea "Preparando"', async () => {
+    const socket = await conectada();
+    socket.desdeElServidor('cocina.linea', {
+      comandaId: S1,
+      lineaId: S2,
+      estado: 'EN_PREPARACION',
+    });
+    expect(invalidadas).toEqual([['cocina'], [...CLAVES_TIEMPO_REAL.ordenes]]);
+    // Sin datos (mal formado) invalida lo mismo: nunca menos.
+    invalidadas.length = 0;
     socket.desdeElServidor('cocina.linea', {});
-    expect(invalidadas).toEqual([['cocina'], ['cocina']]);
+    expect(invalidadas).toEqual([['cocina'], ['orden']]);
+  });
+
+  it('cocina.visto refresca solo la cocina, sin tocar cuentas ni mapa', async () => {
+    const socket = await conectada();
+    socket.desdeElServidor('cocina.visto', { comandaId: S1 });
+    expect(invalidadas).toEqual([['cocina']]);
+  });
+
+  it('cocina.visto se reparte a quien oiga eventos, pero el aviso de "Listo" no lo toma como suyo', async () => {
+    const socket = await conectada();
+    const oyente = vi.fn();
+    const dejar = alRecibirEvento(oyente);
+    socket.desdeElServidor('cocina.visto', { comandaId: S1 });
+    expect(oyente).toHaveBeenCalledWith('cocina.visto', { comandaId: S1 });
+    dejar();
   });
 
   it('cocina.listo refresca la cocina y la orden, y se reparte a quien lo oiga', async () => {

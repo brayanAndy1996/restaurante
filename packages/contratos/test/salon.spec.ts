@@ -9,6 +9,7 @@ import {
   errorRespuestaSchema,
   estadoLineaEntradaSchema,
   eventoCocinaListoSchema,
+  eventoCocinaVistoSchema,
   eventoSalonCambioSchema,
   marchaEntradaSchema,
   mesaEntradaSchema,
@@ -354,6 +355,22 @@ describe('eventos de Salón y Cocina (criterios 14, 31 y 60)', () => {
         datos: { ...evento.datos, destinatarios: 'x' },
       }).success,
     ).toBe(false);
+  });
+});
+
+describe('cocina.visto (criterio 59)', () => {
+  it('lleva solo el id de la comanda, en la sala de la sucursal', () => {
+    const evento = {
+      empresaId: ID_1,
+      sala: { tipo: 'sucursal', sucursalId: ID_2 },
+      nombre: 'cocina.visto',
+      datos: { comandaId: ID_3 },
+    };
+    expect(eventoCocinaVistoSchema.safeParse(evento).success).toBe(true);
+    expect(
+      eventoCocinaVistoSchema.safeParse({ ...evento, datos: { comandaId: 'x' } }).success,
+    ).toBe(false);
+    expect(eventoCocinaVistoSchema.safeParse({ ...evento, datos: {} }).success).toBe(false);
   });
 });
 

@@ -108,11 +108,13 @@ export function TarjetaKds({
   const nivel = reciente ? 'normal' : nivelDeTiempo(minutos);
   const info = TIPO_DE_COMANDA_KDS[tipo];
   const esDeCocina = tipo === 'COMANDA' || tipo === 'ADICION';
-  const quedaAlgo = tieneLineasAbiertas(lineas);
+  // "Todo listo" no toca lo que espera la marcha: sin otra cosa por preparar, el botón no tiene nada que hacer.
+  const quedaAlgo = tieneLineasAbiertas(lineas.filter((l) => !l.esperar));
+  // Espacio duro entre el número y la palabra: a 360 px el conteo no se parte en dos renglones.
   const personas =
     comensales === undefined
       ? ''
-      : ` · ${comensales} ${comensales === 1 ? 'comensal' : 'comensales'}`;
+      : ` · ${comensales}\u00a0${comensales === 1 ? 'comensal' : 'comensales'}`;
 
   return (
     <article
@@ -259,13 +261,13 @@ function LineaDeKds({ linea, deCocina, reciente, alCambiarEstado }: PropsLinea) 
           <div className="ui-kds__banderas">
             {linea.esperar ? (
               <span className="ui-kds__bandera ui-kds__bandera--esperar">
-                <Icono icono={IconoEsperar} tamano={16} />
+                <Icono icono={IconoEsperar} tamano={20} />
                 Esperar
               </span>
             ) : null}
             {linea.paraLlevar ? (
               <span className="ui-kds__bandera ui-kds__bandera--llevar">
-                <Icono icono={IconoParaLlevar} tamano={16} />
+                <Icono icono={IconoParaLlevar} tamano={20} />
                 Para llevar
               </span>
             ) : null}

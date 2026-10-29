@@ -94,14 +94,6 @@ export class AnulacionesService {
     @Inject(VistaOrdenService) private readonly vista: VistaOrdenService,
   ) {}
 
-  /** La sucursal activa de la sesión; las rutas ya exigen una (`@RequiereModulo`). */
-  private sucursalActiva(): string {
-    const sucursalId = this.sesion.principal().sucursalId;
-    if (sucursalId === null) {
-      throw new ErrorAplicacion(409, 'SUCURSAL_NO_ELEGIDA', 'Elige una sucursal para continuar');
-    }
-    return sucursalId;
-  }
 
   // -------------------------------------------------------------------------------------------------
   // Anular un ítem (criterios 35 a 41)
@@ -112,7 +104,7 @@ export class AnulacionesService {
     itemId: string,
     entrada: AnularItemEntrada,
   ): Promise<AnulacionRespuesta> {
-    const sucursalId = this.sucursalActiva();
+    const sucursalId = this.sesion.sucursalActiva();
     const empresaId = this.contexto.empresaActual();
     const anulacionId = entrada.id.toLowerCase();
 
@@ -128,7 +120,6 @@ export class AnulacionesService {
     const huella = huellaDeAnulacion({
       itemId: item.id,
       cantidad: entrada.cantidad,
-      motivo: entrada.motivo,
       destinoStock: entrada.destinoStock,
     });
     const previas = await this.conexion.query<FilaReplica>(
@@ -180,8 +171,8 @@ export class AnulacionesService {
     // La cantidad anulada sube; con la vigente en 0 el ítem pasa a ANULADO (criterio 35).
     await this.conexion.query(
       `UPDATE item
-          SET cantidad_anulada = cantidad_anulada + $2::smallint,
-              estado = CASE WHEN cantidad_anulada + $2::smallint = cantidad THEN 'ANULADO' ELSE estado END,
+          SET cantidad_anulada = cantidad_anulada + $2::int,
+              estado = CASE WHEN cantidad_anulada + $2::int = cantidad THEN 'ANULADO' ELSE estado END,
               actualizado_en = $3
         WHERE id = $1`,
       { bind: [item.id, entrada.cantidad, ahora], type: QueryTypes.UPDATE },
@@ -253,7 +244,7 @@ export class AnulacionesService {
    * el interceptor de idempotencia; con otra clave, una orden ya anulada responde 409.
    */
   async anularOrden(ordenId: string, entrada: AnularOrdenEntrada): Promise<OrdenRespuesta> {
-    const sucursalId = this.sucursalActiva();
+    const sucursalId = this.sesion.sucursalActiva();
     const empresaId = this.contexto.empresaActual();
 
     const orden = await bloquearOrden(this.conexion, ordenId, sucursalId);
