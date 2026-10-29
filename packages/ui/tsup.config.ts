@@ -1,3 +1,5 @@
+import { copyFileSync, mkdirSync, readdirSync } from 'node:fs';
+import { join } from 'node:path';
 import { defineConfig } from 'tsup';
 
 // Verifica que el paquete se compila solo y deja una copia en `dist/` (JS, tipos y estilos) para
@@ -11,5 +13,13 @@ export default defineConfig({
   target: 'es2022',
   external: ['react', 'react-dom', 'lucide-react', '@restaurante/dominio'],
   loader: { '.css': 'copy' },
-  onSuccess: 'mkdir -p dist/estilos && cp src/estilos/*.css dist/estilos/',
+  // Copia con Node y no con `cp`/`mkdir -p`, que no existen en la terminal de Windows.
+  onSuccess: async () => {
+    mkdirSync(join('dist', 'estilos'), { recursive: true });
+    for (const archivo of readdirSync(join('src', 'estilos'))) {
+      if (archivo.endsWith('.css')) {
+        copyFileSync(join('src', 'estilos', archivo), join('dist', 'estilos', archivo));
+      }
+    }
+  },
 });
