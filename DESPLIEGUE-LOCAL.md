@@ -167,15 +167,15 @@ usuario `postgres`).
 
 ## 7. Problemas frecuentes
 
-| Problema                                                              | Qué hacer                                                                                             |
-| --------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
-| `docker: command not found`, o `local:preparar` no conecta con Docker | Abre Docker Desktop y espera a que diga que está en marcha. Luego repite el comando                   |
-| El puerto 5433, 3000 o 5173 ya está en uso                            | Cierra el programa que lo usa, o cambia el puerto en `.env` (el 5433 también en `docker-compose.yml`) |
-| `node --version` muestra una versión menor que 22                     | Instala Node 22 o superior                                                                            |
-| La app dice "No hay conexión con el servidor"                         | Revisa que `pnpm dev` siga corriendo y que http://localhost:3000/health responda                      |
-| Perdiste los PIN de demostración                                      | Borra la base y vuelve a crearla: `docker compose down -v` y luego `pnpm local:preparar`              |
-| La app muestra "useSesion debe usarse dentro de SesionProvider"       | Pasa a veces tras recompilar los paquetes: detén `pnpm dev` y vuelve a arrancarlo                     |
-| Una cuenta quedó bloqueada por 5 intentos fallidos                    | Espera 15 minutos o, si es el superadministrador, `pnpm plataforma:superadmin desbloquear superadmin` |
+| Problema                                                              | Qué hacer                                                                                                                          |
+| --------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| `docker: command not found`, o `local:preparar` no conecta con Docker | Abre Docker Desktop y espera a que diga que está en marcha. Luego repite el comando                                                |
+| El puerto 5433, 3000 o 5173 ya está en uso                            | Cierra el programa que lo usa, o cambia el puerto en `.env`: para la base, `DB_PUERTO_LOCAL` y las cuatro URL (ver `.env.example`) |
+| `node --version` muestra una versión menor que 22                     | Instala Node 22 o superior                                                                                                         |
+| La app dice "No hay conexión con el servidor"                         | Revisa que `pnpm dev` siga corriendo y que http://localhost:3000/health responda                                                   |
+| Perdiste los PIN de demostración                                      | Borra la base y vuelve a crearla: `docker compose down -v` y luego `pnpm local:preparar`                                           |
+| La app muestra "useSesion debe usarse dentro de SesionProvider"       | Pasa a veces tras recompilar los paquetes: detén `pnpm dev` y vuelve a arrancarlo                                                  |
+| Una cuenta quedó bloqueada por 5 intentos fallidos                    | Espera 15 minutos o, si es el superadministrador, `pnpm plataforma:superadmin desbloquear superadmin`                              |
 
 ## 8. Empezar de cero
 

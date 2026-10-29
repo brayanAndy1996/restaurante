@@ -47,7 +47,7 @@ services: # los contenedores que forman el proyecto
       POSTGRES_USER: postgres # usuario administrador de la base
       POSTGRES_PASSWORD: postgres # su contraseña (solo para desarrollo local)
     ports:
-      - '5433:5432' # tu puerto 5433 → puerto 5432 del contenedor
+      - '${DB_PUERTO_LOCAL:-5433}:5432' # tu puerto 5433 (o DB_PUERTO_LOCAL del .env) → 5432 del contenedor
     volumes:
       - postgres_datos:/var/lib/postgresql/data # guarda los datos en el volumen
     healthcheck: # cómo saber si PostgreSQL ya está listo
@@ -59,7 +59,8 @@ volumes:
 ```
 
 ¿Por qué el puerto 5433 y no el habitual 5432? Para no chocar con un PostgreSQL que ya tengas
-instalado en tu computadora.
+instalado en tu computadora. Si aun así está ocupado, define `DB_PUERTO_LOCAL` en tu `.env` (Docker
+Compose lee ese archivo solo) y usa el mismo número en las URL de la base.
 
 `pnpm local:preparar` (archivo `scripts/local-preparar.mjs`) ejecuta `docker compose up -d --wait`:
 
