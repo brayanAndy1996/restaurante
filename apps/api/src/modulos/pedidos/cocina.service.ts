@@ -80,18 +80,9 @@ const UNIR_MOTIVO = `LEFT JOIN anulacion_item a
 const LINEA_SIN_TERMINAR = `l.estado IN ('ENVIADO', 'EN_PREPARACION')`;
 
 /**
- * Las comandas pendientes (criterio 56): una `COMANDA` o `ADICION` con alguna línea sin terminar, y una `MARCHAR` o
- * `ANULACION` todavía no vista. Se llega a ellas por los dos índices parciales (`comanda_linea_pendiente_idx` y
- * `comanda_no_vista_idx`), así que el costo depende de lo que está pendiente y no del historial de la sucursal.
+ * Las que no están pendientes (criterio 56): una `MARCHAR` o `ANULACION` ya vista, o una `COMANDA` o `ADICION` sin
+ * líneas por terminar. Las pendientes se piden aparte, en dos consultas (ver `comandas`).
  */
-const SOLO_PENDIENTES = `c.id IN (
-         SELECT l.comanda_id FROM comanda_linea l WHERE ${LINEA_SIN_TERMINAR}
-         UNION
-         SELECT n.id FROM comanda n
-          WHERE n.sucursal_id = $1 AND n.vista_en IS NULL AND n.tipo IN ('MARCHAR', 'ANULACION'))
-       AND (c.tipo IN ('COMANDA', 'ADICION') OR c.vista_en IS NULL)`;
-
-/** Las que no están pendientes: la negación exacta de `SOLO_PENDIENTES`. */
 const SIN_PENDIENTES = `((c.tipo IN ('MARCHAR', 'ANULACION') AND c.vista_en IS NOT NULL)
          OR (c.tipo IN ('COMANDA', 'ADICION')
              AND NOT EXISTS (SELECT 1 FROM comanda_linea l
@@ -107,7 +98,7 @@ const TIPOS_PREPARABLES: readonly TipoComanda[] = ['COMANDA', 'ADICION'];
  * estación con impresora (destino `IMPRESORA`, criterio 61) o inexistente responde el mismo 404.
  *
  * `GET /cocina/comandas` se arma con una cantidad fija de consultas sin importar cuántas comandas haya: las
- * estaciones (`CartaConsultaService`), las pendientes, las recientes, sus líneas con la cantidad vigente del ítem,
+ * estaciones (`CartaConsultaService`), las pendientes (dos consultas), las recientes, sus líneas con la cantidad vigente del ítem,
  * las órdenes con sus mesas vigentes, los nombres de las mesas y los de las personas. El motivo de una anulación
  * viene unido a la consulta de las comandas. Las pendientes salen de índices parciales y las recientes se miden
  * por su última actividad (`greatest(creado_en, vista_en, max(comanda_linea.estado_en))`): ninguna recorre el
@@ -155,14 +146,26 @@ export class CocinaService {
     }
 
     const desde = new Date(ahora.getTime() - MINUTOS_RECIENTES * 60_000);
-    const pendientes = await this.conexion.query<FilaComanda>(
+    // Las pendientes, en dos consultas que el planificador resuelve por los índices parciales (una sola con `OR` o
+    // `UNION` lo lleva a recorrer las comandas de la sucursal, porque no sabe que `tipo` y `vista_en` se
+    // correlacionan): las de marcha o anulación todavía no vistas, y las comandas y adiciones con alguna línea por
+    // terminar (de ahí se llega a la comanda por su llave).
+    const noVistas = await this.conexion.query<FilaComanda>(
       `SELECT ${COLUMNAS_COMANDA}
          FROM comanda c ${UNIR_MOTIVO}
         WHERE c.sucursal_id = $1 AND c.destino = 'KDS' AND c.estacion_id = ANY($2::uuid[])
-          AND ${SOLO_PENDIENTES}
-        ORDER BY c.creado_en, c.id`,
+          AND c.tipo IN ('MARCHAR', 'ANULACION') AND c.vista_en IS NULL`,
       { bind: [sucursalId, ids], type: QueryTypes.SELECT },
     );
+    const sinTerminar = await this.conexion.query<FilaComanda>(
+      `SELECT ${COLUMNAS_COMANDA}
+         FROM comanda c ${UNIR_MOTIVO}
+        WHERE c.sucursal_id = $1 AND c.destino = 'KDS' AND c.estacion_id = ANY($2::uuid[])
+          AND c.tipo IN ('COMANDA', 'ADICION')
+          AND c.id IN (SELECT l.comanda_id FROM comanda_linea l WHERE ${LINEA_SIN_TERMINAR})`,
+      { bind: [sucursalId, ids], type: QueryTypes.SELECT },
+    );
+    const pendientes = ordenarPorLlegada([...noVistas, ...sinTerminar]);
     // Las recientes: las demás, por su última actividad en la última hora (una comanda vieja que se termina ahora
     // aparece aquí y se puede corregir). Los candidatos salen de los instantes con índice; las 30 más recientes
     // se muestran en orden de llegada.
