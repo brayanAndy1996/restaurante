@@ -94,7 +94,6 @@ export class AnulacionesService {
     @Inject(VistaOrdenService) private readonly vista: VistaOrdenService,
   ) {}
 
-
   // -------------------------------------------------------------------------------------------------
   // Anular un ítem (criterios 35 a 41)
   // -------------------------------------------------------------------------------------------------

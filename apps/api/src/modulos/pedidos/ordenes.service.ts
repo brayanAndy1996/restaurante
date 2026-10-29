@@ -48,7 +48,6 @@ export class OrdenesService {
     @Inject(VistaOrdenService) private readonly vista: VistaOrdenService,
   ) {}
 
-
   /**
    * Criterios 9 a 12. Orden de las comprobaciones: réplica del mismo `id` (devuelve la orden tal como está, sin
    * efectos), mesa de la sucursal activa (404; inactiva, 409), otra réplica del mismo `id` que ganó mientras se

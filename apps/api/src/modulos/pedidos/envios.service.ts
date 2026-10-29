@@ -85,8 +85,6 @@ export class EnviosService {
     @Inject(VistaOrdenService) private readonly vista: VistaOrdenService,
   ) {}
 
-
-
   // -------------------------------------------------------------------------------------------------
   // Enviar (criterios 15 a 31)
   // -------------------------------------------------------------------------------------------------

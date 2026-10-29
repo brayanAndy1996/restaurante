@@ -89,7 +89,6 @@ export class MovimientosService {
     @Inject(VistaOrdenService) private readonly vista: VistaOrdenService,
   ) {}
 
-
   /** Quién ocupa ahora cada una de las mesas (solo las de la sucursal y con una orden vigente). */
   private async ocupantes(
     mesaIds: readonly string[],

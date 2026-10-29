@@ -73,7 +73,6 @@ export class PrecuentasService {
     @Inject(EventosPedidos) private readonly eventos: EventosPedidos,
   ) {}
 
-
   async emitir(ordenId: string, entrada: PrecuentaEntrada): Promise<PrecuentaRespuesta> {
     const sucursalId = this.sesion.sucursalActiva();
     const empresaId = this.contexto.empresaActual();
