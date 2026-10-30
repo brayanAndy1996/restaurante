@@ -4,8 +4,11 @@ import {
   ErrorDeCarga,
   EsqueletoDeLista,
   EstadoVacio,
+  EtiquetaDeEstado,
   Icono,
   IconoCocina,
+  IconoImpresora,
+  IconoInfo,
   IconoOk,
   Interruptor,
   Plegable,
@@ -15,9 +18,11 @@ import {
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Pagina } from '../../componentes/Pagina';
 import { AvisoPendiente } from '../../componentes/PendienteDeEnvio';
+import { useConexion } from '../../lib/conexion';
 import { useEstadoTiempoReal } from '../../lib/tiempo-real';
 import { useSesionActiva } from '../acceso/sesion';
 import { useVistaDeSucursal } from '../disponibilidad/useVistaDeSucursal';
+import { resumenDeImpresion, useEstadoDeImpresion } from '../impresion/estado';
 import {
   estacionesDeLasComandas,
   etiquetaDeMesas,
@@ -240,6 +245,7 @@ function CocinaDeSucursal({ empresaId, sucursalId }: { empresaId: string; sucurs
               />
             </div>
           </div>
+          <EstadoDeImpresion sucursalId={sucursalId} />
           {tiempoReal === 'caido' ? (
             <p className="ui-campo__ayuda" role="status">
               Sin conexión en vivo. La cocina se actualiza cada 30 segundos.
@@ -310,6 +316,30 @@ function CocinaDeSucursal({ empresaId, sucursalId }: { empresaId: string; sucurs
         ) : null}
       </div>
     </Pagina>
+  );
+}
+
+/**
+ * El estado de la impresión, discreto, en la cabecera del KDS (criterio 138): una etiqueta de una línea con
+ * palabras. Sale aquí aunque todo vaya bien, porque una estación que sale por impresora no aparece en esta
+ * pantalla. El detalle de un problema está en el banner de arriba. Sin impresoras en la sucursal, no sale.
+ */
+function EstadoDeImpresion({ sucursalId }: { sucursalId: string }) {
+  const { estado, desdeLaRespuestaMs } = useEstadoDeImpresion(sucursalId);
+  const { sinConexion } = useConexion();
+  const resumen = estado && !sinConexion ? resumenDeImpresion(estado, desdeLaRespuestaMs) : null;
+  if (!resumen) return null;
+  return (
+    <p className="cocina__impresion">
+      <EtiquetaDeEstado
+        tono={resumen.tono}
+        icono={
+          resumen.tono === 'ok' ? IconoOk : resumen.tono === 'alerta' ? IconoImpresora : IconoInfo
+        }
+      >
+        {resumen.texto}
+      </EtiquetaDeEstado>
+    </p>
   );
 }
 

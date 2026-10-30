@@ -14,6 +14,7 @@ import { AvisoPendiente } from '../../../componentes/PendienteDeEnvio';
 import { MUTACION_SIN_PAUSA, useEnvioPendiente } from '../../../lib/envios';
 import { mensajeDeError } from '../../../lib/errores';
 import { usePermiso } from '../../acceso/permisos';
+import { PERIODO_DE_REEVALUACION_MS } from '../../impresion/estado';
 import { useSesionActiva } from '../../acceso/sesion';
 import { MarcoDeAjustes } from '../MarcoDeAjustes';
 import { DondeSaleCadaEstacion, ImpresoraDeCaja } from './DestinosDeImpresion';
@@ -88,6 +89,9 @@ function ImpresionDeSucursal({ sucursalId }: { sucursalId: string }) {
   const consultaImpresoras = useQuery({
     queryKey: claveLista,
     queryFn: ({ signal }) => listarImpresoras(sucursalId, signal),
+    // El estado y los pendientes de cada impresora cambian solos: se vuelven a pedir con el aviso (15 s) y
+    // con el evento `impresion.estado`.
+    refetchInterval: PERIODO_DE_REEVALUACION_MS,
   });
   const consultaDestinos = useQuery({
     queryKey: claveDestinos(sucursalId),

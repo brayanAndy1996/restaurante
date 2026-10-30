@@ -29,8 +29,6 @@ import { VincularPuente } from './VincularPuente';
 /** Enviar una escritura sin perderla por un corte (el `enviar` de `useEnvioPendiente`). */
 type Enviar = <T>(ejecutar: (extra: ExtraDeEscritura) => Promise<T>) => Promise<T>;
 
-/** Cada cuánto se vuelve a pedir el estado del puente (criterio 122: la misma cadencia del aviso). */
-const PERIODO_DEL_ESTADO_MS = 30_000;
 /** Mientras se muestra el código, cada cuánto se mira si el puente ya se vinculó. */
 const PERIODO_DE_VINCULACION_MS = 3_000;
 /** Cada cuánto se vuelve a escribir "hace 2 min". */
@@ -64,7 +62,8 @@ export function PuenteDeImpresion({ sucursalId, enviar }: Props) {
   const consultaEstado = useQuery({
     queryKey: claveEstadoImpresion(sucursalId),
     queryFn: ({ signal }) => leerEstadoDeImpresion(signal),
-    refetchInterval: vinculando ? PERIODO_DE_VINCULACION_MS : PERIODO_DEL_ESTADO_MS,
+    // Sin código a la vista, el aviso de todas las pantallas ya lo vuelve a pedir cada 15 s y con el evento.
+    refetchInterval: vinculando ? PERIODO_DE_VINCULACION_MS : false,
   });
   const estado = consultaEstado.data;
   const puenteId = estado?.puente?.id ?? null;

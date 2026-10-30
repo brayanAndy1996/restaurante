@@ -62,6 +62,10 @@ al cambiar de usuario y al cambiar de sucursal. En las pruebas, `test/preparar.t
 
 La pantalla de cocina y barra es `/cocina` (`modulos/cocina`): comandas en orden de llegada, filtros de estación que se recuerdan, tiempo transcurrido con avisos a los 10 y 20 minutos, «Preparando», «Listo», «Todo listo» y «Enterado», sonido que se puede silenciar (`sonido.ts`) y comandas recientes. Cada «Listo» avisa en el salón a quien comandó y al mozo responsable (lista «Avisos»). En un iPad o una tableta conviene dejarla en primer plano: en segundo plano, el navegador corta la conexión, y al volver la pantalla se pone al día.
 
+## Aviso de impresión
+
+`BannerDeImpresion` (en `AppLayout`, así que sale en todas las pantallas de la sucursal) avisa, en un banner ají con palabras, cuando el puente de impresión está desconectado (más de 60 s sin señal), cuando no hay puente vinculado o cuando una impresora no responde, siempre con los tickets que quedan en cola. No sale si la sucursal no tiene impresoras. La consulta `GET /impresion/estado` (`modulos/impresion/estado.ts`) se repite cada 15 s con `X-Actividad: segundo-plano` y al instante con el evento `impresion.estado`; la comparten el banner, la etiqueta de impresión del KDS y Ajustes › Impresión (que ya no sondea por su cuenta). Un puente que deja de latir se nota entre dos consultas porque se calcula con la hora de la API (`ahora` más lo transcurrido). Una impresora «sin datos» (por ejemplo, una Bluetooth) no es un fallo y no avisa. El código del inicio no importa `lib/monto.ts` ni `decimal.js`.
+
 ## Ver las fotos de los productos en desarrollo
 
 Las fotos de la carta las guarda y las sirve la API. En desarrollo, arranca la API con

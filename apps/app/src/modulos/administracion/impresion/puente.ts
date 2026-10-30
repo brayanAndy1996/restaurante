@@ -1,6 +1,5 @@
 import {
   MINUTOS_VIGENCIA_VINCULACION,
-  estadoImpresionRespuestaSchema,
   puenteRespuestaSchema,
   trabajoCreadoRespuestaSchema,
   vinculacionRespuestaSchema,
@@ -10,6 +9,10 @@ import {
 import { api, listaDe } from '../../../lib/api';
 import type { ExtraDeEscritura } from '../../../lib/envios';
 import { ErrorApi, mensajeDeError } from '../../../lib/errores';
+import { claveEstadoImpresion, leerEstadoDeImpresion, textoDeHace } from '../../impresion/estado';
+
+// El estado de la impresión lo comparten el aviso de todas las pantallas, el KDS y esta sección.
+export { claveEstadoImpresion, leerEstadoDeImpresion, textoDeHace };
 
 /**
  * Ajustes › Impresión, el puente (historia 004, entrega 3b, criterios 106 a 108, 121, 127 y 137): vincular,
@@ -17,19 +20,9 @@ import { ErrorApi, mensajeDeError } from '../../../lib/errores';
  * sin React.
  */
 
-export const claveEstadoImpresion = (sucursalId: string) =>
-  ['impresion', 'estado', sucursalId] as const;
 export const clavePuentes = (sucursalId: string) => ['impresion', 'puentes', sucursalId] as const;
 
 // --- Llamadas a la API ----------------------------------------------------------------------------
-
-/** `GET /impresion/estado`: el puente y las impresoras de la sucursal activa. Se repite sola. */
-export const leerEstadoDeImpresion = (senal?: AbortSignal) =>
-  api.get('/impresion/estado', {
-    esquema: estadoImpresionRespuestaSchema,
-    segundoPlano: true,
-    ...(senal ? { senal } : {}),
-  });
 
 /** `GET /sucursales/:sucursalId/puentes`: los puentes de la sucursal, activos y revocados. */
 export const listarPuentes = (sucursalId: string, senal?: AbortSignal) =>
@@ -72,15 +65,6 @@ export const SEGUNDOS_DE_VIGENCIA = MINUTOS_VIGENCIA_VINCULACION * 60;
 /** Segundos que le quedan a un código; nunca negativos. */
 export const segundosRestantes = (expiraEn: string, ahoraMs: number): number =>
   Math.max(0, Math.ceil((Date.parse(expiraEn) - ahoraMs) / 1000));
-
-/** "hace 8 s", "hace 2 min", "hace 3 h", "hace 2 d". */
-export function textoDeHace(segundos: number): string {
-  const s = Math.max(0, Math.floor(segundos));
-  if (s < 60) return `hace ${s} s`;
-  if (s < 3600) return `hace ${Math.floor(s / 60)} min`;
-  if (s < 86400) return `hace ${Math.floor(s / 3600)} h`;
-  return `hace ${Math.floor(s / 86400)} d`;
-}
 
 export type SituacionDelPuente =
   | { tipo: 'ninguno' }

@@ -19,6 +19,7 @@ import {
 import { api, listaDe } from '../../../lib/api';
 import type { ExtraDeEscritura } from '../../../lib/envios';
 import { ErrorApi, erroresPorCampo, mensajeDeCampo, mensajeDeError } from '../../../lib/errores';
+import { CLAVES_TIEMPO_REAL } from '../../../lib/tiempo-real';
 
 /**
  * Ajustes › Impresión (historia 004, entrega 3b, criterios 99 a 105, 136 y 137 en parte): impresoras de la
@@ -27,7 +28,7 @@ import { ErrorApi, erroresPorCampo, mensajeDeCampo, mensajeDeError } from '../..
  */
 
 export const claveImpresoras = (sucursalId: string) =>
-  ['impresion', 'impresoras', sucursalId] as const;
+  [...CLAVES_TIEMPO_REAL.impresoras, sucursalId] as const;
 export const claveDestinos = (sucursalId: string) => ['impresion', 'destinos', sucursalId] as const;
 export const claveImpresoraDeCaja = (sucursalId: string) =>
   ['impresion', 'caja', sucursalId] as const;
