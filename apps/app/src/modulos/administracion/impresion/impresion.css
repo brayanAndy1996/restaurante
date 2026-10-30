@@ -1,0 +1,52 @@
+/* Ajustes › Impresión (004, 3b): se carga junto con la pantalla, no con el paquete inicial */
+
+.impresion__bloque {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espacio-md);
+  max-width: 40rem;
+  padding-top: var(--espacio-xl);
+  border-top: 1px solid var(--color-junta);
+}
+
+.impresion__cabecera {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espacio-xs);
+}
+
+.impresion__selectores {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espacio-lg);
+}
+
+.impresion__formulario {
+  max-width: 40rem;
+}
+
+.impresion__grupo {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espacio-sm);
+}
+
+/* Dirección y puerto: una debajo de la otra en celular, para que los avisos de error tengan ancho */
+.impresion__red {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--espacio-lg);
+}
+
+@media (min-width: 768px) {
+  .impresion__red {
+    grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+    align-items: start;
+  }
+}
+
+/* Un campo o aviso al que se salta por un error no queda tapado por la acción fija de abajo */
+.impresion__formulario .ui-campo__control,
+.impresion__formulario .ui-aviso {
+  scroll-margin-block: 5rem 7rem;
+}
