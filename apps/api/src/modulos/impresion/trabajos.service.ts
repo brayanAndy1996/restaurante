@@ -18,13 +18,7 @@ import { RELOJ, horaLocal, type Reloj } from '../../nucleo/reloj';
 import { SucursalesConsultaService } from '../plataforma';
 import { SesionActual } from '../seguridad';
 import { ColaImpresionService } from './cola-impresion.service';
-import {
-  conMarcas,
-  documentoDePrueba,
-  errorDeDocumento,
-  recortarError,
-  renderizarTicket,
-} from './escpos';
+import { conMarcas, documentoDePrueba, recortarError, renderizarTicket } from './escpos';
 import { noEncontrado, sinImpresora } from './errores-impresion';
 import { OrdenesVigentes } from './ordenes-vigentes';
 import type { FilaImpresora } from './lectura-impresoras';

@@ -31,7 +31,10 @@ export interface TrabajoParaEncolar {
   comandaId: string | null;
   /** La pre-cuenta de la que sale el trabajo; `null` en una comanda. */
   precuentaId: string | null;
-  /** Los nombres de las mesas de la cuenta separados por coma, para la lista de trabajos (criterio 128). */
+  /**
+   * Los nombres de las mesas de la cuenta separados por coma, para la lista de trabajos (criterio 128). `encolar` lo
+   * recorta con "…" a los 300 caracteres que admite la columna.
+   */
   mesa: string | null;
   /** La orden de la comanda o de la pre-cuenta (de origen: no cambia al unir mesas). */
   ordenId: string | null;

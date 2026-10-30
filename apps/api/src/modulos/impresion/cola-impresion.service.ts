@@ -239,5 +239,8 @@ export function recortarMesa(mesa: string | null): string | null {
   const caracteres = Array.from(mesa);
   return caracteres.length <= LARGO_MESA_DE_TRABAJO
     ? mesa
-    : `${caracteres.slice(0, LARGO_MESA_DE_TRABAJO - 1).join('').trimEnd()}…`;
+    : `${caracteres
+        .slice(0, LARGO_MESA_DE_TRABAJO - 1)
+        .join('')
+        .trimEnd()}…`;
 }

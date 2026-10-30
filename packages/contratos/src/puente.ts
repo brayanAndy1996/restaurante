@@ -17,7 +17,8 @@ import {
  *    llama `POST /puente/vinculacion` con `Authorization: Bearer vi.…` y guarda el `token` `pu.…` de la respuesta.
  * 2. **Conectar.** Abre Socket.IO en `/tiempo-real`, espacio `/puente`, con `auth: { token: 'pu.…' }`. Recibe
  *    `trabajo.nuevo` y `puente.configuracion`.
- * 3. **Imprimir.** `GET /puente/trabajos` al conectarse, al recibir `trabajo.nuevo` y cada 30 segundos; manda los
+ * 3. **Imprimir.** `GET /puente/trabajos` al conectarse, al recibir `trabajo.nuevo` y cada 30 segundos (hasta
+ *    `MAXIMO_TRABAJOS_POR_IMPRESORA` por impresora; con ese lote lleno vuelve a pedir); manda los
  *    `bytes` (base64) por TCP a la impresora de cada trabajo, en el orden recibido, y reporta con
  *    `POST /puente/trabajos/:id/resultado`. La entrega es "al menos una vez": el puente recuerda los últimos 500
  *    ids impresos para no imprimir dos veces un trabajo repetido.

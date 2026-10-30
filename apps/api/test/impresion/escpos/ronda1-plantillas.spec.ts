@@ -31,7 +31,12 @@ import { imprimir } from './ayudas-escpos';
 // se parten sin perder nada. Reglas puras, sin base de datos. No es una prueba protegida.
 
 const compacto = (texto: string): string => texto.replace(/\s+/g, '');
-const CONTEXTO: ContextoDeComanda = { mesas: ['4'], mozo: 'Ana Pérez', hora: '20:15', envioNumero: 2 };
+const CONTEXTO: ContextoDeComanda = {
+  mesas: ['4'],
+  mozo: 'Ana Pérez',
+  hora: '20:15',
+  envioNumero: 2,
+};
 
 const linea = (parcial: Partial<LineaDeComanda> & Pick<LineaDeComanda, 'cantidad' | 'nombre'>) =>
   ({
@@ -83,11 +88,16 @@ describe('partirTexto y juntarEnLineas', () => {
   it('juntarEnLineas reparte entre varias líneas y parte el texto que solo ya pasa del máximo', () => {
     const lineas = juntarEnLineas(['a'.repeat(150), 'b'.repeat(150), 'c'.repeat(250)]);
     for (const l of lineas) expect(l.length).toBeLessThanOrEqual(LARGO_TEXTO_TICKET);
-    expect(compacto(lineas.join(''))).toBe(`${'a'.repeat(150)}${'b'.repeat(150)}${'c'.repeat(250)}`);
+    expect(compacto(lineas.join(''))).toBe(
+      `${'a'.repeat(150)}${'b'.repeat(150)}${'c'.repeat(250)}`,
+    );
   });
 
   it('lineasDeMesas: 20 mesas de 20 caracteres salen completas en varias líneas', () => {
-    const nombres = Array.from({ length: 20 }, (_, i) => `Salon ${String(i + 1).padStart(2, '0')} ${'x'.repeat(11)}`);
+    const nombres = Array.from(
+      { length: 20 },
+      (_, i) => `Salon ${String(i + 1).padStart(2, '0')} ${'x'.repeat(11)}`,
+    );
     const lineas = lineasDeMesas(nombres, true);
     expect(lineas.length).toBeGreaterThan(1);
     for (const l of lineas) expect(l.length).toBeLessThanOrEqual(LARGO_TEXTO_TICKET);
@@ -118,7 +128,10 @@ describe('partirTexto y juntarEnLineas', () => {
 
 describe('F2 y F7 · textos largos salen completos', () => {
   it('20 mesas de 20 caracteres: el título se parte, el documento es válido y las 20 mesas están', () => {
-    const mesas = Array.from({ length: 20 }, (_, i) => `Salon ${String(i + 1).padStart(2, '0')} ${'y'.repeat(11)}`);
+    const mesas = Array.from(
+      { length: 20 },
+      (_, i) => `Salon ${String(i + 1).padStart(2, '0')} ${'y'.repeat(11)}`,
+    );
     const doc = documentoDeComanda(
       { tipo: 'COMANDA', estacion: 'Cocina', lineas: [linea({ cantidad: 1, nombre: 'Ají' })] },
       { ...CONTEXTO, mesas },
@@ -131,20 +144,31 @@ describe('F2 y F7 · textos largos salen completos', () => {
   });
 
   it('un motivo de 300 caracteres sale completo en la anulación', () => {
-    const motivo = Array.from({ length: 50 }, (_, i) => `moti${i}`).join(' ').slice(0, 300);
+    const motivo = Array.from({ length: 50 }, (_, i) => `moti${i}`)
+      .join(' ')
+      .slice(0, 300);
     expect(motivo).toHaveLength(300);
     const doc = documentoDeComanda(
-      { tipo: 'ANULACION', estacion: 'Cocina', lineas: [linea({ cantidad: 1, nombre: 'Ají' })], motivo },
+      {
+        tipo: 'ANULACION',
+        estacion: 'Cocina',
+        lineas: [linea({ cantidad: 1, nombre: 'Ají' })],
+        motivo,
+      },
       CONTEXTO,
     );
     exigirValido(doc);
     for (const ancho of [58, 80] as const) {
-      expect(compacto(imprimir(doc, ancho, 'PC850').texto)).toContain(compacto(`Motivo: ${motivo}`));
+      expect(compacto(imprimir(doc, ancho, 'PC850').texto)).toContain(
+        compacto(`Motivo: ${motivo}`),
+      );
     }
   });
 
   it('pre-cuenta con 20 mesas, sucursal y mozo largos: válida y completa', () => {
-    const mesas = Array.from({ length: 20 }, (_, i) => ({ nombre: `Terraza ${String(i + 1).padStart(2, '0')} ${'z'.repeat(10)}` }));
+    const mesas = Array.from({ length: 20 }, (_, i) => ({
+      nombre: `Terraza ${String(i + 1).padStart(2, '0')} ${'z'.repeat(10)}`,
+    }));
     const precuenta: PrecuentaParaTicket = {
       numero: 3,
       orden: { mesas, mozo: { nombre: 'M'.repeat(100) }, comensales: 8 },

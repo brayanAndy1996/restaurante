@@ -117,9 +117,10 @@ function encabezadoDe(comanda: ComandaParaTicket, contexto: ContextoDeComanda): 
       tipo: 'titulo',
       texto: limpiarTexto(`${comanda.estacion.toUpperCase()} · ${ETIQUETA_TIPO[comanda.tipo]}`),
     },
-    ...lineasDeMesas(contexto.mesas, true).map(
-      (texto): BloqueTicket => ({ tipo: 'titulo', texto }),
-    ),
+    ...lineasDeMesas(contexto.mesas, true).map((texto): BloqueTicket => ({
+      tipo: 'titulo',
+      texto,
+    })),
     {
       tipo: 'columnas',
       izquierda: limpiarTexto(`Mozo: ${contexto.mozo}`),
@@ -138,10 +139,7 @@ function encabezadoDe(comanda: ComandaParaTicket, contexto: ContextoDeComanda): 
   return encabezado;
 }
 
-function cuerpoCompleto(
-  comanda: ComandaParaTicket,
-  compacto: boolean,
-): BloqueTicket[] {
+function cuerpoCompleto(comanda: ComandaParaTicket, compacto: boolean): BloqueTicket[] {
   const cuerpo: BloqueTicket[] = [];
   comanda.lineas.forEach((linea, i) => {
     if (i > 0 && !compacto) cuerpo.push({ tipo: 'espacio' });
@@ -152,13 +150,11 @@ function cuerpoCompleto(
 
 /** Una parte por línea de texto, sin líneas en blanco ni marcas aparte. */
 function cuerpoDenso(comanda: ComandaParaTicket): BloqueTicket[] {
-  return comanda.lineas.map(
-    (linea): BloqueTicket => ({
-      tipo: 'linea',
-      texto: textoDeLinea(linea, comanda.tipo),
-      negrita: true,
-    }),
-  );
+  return comanda.lineas.map((linea): BloqueTicket => ({
+    tipo: 'linea',
+    texto: textoDeLinea(linea, comanda.tipo),
+    negrita: true,
+  }));
 }
 
 /** Las partes una detrás de otra, rellenando cada línea hasta el máximo de un bloque. */

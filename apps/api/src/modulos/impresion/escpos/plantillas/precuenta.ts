@@ -102,7 +102,9 @@ function cuerpoDe(
 /** Último recurso: cada línea con su monto en un texto ("2 × Pizza  S/ 42.00"), rellenando cada línea del ticket. */
 function cuerpoEmpaquetado(precuenta: PrecuentaParaTicket): BloqueTicket[] {
   return juntarEnLineas(
-    precuenta.lineas.map((l) => `${limpiarTexto(`${l.cantidad} × ${l.nombre}`)}  ${formatoMonto(l.total)}`),
+    precuenta.lineas.map(
+      (l) => `${limpiarTexto(`${l.cantidad} × ${l.nombre}`)}  ${formatoMonto(l.total)}`,
+    ),
     ' | ',
   ).map((texto): BloqueTicket => ({ tipo: 'linea', texto }));
 }

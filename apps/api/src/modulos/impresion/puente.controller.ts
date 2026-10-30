@@ -48,7 +48,10 @@ export class PuenteController {
     return this.puentes.configuracion(puente);
   }
 
-  /** 200 con hasta 50 trabajos pendientes de su sucursal, en orden de creación (criterio 113). */
+  /**
+   * 200 con hasta 20 trabajos pendientes por impresora de red activa de su sucursal, en orden de creación dentro de
+   * cada una (criterio 113).
+   */
   @Get('trabajos')
   @Puente()
   entregar(@PuenteActual() puente: PuenteAutenticado): Promise<TrabajoParaImprimir[]> {

@@ -20,6 +20,7 @@ import { ServidorTiempoReal } from '../../src/nucleo/tiempo-real';
 import { AutenticacionPuenteService } from '../../src/modulos/impresion/autenticacion-puente.service';
 import { ColaImpresionService } from '../../src/modulos/impresion/cola-impresion.service';
 import { PuentesService } from '../../src/modulos/impresion/puentes.service';
+import { enTransaccion } from '../aislamiento/fabrica';
 import { sesionContrasena } from '../carta-critica/fabrica-permisos-carta';
 import {
   Cierres,
@@ -70,6 +71,10 @@ afterAll(async () => {
   await admin?.end();
 });
 
+/** Una escritura directa en la base (con el actor que exige la trazabilidad), confirmada. */
+const escribir = (sql: string, parametros: unknown[] = []) =>
+  enTransaccion(admin, A().empresaId, () => admin.query(sql, parametros), { confirmar: true });
+
 const listar = async (token: string, consulta = ''): Promise<TrabajoResumen[]> => {
   const res = await llamar(ctx, token, { metodo: 'get', ruta: `/impresion/trabajos${consulta}` });
   exigirEstado(res, 200, `listar trabajos ${consulta}`);
@@ -92,7 +97,7 @@ describe('I2 · la lista de trabajos filtra antes del límite y por cuenta (crit
     ).toBe(200);
     ctx.reloj.avanzar(1000);
     // 205 trabajos más nuevos: ocupan toda la lista sin filtro (el límite es 200).
-    await admin.query(
+    await escribir(
       `INSERT INTO trabajo_impresion (empresa_id, sucursal_id, impresora_id, tipo, documento, estado, dia_operativo,
                                       creado_en, actualizado_en)
        SELECT t.empresa_id, t.sucursal_id, t.impresora_id, 'PRUEBA', t.documento, 'PENDIENTE', t.dia_operativo,
@@ -232,9 +237,10 @@ describe('F1 · un trabajo sin ticket no ocupa la cola y se ve en la lista', () 
     const puente = await nuevoPuente(ctx, T(), A(), sucursalId);
     const roto = await crearPrueba(ctx, T(), sucursalId, impresora.id);
     const sano = await crearPrueba(ctx, T(), sucursalId, impresora.id);
-    await admin.query(`UPDATE trabajo_impresion SET documento = '{"version": 9}'::jsonb WHERE id = $1`, [
-      roto,
-    ]);
+    await escribir(
+      `UPDATE trabajo_impresion SET documento = '{"version": 9}'::jsonb WHERE id = $1`,
+      [roto],
+    );
     const primera = (await trabajosDelPuente(ctx, puente)).map((t) => t.id);
     expect(primera).toContain(sano);
     expect(primera).not.toContain(roto);
@@ -268,7 +274,9 @@ describe('F1 · un trabajo sin ticket no ocupa la cola y se ve en la lista', () 
     await enviarOk(ctx, mozo, orden.id, [L.gaseosa(1)]);
     const cola = ctx.app.get(ColaImpresionService, { strict: false });
     const contexto = ctx.app.get(ContextoEmpresa, { strict: false });
-    const mesaLarga = Array.from({ length: 20 }, (_, i) => `Salon ${i} ${'q'.repeat(12)}`).join(', ');
+    const mesaLarga = Array.from({ length: 20 }, (_, i) => `Salon ${i} ${'q'.repeat(12)}`).join(
+      ', ',
+    );
     expect(mesaLarga.length).toBeGreaterThan(300);
     const [id] = await contexto.ejecutar(
       A().empresaId,
@@ -326,7 +334,7 @@ describe('M8 · un solo trabajo de emisión por pre-cuenta', () => {
     const { id: precuentaId, trabajoId } = precuentaRespuestaSchema.parse(pre.body);
 
     const duplicar = (reimpresionDe: string | null) =>
-      admin.query(
+      escribir(
         `INSERT INTO trabajo_impresion (empresa_id, sucursal_id, impresora_id, tipo, documento, precuenta_id,
                                         reimpresion_de_id, orden_id, estado, dia_operativo)
          SELECT empresa_id, sucursal_id, impresora_id, tipo, documento, precuenta_id, $2::uuid, orden_id,
@@ -356,7 +364,12 @@ describe('M6 · destinosVisibles', () => {
   it('con una lista vacía no consulta, y las claves son los ids pedidos, como en destinos', async () => {
     const cola = ctx.app.get(ColaImpresionService, { strict: false });
     const contexto = ctx.app.get(ContextoEmpresa, { strict: false });
-    const impresora = await impresoraCreada(ctx, T(), A().S1, cuerpoRed({ nombre: unico('Barra') }));
+    const impresora = await impresoraCreada(
+      ctx,
+      T(),
+      A().S1,
+      cuerpoRed({ nombre: unico('Barra') }),
+    );
     exigirEstado(
       await llamar(ctx, T(), {
         metodo: 'put',
@@ -398,7 +411,9 @@ describe('M6 · destinosVisibles', () => {
 
 describe('I3 · API_URL_PUBLICA ausente', () => {
   it('crear una vinculación responde 503 CONFIGURACION_INCOMPLETA sin crear nada y el arranque avisa con un warn', async () => {
-    const entorno = ctx.app.get(ENTORNO, { strict: false }) as { API_URL_PUBLICA: string | undefined };
+    const entorno = ctx.app.get(ENTORNO, { strict: false }) as {
+      API_URL_PUBLICA: string | undefined;
+    };
     const original = entorno.API_URL_PUBLICA;
     const antes = (
       await admin.query<{ n: string }>(
@@ -500,7 +515,7 @@ describe('estado de las impresoras Bluetooth y de las que cambian de conexión (
     expect(Object.keys(await guardado())).toEqual([red.id]);
 
     // Un estado viejo de una Bluetooth (de antes de esta regla) tampoco se muestra.
-    await admin.query(
+    await escribir(
       `UPDATE puente SET estado_impresoras = estado_impresoras || jsonb_build_object($2::text, '{"estado":"LISTA","desde":"2026-01-01T00:00:00.000Z"}'::jsonb) WHERE id = $1`,
       [puente.id, bluetooth.id],
     );
@@ -568,7 +583,7 @@ describe('revocar un puente cierra sus conexiones aunque la revocación no las a
     const socket = await conectarSocketDelPuente(ctx.app, cierres, puente.token);
     await esperarHasta(() => socket.conectado, 3000, 'la conexión del puente');
     // Se revoca "por debajo": ni `desconectarPuente` ni el cierre normal corren, como en la carrera.
-    await admin.query(
+    await escribir(
       'UPDATE puente SET activo = false, revocado_en = now(), actualizado_en = now() WHERE id = $1',
       [puente.id],
     );

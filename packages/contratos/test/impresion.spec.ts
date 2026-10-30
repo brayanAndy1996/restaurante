@@ -40,9 +40,10 @@ const impresoraBase = {
 };
 
 describe('códigos de error de 3b', () => {
-  it('incluye VINCULACION_INVALIDA y SIN_IMPRESORA sin repetir códigos', () => {
+  it('incluye VINCULACION_INVALIDA, SIN_IMPRESORA y CONFIGURACION_INCOMPLETA sin repetir códigos', () => {
     expect(CODIGOS_ERROR).toContain('VINCULACION_INVALIDA');
     expect(CODIGOS_ERROR).toContain('SIN_IMPRESORA');
+    expect(CODIGOS_ERROR).toContain('CONFIGURACION_INCOMPLETA');
     expect(new Set(CODIGOS_ERROR).size).toBe(CODIGOS_ERROR.length);
   });
 });
@@ -384,6 +385,40 @@ describe('estadoImpresionRespuestaSchema, trabajoResumenSchema y trabajosConsult
     expect(trabajosConsultaSchema.safeParse({ estado: 'otro' }).success).toBe(false);
     expect(trabajosConsultaSchema.safeParse({ desde: 'ayer' }).success).toBe(false);
     expect(trabajosConsultaSchema.safeParse({ sucursalId: ID_1 }).success).toBe(false);
+  });
+
+  it('la consulta acepta ordenId (la cuenta pide solo sus tickets) y solo un uuid', () => {
+    expect(trabajosConsultaSchema.safeParse({ ordenId: ID_1 }).success).toBe(true);
+    expect(trabajosConsultaSchema.safeParse({ ordenId: ID_1, estado: 'IMPRESO' }).success).toBe(
+      true,
+    );
+    expect(trabajosConsultaSchema.safeParse({ ordenId: 'x' }).success).toBe(false);
+  });
+
+  it('el trabajo puede traer su último error y si no tiene ticket, sin que sea obligatorio', () => {
+    const base = {
+      id: ID_1,
+      tipo: 'COMANDA',
+      impresora: { id: ID_2, nombre: 'Cocina' },
+      mesa: '4',
+      estado: 'PENDIENTE',
+      intentos: 0,
+      creadoEn: '2026-10-29T20:00:00.000Z',
+      impresoEn: null,
+      reimpresionDe: null,
+      ordenId: ID_1,
+      envioNumero: 1,
+    };
+    expect(trabajoResumenSchema.safeParse(base).success).toBe(true);
+    expect(
+      trabajoResumenSchema.safeParse({
+        ...base,
+        ultimoError: 'Documento inválido (bloques.0.texto): demasiado largo',
+        sinTicket: true,
+      }).success,
+    ).toBe(true);
+    expect(trabajoResumenSchema.safeParse({ ...base, ultimoError: null }).success).toBe(true);
+    expect(trabajoResumenSchema.safeParse({ ...base, sinTicket: 'si' }).success).toBe(false);
   });
 });
 

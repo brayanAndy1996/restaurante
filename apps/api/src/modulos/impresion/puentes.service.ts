@@ -85,7 +85,9 @@ export class PuentesService implements OnApplicationBootstrap {
     await this.exigirSucursal(sucursalId);
     const api = this.entorno.API_URL_PUBLICA;
     if (api === undefined) {
-      this.logger.error('API_URL_PUBLICA no está configurada: no se puede armar el QR de vinculación');
+      this.logger.error(
+        'API_URL_PUBLICA no está configurada: no se puede armar el QR de vinculación',
+      );
       throw new ErrorAplicacion(
         503,
         'CONFIGURACION_INCOMPLETA',

@@ -19,6 +19,7 @@ export function errorDeDocumento(documento: unknown): string | null {
   const resultado = documentoTicketSchema.safeParse(documento);
   if (resultado.success) return null;
   const problema = resultado.error.issues[0];
-  const donde = problema === undefined || problema.path.length === 0 ? '' : ` (${problema.path.join('.')})`;
+  const donde =
+    problema === undefined || problema.path.length === 0 ? '' : ` (${problema.path.join('.')})`;
   return recortarError(`Documento inválido${donde}: ${problema?.message ?? 'sin detalle'}`);
 }
