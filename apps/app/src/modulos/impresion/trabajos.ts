@@ -99,6 +99,17 @@ export const noSePudoArmar = (trabajo: Pick<TrabajoResumen, 'sinTicket'>): boole
 export const EXPLICACION_DE_ARMADO_FALLIDO =
   'El sistema no pudo preparar el contenido, así que no se mandó a la impresora. Avisa a soporte.';
 
+/**
+ * `true` si el ticket salió recortado (criterio 126): era tan largo que no le cupo todo y en el papel termina con
+ * «Ticket incompleto: faltan N líneas». Un ticket que no se pudo armar no salió, así que no cuenta aquí.
+ */
+export const salioIncompleto = (
+  trabajo: Pick<TrabajoResumen, 'incompleto' | 'sinTicket'>,
+): boolean => trabajo.incompleto === true && trabajo.sinTicket !== true;
+
+export const EXPLICACION_DE_TICKET_INCOMPLETO =
+  'El ticket era demasiado largo y salió recortado. Revisa la cuenta en la app.';
+
 /** Las mesas de un trabajo ("4" o "4, 5") dichas como en la cuenta: "Mesa 4", "Mesas 4 y 5". */
 export function textoDeMesasDeTrabajo(mesa: string | null): string | null {
   const nombres = nombresDeMesas(mesa);

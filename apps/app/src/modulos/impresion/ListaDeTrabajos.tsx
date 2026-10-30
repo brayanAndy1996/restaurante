@@ -3,6 +3,7 @@ import {
   Boton,
   ContenidoDeFila,
   EtiquetaDeEstado,
+  IconoAlerta,
   IconoError,
   IconoImpresora,
   TablaResponsiva,
@@ -12,8 +13,10 @@ import { horaDeLima } from '../../lib/formato';
 import {
   ESTADO_DE_TRABAJO,
   EXPLICACION_DE_ARMADO_FALLIDO,
+  EXPLICACION_DE_TICKET_INCOMPLETO,
   TEXTO_DE_TIPO,
   noSePudoArmar,
+  salioIncompleto,
   textoDeIntentos,
   textoDeMesasDeTrabajo,
 } from './trabajos';
@@ -50,18 +53,25 @@ function EtiquetasDeTrabajo({ trabajo }: { trabajo: TrabajoResumen }) {
       {!sinArmar && trabajo.estado === 'PENDIENTE' && trabajo.intentos > 0 ? (
         <EtiquetaDeEstado tono="alerta">{textoDeIntentos(trabajo.intentos)}</EtiquetaDeEstado>
       ) : null}
+      {salioIncompleto(trabajo) ? (
+        <EtiquetaDeEstado tono="alerta" icono={IconoAlerta}>
+          Incompleto
+        </EtiquetaDeEstado>
+      ) : null}
       {trabajo.reimpresionDe ? <EtiquetaDeEstado tono="info">Reimpresión</EtiquetaDeEstado> : null}
     </span>
   );
 }
 
-/** Las etiquetas del trabajo y, si el ticket no se pudo armar, por qué no salió y qué hacer. */
+/** Las etiquetas del trabajo y, si no se pudo armar o salió recortado, qué pasó y qué hacer. */
 function EstadoDeTrabajo({ trabajo }: { trabajo: TrabajoResumen }) {
   return (
     <>
       <EtiquetasDeTrabajo trabajo={trabajo} />
       {noSePudoArmar(trabajo) ? (
         <p className="texto-ayuda trabajo__falla">{EXPLICACION_DE_ARMADO_FALLIDO}</p>
+      ) : salioIncompleto(trabajo) ? (
+        <p className="texto-ayuda trabajo__falla">{EXPLICACION_DE_TICKET_INCOMPLETO}</p>
       ) : null}
     </>
   );
