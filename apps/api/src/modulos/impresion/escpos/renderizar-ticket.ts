@@ -10,7 +10,7 @@ import {
   JUEGOS_CARACTERES,
 } from '@restaurante/contratos';
 import { armarColumnas, centrarCon, partirEnLineas } from './ajuste';
-import { avisoDeCorte } from './plantillas/presupuesto';
+import { avisoDeCorte, esAvisoDeCorte, omitidosPorAvisos } from './plantillas/presupuesto';
 import {
   NUMERO_DE_PAGINA,
   adaptarTexto,
@@ -196,8 +196,9 @@ function escribirBloque(
  *
  * **Tope de bytes (ronda 3 del ataque, criterio 126).** Un ticket nunca pasa de `MAXIMO_BYTES_TICKET`, medido sobre
  * los bytes ya adaptados al juego de caracteres. Si el documento no cabe, se escribe hasta donde cabe, se cierra con
- * el aviso "Ticket incompleto: faltan N líneas…" (el mismo de las plantillas) y `recortado` es `true`: el trabajo
- * debe marcarse `incompleto`. El trabajo del renderizador queda acotado en tiempo y memoria: deja de adaptar y de
+ * el aviso "Ticket incompleto: faltan N líneas…" (el mismo de las plantillas) y `recortado` es `true`. N es lo que
+ * el renderizador dejó sin escribir más lo que la plantilla ya había descartado (el `omitidos` de su aviso
+ * estructural); el aviso de la plantilla no se cuenta como una línea (ronda 4, F3). El trabajo del renderizador queda acotado en tiempo y memoria: deja de adaptar y de
  * codificar texto en cuanto llega al tope.
  *
  * El documento se valida con `documentoTicketSchema`: uno inválido o de una versión desconocida lanza `Error`.
@@ -231,7 +232,15 @@ export function renderizarTicketDetallado(
     // No cupo: el bloque en curso y los que siguen se omiten, y el ticket lo dice.
     recortado = true;
     escritor.usarReserva();
-    escribirBloque(escritor, avisoDeCorte(bloques.length - i), columnas, impresora.juegoCaracteres);
+    // "Faltan N": lo que el renderizador dejó sin escribir (sin contar el aviso de una plantilla, que no es una
+    // línea de la cuenta) más lo que los avisos de la plantilla ya habían descartado (su `omitidos`, un número).
+    const sinEscribir = bloques.slice(i).filter((b) => !esAvisoDeCorte(b)).length;
+    escribirBloque(
+      escritor,
+      avisoDeCorte(sinEscribir + omitidosPorAvisos(bloques)),
+      columnas,
+      impresora.juegoCaracteres,
+    );
     break;
   }
   return { bytes: escritor.finalizar(), recortado };

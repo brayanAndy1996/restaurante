@@ -129,8 +129,17 @@ const esDeControl = (caracter: string): boolean => {
  */
 export const MAXIMO_REEMPLAZO = 3;
 
-/** Reemplazos ya calculados, por página y modo: `sustituir` repite los mismos pocos caracteres miles de veces. */
-const CACHE_DE_REEMPLAZOS = new Map<string, Map<string, string>>();
+/**
+ * Reemplazos ya calculados, por página y modo: `sustituir` repite los mismos pocos caracteres miles de veces. Dos
+ * generaciones de a lo más `MAXIMO_EN_CACHE` cada una (expulsión tipo LRU barata): al llenarse la actual pasa a ser la
+ * anterior y la anterior se descarta, así una ráfaga de caracteres raros no vacía de golpe los frecuentes ("×", "…",
+ * "€"): un acierto en la anterior lo sube a la actual (ronda 4, observación).
+ */
+interface GeneracionesDeReemplazos {
+  actual: Map<string, string>;
+  anterior: Map<string, string>;
+}
+const CACHE_DE_REEMPLAZOS = new Map<string, GeneracionesDeReemplazos>();
 const MAXIMO_EN_CACHE = 2048;
 
 /** El texto con el carácter reemplazado por algo que la página pueda escribir (o `?`); a lo más `MAXIMO_REEMPLAZO`. */
@@ -138,15 +147,19 @@ function sustituir(caracter: string, pagina: PaginaDeCodigos, sinTildes: boolean
   const clave = `${pagina}${sinTildes ? '-' : '+'}`;
   let cache = CACHE_DE_REEMPLAZOS.get(clave);
   if (cache === undefined) {
-    cache = new Map();
+    cache = { actual: new Map(), anterior: new Map() };
     CACHE_DE_REEMPLAZOS.set(clave, cache);
   }
-  const guardado = cache.get(caracter);
-  if (guardado !== undefined) return guardado;
-  const calculado = calcularReemplazo(caracter, pagina, sinTildes);
-  if (cache.size >= MAXIMO_EN_CACHE) cache.clear();
-  cache.set(caracter, calculado);
-  return calculado;
+  const reciente = cache.actual.get(caracter);
+  if (reciente !== undefined) return reciente;
+  let resultado = cache.anterior.get(caracter);
+  if (resultado === undefined) resultado = calcularReemplazo(caracter, pagina, sinTildes);
+  if (cache.actual.size >= MAXIMO_EN_CACHE) {
+    cache.anterior = cache.actual;
+    cache.actual = new Map();
+  }
+  cache.actual.set(caracter, resultado);
+  return resultado;
 }
 
 function calcularReemplazo(caracter: string, pagina: PaginaDeCodigos, sinTildes: boolean): string {

@@ -442,7 +442,12 @@ export class SimuladorPuente {
     } while ((api.hayMas || hayMasPorPedir(lote)) && avance > 0 && this.puedeTrabajar());
   }
 
-  /** Imprime el lote en el orden recibido; devuelve cuántos trabajos quedaron resueltos (impresos u omitidos). */
+  /**
+   * Imprime el lote en el orden recibido; devuelve cuántos trabajos terminaron **y la API lo aceptó**: los que se
+   * imprimieron, o ya estaban impresos, y cuyo resultado `IMPRESO` respondió 2xx. Un resultado que falla (red, 5xx,
+   * 404, 409) no cuenta, y tampoco un `NO_IMPRESO`: así un lote que no se puede reportar no se vuelve a pedir sin
+   * pausa (ronda 4 del ataque, F1; criterio 113 y contrato `puente.ts`).
+   */
   private async procesarLote(lote: readonly TrabajoParaImprimir[]): Promise<number> {
     const bloqueadas = new Set<string>();
     let resueltos = 0;
@@ -452,8 +457,7 @@ export class SimuladorPuente {
         // Ya salió: solo falta que la API lo sepa (el resultado anterior pudo perderse).
         this.omitidos.push(trabajo.id);
         this.anotar('omitido', trabajo.id);
-        await this.reportar(trabajo, { resultado: 'IMPRESO' });
-        resueltos += 1;
+        if (await this.reportar(trabajo, { resultado: 'IMPRESO' })) resueltos += 1;
         continue;
       }
       let impresora = this.impresoraDe(trabajo.impresoraId);
@@ -507,8 +511,7 @@ export class SimuladorPuente {
       this.fallos.delete(impresora.id);
       this.fijarEstadoDeImpresora(impresora.id, 'LISTA');
       this.anotar('impreso', trabajo.id);
-      await this.reportar(trabajo, { resultado: 'IMPRESO' });
-      resueltos += 1;
+      if (await this.reportar(trabajo, { resultado: 'IMPRESO' })) resueltos += 1;
     }
     return resueltos;
   }
@@ -522,10 +525,11 @@ export class SimuladorPuente {
     }
   }
 
+  /** Reporta el resultado; devuelve `true` solo si la API lo aceptó (2xx). */
   private async reportar(
     trabajo: TrabajoParaImprimir,
     entrada: ResultadoTrabajoEntrada,
-  ): Promise<void> {
+  ): Promise<boolean> {
     const reporte: ResultadoReportado = {
       trabajoId: trabajo.id,
       resultado: entrada.resultado,
@@ -535,14 +539,16 @@ export class SimuladorPuente {
     try {
       await this.http('POST', `/puente/trabajos/${trabajo.id}/resultado`, entrada);
       this.resultados.push(reporte);
+      return true;
     } catch (error) {
       if (error instanceof ErrorProtocoloPuente && (error.estado === 404 || error.estado === 409)) {
         this.rechazados.push({ ...reporte, estado: error.estado });
         this.anotar('resultado-rechazado', { trabajoId: trabajo.id, estado: error.estado });
-        return;
+        return false;
       }
       // Sin red o con error del servidor: el id sigue recordado y el próximo ciclo lo vuelve a reportar.
       this.anotar('error-resultado', { trabajoId: trabajo.id, mensaje: textoDeError(error) });
+      return false;
     }
   }
 

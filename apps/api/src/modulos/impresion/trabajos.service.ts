@@ -19,7 +19,13 @@ import { RELOJ, horaLocal, type Reloj } from '../../nucleo/reloj';
 import { SucursalesConsultaService } from '../plataforma';
 import { SesionActual } from '../seguridad';
 import { ColaImpresionService } from './cola-impresion.service';
-import { conMarcas, documentoDePrueba, recortarError, renderizarTicketDetallado } from './escpos';
+import {
+  conMarcas,
+  documentoDePrueba,
+  esIncompleto,
+  recortarError,
+  renderizarTicketDetallado,
+} from './escpos';
 import { noEncontrado, sinImpresora } from './errores-impresion';
 import { OrdenesVigentes } from './ordenes-vigentes';
 import type { FilaImpresora } from './lectura-impresoras';
@@ -106,8 +112,9 @@ export class TrabajosService {
    *
    * Ronda 3 del ataque: ningún ticket pasa de `MAXIMO_BYTES_TICKET` (256 KB; el renderizador lo corta y avisa), así
    * que la respuesta pesa a lo más el tope más un ticket, y armarla está acotado en tiempo y en memoria (a lo más 20
-   * por impresora y hasta que se llena el tope; los demás ni se leen ni se arman). Un ticket que salió cortado deja
-   * su trabajo en `incompleto = true`.
+   * por impresora y hasta que se llena el tope; los demás ni se leen ni se arman). La marca `incompleto` de cada
+   * trabajo entregado se recalcula con lo que salió (ronda 4, F2): verdadera si la plantilla cortó el documento o el
+   * renderizador lo cortó por el tope con la configuración de ahora, falsa si salió completo.
    */
   async entregar(puente: PuenteAutenticado): Promise<EntregaDeTrabajos> {
     const ahora = this.reloj.ahora();
@@ -129,7 +136,8 @@ export class TrabajosService {
     );
     const entregados: TrabajoParaImprimir[] = [];
     const sinTicket: Array<{ id: string; error: string }> = [];
-    const cortados: string[] = [];
+    // La marca `incompleto` de cada trabajo entregado, calculada con lo que de verdad salió (ronda 4, F2).
+    const marcaIncompleto = new Map<string, boolean>();
     const entregadosPorImpresora = new Map<string, number>();
     const cerradas = new Set<string>();
     let bytesTotales = 0;
@@ -176,7 +184,9 @@ export class TrabajosService {
             hayMas = true;
             continue;
           }
-          if (recortado) cortados.push(fila.id);
+          // Incompleto es verdadero si la plantilla cortó el documento (su aviso estructural) o si el renderizador lo
+          // cortó por el tope con la configuración de ahora; si salió entero, es falso aunque antes se hubiera cortado.
+          marcaIncompleto.set(fila.id, esIncompleto(documento) || recortado);
           bytesTotales += bytes.length;
           entregadosPorImpresora.set(
             fila.impresora_id,
@@ -210,13 +220,15 @@ export class TrabajosService {
         { bind: [id, error, ahora], type: QueryTypes.UPDATE },
       );
     }
-    if (cortados.length > 0) {
-      // El ticket pasó de `MAXIMO_BYTES_TICKET` con la configuración vigente de la impresora: sale cortado, con el
-      // aviso de incompleto, y la lista de "Trabajos de hoy" lo dice (ronda 3 del ataque, criterio 126).
+    if (marcaIncompleto.size > 0) {
+      // `incompleto` se recalcula en cada entrega y puede volver a `false`: la lista de "Trabajos de hoy" dice lo que
+      // salió en papel con la configuración de ese momento (ronda 4 del ataque, F2; criterio 126).
+      const ids = [...marcaIncompleto.keys()];
       await this.conexion.query(
-        `UPDATE trabajo_impresion SET incompleto = true, actualizado_en = $2
-          WHERE id = ANY($1::uuid[]) AND NOT incompleto`,
-        { bind: [cortados, ahora], type: QueryTypes.UPDATE },
+        `UPDATE trabajo_impresion t SET incompleto = v.incompleto, actualizado_en = $3
+           FROM unnest($1::uuid[], $2::boolean[]) AS v(id, incompleto)
+          WHERE t.id = v.id AND t.incompleto IS DISTINCT FROM v.incompleto`,
+        { bind: [ids, ids.map((id) => marcaIncompleto.get(id)!), ahora], type: QueryTypes.UPDATE },
       );
     }
     if (entregados.length > 0) {

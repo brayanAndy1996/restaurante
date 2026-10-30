@@ -316,6 +316,12 @@ export const MAXIMO_BLOQUES_TICKET = 3000;
  * entre 35 KB y 110 KB, así que un ticket normal no se acerca.
  */
 export const MAXIMO_BYTES_TICKET = 262_144;
+/**
+ * Máximo de `omitidos` del aviso `INCOMPLETO` (la cantidad de líneas que dejó sin escribir quien cortó el
+ * documento; ronda 4 del ataque, F3). Es un número, no un texto: así el renderizador suma lo que una plantilla ya
+ * había descartado sin leer el texto del aviso.
+ */
+export const MAXIMO_OMITIDOS_TICKET = 1_000_000;
 export const LARGO_TEXTO_TICKET = 200;
 export const SANGRIA_MAXIMA_TICKET = 8;
 export const LINEAS_MAXIMAS_ESPACIO_TICKET = 10;
@@ -335,7 +341,9 @@ const alineacionTicketSchema = z.enum(['izquierda', 'centro', 'derecha']);
  * lo que escribe una persona (un modificador, una observación, un nombre) puede tenerla, así que un texto que se
  * parezca al aviso nunca se confunde con él.
  * - `RETRASO`: "Impreso con retraso · enviado a las 20:15" (criterio 118).
- * - `INCOMPLETO`: "Ticket incompleto: faltan N líneas. Revisa la cuenta en la app." (criterio 126).
+ * - `INCOMPLETO`: "Ticket incompleto: faltan N líneas. Revisa la cuenta en la app." (criterio 126). Lleva además
+ *   `omitidos` (N, un número): lo que la plantilla descartó. Si luego el renderizador corta por el tope de bytes, su
+ *   aviso suma ese número a lo que él mismo dejó sin escribir (ronda 4, F3).
  */
 export const AVISOS_TICKET = ['RETRASO', 'INCOMPLETO'] as const;
 export type AvisoTicket = (typeof AVISOS_TICKET)[number];
@@ -345,6 +353,7 @@ export type AvisoTicket = (typeof AVISOS_TICKET)[number];
  * - `titulo`: texto en negrita y doble alto (por defecto centrado).
  * - `linea`: un texto que se ajusta al ancho sin partir palabras, con `sangria` columnas a la izquierda. `aviso`
  *   la marca como un aviso del sistema (`AVISOS_TICKET`); solo lo ponen el sistema, nunca el texto de una persona.
+ *   `omitidos`, solo con el aviso `INCOMPLETO`, es la cantidad de líneas que ese aviso dice que faltan.
  * - `columnas`: `izquierda` y `derecha` en la misma línea (la derecha alineada al borde; si no caben, la
  *   izquierda continúa en las líneas siguientes; con `derechaAlFinal`, la izquierda sale completa y seguida, y la
  *   derecha queda al final, para que un nombre largo no se parta con el monto en medio).
@@ -358,15 +367,21 @@ export const bloqueTicketSchema = z.discriminatedUnion('tipo', [
     texto: textoDeTicketSchema,
     alinear: alineacionTicketSchema.optional(),
   }),
-  z.strictObject({
-    tipo: z.literal('linea'),
-    texto: textoDeTicketSchema,
-    negrita: z.boolean().optional(),
-    dobleAlto: z.boolean().optional(),
-    alinear: alineacionTicketSchema.optional(),
-    sangria: z.number().int().min(0).max(SANGRIA_MAXIMA_TICKET).optional(),
-    aviso: z.enum(AVISOS_TICKET).optional(),
-  }),
+  z
+    .strictObject({
+      tipo: z.literal('linea'),
+      texto: textoDeTicketSchema,
+      negrita: z.boolean().optional(),
+      dobleAlto: z.boolean().optional(),
+      alinear: alineacionTicketSchema.optional(),
+      sangria: z.number().int().min(0).max(SANGRIA_MAXIMA_TICKET).optional(),
+      aviso: z.enum(AVISOS_TICKET).optional(),
+      omitidos: z.number().int().min(0).max(MAXIMO_OMITIDOS_TICKET).optional(),
+    })
+    .refine((b) => b.omitidos === undefined || b.aviso === 'INCOMPLETO', {
+      message: 'Solo el aviso INCOMPLETO lleva la cantidad de líneas omitidas',
+      path: ['omitidos'],
+    }),
   z.strictObject({
     tipo: z.literal('columnas'),
     izquierda: textoDeTicketSchema,

@@ -25,10 +25,16 @@ import {
  *    recuerda los últimos 500 ids impresos para no imprimir dos veces un trabajo repetido.
  *
  *    **Regla de "Hay más".** Con un lote lleno (alguna impresora recibió `MAXIMO_TRABAJOS_POR_IMPRESORA`) o con la
- *    cabecera `X-Puente-Hay-Mas: 1`, el puente vuelve a pedir enseguida **solo si el lote anterior avanzó**, es decir,
- *    si terminó algún trabajo: lo imprimió, o confirmó con `IMPRESO` que ya estaba impreso. Si no avanzó (impresora
- *    apagada o en espera, Bluetooth, impresora desconocida) no repite: espera el intervalo normal de 30 segundos (o el
- *    aviso `trabajo.nuevo`). Así un lote que no puede salir nunca hace un ciclo de peticiones sin pausa.
+ *    cabecera `X-Puente-Hay-Mas: 1`, el puente vuelve a pedir enseguida **solo si el lote anterior avanzó**. El lote
+ *    avanzó únicamente si la API **aceptó (2xx) el resultado `IMPRESO` de al menos un trabajo del lote**: el trabajo
+ *    que se imprimió en ese lote, o uno que ya estaba en la memoria de ids impresos y se confirmó de nuevo. No
+ *    cuentan: un trabajo impreso cuyo `POST …/resultado` falló (red, 5xx, 404, 409), un `NO_IMPRESO` aunque la API lo
+ *    acepte, un trabajo ya impreso cuyo reporte falló, ni los que se omitieron (impresora apagada o en espera,
+ *    Bluetooth, impresora desconocida). Si el lote no avanzó, el puente no repite: espera el intervalo normal de 30
+ *    segundos (o el aviso `trabajo.nuevo`). Así ni un lote que no puede salir ni una API que rechaza los resultados
+ *    provocan un ciclo de peticiones sin pausa (ronda 4 del ataque: con todos los resultados fallando, el puente
+ *    hacía 110 `GET` y 2180 `POST` en 2 segundos). El trabajo impreso cuyo resultado no se aceptó se vuelve a
+ *    reportar `IMPRESO`, sin imprimirlo otra vez, en la siguiente vuelta normal.
  * 4. **Latido.** `POST /puente/latido` cada 20 segundos y al cambiar algo.
  *
  * Toda petición lleva la cabecera `X-Puente-Protocolo: 1`. Todas las rutas salvo la vinculación llevan

@@ -3,7 +3,7 @@ import {
   type BloqueTicket,
   type DocumentoTicket,
 } from '@restaurante/contratos';
-import { avisoDeCorte } from './presupuesto';
+import { avisoDeCorte, esAvisoDeCorte, omitidosPorAvisos } from './presupuesto';
 import { limpiarTexto } from './texto';
 
 /** El texto de la marca de una reimpresión (criterio 128). */
@@ -61,8 +61,15 @@ export function conMarcas(documento: DocumentoTicket, marcas: MarcasDeTicket): D
   const exceso = nuevos.length + documento.bloques.length - MAXIMO_BLOQUES_TICKET;
   if (exceso <= 0) return { ...documento, bloques: [...nuevos, ...documento.bloques] };
   const conservados = documento.bloques.slice(0, documento.bloques.length - exceso - 1);
+  const perdidos = documento.bloques.slice(conservados.length).filter((b) => !esAvisoDeCorte(b));
   return {
     ...documento,
-    bloques: [...nuevos, ...conservados, avisoDeCorte(exceso + 1)],
+    // "Faltan N": lo que se pierde ahora (sin contar un aviso de la plantilla como una línea) más lo que los avisos
+    // del documento ya habían descartado (ronda 4, F3).
+    bloques: [
+      ...nuevos,
+      ...conservados,
+      avisoDeCorte(perdidos.length + omitidosPorAvisos(documento.bloques)),
+    ],
   };
 }

@@ -22,12 +22,31 @@ export function avisoDeCorte(omitidos: number): BloqueTicket {
     texto: `... Ticket incompleto: faltan ${omitidos} líneas. Revisa la cuenta en la app.`,
     negrita: true,
     aviso: 'INCOMPLETO',
+    omitidos,
   };
+}
+
+/** `true` si el bloque es un aviso de incompleto del sistema (la marca estructural, nunca un texto). */
+export function esAvisoDeCorte(bloque: BloqueTicket): boolean {
+  return bloque.tipo === 'linea' && bloque.aviso === 'INCOMPLETO';
+}
+
+/**
+ * Cuántas líneas dejaron sin escribir los avisos de incompleto que ya trae el documento (el `omitidos` de cada uno,
+ * un número, nunca el texto). Un aviso sin el número (un documento guardado antes de la ronda 4) cuenta 0. Lo suma el
+ * aviso nuevo de quien corte después (el renderizador o `conMarcas`), para que su "faltan N" sea el total.
+ */
+export function omitidosPorAvisos(bloques: readonly BloqueTicket[]): number {
+  let total = 0;
+  for (const bloque of bloques) {
+    if (bloque.tipo === 'linea' && bloque.aviso === 'INCOMPLETO') total += bloque.omitidos ?? 0;
+  }
+  return total;
 }
 
 /** `true` si al documento no le cupo todo y termina con el aviso de corte (se guarda como `incompleto`). */
 export function esIncompleto(documento: { bloques: readonly BloqueTicket[] }): boolean {
-  return documento.bloques.some((b) => b.tipo === 'linea' && b.aviso === 'INCOMPLETO');
+  return documento.bloques.some(esAvisoDeCorte);
 }
 
 /**

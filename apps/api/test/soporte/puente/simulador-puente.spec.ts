@@ -233,6 +233,34 @@ describe('SimuladorPuente', () => {
       expect(simulador.peticionesDeTrabajos).toBe(1);
     });
 
+    it('con los resultados fallando, un lote lleno no se vuelve a pedir sin pausa: no avanzó (ronda 4, F1)', async () => {
+      const iCocina = api.agregarImpresoraDeRed(cocina.host, cocina.puerto, 'Cocina');
+      for (let i = 0; i < 21; i += 1) api.encolar(iCocina.id, ticket(`t${i}`), { avisar: false });
+      // La API rechaza todos los resultados (error del servidor): ningún trabajo queda confirmado.
+      api.fallosDeResultado = 1_000_000;
+      const simulador = await vinculado({ esperaInicialMs: 5000, esperaMaximaMs: 5000 });
+      await simulador.iniciar();
+      await new Promise((r) => setTimeout(r, 600));
+      // Imprimió los 20 del primer lote una sola vez y no pidió otro: esperó el intervalo (60 s en la prueba).
+      expect(simulador.impresiones).toHaveLength(20);
+      expect(simulador.peticionesDeTrabajos).toBe(1);
+      expect(api.peticionesA('POST', /resultado$/).length).toBe(20);
+    });
+
+    it('si la API acepta solo algunos resultados, el lote avanzó y vuelve a pedir (ronda 4, F1)', async () => {
+      const iCocina = api.agregarImpresoraDeRed(cocina.host, cocina.puerto, 'Cocina');
+      const orden = Array.from({ length: 21 }, (_, i) =>
+        api.encolar(iCocina.id, ticket(`t${i}`), { avisar: false }),
+      );
+      // Falla el primer resultado y aceptan los demás: el lote terminó trabajos aceptados.
+      api.fallosDeResultado = 1;
+      const simulador = await vinculado();
+      await simulador.iniciar();
+      await simulador.esperarImpresos(21, 4000);
+      expect([...simulador.impresos].sort()).toEqual(orden.map((t) => t.id).sort());
+      expect(simulador.peticionesDeTrabajos).toBeGreaterThanOrEqual(2);
+    });
+
     it('detener para los temporizadores: ya no pide trabajos', async () => {
       const simulador = await vinculado({ intervaloTrabajosMs: 30 });
       await simulador.iniciar();
