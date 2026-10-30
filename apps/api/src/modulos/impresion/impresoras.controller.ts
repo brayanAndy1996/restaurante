@@ -1,29 +1,57 @@
-import { Controller, Get, Patch, Post } from '@nestjs/common';
+import { Body, Controller, Get, Inject, Param, Patch, Post } from '@nestjs/common';
+import {
+  impresoraEntradaSchema,
+  impresoraModificarEntradaSchema,
+  type ImpresoraEntradaValidada,
+  type ImpresoraModificarEntradaValidada,
+  type ImpresoraRespuesta,
+} from '@restaurante/contratos';
 import { noImplementado } from '../../nucleo/errores/no-implementado';
+import { PipeUuid, PipeZod } from '../../nucleo/errores/pipes';
+import { Idempotente } from '../../nucleo/idempotencia';
+import { Permiso } from '../seguridad';
+import { ImpresorasService } from './impresoras.service';
 
 /**
- * Impresoras de la sucursal (historia 004, criterios 103 a 105 y 127). Firmas de la fase A (T35): sin
- * `@Permiso` (en la fase C, `ADMINISTRAR` en todas, con `Idempotency-Key` opcional en la prueba), sin validación y
- * sin lógica.
+ * Impresoras de la sucursal (historia 004, criterios 103 a 105 y 127): `ADMINISTRAR` en todas, con la sucursal en
+ * la ruta (el Administrador configura cualquier sucursal de su empresa, con o sin sucursal activa), sin
+ * `@RequiereModulo`. La página de prueba sigue como firma de la fase A hasta T41 (con `Idempotency-Key`).
  */
 @Controller('sucursales/:sucursalId/impresoras')
 export class ImpresorasController {
+  constructor(@Inject(ImpresorasService) private readonly impresoras: ImpresorasService) {}
+
+  /** 200 con las impresoras (activas e inactivas), su estado y sus pendientes; 403; 404. */
   @Get()
-  listar(): never {
-    throw noImplementado();
+  @Permiso('ADMINISTRAR')
+  listar(@Param('sucursalId', PipeUuid) sucursalId: string): Promise<ImpresoraRespuesta[]> {
+    return this.impresoras.listar(sucursalId);
   }
 
+  /** 201; 400; 403; 404; 409 `CONFLICTO` (nombre repetido). Con `Idempotency-Key` opcional. */
   @Post()
-  crear(): never {
-    throw noImplementado();
+  @Idempotente()
+  @Permiso('ADMINISTRAR')
+  crear(
+    @Param('sucursalId', PipeUuid) sucursalId: string,
+    @Body(new PipeZod(impresoraEntradaSchema)) entrada: ImpresoraEntradaValidada,
+  ): Promise<ImpresoraRespuesta> {
+    return this.impresoras.crear(sucursalId, entrada);
   }
 
+  /** 200; 400; 403; 404; 409 `CONFLICTO` (nombre) o `EN_USO` (al desactivar). Sin cambios, 200 sin auditoría. */
   @Patch(':id')
-  modificar(): never {
-    throw noImplementado();
+  @Permiso('ADMINISTRAR')
+  modificar(
+    @Param('sucursalId', PipeUuid) sucursalId: string,
+    @Param('id', PipeUuid) id: string,
+    @Body(new PipeZod(impresoraModificarEntradaSchema)) cambios: ImpresoraModificarEntradaValidada,
+  ): Promise<ImpresoraRespuesta> {
+    return this.impresoras.modificar(sucursalId, id, cambios);
   }
 
   @Post(':id/prueba')
+  @Permiso('ADMINISTRAR')
   paginaDePrueba(): never {
     throw noImplementado();
   }
