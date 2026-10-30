@@ -1,12 +1,12 @@
-import type { EstadoImpresionRespuesta, ImpresoraRespuesta } from '@restaurante/contratos';
+import type { ImpresoraRespuesta } from '@restaurante/contratos';
 import { Aviso, Boton, IconoImpresora } from '@restaurante/ui';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { MUTACION_SIN_PAUSA, type ExtraDeEscritura } from '../../../lib/envios';
 import { mensajeDeError } from '../../../lib/errores';
 import { PREFIJO_DE_TRABAJOS } from '../../impresion/trabajos';
 import { NOTA_DE_BLUETOOTH } from './impresion';
-import { claveEstadoImpresion, imprimirPaginaDePrueba } from './puente';
+import { claveEstadoImpresion, imprimirPaginaDePrueba, leerEstadoDeImpresion } from './puente';
 
 type Enviar = <T>(ejecutar: (extra: ExtraDeEscritura) => Promise<T>) => Promise<T>;
 
@@ -44,22 +44,27 @@ export function PaginaDePrueba({ sucursalId, impresora, enviar }: Props) {
     }
   }
 
-  // Lo que ya se sabe del puente decide qué se le promete a la persona.
-  const puente = clientes.getQueryData<EstadoImpresionRespuesta>(claveEstadoImpresion(sucursalId))
-    ?.puente;
+  // Lo que se sabe del puente decide qué se le promete a la persona (es la misma consulta de la lista).
+  const estado = useQuery({
+    queryKey: claveEstadoImpresion(sucursalId),
+    queryFn: ({ signal }) => leerEstadoDeImpresion(signal),
+    staleTime: 30_000,
+  });
   const cuando =
     impresora.conexion.tipo === 'BLUETOOTH'
       ? `${NOTA_DE_BLUETOOTH}: hasta entonces la página espera en la cola.`
-      : puente?.conectado
-        ? `Sale en unos segundos por ${impresora.nombre}.`
-        : 'Todavía no hay un puente conectado: la página sale en cuanto se conecte.';
+      : !estado.data
+        ? 'Sale en cuanto el puente la reciba.'
+        : estado.data.puente?.conectado
+          ? `Sale en unos segundos por ${impresora.nombre}.`
+          : 'El puente no está conectado ahora: la página sale en cuanto se conecte.';
 
   return (
     <div className="impresion__grupo">
       <p className="ui-campo__etiqueta">Probar la impresora</p>
       <p className="texto-ayuda">
-        Imprime una hoja con tildes, la letra Ñ y un monto de muestra. Si algo sale raro, cambia el juego
-        de caracteres y prueba otra vez. Funciona aunque la impresora esté desactivada.
+        Imprime una hoja con tildes, la letra Ñ y un monto de muestra. Si algo sale raro, cambia el
+        juego de caracteres y prueba otra vez. Funciona aunque la impresora esté desactivada.
       </p>
       {fallo ? (
         <Aviso tipo="error" titulo="No pudimos mandar la página de prueba">

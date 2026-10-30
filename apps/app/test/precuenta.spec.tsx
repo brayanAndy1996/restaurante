@@ -252,7 +252,9 @@ describe('Qué pasó con el papel (criterios 102 y 138)', () => {
     const s = montar({ precuenta: EN_COLA() });
     const hoja = await abrirHoja();
     await userEvent.click(within(hoja).getByRole('button', { name: 'Imprimir otra vez' }));
-    await waitFor(() => expect(hoja).toHaveTextContent('Mandaste otra copia a la impresora de caja.'));
+    await waitFor(() =>
+      expect(hoja).toHaveTextContent('Mandaste otra copia a la impresora de caja.'),
+    );
     // Sigue siendo la pre-cuenta 1 y sigue vigente.
     expect(within(hoja).getByText('Pre-cuenta 1')).toBeVisible();
     expect(hoja).not.toHaveTextContent('ya no vale');
@@ -305,9 +307,7 @@ describe('Qué pasó con el papel (criterios 102 y 138)', () => {
   it('si no se pudo, lo dice dentro de la hoja y se puede volver a tocar', async () => {
     const s = montar({ precuenta: EN_COLA() });
     const hoja = await abrirHoja();
-    s.poner(`POST ${API}`, () =>
-      json(500, { codigo: 'ERROR_INTERNO', mensaje: 'Falló' }),
-    );
+    s.poner(`POST ${API}`, () => json(500, { codigo: 'ERROR_INTERNO', mensaje: 'Falló' }));
     await userEvent.click(within(hoja).getByRole('button', { name: 'Imprimir otra vez' }));
     const aviso = await within(hoja).findByRole('alert');
     expect(aviso).toHaveTextContent('No pudimos imprimir la pre-cuenta');

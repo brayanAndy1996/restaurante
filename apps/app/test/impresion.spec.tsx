@@ -123,6 +123,10 @@ function api(datos: Datos = {}, respuestas: Record<string, Manejador> = {}) {
       impresoraCajaId = (cuerpo as { impresoraCajaId: string | null }).impresoraCajaId;
       return json(200, { impresoraCajaId });
     },
+    // El puente y los trabajos de hoy tienen sus propias pruebas (`puente.spec.tsx`): aquí, sin nada.
+    'GET /impresion/estado': () =>
+      json(200, { ahora: '2026-10-30T17:00:00.000Z', puente: null, impresoras: [] }),
+    'GET /impresion/trabajos': () => json(200, []),
     ...respuestas,
   });
   return { ...s, impresoras: () => impresoras, destinos: () => destinos };

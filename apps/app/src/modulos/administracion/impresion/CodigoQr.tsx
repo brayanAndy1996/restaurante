@@ -7,7 +7,8 @@ interface Props {
   etiqueta: string;
 }
 
-type Dibujo = { estado: 'cargando' } | { estado: 'listo'; lado: number; ruta: string } | { estado: 'fallo' };
+type Dibujo =
+  { estado: 'cargando' } | { estado: 'listo'; lado: number; ruta: string } | { estado: 'fallo' };
 
 /**
  * Un QR siempre es oscuro sobre claro, también cuando llegue el tema nocturno: por eso estos dos colores son

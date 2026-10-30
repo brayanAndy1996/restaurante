@@ -197,3 +197,10 @@
   flex-direction: column;
   gap: var(--espacio-md);
 }
+/* La sección plegable ya es la baldosa: la lista de dentro no lleva otro borde (nada de baldosas anidadas) */
+.cuenta__tickets .ui-lista,
+.cuenta__tickets .ui-tabla-envoltorio {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}

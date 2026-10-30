@@ -54,6 +54,7 @@ import {
   type GrupoDeEnvio,
 } from './ordenes';
 import { pedirPrecuenta, esLaVigente, sePuedePedirPrecuenta } from './precuenta';
+import { TicketsDeLaCuenta } from './TicketsDeLaCuenta';
 import { rutaDeComandero, rutaDeMover, rutaDeOrden, rutaDeUnir } from './salon';
 import { useAhoraDelServidor, useOrden } from './useOrden';
 import './cuenta.css';
@@ -65,10 +66,6 @@ const LiberarMesaHoja = lazy(() =>
 );
 const PrecuentaHoja = lazy(() =>
   import('./PrecuentaHoja').then((m) => ({ default: m.PrecuentaHoja })),
-);
-// Los tickets que se pueden reimprimir (criterio 138) se piden al abrir su sección, no con la cuenta.
-const TicketsDeLaCuenta = lazy(() =>
-  import('./TicketsDeLaCuenta').then((m) => ({ default: m.TicketsDeLaCuenta })),
 );
 
 /** Lo que la pantalla anterior le pide a la cuenta al llegar. */
@@ -537,11 +534,7 @@ function Cuenta({
         </section>
       ) : null}
 
-      {abierta && puedeAtender && grupos.length > 0 ? (
-        <Suspense fallback={null}>
-          <TicketsDeLaCuenta orden={orden} />
-        </Suspense>
-      ) : null}
+      {abierta && puedeAtender && grupos.length > 0 ? <TicketsDeLaCuenta orden={orden} /> : null}
 
       {conConsumo ? (
         <Aviso tipo="alerta" titulo="Esta mesa ya tuvo pedidos">

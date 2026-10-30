@@ -478,7 +478,8 @@ test('el Mozo agrega una adición, pide la pre-cuenta (amarillo) y agrega otra (
     );
     await expect(hoja.locator('.precuenta__total')).toContainText('S/ 144.00');
     await expect(hoja).toContainText('IGV incluido');
-    await expect(hoja).toContainText('La impresión llega con el puente de impresión');
+    // Sin impresora de caja (la sucursal de la prueba no eligió una): la hoja lo dice.
+    await expect(hoja).toContainText('Sin impresora de caja');
     await page.waitForTimeout(400); // la hoja termina de subir
     await page.screenshot({ path: 'e2e/resultados/salon-10-precuenta.png' });
     await hoja.getByRole('button', { name: 'Volver a la cuenta' }).click();

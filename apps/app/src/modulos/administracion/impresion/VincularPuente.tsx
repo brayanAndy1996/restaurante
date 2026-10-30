@@ -62,7 +62,7 @@ export function VincularPuente({ sucursalId, reemplaza, onCerrar }: Props) {
     if (iniciado.current) return;
     iniciado.current = true;
     titulo.current?.focus();
-    titulo.current?.scrollIntoView?.({ block: 'nearest' });
+    titulo.current?.scrollIntoView({ block: 'nearest' });
     crear.mutate();
     // Solo al abrir.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -119,7 +119,11 @@ export function VincularPuente({ sucursalId, reemplaza, onCerrar }: Props) {
         <>
           <div className="qr">
             <CodigoQr texto={vinculacion.qr} etiqueta="Código QR para vincular el puente" />
-            <p className={restantes <= SEGUNDOS_DE_AVISO ? 'qr__reloj qr__reloj--pronto' : 'qr__reloj'}>
+            <p
+              className={
+                restantes <= SEGUNDOS_DE_AVISO ? 'qr__reloj qr__reloj--pronto' : 'qr__reloj'
+              }
+            >
               <span>Vence en</span>
               <b role="timer" aria-label={`Vence en ${leerReloj(restantes)}`}>
                 {relojDeCuenta(restantes)}

@@ -69,7 +69,8 @@ function Tickets({ orden }: { orden: OrdenRespuesta }) {
         </ErrorDeCarga>
       ) : trabajos && trabajos.length === 0 ? (
         <p className="texto-ayuda">
-          Esta cuenta no tiene tickets impresos. Lo que sale por la pantalla de cocina no se imprime.
+          Esta cuenta no tiene tickets impresos. Lo que sale por la pantalla de cocina no se
+          imprime.
         </p>
       ) : trabajos ? (
         <ListaDeTrabajos

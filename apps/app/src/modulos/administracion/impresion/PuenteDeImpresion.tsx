@@ -11,7 +11,7 @@ import {
   IconoSinRed,
 } from '@restaurante/ui';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { lazy, Suspense, useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { MUTACION_SIN_PAUSA, type ExtraDeEscritura } from '../../../lib/envios';
 import { mensajeDeError } from '../../../lib/errores';
 import {
@@ -24,11 +24,7 @@ import {
   revocarPuente,
   situacionDelPuente,
 } from './puente';
-
-// El QR y su librería se descargan recién al tocar "Vincular puente": no cuentan en el paquete inicial.
-const VincularPuente = lazy(() =>
-  import('./VincularPuente').then((m) => ({ default: m.VincularPuente })),
-);
+import { VincularPuente } from './VincularPuente';
 
 /** Enviar una escritura sin perderla por un corte (el `enviar` de `useEnvioPendiente`). */
 type Enviar = <T>(ejecutar: (extra: ExtraDeEscritura) => Promise<T>) => Promise<T>;
@@ -140,8 +136,8 @@ export function PuenteDeImpresion({ sucursalId, enviar }: Props) {
           Puente de impresión
         </h3>
         <p className="texto-ayuda">
-          El puente es la app de un celular Android del local que recibe los tickets y los manda a las
-          impresoras de la red. Hay uno por sucursal.
+          El puente es la app de un celular Android del local que recibe los tickets y los manda a
+          las impresoras de la red. Hay uno por sucursal.
         </p>
       </div>
 
@@ -175,7 +171,8 @@ export function PuenteDeImpresion({ sucursalId, enviar }: Props) {
             <>
               <EtiquetaDeEstado tono="neutro">Sin puente</EtiquetaDeEstado>
               <p>
-                Aún no hay un puente vinculado. Sin él, los tickets quedan en la cola y no se imprimen.
+                Aún no hay un puente vinculado. Sin él, los tickets quedan en la cola y no se
+                imprimen.
               </p>
             </>
           ) : (
@@ -207,23 +204,14 @@ export function PuenteDeImpresion({ sucursalId, enviar }: Props) {
       ) : null}
 
       {vinculando ? (
-        <Suspense
-          fallback={
-            <div className="puente__cargando" role="status">
-              <Esqueleto className="qr__esqueleto" />
-              <span>Preparando…</span>
-            </div>
-          }
-        >
-          <VincularPuente
-            sucursalId={sucursalId}
-            reemplaza={estado?.puente?.nombre ?? null}
-            onCerrar={() => {
-              setVinculando(false);
-              requestAnimationFrame(() => titulo.current?.focus());
-            }}
-          />
-        </Suspense>
+        <VincularPuente
+          sucursalId={sucursalId}
+          reemplaza={estado?.puente?.nombre ?? null}
+          onCerrar={() => {
+            setVinculando(false);
+            requestAnimationFrame(() => titulo.current?.focus());
+          }}
+        />
       ) : (
         <Boton icono={IconoCelular} bloque onClick={abrirVinculacion}>
           Vincular puente
