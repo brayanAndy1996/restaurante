@@ -22,12 +22,17 @@ export { HorarioService } from './horario.service';
 export type { UsuarioConHorario } from './horario.service';
 export {
   armarTokenEquipo,
+  armarTokenPuente,
   armarTokenSesion,
   armarTokenSuperadministrador,
+  armarTokenVinculacion,
   parsearTokenEquipo,
+  parsearTokenPuente,
   parsearTokenSesion,
   parsearTokenSuperadministrador,
+  parsearTokenVinculacion,
 } from './tokens';
+export type { TokenPuente, TokenVinculacion } from './tokens';
 export { ResolutorEmpresaSesion, actorDePrincipal } from './resolutor-empresa-sesion';
 export { SesionActual } from './sesion-actual';
 export { AutorizacionService, autorizacionInvalida } from './autorizacion.service';

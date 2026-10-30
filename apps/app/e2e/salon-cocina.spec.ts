@@ -12,12 +12,14 @@ import { afirmarPantallaDeCelular, entrarEnCelular, medirPantalla } from './ayud
 import {
   CARTA,
   PRECIOS,
+  abrirElComandero,
   afirmarClavesDelSalon,
   afirmarEstadoDeMesa,
   baldosaDeMesa,
   crearEscenarioDeSalon,
   cuentaPorApi,
   destino,
+  elegirProducto,
   esperarLaCuenta,
   itemDeCuenta,
   tarjetaDeCocina,
@@ -101,21 +103,6 @@ async function verPorEnviar(page: Page): Promise<Locator> {
   const panel = page.getByRole('region', { name: 'Por enviar' });
   await expect(panel).toBeVisible();
   return panel;
-}
-
-/** Abre el comandero desde la cuenta y deja la carta a la vista. */
-async function abrirElComandero(page: Page, titulo: string): Promise<void> {
-  await page.getByRole('link', { name: 'Agregar', exact: true }).click();
-  await expect(page.getByRole('heading', { name: `Agregar a ${titulo}`, level: 1 })).toBeVisible();
-  await expect(page.getByRole('region', { name: 'Carta' })).toBeVisible();
-}
-
-/** Toca un producto de la carta del comandero; abre su hoja. */
-async function elegirProducto(page: Page, nombre: string, precio: string) {
-  await page.getByRole('button', { name: `${nombre}, ${precio}`, exact: true }).click();
-  const hoja = page.getByRole('dialog', { name: nombre });
-  await expect(hoja).toBeVisible();
-  return hoja;
 }
 
 /** El PIN del supervisor en el teclado propio de la ventana de clave (el del sistema nunca se abre). */
@@ -298,7 +285,7 @@ test('el Mozo comanda un combo y un lomo en segundo tiempo y envía; el KDS ve l
     await page.getByRole('button', { name: 'Enviar', exact: true }).click();
     await esperarLaCuenta(page, 'Mesa 1');
     await expect(page.getByText('Pedido enviado')).toBeVisible();
-    await expect(page.getByText('La comanda ya salió a cocina.')).toBeVisible();
+    await expect(page.getByText('La comanda se envió a cocina.')).toBeVisible();
     const grupo = page.getByRole('region', { name: 'Comanda', exact: true });
     await expect(grupo).toContainText(e.mozo.nombre);
     await expect(itemDeCuenta(grupo, CARTA.combo)).toContainText('Enviado a cocina');
@@ -456,7 +443,7 @@ test('el Mozo agrega una adición, pide la pre-cuenta (amarillo) y agrega otra (
     await expect(page.getByText('2 ítems por enviar')).toBeVisible();
     await page.getByRole('button', { name: 'Enviar', exact: true }).click();
     await esperarLaCuenta(page, 'Mesa 1');
-    await expect(page.getByText('La adición 2 ya salió a cocina.')).toBeVisible();
+    await expect(page.getByText('La adición 2 se envió a cocina.')).toBeVisible();
     await expect(
       itemDeCuenta(page.getByRole('region', { name: 'Adición 2' }), CARTA.ceviche),
     ).toContainText('2 ×');
@@ -478,7 +465,8 @@ test('el Mozo agrega una adición, pide la pre-cuenta (amarillo) y agrega otra (
     );
     await expect(hoja.locator('.precuenta__total')).toContainText('S/ 144.00');
     await expect(hoja).toContainText('IGV incluido');
-    await expect(hoja).toContainText('La impresión llega con el puente de impresión');
+    // Sin impresora de caja (la sucursal de la prueba no eligió una): la hoja lo dice.
+    await expect(hoja).toContainText('Sin impresora de caja');
     await page.waitForTimeout(400); // la hoja termina de subir
     await page.screenshot({ path: 'e2e/resultados/salon-10-precuenta.png' });
     await hoja.getByRole('button', { name: 'Volver a la cuenta' }).click();
@@ -505,7 +493,7 @@ test('el Mozo agrega una adición, pide la pre-cuenta (amarillo) y agrega otra (
     await gaseosa.getByRole('button', { name: `Agregar · ${PRECIOS.gaseosa}` }).click();
     await page.getByRole('button', { name: 'Enviar', exact: true }).click();
     await esperarLaCuenta(page, 'Mesa 1');
-    await expect(page.getByText('La adición 3 ya salió a cocina.')).toBeVisible();
+    await expect(page.getByText('La adición 3 se envió a cocina.')).toBeVisible();
 
     await expect(page.locator('.cuenta__cabecera')).toContainText('Ocupada');
     await expect(page.locator('.cuenta__precuenta-dato')).toHaveCount(0);
@@ -750,7 +738,7 @@ test('un envío con la red cortada queda «Pendiente de envío» y sale una sola
   await test.step('al volver la red sale una sola vez, con la misma clave', async () => {
     await contexto.setOffline(false);
     await esperarLaCuenta(page, 'Mesas 2 y 3');
-    await expect(page.getByText('La adición 4 ya salió a cocina.')).toBeVisible();
+    await expect(page.getByText('La adición 4 se envió a cocina.')).toBeVisible();
     await expect(page.getByText('Sin conexión', { exact: true })).toHaveCount(0);
 
     expect(

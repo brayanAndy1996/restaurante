@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import type { DestinoComanda, ParteDeComanda, TipoComanda } from '@restaurante/dominio';
 import { type Sequelize } from 'sequelize';
 import type { ImpresionPuerto } from './impresion';
+import type { TicketsDePedidos } from './tickets-de-pedidos';
 
 /**
  * Arma y guarda las comandas de estación de un envío o de una marcha (historia 004, criterio 22; plan,
@@ -34,6 +35,10 @@ export interface ComandasPorGuardar {
   origenId: string | null;
   ahora: Date;
   partes: readonly ParteParaGuardar[];
+  /** El número del envío (3b: sale en el ticket); `null` en una marcha o una anulación. */
+  envioNumero?: number | null;
+  /** El motivo de la anulación (3b: sale en el ticket de anulación). */
+  motivo?: string | null;
 }
 
 export interface ComandaGuardada {
@@ -48,6 +53,7 @@ export interface ComandaGuardada {
 export async function guardarComandas(
   conexion: Sequelize,
   impresion: ImpresionPuerto,
+  tickets: TicketsDePedidos,
   entrada: ComandasPorGuardar,
 ): Promise<ComandaGuardada[]> {
   if (entrada.partes.length === 0) return [];
@@ -120,5 +126,8 @@ export async function guardarComandas(
             observacion text, tiempo int, para_llevar boolean, esperar boolean)`,
     { bind: [JSON.stringify(lineas), entrada.empresaId, entrada.ahora] },
   );
+  // 3b: un trabajo de impresión por cada comanda con destino `IMPRESORA`, en esta misma transacción (criterio 101).
+  // Una réplica, un rechazo o una reversión no llegan hasta aquí, o se revierten con la transacción.
+  await impresion.encolar(await tickets.deComandas(entrada, comandas));
   return comandas;
 }

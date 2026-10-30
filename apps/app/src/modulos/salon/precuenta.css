@@ -116,6 +116,20 @@
   color: var(--color-tinta);
 }
 
+/* Qué pasó con el papel: la etiqueta dice el estado y la frase, adónde fue */
+.precuenta__impresion {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--espacio-sm) var(--espacio-md);
+}
+.precuenta__impresion p {
+  margin: 0;
+  font-size: 0.9375rem;
+  line-height: 1.375rem;
+  color: var(--color-tinta-suave);
+}
+
 /* Una pre-cuenta que ya no vale lleva el total tachado (y lo dice con palabras): no se le muestra al cliente */
 .precuenta--vencida .precuenta__total b {
   text-decoration: line-through;

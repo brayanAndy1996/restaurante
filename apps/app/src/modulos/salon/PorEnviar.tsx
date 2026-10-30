@@ -11,7 +11,7 @@ import {
 } from '@restaurante/ui';
 import { useState } from 'react';
 import { AvisoPendiente } from '../../componentes/PendienteDeEnvio';
-import { montoEnSoles } from '../../lib/formato';
+import { montoEnSoles } from '../../lib/monto';
 import {
   totalDeLinea,
   totalDelBorrador,

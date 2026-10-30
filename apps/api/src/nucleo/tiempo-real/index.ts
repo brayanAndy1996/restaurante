@@ -5,4 +5,7 @@ export { OPCIONES_TIEMPO_REAL, RUTA_TIEMPO_REAL } from './opciones';
 export type { OpcionesTiempoReal } from './opciones';
 export { VALIDADOR_DE_CONEXIONES } from './validador-de-conexiones';
 export type { SesionDeConexion, ValidadorDeConexiones } from './validador-de-conexiones';
-export { salaDeEmpresa, salaDeSesion, salaDeSucursal, salaDeSocketIo } from './salas';
+export { salaDeEmpresa, salaDePuente, salaDeSesion, salaDeSucursal, salaDeSocketIo } from './salas';
+export type { DatosDeConexionDePuente } from './salas';
+export { VALIDADOR_DE_PUENTE } from './validador-de-puente';
+export type { PuenteDeConexion, ValidadorDePuente } from './validador-de-puente';

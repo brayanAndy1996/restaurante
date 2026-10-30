@@ -38,6 +38,11 @@ const AccesoSucursalPagina = lazy(() =>
     default: m.AccesoSucursalPagina,
   })),
 );
+const ImpresionPagina = lazy(() =>
+  import('./modulos/administracion/impresion/ImpresionPagina').then((m) => ({
+    default: m.ImpresionPagina,
+  })),
+);
 const MapaDeMesasPagina = lazy(() =>
   import('./modulos/administracion/mesas/MapaDeMesasPagina').then((m) => ({
     default: m.MapaDeMesasPagina,
@@ -296,6 +301,7 @@ export function App() {
                 <Route path="/administracion/usuarios/:id" element={<UsuarioEditarPagina />} />
                 <Route path="/administracion/acceso" element={<AccesoSucursalPagina />} />
                 <Route path="/administracion/mesas" element={<MapaDeMesasPagina />} />
+                <Route path="/administracion/impresion" element={<ImpresionPagina />} />
               </Route>
             </Route>
           </Route>

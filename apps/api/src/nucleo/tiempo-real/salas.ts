@@ -1,7 +1,7 @@
 import { uuidSchema } from '@restaurante/contratos';
 import type { EventoPublicable } from '../eventos';
 
-/** Espacio de nombres de la PWA (criterio 64). El del puente (`/puente`) llega con la entrega 3b. */
+/** Espacio de nombres de la PWA (criterio 64). El del puente de impresión es `ESPACIO_PUENTE` (`/puente`, 3b). */
 export const ESPACIO_PWA = '/';
 
 /** Sala de toda una empresa (criterio 65). */
@@ -18,11 +18,18 @@ export const salaDePuente = (empresaId: string, puenteId: string): string =>
 /** Sala de una sesión: solo sirve para desconectarla (criterio 66). */
 export const salaDeSesion = (sesionId: string): string => `sesion:${sesionId}`;
 
-/** Lo que el servidor guarda en `socket.data` de cada conexión autenticada. */
+/** Lo que el servidor guarda en `socket.data` de cada conexión autenticada de la PWA. */
 export interface DatosDeConexion {
   empresaId: string;
   sesionId: string;
   sucursalId: string | null;
+}
+
+/** Lo que el servidor guarda en `socket.data` de cada conexión autenticada del puente de impresión (3b). */
+export interface DatosDeConexionDePuente {
+  empresaId: string;
+  puenteId: string;
+  sucursalId: string;
 }
 
 const esUuid = (valor: unknown): valor is string =>
@@ -30,8 +37,8 @@ const esUuid = (valor: unknown): valor is string =>
 
 /**
  * Traduce la sala de un evento a la sala de Socket.IO. Devuelve `null` si el evento no se puede enviar a nadie:
- * ids que no son UUID, o una sala de puente (el espacio `/puente` no existe todavía). Nunca devuelve una sala que
- * no lleve la empresa (criterio 67).
+ * ids que no son UUID. Las salas de empresa y sucursal son del espacio de la PWA y la del puente, del espacio
+ * `/puente`. Nunca devuelve una sala que no lleve la empresa (criterio 67).
  */
 export function salaDeSocketIo(evento: EventoPublicable): string | null {
   if (!esUuid(evento.empresaId)) return null;
@@ -44,6 +51,8 @@ export function salaDeSocketIo(evento: EventoPublicable): string | null {
         ? salaDeSucursal(empresaId, evento.sala.sucursalId.toLowerCase())
         : null;
     case 'puente':
-      return null;
+      return esUuid(evento.sala.puenteId)
+        ? salaDePuente(empresaId, evento.sala.puenteId.toLowerCase())
+        : null;
   }
 }

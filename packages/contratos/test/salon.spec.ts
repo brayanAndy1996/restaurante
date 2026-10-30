@@ -5,6 +5,7 @@ import {
   anularItemEntradaSchema,
   anularOrdenEntradaSchema,
   cocinaConsultaSchema,
+  cocinaRespuestaSchema,
   envioEntradaSchema,
   errorRespuestaSchema,
   estadoLineaEntradaSchema,
@@ -17,6 +18,7 @@ import {
   moverEntradaSchema,
   ordenModificarEntradaSchema,
   precuentaEntradaSchema,
+  precuentaRespuestaSchema,
   stockSalonConsultaSchema,
   unirEntradaSchema,
   zonaEntradaSchema,
@@ -395,5 +397,77 @@ describe('códigos de error de 3a y ordenId (criterios 11, 29 y los de la tabla 
     expect(errorRespuestaSchema.safeParse(base).success).toBe(true);
     expect(errorRespuestaSchema.safeParse({ ...base, ordenId: ID_1 }).success).toBe(true);
     expect(errorRespuestaSchema.safeParse({ ...base, ordenId: 'x' }).success).toBe(false);
+  });
+});
+
+describe('precuentaRespuestaSchema · impresion (criterio 102)', () => {
+  const base = {
+    id: ID_1,
+    numero: 1,
+    emitidaEn: '2026-10-29T17:10:00.000Z',
+    orden: {
+      id: ID_2,
+      mesas: [{ id: ID_3, nombre: '4' }],
+      mozo: { id: ID_1, nombre: 'Ana' },
+      comensales: 2,
+    },
+    lineas: [],
+    total: '0.00',
+    nota: 'x',
+    trabajoId: null,
+  };
+
+  it('exige trabajoId: el id del trabajo PRECUENTA o null', () => {
+    const { trabajoId: _omitido, ...sin } = base;
+    void _omitido;
+    expect(precuentaRespuestaSchema.safeParse({ ...sin, impresion: 'SIN_IMPRESORA' }).success).toBe(
+      false,
+    );
+    expect(
+      precuentaRespuestaSchema.safeParse({ ...base, impresion: 'EN_COLA', trabajoId: ID_1 })
+        .success,
+    ).toBe(true);
+    expect(
+      precuentaRespuestaSchema.safeParse({ ...base, impresion: 'EN_COLA', trabajoId: 'no-uuid' })
+        .success,
+    ).toBe(false);
+  });
+
+  it('exige impresion y acepta EN_COLA y SIN_IMPRESORA', () => {
+    expect(precuentaRespuestaSchema.safeParse({ ...base, impresion: 'EN_COLA' }).success).toBe(
+      true,
+    );
+    expect(
+      precuentaRespuestaSchema.safeParse({ ...base, impresion: 'SIN_IMPRESORA' }).success,
+    ).toBe(true);
+    expect(precuentaRespuestaSchema.safeParse(base).success).toBe(false);
+    expect(precuentaRespuestaSchema.safeParse({ ...base, impresion: 'IMPRESA' }).success).toBe(
+      false,
+    );
+  });
+});
+
+describe('cocinaRespuestaSchema: las estaciones con su destino (criterio 138)', () => {
+  const base = { ahora: '2026-10-30T12:00:00.000Z', pendientes: [], recientes: [] };
+
+  it('acepta estaciones que salen por el KDS (sin impresora) o por una impresora (con su nombre)', () => {
+    const estaciones = [
+      { id: ID_1, nombre: 'Barra', destino: 'KDS', impresora: null },
+      { id: ID_2, nombre: 'Cocina', destino: 'IMPRESORA', impresora: { id: ID_1, nombre: 'Caja' } },
+    ];
+    expect(cocinaRespuestaSchema.parse({ ...base, estaciones }).estaciones).toEqual(estaciones);
+    expect(cocinaRespuestaSchema.parse({ ...base, estaciones: [] }).estaciones).toEqual([]);
+  });
+
+  it('exige la lista y rechaza un destino desconocido o una impresora sin id', () => {
+    expect(cocinaRespuestaSchema.safeParse(base).success).toBe(false);
+    const mala = (extra: object) =>
+      cocinaRespuestaSchema.safeParse({
+        ...base,
+        estaciones: [{ id: ID_1, nombre: 'Barra', destino: 'KDS', impresora: null, ...extra }],
+      }).success;
+    expect(mala({})).toBe(true);
+    expect(mala({ destino: 'PANTALLA' })).toBe(false);
+    expect(mala({ impresora: { nombre: 'Caja' } })).toBe(false);
   });
 });

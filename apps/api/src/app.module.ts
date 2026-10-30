@@ -9,6 +9,7 @@ import { PublicadorSocketIo, TiempoRealModule } from './nucleo/tiempo-real';
 import { RelojModule, type Reloj } from './nucleo/reloj';
 import { AuditoriaModule } from './modulos/auditoria';
 import { CartaModule } from './modulos/carta';
+import { ImpresionModule } from './modulos/impresion';
 import { InventarioModule, PedidosModule, type InventarioPuerto } from './modulos/pedidos';
 import { PlataformaModule } from './modulos/plataforma';
 import { SaludModule } from './modulos/salud';
@@ -42,6 +43,7 @@ export interface OpcionesAppModule {
     CartaModule,
     SalonModule,
     PedidosModule,
+    ImpresionModule,
     SaludModule,
   ],
 })

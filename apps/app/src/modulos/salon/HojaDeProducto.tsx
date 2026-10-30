@@ -14,7 +14,7 @@ import {
 } from '@restaurante/ui';
 import { useEffect, useId, useMemo, useRef, useState, type FormEvent } from 'react';
 import { nuevaClaveDeIdempotencia } from '../../lib/api';
-import { montoEnSoles } from '../../lib/formato';
+import { montoEnSoles } from '../../lib/monto';
 import type { LineaBorrador } from './borrador';
 import {
   LARGO_OBSERVACION,

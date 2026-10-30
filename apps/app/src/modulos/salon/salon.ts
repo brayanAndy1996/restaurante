@@ -9,7 +9,7 @@ import type { EstadoMesa } from '@restaurante/dominio';
 import { nombreAccesibleDeMesa, type MesaDeCuadricula, type TonoEtiqueta } from '@restaurante/ui';
 import { api, consultarSiCambio } from '../../lib/api';
 import type { ExtraDeEscritura } from '../../lib/envios';
-import { montoEnSoles } from '../../lib/formato';
+import { montoEnSoles } from '../../lib/monto';
 import { CLAVES_TIEMPO_REAL } from '../../lib/tiempo-real';
 
 type ZonaDelSalon = SalonRespuesta['zonas'][number];

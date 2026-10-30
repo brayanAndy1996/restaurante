@@ -15,6 +15,7 @@ import { VigilanteDeInactividad } from '../modulos/acceso/inactividad';
 import { destinosDeNavegacion, type IdDeDestino } from '../modulos/acceso/navegacion';
 import { useSesion } from '../modulos/acceso/sesion';
 import { AvisosDeListoDeSesion, BannerDeAvisosDeListo } from './AvisosDeListo';
+import { BannerDeImpresion } from './BannerDeImpresion';
 import {
   BannerDeConexion,
   BannerDeSoporte,
@@ -56,6 +57,7 @@ export function AppLayout() {
         <BannerDeConexion />
         <BannerDeSoporte />
         <BannerDeSuscripcion />
+        <BannerDeImpresion />
         <BannerDeAvisosDeListo />
         <VigilanteDeInactividad />
       </div>

@@ -6,7 +6,7 @@ import type {
 } from '@restaurante/contratos';
 import type { Seleccion } from '@restaurante/dominio';
 import { ErrorApi, mensajeDeCampo, mensajeDeError } from '../../lib/errores';
-import { comoDecimal, montoComoTexto } from '../../lib/formato';
+import { comoDecimal, montoComoTexto } from '../../lib/monto';
 
 /** Lo que fija la API (003, criterios 24 y 25). */
 export const MAXIMO_NOMBRE_GRUPO = 60;

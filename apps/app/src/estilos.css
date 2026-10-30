@@ -1144,7 +1144,7 @@ body,
 
 /* Ajustes (004): el cambio de sección arriba, como la Carta */
 .ajustes__secciones .ui-segmentos {
-  /* Cada baldosa mide lo que su texto: las tres caben en una fila a 360 px; a 320 px la última pasa a otra */
+  /* Cada baldosa mide lo que su texto; en un celular angosto, dos por fila */
   display: flex;
   flex-wrap: wrap;
 }
@@ -1153,6 +1153,13 @@ body,
   flex: 1 1 auto;
   padding-inline: var(--espacio-sm);
   font-size: 0.9375rem;
+}
+
+/* Con cuatro secciones, en un celular angosto van dos por fila (no tres y una sola abajo) */
+@media (max-width: 479px) {
+  .ajustes__secciones .ui-segmento {
+    flex-basis: calc(50% - var(--espacio-sm));
+  }
 }
 
 @media (min-width: 768px) {

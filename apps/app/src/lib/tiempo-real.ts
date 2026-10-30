@@ -34,6 +34,10 @@ export const CLAVES_TIEMPO_REAL = {
   cocina: ['cocina'] as const,
   /** La disponibilidad de la carta (agotados y menú del día); es la clave de la pantalla de Disponibilidad. */
   disponibilidad: ['disponibilidad'] as const,
+  /** El estado de la impresión (`['impresion', 'estado', sucursalId]`): el aviso de todas las pantallas. */
+  impresionEstado: ['impresion', 'estado'] as const,
+  /** La lista de impresoras de Ajustes, con su estado y sus pendientes (`['impresion', 'impresoras', sucursalId]`). */
+  impresoras: ['impresion', 'impresoras'] as const,
 } as const;
 
 /** Cada cuánto se refrescan las pantallas en vivo cuando no hay conexión de Socket.IO (criterio 97). */
@@ -122,7 +126,8 @@ export type NombreDeEvento =
   | 'cocina.visto'
   | 'cocina.listo'
   | 'carta.disponibilidad'
-  | 'carta.actualizada';
+  | 'carta.actualizada'
+  | 'impresion.estado';
 
 const EVENTOS: readonly NombreDeEvento[] = [
   'salon.cambio',
@@ -133,6 +138,7 @@ const EVENTOS: readonly NombreDeEvento[] = [
   'cocina.listo',
   'carta.disponibilidad',
   'carta.actualizada',
+  'impresion.estado',
 ];
 
 type OyenteDeEvento = (nombre: NombreDeEvento, datos: unknown) => void;
@@ -210,6 +216,11 @@ function alLlegarEvento(cliente: QueryClient, nombre: NombreDeEvento, datos: unk
     case 'carta.actualizada':
       invalidar(cliente, CLAVES_TIEMPO_REAL.disponibilidad);
       break;
+    case 'impresion.estado':
+      // Cambió el puente o una impresora (criterio 120): el aviso y la lista de Ajustes lo vuelven a pedir.
+      invalidar(cliente, CLAVES_TIEMPO_REAL.impresionEstado);
+      invalidar(cliente, CLAVES_TIEMPO_REAL.impresoras);
+      break;
   }
   oyentesDeEvento.forEach((oyente) => oyente(nombre, datos));
 }
@@ -221,6 +232,7 @@ function invalidarTodo(cliente: QueryClient): void {
   invalidar(cliente, CLAVES_TIEMPO_REAL.ordenes, opciones);
   invalidar(cliente, CLAVES_TIEMPO_REAL.cocina, opciones);
   invalidar(cliente, CLAVES_TIEMPO_REAL.disponibilidad, opciones);
+  invalidar(cliente, CLAVES_TIEMPO_REAL.impresionEstado, opciones);
 }
 
 // --- La conexión de la sesión ----------------------------------------------------------------

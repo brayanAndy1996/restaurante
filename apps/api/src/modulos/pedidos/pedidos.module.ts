@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { AuditoriaModule } from '../auditoria';
 import { CartaModule } from '../carta';
+import { ImpresionModule } from '../impresion';
 import { SalonModule } from '../salon';
 import { SeguridadModule } from '../seguridad';
 import { AnulacionesController } from './anulaciones.controller';
@@ -10,7 +11,6 @@ import { CocinaService } from './cocina.service';
 import { EnviosController } from './envios.controller';
 import { EnviosService } from './envios.service';
 import { EventosPedidos } from './eventos-pedidos';
-import { IMPRESION, ImpresionSoloKds } from './impresion';
 import { MovimientosService } from './movimientos.service';
 import { OrdenesController } from './ordenes.controller';
 import { OrdenesService } from './ordenes.service';
@@ -19,17 +19,19 @@ import { PrecuentasController } from './precuentas.controller';
 import { PrecuentasService } from './precuentas.service';
 import { SalonController } from './salon.controller';
 import { SalonService } from './salon.service';
+import { TicketsDePedidos } from './tickets-de-pedidos';
 import { VistaOrdenService } from './vista-orden';
 
 /**
  * Pedidos (historia 004): dueño de `orden`, `orden_mesa`, `envio`, `marcha`, `item`, `comanda`,
  * `comanda_linea` (migración `202610300002-pedidos`), `anulacion_item` y `precuenta` (T22). Usa
  * `MesasConsultaService` (salón), `CartaVentaService` y `CartaConsultaService` (carta) y `UsuariosConsultaService`
- * (seguridad); nunca consulta tablas ajenas. `INVENTARIO` lo provee `InventarioModule` (global). Exporta solo
+ * (seguridad); nunca consulta tablas ajenas. `INVENTARIO` lo provee `InventarioModule` (global) e `IMPRESION`,
+ * `ImpresionModule` (3b). Exporta solo
  * `PedidosConsultaService`, que usará la sección 4.
  */
 @Module({
-  imports: [AuditoriaModule, SalonModule, CartaModule, SeguridadModule],
+  imports: [AuditoriaModule, SalonModule, CartaModule, SeguridadModule, ImpresionModule],
   controllers: [
     OrdenesController,
     EnviosController,
@@ -49,7 +51,7 @@ import { VistaOrdenService } from './vista-orden';
     SalonService,
     VistaOrdenService,
     EventosPedidos,
-    { provide: IMPRESION, useClass: ImpresionSoloKds },
+    TicketsDePedidos,
   ],
   exports: [PedidosConsultaService],
 })

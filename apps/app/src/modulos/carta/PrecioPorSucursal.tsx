@@ -21,7 +21,7 @@ import { useState, type FormEvent } from 'react';
 import { EtiquetaPendiente } from '../../componentes/PendienteDeEnvio';
 import { useEnvioPendiente } from '../../lib/envios';
 import { ErrorApi, mensajeDeError } from '../../lib/errores';
-import { formatearMonto, montoEnSoles } from '../../lib/formato';
+import { formatearMonto, montoEnSoles } from '../../lib/monto';
 import { CLAVES, ajustarSucursalDeProducto, listarSucursalesDeProducto } from './carta';
 import {
   ajusteDeBorrador,

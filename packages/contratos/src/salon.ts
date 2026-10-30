@@ -444,6 +444,18 @@ export const precuentaRespuestaSchema = z.object({
   total: z.string(),
   /** "Precios con IGV incluido. No es un comprobante de pago." y, con ICBPER, "El ICBPER se suma al cobrar.". */
   nota: z.string(),
+  /**
+   * Qué pasó con el papel (criterio 102, entrega 3b): `EN_COLA` si se creó un trabajo `PRECUENTA` para la impresora
+   * de caja; `SIN_IMPRESORA` si la sucursal no tiene impresora de caja (la pre-cuenta se emite igual). Solo una
+   * pre-cuenta nueva crea el trabajo: devolver la vigente o una réplica devuelve el mismo valor que la primera
+   * respuesta, sin crear otro.
+   */
+  impresion: z.enum(['EN_COLA', 'SIN_IMPRESORA']),
+  /**
+   * El trabajo `PRECUENTA` de esta pre-cuenta (criterios 102 y 114), o `null` si no hay (`SIN_IMPRESORA`). Para
+   * imprimirla otra vez se usa `POST /impresion/trabajos/:id/reimpresion` con este id.
+   */
+  trabajoId: uuidSchema.nullable(),
 });
 
 // ---------------------------------------------------------------------------------------------------
@@ -493,8 +505,22 @@ export const comandaKdsSchema = z.object({
   lineas: z.array(lineaKdsSchema),
 });
 
+/**
+ * Una estación activa con adónde sale su comanda en la sucursal (criterio 138): el KDS la muestra para que
+ * Cocina/Barra sepa qué estaciones salen por impresora (y no aparecerán en la pantalla). `impresora` es `null`
+ * cuando el destino es el `KDS`.
+ */
+export const estacionKdsSchema = z.object({
+  id: uuidSchema,
+  nombre: z.string(),
+  destino: z.enum(['KDS', 'IMPRESORA']),
+  impresora: z.object({ id: uuidSchema, nombre: z.string() }).nullable(),
+});
+
 export const cocinaRespuestaSchema = z.object({
   ahora: instanteSchema,
+  /** Todas las estaciones activas de la sucursal con su destino, aunque `estacionIds` filtre las comandas. */
+  estaciones: z.array(estacionKdsSchema),
   pendientes: z.array(comandaKdsSchema),
   recientes: z.array(comandaKdsSchema),
 });
@@ -604,6 +630,7 @@ export type CocinaConsulta = z.input<typeof cocinaConsultaSchema>;
 export type EstadoLineaEntrada = z.input<typeof estadoLineaEntradaSchema>;
 export type LineaKds = z.infer<typeof lineaKdsSchema>;
 export type ComandaKds = z.infer<typeof comandaKdsSchema>;
+export type EstacionKds = z.infer<typeof estacionKdsSchema>;
 export type CocinaRespuesta = z.infer<typeof cocinaRespuestaSchema>;
 export type EventoSalonCambio = z.infer<typeof eventoSalonCambioSchema>;
 export type EventoOrdenCambio = z.infer<typeof eventoOrdenCambioSchema>;

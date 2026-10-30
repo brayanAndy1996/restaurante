@@ -19,7 +19,8 @@ import { useState, type FormEvent } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { Pagina } from '../../componentes/Pagina';
 import { ErrorApi, mensajeDeCampo, mensajeDeError, erroresPorCampo } from '../../lib/errores';
-import { fechaLarga, formatearFecha, formatearMonto } from '../../lib/formato';
+import { fechaLarga, formatearFecha } from '../../lib/formato';
+import { formatearMonto } from '../../lib/monto';
 import { useClaveDeEscritura } from './claves';
 import { validarFechaOpcional, validarMotivo, type Errores } from './empresa-form';
 import {

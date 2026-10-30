@@ -108,9 +108,10 @@ describe('la conexión de la sesión', () => {
       [...CLAVES_TIEMPO_REAL.ordenes],
       [...CLAVES_TIEMPO_REAL.cocina],
       [...CLAVES_TIEMPO_REAL.disponibilidad],
+      [...CLAVES_TIEMPO_REAL.impresionEstado],
     ]);
     // Si ya hay una lectura en camino, esa sirve: no se cancela para bajar lo mismo dos veces.
-    expect(opcionesDeInvalidacion).toEqual(Array(4).fill({ cancelRefetch: false }));
+    expect(opcionesDeInvalidacion).toEqual(Array(5).fill({ cancelRefetch: false }));
   });
 
   it('un aviso de cambio sí cancela la lectura en curso, que pudo salir antes del cambio', async () => {
@@ -270,6 +271,19 @@ describe('qué consulta vuelve a pedirse con cada evento', () => {
     socket.desdeElServidor('carta.disponibilidad', {});
     socket.desdeElServidor('carta.actualizada', {});
     expect(invalidadas).toEqual([['disponibilidad'], ['disponibilidad']]);
+  });
+});
+
+describe('el estado de la impresión', () => {
+  it('impresion.estado vuelve a pedir el estado y la lista de impresoras de Ajustes (criterio 120)', async () => {
+    const socket = await abrir();
+    socket.conectar();
+    invalidadas.length = 0;
+    socket.desdeElServidor('impresion.estado', { sucursalId: ORDEN });
+    expect(invalidadas).toEqual([
+      [...CLAVES_TIEMPO_REAL.impresionEstado],
+      [...CLAVES_TIEMPO_REAL.impresoras],
+    ]);
   });
 });
 

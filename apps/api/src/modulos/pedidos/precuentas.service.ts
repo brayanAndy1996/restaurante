@@ -10,8 +10,10 @@ import { SesionActual, UsuariosConsultaService } from '../seguridad';
 import { bloquearOrden, exigirOrdenAbierta } from './bloqueos-orden';
 import { idDeClienteReutilizado, montoFueraDeRango, ordenSinConsumo } from './errores-pedidos';
 import { EventosPedidos } from './eventos-pedidos';
+import { IMPRESION, type ImpresionPuerto } from './impresion';
 import { mesasVigentesDeOrden } from './mesas-de-orden';
 import { invalidarPrecuentaVigente } from './precuenta-invalidacion';
+import { TicketsDePedidos } from './tickets-de-pedidos';
 
 /** Nota de toda pre-cuenta (criterio 51, decisión 5). */
 export const NOTA_PRECUENTA = 'Precios con IGV incluido. No es un comprobante de pago.';
@@ -70,6 +72,8 @@ export class PrecuentasService {
     @Inject(MesasConsultaService) private readonly mesas: MesasConsultaService,
     @Inject(UsuariosConsultaService) private readonly usuarios: UsuariosConsultaService,
     @Inject(EventosPedidos) private readonly eventos: EventosPedidos,
+    @Inject(IMPRESION) private readonly impresion: ImpresionPuerto,
+    @Inject(TicketsDePedidos) private readonly tickets: TicketsDePedidos,
   ) {}
 
   async emitir(ordenId: string, entrada: PrecuentaEntrada): Promise<PrecuentaRespuesta> {
@@ -84,7 +88,9 @@ export class PrecuentasService {
     const previa = await this.buscarPorId(precuentaId);
     if (previa !== undefined) {
       if (previa.orden_id !== orden.id) throw idDeClienteReutilizado();
-      return this.armar(previa, orden.id, sucursalId);
+      // La réplica devuelve lo que dijo la primera respuesta (criterio 102): el trabajo de esa pre-cuenta, si lo
+      // tiene; no crea otro.
+      return this.devolver(previa, orden.id, sucursalId);
     }
     exigirOrdenAbierta(orden);
 
@@ -100,7 +106,9 @@ export class PrecuentasService {
     );
     const versionActual = actual!.version;
     if (vigente !== undefined && vigente.version_orden === versionActual) {
-      return this.armar(vigente, orden.id, sucursalId);
+      // La vigente no crea otro trabajo (criterios 52 y 114): devuelve el de su emisión. Para sacarla otra vez se
+      // reimprime ese trabajo.
+      return this.devolver(vigente, orden.id, sucursalId);
     }
     const ahora = this.reloj.ahora();
     if (vigente !== undefined) await invalidarPrecuentaVigente(this.conexion, orden.id, ahora);
@@ -171,7 +179,39 @@ export class PrecuentasService {
     const mesaIds = await mesasVigentesDeOrden(this.conexion, orden.id);
     this.eventos.salonCambio(sucursalId, orden.id, mesaIds);
     this.eventos.ordenCambio(sucursalId, orden.id);
-    return this.armar(nueva, orden.id, sucursalId);
+    return this.imprimir(nueva, orden.id, sucursalId);
+  }
+
+  /**
+   * Arma la respuesta de una pre-cuenta que ya existe, sin crear nada: `EN_COLA` con el id de su trabajo
+   * `PRECUENTA` si lo tiene, `SIN_IMPRESORA` si no (criterio 102).
+   */
+  private async devolver(
+    fila: FilaPrecuenta,
+    ordenId: string,
+    sucursalId: string,
+  ): Promise<PrecuentaRespuesta> {
+    const trabajos = await this.impresion.trabajosDePrecuentas([fila.id]);
+    return this.armar(fila, ordenId, sucursalId, trabajos.get(fila.id) ?? null);
+  }
+
+  /**
+   * Arma la respuesta de una pre-cuenta recién emitida y, si la sucursal tiene impresora de caja, encola su trabajo
+   * `PRECUENTA` en esta transacción (criterio 114): `EN_COLA` con su id, o `SIN_IMPRESORA` si no hay impresora de
+   * caja (la pre-cuenta se emite igual). Solo la pre-cuenta nueva imprime.
+   */
+  private async imprimir(
+    fila: FilaPrecuenta,
+    ordenId: string,
+    sucursalId: string,
+  ): Promise<PrecuentaRespuesta> {
+    const caja = await this.impresion.impresoraDeCaja(sucursalId);
+    const sinTrabajo = await this.armar(fila, ordenId, sucursalId, null);
+    if (caja === null) return sinTrabajo;
+    const [trabajoId] = await this.impresion.encolar([
+      await this.tickets.dePrecuenta(sucursalId, caja.id, sinTrabajo, new Date(fila.emitida_en)),
+    ]);
+    return { ...sinTrabajo, impresion: 'EN_COLA', trabajoId: trabajoId! };
   }
 
   private async buscarPorId(id: string): Promise<FilaPrecuenta | undefined> {
@@ -191,6 +231,7 @@ export class PrecuentasService {
     fila: FilaPrecuenta,
     ordenId: string,
     sucursalId: string,
+    trabajoId: string | null,
   ): Promise<PrecuentaRespuesta> {
     const [orden] = await this.conexion.query<{ mozo_id: string | null; comensales: number }>(
       'SELECT mozo_id, comensales FROM orden WHERE id = $1 AND sucursal_id = $2',
@@ -224,6 +265,8 @@ export class PrecuentasService {
       })),
       total: fila.total,
       nota: conIcbper ? `${NOTA_PRECUENTA} ${NOTA_ICBPER}` : NOTA_PRECUENTA,
+      impresion: trabajoId === null ? 'SIN_IMPRESORA' : 'EN_COLA',
+      trabajoId,
     };
   }
 }

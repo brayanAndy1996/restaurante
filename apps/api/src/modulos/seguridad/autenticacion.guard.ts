@@ -3,7 +3,9 @@ import { Reflector } from '@nestjs/core';
 import { ResolutorEmpresaPorCabecera } from '../../nucleo/contexto-empresa/resolutor-empresa-por-cabecera';
 import { ErrorAplicacion } from '../../nucleo/errores/error-aplicacion';
 import {
+  METADATO_PUENTE,
   METADATO_SUPERADMINISTRADOR,
+  METADATO_VINCULACION_PUENTE,
   type PeticionConPrincipal,
   type Principal,
 } from '../../nucleo/principal';
@@ -22,8 +24,9 @@ const ACTIVIDAD_SEGUNDO_PLANO = 'segundo-plano';
 
 /**
  * Guard global de autenticación (historia 002, criterios 1 a 9): toda ruta exige sesión salvo las
- * marcadas `@Publica()` (lista cerrada) y las de `/plataforma/*` con `@Superadministrador()`, que valida
- * su propio guard. Una ruta nueva sin decorador queda cerrada, no abierta.
+ * marcadas `@Publica()` (lista cerrada), las de `/plataforma/*` con `@Superadministrador()` y las de `/puente/*`
+ * con `@Puente()` o `@VinculacionPuente()` (entrega 3b) cuando traen la credencial del puente, que validan su
+ * propio guard. Una ruta nueva sin decorador queda cerrada, no abierta.
  *
  * Con sesión: parsea `Authorization: Bearer se.<empresa>.<sesión>.<secreto>` (cualquier otra forma,
  * incluidos los tokens `sa.` y `eq.`, es 401 sin consultar nada), la valida con `ValidadorDeSesion` (el mismo
@@ -57,6 +60,31 @@ export class AutenticacionGuard implements CanActivate {
 
     const peticion = contexto.switchToHttp().getRequest<PeticionConPrincipal>();
     const autorizacion = peticion.headers.authorization;
+
+    // Rutas del puente (3b): con una credencial `pu.…` (o `vi.…` en la vinculación) las valida su propio guard. Sin
+    // `Authorization` responden 401 `NO_AUTENTICADO` aquí mismo (el modo de prueba no les da un principal de
+    // persona). Con cualquier otra credencial, la ruta se trata como el resto de la API: un token de persona se
+    // valida igual (una sesión que debe cambiar su contraseña recibe 403 `CAMBIO_CONTRASENA_REQUERIDO`, criterio 15
+    // de 002) y el guard del puente rechaza después con 401 `NO_AUTENTICADO`; con otro tipo de token, 401 aquí.
+    const esDelPuente = marca(METADATO_PUENTE) || marca(METADATO_VINCULACION_PUENTE);
+    if (esDelPuente) {
+      const credencial =
+        typeof autorizacion === 'string' ? /^Bearer (\S+)$/i.exec(autorizacion)?.[1] : undefined;
+      if (
+        credencial !== undefined &&
+        ((marca(METADATO_PUENTE) && credencial.startsWith('pu.')) ||
+          (marca(METADATO_VINCULACION_PUENTE) && credencial.startsWith('vi.')))
+      ) {
+        return true;
+      }
+      if (autorizacion === undefined) {
+        throw new ErrorAplicacion(
+          401,
+          'NO_AUTENTICADO',
+          'Se requiere autenticación para esta operación',
+        );
+      }
+    }
 
     let principal: Principal;
     if (autorizacion === undefined && this.modoPrueba !== null) {

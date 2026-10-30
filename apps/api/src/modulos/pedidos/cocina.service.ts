@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import type { CocinaRespuesta, ComandaKds, LineaKds } from '@restaurante/contratos';
+import type { CocinaRespuesta, ComandaKds, EstacionKds, LineaKds } from '@restaurante/contratos';
 import {
   transicionKdsValida,
   type EstadoLineaElegible,
@@ -19,6 +19,7 @@ import {
   transicionInvalida,
 } from './errores-pedidos';
 import { EventosPedidos } from './eventos-pedidos';
+import { IMPRESION, type ImpresionPuerto } from './impresion';
 
 /** Cuántos minutos hacia atrás llegan las comandas "recientes" (criterio 56). */
 const MINUTOS_RECIENTES = 60;
@@ -104,7 +105,8 @@ const TIPOS_PREPARABLES: readonly TipoComanda[] = ['COMANDA', 'ADICION'];
  * estación con impresora (destino `IMPRESORA`, criterio 61) o inexistente responde el mismo 404.
  *
  * `GET /cocina/comandas` se arma con una cantidad fija de consultas sin importar cuántas comandas haya: las
- * estaciones (`CartaConsultaService`), las pendientes (dos consultas), las recientes, sus líneas con la cantidad vigente del ítem,
+ * estaciones activas y sus nombres (`CartaConsultaService`), su destino con la impresora (`IMPRESION.destinosVisibles`,
+ * criterio 138),  las pendientes (dos consultas), las recientes, sus líneas con la cantidad vigente del ítem,
  * las órdenes con sus mesas vigentes, los nombres de las mesas y los de las personas. El motivo de una anulación
  * viene unido a la consulta de las comandas. Las pendientes salen de índices parciales y las recientes se miden
  * por su última actividad (`greatest(creado_en, vista_en, max(comanda_linea.estado_en))`): ninguna recorre el
@@ -124,6 +126,7 @@ export class CocinaService {
     @Inject(MesasConsultaService) private readonly mesas: MesasConsultaService,
     @Inject(UsuariosConsultaService) private readonly usuarios: UsuariosConsultaService,
     @Inject(EventosPedidos) private readonly eventos: EventosPedidos,
+    @Inject(IMPRESION) private readonly impresion: ImpresionPuerto,
   ) {}
 
   // -------------------------------------------------------------------------------------------------
@@ -142,16 +145,24 @@ export class CocinaService {
     const empresaId = this.contexto.empresaActual();
     const ahora = this.reloj.ahora();
 
-    let ids: string[];
-    let nombresEstaciones: Map<string, string>;
-    if (estacionIds.length === 0) {
-      const activas = await this.carta.estaciones();
-      ids = activas.map((e) => e.id);
-      nombresEstaciones = new Map(activas.map((e) => [e.id, e.nombre]));
-    } else {
-      ids = [...new Set(estacionIds.map((id) => id.toLowerCase()))];
-      nombresEstaciones = await this.carta.nombres(ids);
-    }
+    // Las estaciones activas con su destino (criterio 138) salen siempre, aunque `estacionIds` filtre las comandas:
+    // el KDS avisa qué estaciones salen por impresora. Las mismas consultas con o sin filtro.
+    const activas = await this.carta.estaciones();
+    const ids =
+      estacionIds.length === 0
+        ? activas.map((e) => e.id)
+        : [...new Set(estacionIds.map((id) => id.toLowerCase()))];
+    const nombresEstaciones = await this.carta.nombres(ids);
+    const destinos = await this.impresion.destinosVisibles(
+      sucursalId,
+      activas.map((e) => e.id),
+    );
+    const estaciones = activas.map((e): EstacionKds => {
+      const destino = destinos.get(e.id);
+      return destino?.destino === 'IMPRESORA'
+        ? { id: e.id, nombre: e.nombre, destino: 'IMPRESORA', impresora: destino.impresora }
+        : { id: e.id, nombre: e.nombre, destino: 'KDS', impresora: null };
+    });
 
     const desde = new Date(ahora.getTime() - MINUTOS_RECIENTES * 60_000);
     // Las pendientes, en dos consultas que el planificador resuelve por los índices parciales (una sola con `OR` o
@@ -204,6 +215,7 @@ export class CocinaService {
     const enOrden = [...pendientes, ...ordenarPorLlegada(recientes)];
     const armadas = await this.armar(enOrden, nombresEstaciones);
     const paraEtag = {
+      estaciones,
       pendientes: armadas.slice(0, pendientes.length),
       recientes: armadas.slice(pendientes.length),
     };

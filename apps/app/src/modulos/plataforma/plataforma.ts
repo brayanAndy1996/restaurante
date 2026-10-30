@@ -20,7 +20,7 @@ import {
 import type { Modulo, RegimenTributario } from '@restaurante/dominio';
 import type { TonoEtiqueta } from '@restaurante/ui';
 import { api, listaDe } from '../../lib/api';
-import { formatearMonto } from '../../lib/formato';
+import { formatearMonto } from '../../lib/monto';
 
 /** Todas las consultas del panel cuelgan de `['plataforma', …]`: salir del panel las borra juntas. */
 export const CLAVES = {

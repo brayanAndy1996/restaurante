@@ -348,7 +348,7 @@ describe('La cuenta y el borrador (criterio 92)', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Reintentar el envío' }));
 
     expect(await screen.findByText('Pedido enviado')).toBeVisible();
-    expect(screen.getByText('La adición 2 ya salió a cocina.')).toBeVisible();
+    expect(screen.getByText('La adición 2 se envió a cocina.')).toBeVisible();
     const [llamada] = s.de('POST', `/ordenes/${ORDEN_ID}/envios`);
     expect(llamada?.cuerpo).toMatchObject({
       id: uuid(3000),
@@ -357,6 +357,55 @@ describe('La cuenta y el borrador (criterio 92)', () => {
     expect(llamada?.cabeceras.get('Idempotency-Key')).toMatch(/^[0-9a-f-]{36}$/);
     expect(localStorage.getItem(CLAVE)).toBeNull();
     expect(screen.queryByRole('button', { name: 'Reintentar el envío' })).toBeNull();
+  });
+
+  describe('el aviso de «Pedido enviado» no promete que el ticket salió (M5)', () => {
+    const estadoDeImpresion = (puente: boolean) => ({
+      ahora: new Date().toISOString(),
+      puente: puente
+        ? {
+            id: uuid(300),
+            nombre: 'Puente de Cocina',
+            ultimaSenalEn: new Date().toISOString(),
+            conectado: true,
+          }
+        : null,
+      impresoras: [
+        {
+          id: uuid(101),
+          nombre: 'Cocina',
+          estado: 'LISTA' as const,
+          estadoDesde: new Date().toISOString(),
+          pendientes: 0,
+        },
+      ],
+    });
+
+    async function enviarPendiente(puente: boolean) {
+      localStorage.setItem(CLAVE, JSON.stringify({ lineas: [linea], envioId: uuid(3000) }));
+      servidorDeCuenta({
+        extra: {
+          [`POST /ordenes/${ORDEN_ID}/envios`]: () => json(201, envio),
+          'GET /impresion/estado': () => json(200, estadoDeImpresion(puente)),
+        },
+      });
+      renderApp(RUTA);
+      await userEvent.click(await screen.findByRole('button', { name: 'Reintentar el envío' }));
+      return screen.findByText('Pedido enviado');
+    }
+
+    it('con la impresión en orden, dice que se envió a cocina, sin decir que ya salió', async () => {
+      await enviarPendiente(true);
+      expect(await screen.findByText('La adición 2 se envió a cocina.')).toBeVisible();
+      expect(screen.queryByText(/ya salió/)).toBeNull();
+    });
+
+    it('si la impresión tiene un problema (sin puente), dice que quedó en cola de impresión', async () => {
+      await enviarPendiente(false);
+      expect(
+        await screen.findByText('La adición 2 se envió a cocina y quedó en cola de impresión.'),
+      ).toBeVisible();
+    });
   });
 
   it('el borrador de otra persona del mismo equipo no aparece', async () => {

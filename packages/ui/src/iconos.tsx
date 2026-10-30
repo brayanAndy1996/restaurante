@@ -80,6 +80,9 @@ export {
   Undo2 as IconoDeshacer,
   Pause as IconoEsperar,
   CheckCheck as IconoTodoListo,
+  Printer as IconoImpresora,
+  Bluetooth as IconoBluetooth,
+  Network as IconoRed,
 } from 'lucide-react';
 
 interface PropsIcono {

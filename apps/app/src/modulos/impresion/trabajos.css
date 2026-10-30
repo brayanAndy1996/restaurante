@@ -1,0 +1,26 @@
+/* Lista de trabajos de impresión (004, 3b): se carga con Ajustes › Impresión y con la cuenta */
+
+/* El botón "Reimprimir" no se parte ni se achica: el título de la fila cede el ancho */
+.trabajo .ui-fila__derecha .ui-boton {
+  white-space: nowrap;
+}
+
+/* El porqué de un ticket que no se pudo armar: debajo de las etiquetas, sin pasar de la fila */
+.trabajo__falla {
+  margin: var(--espacio-xs) 0 0;
+  max-width: 48ch;
+}
+
+/* Tabla de tickets (tableta): celdas más angostas y la mesa bajo el tipo, para caber en los 40rem de Ajustes
+   sin desplazarse hacia los lados. El "Reimprimir" va solo con el icono. */
+.trabajos .ui-tabla th,
+.trabajos .ui-tabla td {
+  padding-inline: var(--espacio-sm);
+}
+
+.trabajo__mesa {
+  display: block;
+  font-size: 0.8125rem;
+  line-height: 1.125rem;
+  color: var(--color-tinta-suave);
+}

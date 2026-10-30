@@ -36,3 +36,6 @@ apps/app/e2e/resultados/
 
 # Archivos subidos en desarrollo (ARCHIVOS_DRIVER=disco, historia 003)
 apps/api/archivos/
+
+# Credencial del simulador del puente (pnpm puente:simular)
+.puente-simulador.json

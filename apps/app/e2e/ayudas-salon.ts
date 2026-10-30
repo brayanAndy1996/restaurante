@@ -247,3 +247,18 @@ export async function cuentaPorApi<T = { items: { nombre: string; cantidad: numb
   expect(r.estado, 'GET de la cuenta').toBe(200);
   return r.cuerpo;
 }
+
+/** Abre el comandero desde la cuenta y deja la carta a la vista. */
+export async function abrirElComandero(page: Page, titulo: string): Promise<void> {
+  await page.getByRole('link', { name: 'Agregar', exact: true }).click();
+  await expect(page.getByRole('heading', { name: `Agregar a ${titulo}`, level: 1 })).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Carta' })).toBeVisible();
+}
+
+/** Toca un producto de la carta del comandero; abre su hoja. */
+export async function elegirProducto(page: Page, nombre: string, precio: string): Promise<Locator> {
+  await page.getByRole('button', { name: `${nombre}, ${precio}`, exact: true }).click();
+  const hoja = page.getByRole('dialog', { name: nombre });
+  await expect(hoja).toBeVisible();
+  return hoja;
+}

@@ -2,6 +2,7 @@ import { Inject, Injectable, OnModuleInit } from '@nestjs/common';
 import type { EstadoOrden } from '@restaurante/dominio';
 import { QueryTypes, type Sequelize, type Transaction } from 'sequelize';
 import { CONEXION_API } from '../../nucleo/base-de-datos';
+import { OrdenesVigentes } from '../impresion';
 import { UsoDeMesas } from '../salon';
 
 /** Una orden abierta de una sucursal, para otros módulos. */
@@ -35,10 +36,52 @@ export class PedidosConsultaService implements OnModuleInit {
   constructor(
     @Inject(CONEXION_API) private readonly conexion: Sequelize,
     @Inject(UsoDeMesas) private readonly usos: UsoDeMesas,
+    @Inject(OrdenesVigentes) private readonly vigentes: OrdenesVigentes,
   ) {}
 
   onModuleInit(): void {
     this.usos.registrar((mesaIds, transaccion) => this.mesasConOrdenAbierta(mesaIds, transaccion));
+    // 3b: la lista de trabajos de impresión muestra la cuenta principal de las órdenes que se unieron (criterio 128).
+    this.vigentes.registrar(
+      (ordenIds) => this.ordenesPrincipales(ordenIds),
+      (ordenId) => this.ordenesUnidasA(ordenId),
+    );
+  }
+
+  /**
+   * De cada orden pedida, la orden en la que quedó: ella misma o, si se unió a otra (y esa a otra), la principal
+   * al final de la cadena de uniones.
+   */
+  async ordenesPrincipales(ordenIds: readonly string[]): Promise<Map<string, string>> {
+    const filas = await this.conexion.query<{ origen: string; id: string }>(
+      `WITH RECURSIVE cadena AS (
+         SELECT o.id AS origen, o.id, o.empresa_id, o.unida_a_orden_id
+           FROM orden o WHERE o.id = ANY($1::uuid[])
+         UNION
+         SELECT c.origen, s.id, s.empresa_id, s.unida_a_orden_id
+           FROM cadena c JOIN orden s ON s.id = c.unida_a_orden_id AND s.empresa_id = c.empresa_id)
+       SELECT origen, id FROM cadena WHERE unida_a_orden_id IS NULL`,
+      { bind: [[...ordenIds]], type: QueryTypes.SELECT },
+    );
+    return new Map(filas.map((f) => [f.origen, f.id]));
+  }
+
+  /**
+   * La orden pedida y todas las que terminaron unidas a ella (la cadena de uniones al revés), con la misma regla de
+   * `ordenesPrincipales`: solo si la orden pedida es una principal (no se unió a otra). Una orden `UNIDA`, o que no
+   * existe, no tiene cuenta propia: lista vacía.
+   */
+  async ordenesUnidasA(ordenId: string): Promise<string[]> {
+    const filas = await this.conexion.query<{ id: string }>(
+      `WITH RECURSIVE absorbidas AS (
+         SELECT o.id, o.empresa_id FROM orden o WHERE o.id = $1 AND o.unida_a_orden_id IS NULL
+         UNION
+         SELECT h.id, h.empresa_id
+           FROM orden h JOIN absorbidas a ON h.unida_a_orden_id = a.id AND h.empresa_id = a.empresa_id)
+       SELECT id FROM absorbidas`,
+      { bind: [ordenId], type: QueryTypes.SELECT },
+    );
+    return filas.map((f) => f.id);
   }
 
   /** `true` si la sucursal tiene alguna orden `ABIERTA` o `EN_PRECUENTA`. */

@@ -1,11 +1,14 @@
-import type { ComandaKds } from '@restaurante/contratos';
+import type { ComandaKds, EstacionKds } from '@restaurante/contratos';
 import {
   Aviso,
   ErrorDeCarga,
   EsqueletoDeLista,
   EstadoVacio,
+  EtiquetaDeEstado,
   Icono,
   IconoCocina,
+  IconoImpresora,
+  IconoInfo,
   IconoOk,
   Interruptor,
   Plegable,
@@ -15,15 +18,11 @@ import {
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Pagina } from '../../componentes/Pagina';
 import { AvisoPendiente } from '../../componentes/PendienteDeEnvio';
+import { useConexion } from '../../lib/conexion';
 import { useEstadoTiempoReal } from '../../lib/tiempo-real';
 import { useSesionActiva } from '../acceso/sesion';
-import { useVistaDeSucursal } from '../disponibilidad/useVistaDeSucursal';
-import {
-  estacionesDeLasComandas,
-  etiquetaDeMesas,
-  pendientesEnOrden,
-  recientesEnOrden,
-} from './cocina';
+import { resumenDeImpresion, useEstadoDeImpresion } from '../impresion/estado';
+import { etiquetaDeMesas, pendientesEnOrden, recientesEnOrden } from './cocina';
 import './cocina.css';
 import {
   estacionesDelEquipo,
@@ -66,39 +65,46 @@ function CocinaDeSucursal({ empresaId, sucursalId }: { empresaId: string; sucurs
   const [elegidas, setElegidas] = useState<string[]>(() =>
     estacionesDelEquipo(empresaId, sucursalId),
   );
-  // La lista de estaciones sale de la carta de la sucursal (una sola vez); si no llega, se arma con las que
-  // aparecen en las comandas.
-  const vista = useVistaDeSucursal(sucursalId, { refrescar: false });
-  const estacionesDeLaCarta = vista.data?.vista.estaciones;
-  // Una estación recordada que ya no existe (otra sucursal, estación desactivada) se ignora.
+  // La lista de estaciones sale de la misma respuesta de la cocina: todas las activas, aunque el filtro pida
+  // solo algunas, cada una con su destino (criterio 138). Al cambiar el filtro la consulta es otra y por un
+  // momento no hay respuesta: se conserva la última lista para que los filtros no desaparezcan.
+  const [estacionesVistas, setEstacionesVistas] = useState<readonly EstacionKds[] | undefined>(
+    undefined,
+  );
+  // Solo las que salen por esta pantalla son filtros (criterio 138): las de impresora no tienen nada que
+  // mostrar aquí, y filtrar por ellas dejaría la pantalla vacía.
+  const filtrables = useMemo(
+    () => estacionesVistas?.filter((e) => e.destino === 'KDS') ?? [],
+    [estacionesVistas],
+  );
+  const porImpresora = useMemo(
+    () => estacionesVistas?.filter((e) => e.destino === 'IMPRESORA') ?? [],
+    [estacionesVistas],
+  );
+  // Una estación recordada que ya no sirve de filtro (otra sucursal, desactivada o ahora por impresora) se
+  // ignora; la elección guardada en el equipo no se toca.
   const efectivas = useMemo(
     () =>
-      estacionesDeLaCarta
-        ? elegidas.filter((id) => estacionesDeLaCarta.some((e) => e.id === id))
-        : elegidas,
-    [elegidas, estacionesDeLaCarta],
+      estacionesVistas ? elegidas.filter((id) => filtrables.some((e) => e.id === id)) : elegidas,
+    [elegidas, estacionesVistas, filtrables],
   );
 
   const consulta = useCocina(sucursalId, efectivas);
   const datos = consulta.data;
   const cocina = datos?.cocina;
+  const estacionesDeLaRespuesta = cocina?.estaciones;
+  useEffect(() => {
+    if (estacionesDeLaRespuesta) setEstacionesVistas(estacionesDeLaRespuesta);
+  }, [estacionesDeLaRespuesta]);
   const ahora = useAhoraDeCocina(datos);
   const acciones = useAccionesDeCocina(sucursalId);
-
-  const estaciones = useMemo(() => {
-    const todas = new Map<string, string>();
-    for (const e of estacionesDeLaCarta ?? []) todas.set(e.id, e.nombre);
-    for (const e of estacionesDeLasComandas(cocina))
-      if (!todas.has(e.id)) todas.set(e.id, e.nombre);
-    return [...todas].map(([id, nombre]) => ({ id, nombre }));
-  }, [estacionesDeLaCarta, cocina]);
 
   function alternarEstacion(id: string) {
     const siguiente = efectivas.includes(id)
       ? efectivas.filter((e) => e !== id)
       : [...efectivas, id];
     // Elegirlas todas es lo mismo que no filtrar.
-    const lista = siguiente.length === estaciones.length ? [] : siguiente;
+    const lista = siguiente.length === filtrables.length ? [] : siguiente;
     setElegidas(lista);
     guardarEstacionesDelEquipo(empresaId, sucursalId, lista);
   }
@@ -200,14 +206,14 @@ function CocinaDeSucursal({ empresaId, sucursalId }: { empresaId: string; sucurs
         onKeyDownCapture={despertarSonido}
       >
         <div className="cocina__herramientas">
-          {estaciones.length > 1 ? (
+          {filtrables.length > 1 ? (
             <div className="ui-segmentos cocina__filtros" role="group" aria-label="Estaciones">
               <FiltroDeEstacion
                 etiqueta="Todas"
                 elegido={efectivas.length === 0}
                 onClick={verTodas}
               />
-              {estaciones.map((e) => (
+              {filtrables.map((e) => (
                 <FiltroDeEstacion
                   key={e.id}
                   etiqueta={e.nombre}
@@ -240,6 +246,18 @@ function CocinaDeSucursal({ empresaId, sucursalId }: { empresaId: string; sucurs
               />
             </div>
           </div>
+          <EstadoDeImpresion sucursalId={sucursalId} />
+          {porImpresora.length > 0 ? (
+            <ul className="cocina__destinos" aria-label="Estaciones que salen por impresora">
+              {porImpresora.map((e) => (
+                <li key={e.id} className="ui-campo__ayuda">
+                  <Icono icono={IconoImpresora} tamano={16} />
+                  {`${e.nombre} sale por la impresora ${e.impresora?.nombre ?? ''}`.trim()}
+                  {' y no aparece en esta pantalla.'}
+                </li>
+              ))}
+            </ul>
+          ) : null}
           {tiempoReal === 'caido' ? (
             <p className="ui-campo__ayuda" role="status">
               Sin conexión en vivo. La cocina se actualiza cada 30 segundos.
@@ -310,6 +328,30 @@ function CocinaDeSucursal({ empresaId, sucursalId }: { empresaId: string; sucurs
         ) : null}
       </div>
     </Pagina>
+  );
+}
+
+/**
+ * El estado de la impresión, discreto, en la cabecera del KDS (criterio 138): una etiqueta de una línea con
+ * palabras. Sale aquí aunque todo vaya bien, porque una estación que sale por impresora no aparece en esta
+ * pantalla. El detalle de un problema está en el banner de arriba. Sin impresoras en la sucursal, no sale.
+ */
+function EstadoDeImpresion({ sucursalId }: { sucursalId: string }) {
+  const { estado, desdeLaRespuestaMs } = useEstadoDeImpresion(sucursalId);
+  const { sinConexion } = useConexion();
+  const resumen = estado && !sinConexion ? resumenDeImpresion(estado, desdeLaRespuestaMs) : null;
+  if (!resumen) return null;
+  return (
+    <p className="cocina__impresion">
+      <EtiquetaDeEstado
+        tono={resumen.tono}
+        icono={
+          resumen.tono === 'ok' ? IconoOk : resumen.tono === 'alerta' ? IconoImpresora : IconoInfo
+        }
+      >
+        {resumen.texto}
+      </EtiquetaDeEstado>
+    </p>
   );
 }
 

@@ -1,0 +1,154 @@
+/* Ajustes › Impresión (004, 3b): se carga junto con la pantalla, no con el paquete inicial */
+
+.impresion__bloque {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espacio-md);
+  max-width: 40rem;
+  padding-top: var(--espacio-xl);
+  border-top: 1px solid var(--color-junta);
+}
+
+.impresion__cabecera {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espacio-xs);
+}
+
+.impresion__selectores {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espacio-lg);
+}
+
+.impresion__formulario {
+  max-width: 40rem;
+}
+
+.impresion__grupo {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espacio-sm);
+}
+
+/* Dirección y puerto: una debajo de la otra en celular, para que los avisos de error tengan ancho */
+.impresion__red {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--espacio-lg);
+}
+
+@media (min-width: 768px) {
+  .impresion__red {
+    grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+    align-items: start;
+  }
+}
+
+/* Un campo o aviso al que se salta por un error no queda tapado por la acción fija de abajo */
+.impresion__formulario .ui-campo__control,
+.impresion__formulario .ui-aviso {
+  scroll-margin-block: 5rem 7rem;
+}
+
+/* ---------- Puente de impresión (criterio 137) ---------- */
+
+/* El estado del puente: una baldosa informativa (borde de junta, no de control: no se toca) */
+.puente__estado {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espacio-sm);
+  padding: var(--espacio-md) var(--espacio-lg);
+  background: var(--color-baldosa);
+  border: 1px solid var(--color-junta);
+  border-radius: var(--radio-baldosa);
+}
+.puente__estado p {
+  margin: 0;
+}
+.puente__nombre {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--espacio-sm);
+}
+.puente__nombre b {
+  font-size: 1.0625rem;
+  line-height: 1.375rem;
+  overflow-wrap: anywhere;
+}
+
+/* El código de vinculación se abre en su sitio, debajo del estado, sin ventana encima */
+.puente__vincular {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espacio-md);
+  padding-top: var(--espacio-lg);
+  border-top: 1px solid var(--color-junta);
+}
+.puente__vincular p {
+  margin: 0;
+}
+.puente__subtitulo {
+  margin: 0;
+  font-size: 1.25rem;
+  line-height: 1.625rem;
+  font-weight: 700;
+}
+.puente__cargando {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--espacio-sm);
+  color: var(--color-tinta-suave);
+}
+
+/* El QR: lo más grande que cabe, centrado, con el reloj debajo */
+.qr {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--espacio-sm);
+  padding: var(--espacio-lg);
+  background: var(--color-baldosa);
+  border: 1px solid var(--color-junta);
+  border-radius: var(--radio-baldosa);
+}
+.qr__dibujo,
+.qr__esqueleto {
+  display: block;
+  width: min(100%, 20rem);
+  height: auto;
+  aspect-ratio: 1;
+}
+.qr__reloj {
+  display: flex;
+  align-items: baseline;
+  gap: var(--espacio-sm);
+  color: var(--color-tinta-suave);
+  font-variant-numeric: tabular-nums;
+}
+.qr__reloj b {
+  font-size: 2.5rem;
+  line-height: 2.75rem;
+  font-weight: 700;
+  color: var(--color-tinta);
+}
+/* El último minuto lo dice también la frase de abajo: el color solo refuerza */
+.qr__reloj--pronto b {
+  color: var(--color-aviso-texto);
+}
+.qr__aviso {
+  min-height: 1.25rem;
+  color: var(--color-aviso-texto);
+  font-weight: 700;
+}
+.qr__aviso:empty {
+  display: none;
+}
+
+/* El texto del código se lee entero y se selecciona de un toque */
+.puente__vincular textarea {
+  overflow-wrap: anywhere;
+}

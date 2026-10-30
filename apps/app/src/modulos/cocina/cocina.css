@@ -58,3 +58,35 @@
 .ui-segmentos.cocina__filtros {
   grid-template-columns: repeat(auto-fit, minmax(5.5rem, 1fr));
 }
+
+/* El estado de la impresión: una etiqueta discreta; el detalle de un problema vive en el banner de arriba. */
+.cocina__impresion {
+  margin: 0;
+}
+
+/* Con un problema el texto puede ser largo: pasa a otra línea en vez de cortarse a 320 px. */
+.cocina__impresion .ui-etiqueta {
+  white-space: normal;
+  padding-block: 2px;
+}
+
+/* Estaciones que salen por impresora: una línea de ayuda por estación, con el ícono de la impresora. */
+.cocina__destinos {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espacio-xs);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.cocina__destinos > li {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--espacio-sm);
+}
+
+.cocina__destinos > li > svg {
+  flex: none;
+  margin-top: 2px;
+}

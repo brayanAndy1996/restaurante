@@ -6,7 +6,8 @@ import {
   type GrupoDeSeleccion,
   type ResultadoLinea,
 } from '@restaurante/dominio';
-import { montoEnSoles, montoEsCero, paraBuscar } from '../../lib/formato';
+import { paraBuscar } from '../../lib/formato';
+import { montoEnSoles, montoEsCero } from '../../lib/monto';
 
 /**
  * Lógica del comandero (criterio 91 de 004), sin React: qué productos se ofrecen, cómo se dice por qué uno

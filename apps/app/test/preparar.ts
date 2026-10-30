@@ -20,6 +20,11 @@ if (typeof HTMLDialogElement !== 'undefined' && !HTMLDialogElement.prototype.sho
   };
 }
 
+// jsdom tampoco implementa scrollIntoView (las pantallas lo usan para llevar la vista al primer problema).
+if (typeof Element !== 'undefined' && !Element.prototype.scrollIntoView) {
+  Element.prototype.scrollIntoView = function scrollIntoView() {};
+}
+
 // matchMedia tampoco existe en jsdom: por defecto, pantalla de celular.
 if (!window.matchMedia) {
   window.matchMedia = (consulta: string) =>

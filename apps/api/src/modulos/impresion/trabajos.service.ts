@@ -1,0 +1,465 @@
+import { randomUUID } from 'node:crypto';
+import { Inject, Injectable, Logger } from '@nestjs/common';
+import {
+  MAXIMO_BYTES_RESPUESTA_TRABAJOS,
+  MAXIMO_TRABAJOS_POR_IMPRESORA,
+  type ResultadoTrabajoEntrada,
+  type TipoTrabajo,
+  type TrabajoParaImprimir,
+  type TrabajoResumen,
+  type TrabajosConsulta,
+} from '@restaurante/contratos';
+import type { DocumentoTicket } from '@restaurante/contratos';
+import { QueryTypes, type Sequelize } from 'sequelize';
+import { CONEXION_API } from '../../nucleo/base-de-datos';
+import { ContextoEmpresa } from '../../nucleo/contexto-empresa';
+import { ErrorAplicacion } from '../../nucleo/errores/error-aplicacion';
+import type { PuenteAutenticado } from '../../nucleo/principal';
+import { RELOJ, horaLocal, type Reloj } from '../../nucleo/reloj';
+import { SucursalesConsultaService } from '../plataforma';
+import { SesionActual } from '../seguridad';
+import { ColaImpresionService } from './cola-impresion.service';
+import {
+  conMarcas,
+  documentoDePrueba,
+  esIncompleto,
+  recortarError,
+  renderizarTicketDetallado,
+} from './escpos';
+import { noEncontrado, sinImpresora } from './errores-impresion';
+import { OrdenesVigentes } from './ordenes-vigentes';
+import type { FilaImpresora } from './lectura-impresoras';
+
+/** Un trabajo con más de este tiempo entre su creación y su entrega sale con la marca de retraso (criterio 118). */
+const MS_RETRASO = 2 * 60_000;
+
+interface FilaEntrega {
+  id: string;
+  impresora_id: string;
+  tipo: TipoTrabajo;
+  creado_en: Date;
+  ancho_mm: 58 | 80;
+  juego_caracteres: FilaImpresora['juego_caracteres'];
+}
+
+/** Lo que `GET /puente/trabajos` responde: los trabajos y si quedaron otros esperando por el tope de bytes. */
+export interface EntregaDeTrabajos {
+  trabajos: TrabajoParaImprimir[];
+  /** `true` si algo no entró por `MAXIMO_BYTES_RESPUESTA_TRABAJOS`: el puente vuelve a pedir al terminar el lote. */
+  hayMas: boolean;
+}
+
+/** Documentos que se leen y se arman por vez al entregar (cada uno puede pesar cientos de KB). */
+const DOCUMENTOS_POR_LECTURA = 10;
+
+interface FilaResumen {
+  id: string;
+  tipo: TipoTrabajo;
+  impresora_id: string;
+  impresora_nombre: string;
+  mesa: string | null;
+  orden_id: string | null;
+  envio_numero: number | null;
+  estado: 'PENDIENTE' | 'IMPRESO';
+  incompleto: boolean;
+  dia_operativo: string;
+  intentos: number;
+  creado_en: Date;
+  impreso_en: Date | null;
+  reimpresion_de_id: string | null;
+  ultimo_error: string | null;
+  error_render: string | null;
+}
+
+const MAXIMO_LISTA = 200;
+
+/**
+ * Los trabajos de impresión (historia 004, 3b, criterios 113 a 118, 127 y 128; ruta crítica P5 y P6).
+ *
+ * - **Del puente:** `entregar` da hasta `MAXIMO_TRABAJOS_POR_IMPRESORA` (20) `PENDIENTE` de cada impresora de su
+ *   sucursal, en orden de creación dentro de cada una, con los bytes armados en ese momento con la configuración
+ *   vigente de la impresora; `resultado` los cierra o suma un intento. El reparto es por impresora para que los
+ *   trabajos atascados de una (apagada, sin papel) no dejen sin entrega a las demás. No se entregan los de
+ *   impresoras inactivas ni Bluetooth (en 3b no se imprime por ahí, decisión 12) ni los que no se pudieron armar
+ *   (`error_render`: no ocupan lugar y la lista de la PWA los muestra con su error). Todo se limita a la sucursal del puente: un trabajo de otra sucursal o de otra empresa es 404, igual
+ *   que uno inexistente.
+ * - **Vencimiento (117):** un `PENDIENTE` cuyo día operativo ya pasó (hora de corte de la sucursal, reloj de la API)
+ *   es `VENCIDO`: no se entrega y no se acepta su resultado (409). Se calcula al leer, sin tareas programadas.
+ * - **De la PWA:** la página de prueba, la lista de la sucursal activa y la reimpresión.
+ */
+@Injectable()
+export class TrabajosService {
+  private readonly logger = new Logger(TrabajosService.name);
+
+  constructor(
+    @Inject(CONEXION_API) private readonly conexion: Sequelize,
+    @Inject(ContextoEmpresa) private readonly contexto: ContextoEmpresa,
+    @Inject(RELOJ) private readonly reloj: Reloj,
+    @Inject(SesionActual) private readonly sesion: SesionActual,
+    @Inject(SucursalesConsultaService) private readonly sucursales: SucursalesConsultaService,
+    @Inject(ColaImpresionService) private readonly cola: ColaImpresionService,
+    @Inject(OrdenesVigentes) private readonly ordenes: OrdenesVigentes,
+  ) {}
+
+  // ---- El puente ----------------------------------------------------------------------------------
+
+  /**
+   * `GET /puente/trabajos` (criterios 113 y 118). Hasta `MAXIMO_TRABAJOS_POR_IMPRESORA` por impresora y, en total,
+   * `MAXIMO_BYTES_RESPUESTA_TRABAJOS` de bytes ESC/POS (ronda 2 del ataque, F5): se arma cada ticket en el orden de
+   * creación y, cuando el siguiente de una impresora ya no cabe, esa impresora no recibe más en esta respuesta (sus
+   * trabajos salen en orden). De cada impresora con pendientes sale al menos uno aunque pase el tope. Lo que no
+   * entró sale en la siguiente llamada (`hayMas`). Los documentos se leen de a pocos: cientos de KB cada uno.
+   *
+   * Ronda 3 del ataque: ningún ticket pasa de `MAXIMO_BYTES_TICKET` (256 KB; el renderizador lo corta y avisa), así
+   * que la respuesta pesa a lo más el tope más un ticket, y armarla está acotado en tiempo y en memoria (a lo más 20
+   * por impresora y hasta que se llena el tope; los demás ni se leen ni se arman). La marca `incompleto` de cada
+   * trabajo entregado se recalcula con lo que salió (ronda 4, F2): verdadera si la plantilla cortó el documento o el
+   * renderizador lo cortó por el tope con la configuración de ahora, falsa si salió completo.
+   */
+  async entregar(puente: PuenteAutenticado): Promise<EntregaDeTrabajos> {
+    const ahora = this.reloj.ahora();
+    const hoy = await this.cola.diaOperativoDe(puente.sucursalId, ahora);
+    const filas = await this.conexion.query<FilaEntrega>(
+      `SELECT id, impresora_id, tipo, creado_en, ancho_mm, juego_caracteres
+         FROM (SELECT t.id, t.impresora_id, t.tipo, t.creado_en, i.ancho_mm, i.juego_caracteres,
+                      row_number() OVER (PARTITION BY t.impresora_id ORDER BY t.creado_en, t.id) AS posicion
+                 FROM trabajo_impresion t
+                 JOIN impresora i ON i.id = t.impresora_id AND i.empresa_id = t.empresa_id
+                WHERE t.sucursal_id = $1 AND t.estado = 'PENDIENTE' AND t.dia_operativo >= $2::date
+                  AND t.error_render IS NULL AND i.activa AND i.conexion_tipo = 'RED') x
+        WHERE posicion <= $3
+        ORDER BY creado_en, id`,
+      {
+        bind: [puente.sucursalId, hoy, MAXIMO_TRABAJOS_POR_IMPRESORA],
+        type: QueryTypes.SELECT,
+      },
+    );
+    const entregados: TrabajoParaImprimir[] = [];
+    const sinTicket: Array<{ id: string; error: string }> = [];
+    // La marca `incompleto` de cada trabajo entregado, calculada con lo que de verdad salió (ronda 4, F2).
+    const marcaIncompleto = new Map<string, boolean>();
+    const entregadosPorImpresora = new Map<string, number>();
+    const cerradas = new Set<string>();
+    let bytesTotales = 0;
+    let hayMas = false;
+    // ¿Esta fila ya no puede entrar? Una impresora cerrada, o una que ya tiene uno con el tope lleno.
+    const noEntra = (fila: FilaEntrega): boolean =>
+      cerradas.has(fila.impresora_id) ||
+      ((entregadosPorImpresora.get(fila.impresora_id) ?? 0) > 0 &&
+        bytesTotales >= MAXIMO_BYTES_RESPUESTA_TRABAJOS);
+    for (let desde = 0; desde < filas.length; desde += DOCUMENTOS_POR_LECTURA) {
+      const grupo = filas.slice(desde, desde + DOCUMENTOS_POR_LECTURA);
+      const pedidos = grupo.filter((f) => !noEntra(f)).map((f) => f.id);
+      const documentos = new Map<string, DocumentoTicket>();
+      if (pedidos.length > 0) {
+        const leidos = await this.conexion.query<{ id: string; documento: DocumentoTicket }>(
+          `SELECT id, documento FROM trabajo_impresion WHERE id = ANY($1::uuid[])`,
+          { bind: [pedidos], type: QueryTypes.SELECT },
+        );
+        for (const l of leidos) documentos.set(l.id, l.documento);
+      }
+      for (const fila of grupo) {
+        if (noEntra(fila)) {
+          cerradas.add(fila.impresora_id);
+          hayMas = true;
+          continue;
+        }
+        const documentoGuardado = documentos.get(fila.id);
+        if (documentoGuardado === undefined) continue;
+        const creado = new Date(fila.creado_en);
+        try {
+          // El documento guardado queda intacto: la marca de retraso se agrega solo a lo que se manda (criterio 118).
+          const documento =
+            ahora.getTime() - creado.getTime() > MS_RETRASO
+              ? conMarcas(documentoGuardado, { retraso: { horaEnvio: horaLocal(creado) } })
+              : documentoGuardado;
+          const { bytes, recortado } = renderizarTicketDetallado(documento, {
+            anchoMm: fila.ancho_mm,
+            juegoCaracteres: fila.juego_caracteres,
+          });
+          const yaTiene = (entregadosPorImpresora.get(fila.impresora_id) ?? 0) > 0;
+          if (yaTiene && bytesTotales + bytes.length > MAXIMO_BYTES_RESPUESTA_TRABAJOS) {
+            // No cabe: esta impresora espera a la siguiente llamada (sus trabajos salen en orden).
+            cerradas.add(fila.impresora_id);
+            hayMas = true;
+            continue;
+          }
+          // Incompleto es verdadero si la plantilla cortó el documento (su aviso estructural) o si el renderizador lo
+          // cortó por el tope con la configuración de ahora; si salió entero, es falso aunque antes se hubiera cortado.
+          marcaIncompleto.set(fila.id, esIncompleto(documento) || recortado);
+          bytesTotales += bytes.length;
+          entregadosPorImpresora.set(
+            fila.impresora_id,
+            (entregadosPorImpresora.get(fila.impresora_id) ?? 0) + 1,
+          );
+          entregados.push({
+            id: fila.id,
+            impresoraId: fila.impresora_id,
+            tipo: fila.tipo,
+            creadoEn: creado.toISOString(),
+            bytes: Buffer.from(bytes).toString('base64'),
+          });
+        } catch (error) {
+          // Un documento que no se puede armar no debe frenar los demás trabajos de la cola ni quedarse en ella:
+          // se marca con su error (se ve en "Trabajos de hoy") y no se vuelve a entregar.
+          const motivo = recortarError(
+            error instanceof Error ? error.message : `No se pudo armar el ticket: ${String(error)}`,
+          );
+          this.logger.error(
+            `No se pudo armar el ticket del trabajo ${fila.id}`,
+            error instanceof Error ? error.stack : String(error),
+          );
+          sinTicket.push({ id: fila.id, error: motivo });
+        }
+      }
+    }
+    for (const { id, error } of sinTicket) {
+      await this.conexion.query(
+        `UPDATE trabajo_impresion SET error_render = $2, actualizado_en = $3
+          WHERE id = $1 AND error_render IS NULL`,
+        { bind: [id, error, ahora], type: QueryTypes.UPDATE },
+      );
+    }
+    if (marcaIncompleto.size > 0) {
+      // `incompleto` se recalcula en cada entrega y puede volver a `false`: la lista de "Trabajos de hoy" dice lo que
+      // salió en papel con la configuración de ese momento (ronda 4 del ataque, F2; criterio 126).
+      const ids = [...marcaIncompleto.keys()];
+      await this.conexion.query(
+        `UPDATE trabajo_impresion t SET incompleto = v.incompleto, actualizado_en = $3
+           FROM unnest($1::uuid[], $2::boolean[]) AS v(id, incompleto)
+          WHERE t.id = v.id AND t.incompleto IS DISTINCT FROM v.incompleto`,
+        { bind: [ids, ids.map((id) => marcaIncompleto.get(id)!), ahora], type: QueryTypes.UPDATE },
+      );
+    }
+    if (entregados.length > 0) {
+      await this.conexion.query(
+        `UPDATE trabajo_impresion SET entregado_en = $2, actualizado_en = $2
+          WHERE id = ANY($1::uuid[]) AND entregado_en IS NULL`,
+        { bind: [entregados.map((e) => e.id), ahora], type: QueryTypes.UPDATE },
+      );
+    }
+    return { trabajos: entregados, hayMas };
+  }
+
+  /** `POST /puente/trabajos/:id/resultado` (criterio 115). */
+  async resultado(
+    puente: PuenteAutenticado,
+    id: string,
+    entrada: ResultadoTrabajoEntrada,
+  ): Promise<void> {
+    const ahora = this.reloj.ahora();
+    const filas = await this.conexion.query<{
+      estado: 'PENDIENTE' | 'IMPRESO';
+      dia_operativo: string;
+    }>(
+      `SELECT estado, dia_operativo::text AS dia_operativo FROM trabajo_impresion
+        WHERE id = $1 AND sucursal_id = $2 FOR UPDATE`,
+      { bind: [id, puente.sucursalId], type: QueryTypes.SELECT },
+    );
+    const fila = filas[0];
+    if (fila === undefined) throw noEncontrado('El trabajo');
+    if (entrada.resultado === 'IMPRESO') {
+      if (fila.estado === 'IMPRESO') return;
+    }
+    const hoy = await this.cola.diaOperativoDe(puente.sucursalId, ahora);
+    if (fila.estado === 'PENDIENTE' && fila.dia_operativo < hoy) {
+      throw new ErrorAplicacion(
+        409,
+        'TRANSICION_INVALIDA',
+        'El trabajo venció: ya pasó el día operativo en que se creó',
+      );
+    }
+    if (entrada.resultado === 'IMPRESO') {
+      await this.conexion.query(
+        `UPDATE trabajo_impresion SET estado = 'IMPRESO', impreso_en = $2, actualizado_en = $2 WHERE id = $1`,
+        { bind: [id, ahora], type: QueryTypes.UPDATE },
+      );
+      return;
+    }
+    // Un trabajo ya impreso no vuelve a pendiente por un reporte tardío de fallo.
+    if (fila.estado === 'IMPRESO') return;
+    await this.conexion.query(
+      `UPDATE trabajo_impresion
+          SET intentos = intentos + 1, ultimo_error = $2, actualizado_en = $3
+        WHERE id = $1`,
+      { bind: [id, entrada.error, ahora], type: QueryTypes.UPDATE },
+    );
+  }
+
+  // ---- La PWA -------------------------------------------------------------------------------------
+
+  /** `POST /sucursales/:sucursalId/impresoras/:id/prueba` (criterio 127): funciona con la impresora inactiva. */
+  async paginaDePrueba(sucursalId: string, impresoraId: string): Promise<{ trabajoId: string }> {
+    if (!(await this.sucursales.existen([sucursalId]))) throw noEncontrado('La sucursal');
+    const filas = await this.conexion.query<FilaImpresora>(
+      `SELECT id, nombre, ancho_mm, juego_caracteres FROM impresora WHERE id = $1 AND sucursal_id = $2`,
+      { bind: [impresoraId, sucursalId], type: QueryTypes.SELECT },
+    );
+    const impresora = filas[0];
+    if (impresora === undefined) throw noEncontrado('La impresora');
+    const [trabajoId] = await this.cola.encolar([
+      {
+        sucursalId,
+        impresoraId,
+        estacionId: null,
+        tipo: 'PRUEBA',
+        comandaId: null,
+        precuentaId: null,
+        mesa: null,
+        ordenId: null,
+        envioNumero: null,
+        documento: documentoDePrueba({
+          nombre: impresora.nombre,
+          anchoMm: impresora.ancho_mm,
+          juegoCaracteres: impresora.juego_caracteres,
+        }),
+      },
+    ]);
+    return { trabajoId: trabajoId! };
+  }
+
+  /**
+   * `GET /impresion/trabajos` (criterio 128): los de la sucursal activa, en su día operativo (o desde `desde`),
+   * los más nuevos primero, hasta `MAXIMO_LISTA`. `estado` y `ordenId` se aplican en la consulta, antes del límite:
+   * pedir los `IMPRESO` o los de una cuenta nunca queda corto porque haya 200 trabajos más nuevos de otro estado u
+   * otra cuenta. `ordenId` es la cuenta que ve el mozo: la orden y las que se le unieron.
+   */
+  async listar(consulta: TrabajosConsulta): Promise<TrabajoResumen[]> {
+    const sucursalId = this.sesion.sucursalActiva();
+    const ahora = this.reloj.ahora();
+    const hoy = await this.cola.diaOperativoDe(sucursalId, ahora);
+    const desde = consulta.desde === undefined ? null : new Date(consulta.desde);
+    const ordenes =
+      consulta.ordenId === undefined ? null : await this.ordenes.delaCuenta(consulta.ordenId);
+    const filas = await this.conexion.query<FilaResumen>(
+      `SELECT t.id, t.tipo, t.impresora_id, i.nombre AS impresora_nombre, t.mesa, t.orden_id,
+              t.envio_numero, t.estado, t.incompleto,
+              t.dia_operativo::text AS dia_operativo, t.intentos, t.creado_en, t.impreso_en,
+              t.reimpresion_de_id, t.ultimo_error, t.error_render
+         FROM trabajo_impresion t
+         JOIN impresora i ON i.id = t.impresora_id AND i.empresa_id = t.empresa_id
+        WHERE t.sucursal_id = $1
+          AND (($2::timestamptz IS NULL AND t.dia_operativo = $3::date)
+               OR ($2::timestamptz IS NOT NULL AND t.creado_en >= $2::timestamptz))
+          AND ($4::text IS NULL
+               OR ($4 = 'IMPRESO' AND t.estado = 'IMPRESO')
+               OR ($4 = 'PENDIENTE' AND t.estado = 'PENDIENTE' AND t.dia_operativo >= $3::date)
+               OR ($4 = 'VENCIDO' AND t.estado = 'PENDIENTE' AND t.dia_operativo < $3::date))
+          AND ($5::uuid[] IS NULL OR t.orden_id = ANY($5::uuid[]))
+        ORDER BY t.creado_en DESC, t.id DESC
+        LIMIT ${MAXIMO_LISTA}`,
+      { bind: [sucursalId, desde, hoy, consulta.estado ?? null, ordenes], type: QueryTypes.SELECT },
+    );
+    // La cuenta que ve el mozo: la orden principal si la de origen se unió a otra (criterio 128).
+    const principales = await this.ordenes.resolver(
+      filas.flatMap((f) => (f.orden_id === null ? [] : [f.orden_id])),
+    );
+    return filas.map((f): TrabajoResumen => {
+      const vencido = f.estado === 'PENDIENTE' && f.dia_operativo < hoy;
+      return {
+        id: f.id,
+        tipo: f.tipo,
+        impresora: { id: f.impresora_id, nombre: f.impresora_nombre },
+        mesa: f.mesa,
+        estado: vencido ? 'VENCIDO' : f.estado,
+        intentos: f.intentos,
+        creadoEn: new Date(f.creado_en).toISOString(),
+        impresoEn: f.impreso_en === null ? null : new Date(f.impreso_en).toISOString(),
+        reimpresionDe: f.reimpresion_de_id,
+        ordenId: f.orden_id === null ? null : (principales.get(f.orden_id) ?? f.orden_id),
+        envioNumero: f.envio_numero,
+        ultimoError: f.estado === 'IMPRESO' ? null : (f.error_render ?? f.ultimo_error),
+        sinTicket: f.error_render !== null,
+        incompleto: f.incompleto,
+      };
+    });
+  }
+
+  /** `POST /impresion/trabajos/:id/reimpresion` (criterio 128). */
+  async reimprimir(id: string): Promise<{ trabajoId: string }> {
+    const sucursalId = this.sesion.sucursalActiva();
+    const ahora = this.reloj.ahora();
+    const filas = await this.conexion.query<{
+      impresora_id: string;
+      estacion_id: string | null;
+      tipo: TipoTrabajo;
+      documento: DocumentoTicket;
+      comanda_id: string | null;
+      precuenta_id: string | null;
+      mesa: string | null;
+      orden_id: string | null;
+      envio_numero: number | null;
+      impresora_utilizable: boolean;
+    }>(
+      `SELECT t.impresora_id, t.estacion_id, t.tipo, t.documento, t.comanda_id, t.precuenta_id, t.mesa,
+              t.orden_id, t.envio_numero, (i.activa AND i.conexion_tipo = 'RED') AS impresora_utilizable
+         FROM trabajo_impresion t
+         JOIN impresora i ON i.id = t.impresora_id AND i.empresa_id = t.empresa_id
+        WHERE t.id = $1 AND t.sucursal_id = $2`,
+      { bind: [id, sucursalId], type: QueryTypes.SELECT },
+    );
+    const original = filas[0];
+    if (original === undefined) throw noEncontrado('El trabajo');
+
+    // Una impresora que pasó a Bluetooth no imprime en 3b (decisión 12): se trata como una inactiva. Si tampoco hay
+    // otra de red activa para la estación (o la caja), 409 sin crear el trabajo (ronda 2 del ataque, F4).
+    let impresoraId: string | null = original.impresora_utilizable ? original.impresora_id : null;
+    if (impresoraId === null) impresoraId = await this.impresoraActual(sucursalId, original);
+    if (impresoraId === null) throw sinImpresora();
+
+    const nuevoId = randomUUID();
+    const documento = conMarcas(original.documento, { reimpresion: true });
+    await this.cola.insertar(
+      this.contexto.empresaActual(),
+      [
+        {
+          id: nuevoId,
+          sucursal_id: sucursalId,
+          impresora_id: impresoraId,
+          estacion_id: original.estacion_id,
+          tipo: original.tipo,
+          documento,
+          comanda_id: original.comanda_id,
+          precuenta_id: original.precuenta_id,
+          mesa: original.mesa,
+          orden_id: original.orden_id,
+          envio_numero: original.envio_numero,
+          dia_operativo: await this.cola.diaOperativoDe(sucursalId, ahora),
+          reimpresion_de_id: id,
+          error_render: this.cola.errorDelDocumento(documento, original.tipo),
+        },
+      ],
+      ahora,
+    );
+    await this.cola.avisarTrabajos(sucursalId, [nuevoId]);
+    return { trabajoId: nuevoId };
+  }
+
+  /**
+   * La impresora actual de la estación del trabajo (o la de caja, en una pre-cuenta), si la original no se puede
+   * usar (inactiva o Bluetooth). Solo una activa y de red: es la única que recibe trabajos en 3b.
+   */
+  private async impresoraActual(
+    sucursalId: string,
+    original: { estacion_id: string | null; tipo: TipoTrabajo },
+  ): Promise<string | null> {
+    if (original.tipo === 'PRECUENTA') {
+      const caja = await this.cola.impresoraDeCaja(sucursalId);
+      if (caja === null) return null;
+      const filas = await this.conexion.query<{ id: string }>(
+        `SELECT id FROM impresora WHERE id = $1 AND sucursal_id = $2 AND activa AND conexion_tipo = 'RED'`,
+        { bind: [caja.id, sucursalId], type: QueryTypes.SELECT },
+      );
+      return filas[0]?.id ?? null;
+    }
+    if (original.estacion_id === null) return null;
+    const filas = await this.conexion.query<{ impresora_id: string }>(
+      `SELECT d.impresora_id FROM estacion_destino d
+         JOIN impresora i ON i.id = d.impresora_id AND i.empresa_id = d.empresa_id
+        WHERE d.sucursal_id = $1 AND d.estacion_id = $2 AND d.destino = 'IMPRESORA'
+          AND i.activa AND i.conexion_tipo = 'RED'`,
+      { bind: [sucursalId, original.estacion_id], type: QueryTypes.SELECT },
+    );
+    return filas[0]?.impresora_id ?? null;
+  }
+}

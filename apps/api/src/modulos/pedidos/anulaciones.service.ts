@@ -35,6 +35,7 @@ import { INVENTARIO, type InventarioPuerto } from './inventario';
 import { mesasVigentesDeOrden } from './mesas-de-orden';
 import { invalidarPrecuentaVigente } from './precuenta-invalidacion';
 import { huellaDeAnulacion, huellaDeAnulacionDeOrden } from './replica';
+import { TicketsDePedidos } from './tickets-de-pedidos';
 import { VistaOrdenService } from './vista-orden';
 
 /** Un ítem tal como lo necesita una anulación. */
@@ -89,6 +90,7 @@ export class AnulacionesService {
     @Inject(SesionActual) private readonly sesion: SesionActual,
     @Inject(INVENTARIO) private readonly inventario: InventarioPuerto,
     @Inject(IMPRESION) private readonly impresion: ImpresionPuerto,
+    @Inject(TicketsDePedidos) private readonly tickets: TicketsDePedidos,
     @Inject(AuditoriaService) private readonly auditoria: AuditoriaService,
     @Inject(MesasConsultaService) private readonly mesas: MesasConsultaService,
     @Inject(EventosPedidos) private readonly eventos: EventosPedidos,
@@ -203,6 +205,7 @@ export class AnulacionesService {
       origenId: anulacionId,
       ahora,
       anulados: [{ item, cantidad: entrada.cantidad }],
+      motivo: entrada.motivo,
     });
 
     // El inventario, dentro de la transacción y una sola vez (criterio 39): si lanza, se revierte todo.
@@ -333,6 +336,7 @@ export class AnulacionesService {
       origenId: filas[0]?.id ?? null,
       ahora,
       anulados,
+      motivo: entrada.motivo,
     });
 
     // El inventario, una sola vez con todas las partes vigentes; el id es el de la orden (criterio 72).
@@ -427,6 +431,7 @@ export class AnulacionesService {
     origenId: string | null;
     ahora: Date;
     anulados: readonly Anulado[];
+    motivo: string;
   }): Promise<ComandaGuardada[]> {
     const partes: ParteParaGuardar[] = entrada.anulados.flatMap(({ item, cantidad }) =>
       partesDeComanda(item.linea, {
@@ -444,7 +449,7 @@ export class AnulacionesService {
         };
       }),
     );
-    return guardarComandas(this.conexion, this.impresion, {
+    return guardarComandas(this.conexion, this.impresion, this.tickets, {
       empresaId: entrada.empresaId,
       sucursalId: entrada.sucursalId,
       ordenId: entrada.ordenId,
@@ -453,6 +458,7 @@ export class AnulacionesService {
       origenId: entrada.origenId,
       ahora: entrada.ahora,
       partes,
+      motivo: entrada.motivo,
     });
   }
 

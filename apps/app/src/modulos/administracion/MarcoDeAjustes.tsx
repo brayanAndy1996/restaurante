@@ -3,18 +3,20 @@ import type { ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Pagina } from '../../componentes/Pagina';
 
-export type SeccionDeAjustes = 'usuarios' | 'acceso' | 'mesas';
+export type SeccionDeAjustes = 'usuarios' | 'acceso' | 'mesas' | 'impresion';
 
 const SECCIONES: readonly OpcionDeSegmento<SeccionDeAjustes>[] = [
   { valor: 'usuarios', etiqueta: 'Usuarios' },
   { valor: 'acceso', etiqueta: 'Acceso' },
   { valor: 'mesas', etiqueta: 'Mapa de mesas' },
+  { valor: 'impresion', etiqueta: 'Impresión' },
 ];
 
 export const RUTA_DE_SECCION: Record<SeccionDeAjustes, string> = {
   usuarios: '/administracion/usuarios',
   acceso: '/administracion/acceso',
   mesas: '/administracion/mesas',
+  impresion: '/administracion/impresion',
 };
 
 interface PropsMarco {
@@ -26,8 +28,8 @@ interface PropsMarco {
 }
 
 /**
- * Ajustes del Administrador (criterio 87 de 004): una sola puerta para Usuarios, Acceso y Mapa de
- * mesas (y, en 3b, Impresión). Es una pantalla con el cambio de sección arriba, como la Carta, para que
+ * Ajustes del Administrador (criterio 87 de 004): una sola puerta para Usuarios, Acceso, Mapa de
+ * mesas e Impresión (3b). Es una pantalla con el cambio de sección arriba, como la Carta, para que
  * "Ajustes" sea un destino de la navegación y no tres.
  */
 export function MarcoDeAjustes({ actual, pie, ancho = 'estrecho', children }: PropsMarco) {

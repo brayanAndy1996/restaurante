@@ -44,7 +44,17 @@ La sección 3a de los requerimientos, «Salón y Cocina» (especificación 004, 
 - **Inactividad de Cocina/Barra** (RF-11, decisión 11): la sesión de Cocina/Barra se cierra a los 60 minutos sin actividad (configurable de 1 a 720). Los demás roles no cambian.
 - **Permisos, trazabilidad y aislamiento**: quién abrió, comandó y autorizó queda registrado. Las tablas nuevas llevan RLS, y las pruebas protegidas comprueban que una empresa no ve nada de otra.
 
-La siguiente es la 3b (Impresión básica): comandas y pre-cuentas en las impresoras del local, a través del puente vinculado por QR. La app Android del puente es la 3c.
+La sección 3b de los requerimientos, «Impresión básica» (especificación 004, historias HU-38 y HU-39), está terminada en la misma rama de trabajo; todavía no está en `main`. Incluye la revisión y cuatro rondas de ataque adversarial sobre la impresión. Lo construido:
+
+- **Impresoras de red** (RF-76): alta, edición y desactivación en Ajustes › Impresión, con ancho de 58 u 80 mm, juego de caracteres y marca de gaveta. Hasta 50 activas por sucursal. Bluetooth se configura, pero solo se imprime con la app del puente (entrega 3c).
+- **Destino por estación** (RF-19): cada estación sale a la pantalla de cocina o a una impresora, y hay una impresora de caja para las pre-cuentas.
+- **Puente de impresión** (RF-75): se vincula con un código QR de un solo uso, que dura 10 minutos. Hay un puente activo por sucursal; vincular otro revoca el anterior.
+- **Cola de trabajos y reenvío** (RF-77): cada comanda y cada pre-cuenta crean su trabajo en la misma transacción que el envío. Si el puente o la impresora no responden, los tickets esperan en cola y salen al volver. Los que no salieron vencen al terminar el día operativo.
+- **Tickets ESC/POS** (HU-38): comanda, adición, marcha y anulación; pre-cuenta sin desglose de IGV; página de prueba y reimpresión con la marca «REIMPRESIÓN».
+- **Estado y avisos** (HU-39, RF-77): el puente y cada impresora se ven en Ajustes › Impresión, y un aviso en todas las pantallas de la sucursal cuando el puente se desconecta o una impresora no responde.
+- **Simulador del puente:** `pnpm puente:simular` implementa el protocolo que usará la app Android y puede levantar una impresora falsa, para probar la impresión sin Android (ver «Impresión (3b)» más abajo).
+
+La siguiente es la 3c: la app Android del puente (Kotlin), que se especifica aparte.
 
 ## Requisitos
 
@@ -208,17 +218,18 @@ superusuario, `DB_PROTECCION_CATALOGO=omitir` (ver arriba).
 
 ## Comandos
 
-| Comando                      | Qué hace                                                                      |
-| ---------------------------- | ----------------------------------------------------------------------------- |
-| `pnpm lint`                  | ESLint en todo el monorepo (incluye las reglas del criterio 37)               |
-| `pnpm typecheck`             | Verificación de tipos                                                         |
-| `pnpm build`                 | Compila los paquetes y la API                                                 |
-| `pnpm test`                  | Todas las pruebas (la API necesita `DATABASE_ADMIN_URL`)                      |
-| `pnpm format:check`          | Comprueba el formato con Prettier (`pnpm format` lo corrige)                  |
-| `pnpm dev`                   | API (puerto 3000) y app del personal (puerto 5173) en modo desarrollo         |
-| `pnpm build:compartidos`     | Compila `packages/dominio` y `packages/contratos` (`db:semilla` lo hace)      |
-| `pnpm db:semilla`            | Superadministrador y dos empresas de demostración, con usuarios por rol       |
-| `pnpm plataforma:superadmin` | Crea, desactiva o desbloquea un superadministrador (ver "Superadministrador") |
+| Comando                      | Qué hace                                                                                  |
+| ---------------------------- | ----------------------------------------------------------------------------------------- |
+| `pnpm lint`                  | ESLint en todo el monorepo (incluye las reglas del criterio 37)                           |
+| `pnpm typecheck`             | Verificación de tipos                                                                     |
+| `pnpm build`                 | Compila los paquetes y la API                                                             |
+| `pnpm test`                  | Todas las pruebas (la API necesita `DATABASE_ADMIN_URL`)                                  |
+| `pnpm format:check`          | Comprueba el formato con Prettier (`pnpm format` lo corrige)                              |
+| `pnpm dev`                   | API (puerto 3000) y app del personal (puerto 5173) en modo desarrollo                     |
+| `pnpm build:compartidos`     | Compila `packages/dominio` y `packages/contratos` (`db:semilla` lo hace)                  |
+| `pnpm db:semilla`            | Superadministrador y dos empresas de demostración, con usuarios por rol                   |
+| `pnpm plataforma:superadmin` | Crea, desactiva o desbloquea un superadministrador (ver "Superadministrador")             |
+| `pnpm puente:simular`        | Puente de impresión de mentira, para probar la impresión sin un Android (ver "Impresión") |
 
 ## La app del personal (`apps/app`) y `packages/ui`
 
@@ -261,6 +272,38 @@ Con la rama de trabajo `claude/upbeat-wright-q09k0n`, `pnpm local:preparar` y `p
 - **Inactividad de Cocina/Barra.** Una sesión de Cocina/Barra, con PIN o con contraseña, se cierra tras 60 minutos sin actividad. Los demás roles siguen con su tiempo: por defecto, 5 minutos con PIN y 30 con contraseña. El de Cocina y Barra se cambia en Ajustes › Acceso, «Cierre por inactividad de Cocina y Barra (minutos)», de 1 a 720; rige desde la siguiente petición.
 - **Pruebas automáticas.** `e2e/salon-cocina.spec.ts` recorre el salón y la cocina con tres celulares de 360 px (`pnpm --filter @restaurante/app e2e`). Ver [`apps/app/README.md`](apps/app/README.md).
 
+## Impresión (3b): el puente y cómo probarla sin un Android
+
+El **puente** es el programa que corre en el local, vinculado a una sucursal. Recibe de la API los trabajos de impresión (los tickets de comandas y pre-cuentas, la página de prueba y las reimpresiones), los manda por TCP a las impresoras de red, por defecto al puerto 9100, y reporta cada resultado. La app Android del puente es la entrega 3c. Mientras tanto, `pnpm puente:simular` corre el mismo `SimuladorPuente` de las pruebas (`apps/api/test/soporte/puente/`) contra tu API local: vincula con el texto del QR, se conecta al espacio `/puente`, manda los tickets a las impresoras de red y reporta el resultado y el latido. Con `--emulador` levanta además una impresora ESC/POS falsa y escribe en la consola cada ticket que recibe, como texto.
+
+1. **Arranca** la API y la app (`pnpm local:preparar` y `pnpm dev`; ver arriba). El puerto de la API es el 3000 y `API_URL_PUBLICA` vale `http://localhost:3000` en desarrollo.
+2. **Crea la impresora apuntando al emulador.** Como `fogon.admin`, en Ajustes › Impresión, crea una impresora de red con host `127.0.0.1` y puerto `9100` (el puerto por defecto del emulador; cambia con `--emulador-puerto`). Elígela como destino de la estación Cocina, o como impresora de caja para las pre-cuentas.
+3. **Pide el código de vinculación.** En Ajustes › Impresión, «Vincular puente» muestra el texto del QR (`restaurante-puente://vincular?api=…&t=vi.…`) con un botón para copiarlo. El código sirve una vez y dura 10 minutos; pedir otro invalida el anterior.
+4. **Vincula el simulador.** En otra terminal, desde la raíz del repositorio y con el texto entre comillas:
+
+   ```bash
+   pnpm puente:simular --emulador --qr "restaurante-puente://vincular?api=http%3A%2F%2Flocalhost%3A3000&t=vi...."
+   ```
+
+   Verás en la consola la vinculación, la sucursal, las impresoras que trae la configuración y «Esperando trabajos de impresión». En la app, el aviso de «puente desconectado» desaparece.
+
+5. **Imprime.** Pide la «página de prueba» de la impresora, o abre una mesa como `fogon.mozo`, comanda y envía: el ticket sale en la consola, entre `┌─ Ticket N` y `└─ fin del ticket N`, con las tildes y los anchos del papel de la impresora (`--ancho 58|80` define las columnas del emulador). Con `--marcas` también muestra la transcripción con marcas (`[B]` negrita, `[CORTE]`…).
+
+Opciones: `--api <url>` (si el QR trae una URL pública que tu máquina no alcanza), `--emulador-host`, `--emulador-puerto`, `--ancho`, `--marcas`, `--nombre-equipo` y `--token-archivo` (ver `pnpm puente:simular --ayuda`). El código del QR es de un solo uso, así que el comando guarda la credencial del puente en `.puente-simulador.json` (carpeta desde la que corres el comando; está en `.gitignore`) y, sin `--qr`, la reutiliza: `pnpm puente:simular --emulador` vuelve a conectar sin pedir otro código. Si vinculas otro puente en la sucursal, el anterior queda revocado y el simulador se detiene. Termina con Ctrl+C.
+
+Para ver los estados: detén el simulador (Ctrl+C) y espera hasta un minuto y medio: la app muestra «El puente de impresión está desconectado» y los tickets nuevos quedan en cola. O crea una impresora en otro puerto donde nadie escucha: en unos segundos la app muestra «La impresora … no responde» y los tickets quedan en cola. El simulador solo imprime en impresoras de red: una Bluetooth queda con estado «Sin datos» y sus trabajos, pendientes (llegan con la app 3c).
+
+### Variables de la impresión
+
+- `API_URL_PUBLICA`: la dirección de la API que va en el QR, sin barra final. Con `development` y `test`, si falta, vale `http://localhost:<PORT>`. En producción hay que definirla; sin ella, crear un código de vinculación responde 503 `CONFIGURACION_INCOMPLETA`. Si el QR trae una dirección que tu máquina no alcanza, usa `--api` en el simulador.
+- `TIEMPO_REAL`, `DATABASE_TIEMPO_REAL_URL` y `DB_PASSWORD_TIEMPO_REAL`: el puente recibe por Socket.IO (espacio `/puente`) el aviso `trabajo.nuevo` de cada trabajo nuevo. Con `TIEMPO_REAL=deshabilitado` ese aviso no sale, y el puente trae sus trabajos en el sondeo de cada 30 segundos.
+
+### Límites
+
+- **256 KB por ticket** (`MAXIMO_BYTES_TICKET`, 262 144 bytes ESC/POS). Un ticket que no cabe sale cortado con «... Ticket incompleto: faltan N líneas. Revisa la cuenta en la app.»; el trabajo queda como «Incompleto» en «Trabajos de hoy», y el simulador lo marca como `INCOMPLETO` en el encabezado. Un ticket normal pesa muy por debajo.
+- **1 MB por respuesta** (`MAXIMO_BYTES_RESPUESTA_TRABAJOS`, 1 000 000 bytes). `GET /puente/trabajos` trae hasta 20 trabajos por impresora y, como mínimo, uno de cada impresora que tenga pendientes, aunque por sí solo pase el tope. Lo que no entra sale en la siguiente llamada, y la respuesta lo avisa con la cabecera `X-Puente-Hay-Mas: 1`. Por eso, con muchas impresoras (hasta 50 activas por sucursal), una respuesta puede pasar de 1 MB.
+- **La regla de «Hay más».** El puente vuelve a pedir enseguida cuando la respuesta trae `X-Puente-Hay-Mas: 1` (o una impresora llenó sus 20 trabajos), pero solo si el lote anterior avanzó: si la API aceptó (2xx) el resultado `IMPRESO` de al menos un trabajo. Si no, espera el intervalo de 30 segundos o el aviso `trabajo.nuevo`. Así, una API que rechaza los resultados no hace que el puente entre en bucle.
+
 ## Pruebas
 
 Las pruebas de la API son de integración contra PostgreSQL real, sin mocks de la base. Necesitan
@@ -294,6 +337,7 @@ utilidades están en `apps/api/test/README.md`. Las pruebas de `packages/*` no u
 | `DB_PROTECCION_CATALOGO`                                                 | Solo `db:preparar`. `omitir`: sin superusuario, omite las protecciones del catálogo y avisa (producción); otro valor es un error                                                                                                                                                                                                                                  |
 | `DB_POOL_MAX`                                                            | Tamaño del pool de la API (por defecto 10)                                                                                                                                                                                                                                                                                                                        |
 | `TIEMPO_REAL`                                                            | `habilitado` o `deshabilitado`: enciende o apaga el servidor de Socket.IO (`/tiempo-real`). Por defecto `habilitado`, salvo con `NODE_ENV=test`                                                                                                                                                                                                                   |
+| `API_URL_PUBLICA`                                                        | URL pública de la API, sin barra final: va en el QR de vinculación del puente de impresión (`restaurante-puente://vincular?api=<URL>&t=<código>`). Con `development` y `test` vale `http://localhost:<PORT>` si falta; en producción hay que definirla; sin ella, crear un código de vinculación responde 503 `CONFIGURACION_INCOMPLETA`                          |
 | `EMPRESA_POR_HEADER`                                                     | **Solo pruebas.** `habilitado` con `NODE_ENV=test` da un principal de prueba (Administrador, actor `prueba`) a las peticiones sin `Authorization` con `x-empresa-id`; la API se niega a arrancar con él en `development` y en `production`. No lo pongas en tu `.env`                                                                                             |
 | `PIN_PEPPER`                                                             | Secreto (base64, 32 bytes o más) con el que se calcula la huella de los PIN. Obligatoria en producción; con `development` o `test` hay un valor local. **Cambiarla invalida todos los PIN** (y las claves de idempotencia de las últimas 24 horas, cuya huella también se calcula con HMAC y una clave derivada de ella); nunca va en la base ni en los respaldos |
 | `ORIGENES_PERMITIDOS`                                                    | Orígenes de la PWA permitidos por CORS, separados por coma, sin ruta ni barra final. Obligatoria en producción (por defecto local: `http://localhost:5173`)                                                                                                                                                                                                       |

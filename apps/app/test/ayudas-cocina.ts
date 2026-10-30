@@ -1,4 +1,4 @@
-import type { CocinaRespuesta, ComandaKds, LineaKds } from '@restaurante/contratos';
+import type { CocinaRespuesta, ComandaKds, EstacionKds, LineaKds } from '@restaurante/contratos';
 import { AHORA, uuid } from './ayudas-salon';
 
 /** Una línea de comanda del KDS; por defecto, un Lomo saltado × 1 recién enviado. */
@@ -53,6 +53,16 @@ export function comandaKds(n: number, opciones: OpcionesDeComanda = {}): Comanda
   };
 }
 
-export function cocinaDe(pendientes: ComandaKds[], recientes: ComandaKds[] = []): CocinaRespuesta {
-  return { ahora: AHORA, pendientes, recientes };
+/** Las estaciones de la sucursal de prueba: Cocina y Barra, las dos en la pantalla (criterio 138). */
+export const ESTACIONES_KDS: EstacionKds[] = [
+  { id: Z_COCINA, nombre: 'Cocina', destino: 'KDS', impresora: null },
+  { id: Z_BARRA, nombre: 'Barra', destino: 'KDS', impresora: null },
+];
+
+export function cocinaDe(
+  pendientes: ComandaKds[],
+  recientes: ComandaKds[] = [],
+  estaciones: EstacionKds[] = ESTACIONES_KDS,
+): CocinaRespuesta {
+  return { ahora: AHORA, estaciones, pendientes, recientes };
 }

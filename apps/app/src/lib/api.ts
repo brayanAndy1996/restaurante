@@ -1,3 +1,4 @@
+import { errorRespuestaSchema } from '@restaurante/contratos';
 import { type Ambito, equipoDeSesion, tokenDe } from './almacen';
 import { API_URL } from './config';
 import { conexion } from './conexion';
@@ -73,6 +74,11 @@ export interface OpcionesApi<T> {
 const ESPERAS_MS = [600, 1500, 3000, 6000, 10000, 15000] as const;
 const TIEMPO_MAXIMO_MS = 15000;
 const ESTADOS_REINTENTABLES = new Set([502, 503, 504]);
+/**
+ * Un 503 que no es un corte de paso: el servidor contesta, y repetir no lo arregla (falta una configuración
+ * del sistema). Se muestra de inmediato en vez de esperar los reintentos.
+ */
+const CODIGOS_503_SIN_REINTENTO = new Set(['CONFIGURACION_INCOMPLETA']);
 
 interface Manejadores {
   /** Un 401 `NO_AUTENTICADO` o `SESION_EXPIRADA` con una credencial guardada: la sesión ya no vale. */
@@ -227,13 +233,22 @@ export async function llamar<T = void>(ruta: string, opciones: OpcionesApi<T> = 
           }
         }
 
-        const reintentable =
+        let reintentable =
           ESTADOS_REINTENTABLES.has(respuesta.status) ||
           (respuesta.status === 500 && metodo === 'GET');
+        // Se lee el cuerpo de un 503 una sola vez: si trae un código definitivo no se reintenta.
+        let cuerpoLeido: string | undefined;
+        if (reintentable && respuesta.status === 503) {
+          cuerpoLeido = await respuesta.text();
+          const analizado = errorRespuestaSchema.safeParse(leerJson(cuerpoLeido));
+          if (analizado.success && CODIGOS_503_SIN_REINTENTO.has(analizado.data.codigo)) {
+            reintentable = false;
+          }
+        }
         if (!reintentable || intento >= maximoReintentos) {
           const error = errorDeRespuesta(
             respuesta.status,
-            leerJson(await respuesta.text()),
+            leerJson(cuerpoLeido ?? (await respuesta.text())),
             reintentada,
           );
           if (
@@ -255,7 +270,8 @@ export async function llamar<T = void>(ruta: string, opciones: OpcionesApi<T> = 
       }
 
       // Falló por la red o por un 5xx de paso: se espera y se repite con la misma clave.
-      void respuesta?.body?.cancel();
+      // (Si ya se leyó el cuerpo, el flujo está cerrado y cancelar no hace nada.)
+      void respuesta?.body?.cancel().catch(() => undefined);
       if (!reintentada) opciones.alReintentar?.();
       reintentada = true;
       if (metodo !== 'GET' && !contadoComoPendiente) {

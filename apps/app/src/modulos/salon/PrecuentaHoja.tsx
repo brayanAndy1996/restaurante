@@ -1,9 +1,19 @@
 import type { PrecuentaRespuesta } from '@restaurante/contratos';
-import { Aviso, Boton, EtiquetaDeEstado, Hoja, IconoNota } from '@restaurante/ui';
+import {
+  Aviso,
+  Boton,
+  EtiquetaDeEstado,
+  Hoja,
+  IconoImpresora,
+  IconoNota,
+  IconoPendiente,
+} from '@restaurante/ui';
 import { AvisoPendiente } from '../../componentes/PendienteDeEnvio';
-import { horaDeLima, montoEnSoles } from '../../lib/formato';
+import { horaDeLima } from '../../lib/formato';
+import { montoEnSoles } from '../../lib/monto';
+import { useReimpresion } from '../impresion/trabajos';
 import { tituloDeMesas } from './ordenes';
-import { TEXTO_SIN_IMPRESION, esFraseDeIcbper, frasesDeLaNota } from './precuenta';
+import { TEXTO_DE_IMPRESION, esFraseDeIcbper, frasesDeLaNota } from './precuenta';
 import './precuenta.css';
 
 interface PropsPrecuenta {
@@ -21,9 +31,10 @@ interface PropsPrecuenta {
 }
 
 /**
- * La pre-cuenta en pantalla (criterios 50 a 54 y 95 de 004): las líneas, el total con IGV incluido (sin
- * desglose, decisión 5) y la nota de la API, todo con cifras tabulares. En 3a no hay papel: lo dice. Si la
- * cuenta cambió después de pedirla, la hoja deja de presentarla como vigente y ofrece pedir otra.
+ * La pre-cuenta en pantalla (criterios 50 a 54, 95 y 138 de 004): las líneas, el total con IGV incluido (sin
+ * desglose, decisión 5) y la nota de la API, todo con cifras tabulares. Dice qué pasó con el papel (`impresion`
+ * de la respuesta): "En cola" con "Imprimir otra vez", o "Sin impresora de caja". Si la cuenta cambió después de
+ * pedirla, la hoja deja de presentarla como vigente y ofrece pedir otra (que sale a la impresora).
  */
 export function PrecuentaHoja({
   precuenta,
@@ -35,6 +46,9 @@ export function PrecuentaHoja({
   onCerrar,
 }: PropsPrecuenta) {
   const { orden, lineas } = precuenta;
+  // Otra copia es una reimpresión del trabajo de esta pre-cuenta (criterio 128), no una pre-cuenta nueva.
+  const reimpresion = useReimpresion();
+  const puedeImprimir = vale && precuenta.impresion === 'EN_COLA' && precuenta.trabajoId !== null;
   const comensales = `${orden.comensales} ${orden.comensales === 1 ? 'comensal' : 'comensales'}`;
   return (
     <Hoja abierta onCerrar={onCerrar} titulo="Pre-cuenta" className="hoja-precuenta">
@@ -95,19 +109,42 @@ export function PrecuentaHoja({
           ))}
         </div>
 
-        <Aviso tipo="info">{TEXTO_SIN_IMPRESION}</Aviso>
+        {vale ? (
+          <ImpresionDeLaPrecuenta
+            impresion={precuenta.impresion}
+            otraCopia={reimpresion.hecho !== null}
+          />
+        ) : null}
 
         <div className="precuenta__pie">
-          <AvisoPendiente pendiente={pendiente} />
+          <AvisoPendiente pendiente={pendiente || reimpresion.pendiente} />
           {fallo ? (
             <Aviso tipo="error" titulo="No pudimos pedir la pre-cuenta">
               {fallo}
             </Aviso>
           ) : null}
+          {reimpresion.fallo ? (
+            <Aviso tipo="error" titulo="No pudimos imprimir la pre-cuenta">
+              {reimpresion.fallo.mensaje}
+            </Aviso>
+          ) : null}
           {vale ? (
-            <Boton variante="principal" bloque onClick={onCerrar}>
-              Volver a la cuenta
-            </Boton>
+            <>
+              {puedeImprimir && precuenta.trabajoId ? (
+                <Boton
+                  bloque
+                  icono={IconoImpresora}
+                  cargando={reimpresion.enCurso !== null}
+                  textoCargando={reimpresion.pendiente ? 'Pendiente de envío' : 'Imprimiendo…'}
+                  onClick={() => void reimpresion.reimprimir(precuenta.trabajoId as string)}
+                >
+                  Imprimir otra vez
+                </Boton>
+              ) : null}
+              <Boton variante="principal" bloque onClick={onCerrar}>
+                Volver a la cuenta
+              </Boton>
+            </>
           ) : (
             <>
               <Boton
@@ -127,5 +164,31 @@ export function PrecuentaHoja({
         </div>
       </div>
     </Hoja>
+  );
+}
+
+/** Qué pasó con el papel: "En cola" o "Sin impresora de caja", dicho con palabras y con icono. */
+function ImpresionDeLaPrecuenta({
+  impresion,
+  otraCopia,
+}: {
+  impresion: PrecuentaRespuesta['impresion'];
+  otraCopia: boolean;
+}) {
+  if (impresion === 'SIN_IMPRESORA') {
+    return (
+      <Aviso tipo="info" titulo={TEXTO_DE_IMPRESION.SIN_IMPRESORA.titulo}>
+        {TEXTO_DE_IMPRESION.SIN_IMPRESORA.ayuda}
+      </Aviso>
+    );
+  }
+  const texto = TEXTO_DE_IMPRESION.EN_COLA;
+  return (
+    <div className="precuenta__impresion" role="status">
+      <EtiquetaDeEstado tono="alerta" icono={IconoPendiente}>
+        {texto.etiqueta}
+      </EtiquetaDeEstado>
+      <p>{otraCopia ? texto.otraCopia : texto.ayuda}</p>
+    </div>
   );
 }

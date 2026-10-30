@@ -9,7 +9,8 @@ import {
 } from '@restaurante/contratos';
 import { CANTIDAD_MAXIMA_COMPONENTE } from '@restaurante/dominio';
 import type { AfectacionIgv, TipoControlStock, TipoProducto } from '@restaurante/dominio';
-import { comoDecimal, diaConFecha, montoComoTexto } from '../../lib/formato';
+import { diaConFecha } from '../../lib/formato';
+import { comoDecimal, montoComoTexto } from '../../lib/monto';
 import { definicionDeTipo, tipoEnFrase } from './tipos';
 
 /** Valor de la opción "Ninguna" de la estación (el producto no va a cocina ni a barra). */

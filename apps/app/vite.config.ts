@@ -1,3 +1,4 @@
+import { fileURLToPath } from 'node:url';
 import react from '@vitejs/plugin-react';
 import { defineConfig } from 'vite';
 import { VitePWA } from 'vite-plugin-pwa';
@@ -46,6 +47,21 @@ export default defineConfig({
       },
     }),
   ],
+  resolve: {
+    // Contratos y dominio se leen desde su código fuente (como ya se hace con `packages/ui`) y no desde el
+    // `dist` de tsup: ahí todo queda en un solo archivo y el bundler no puede repartirlo, así que los esquemas
+    // de todas las pantallas (y decimal.js) caían en el paquete inicial. Con un archivo por módulo (y
+    // `sideEffects: false` en sus package.json) cada pantalla arrastra solo lo que importa. La API sigue
+    // usando el `dist`; los tipos también.
+    alias: {
+      '@restaurante/contratos': fileURLToPath(
+        new URL('../../packages/contratos/src/index.ts', import.meta.url),
+      ),
+      '@restaurante/dominio': fileURLToPath(
+        new URL('../../packages/dominio/src/index.ts', import.meta.url),
+      ),
+    },
+  },
   server: { port: 5173, strictPort: true, host: true },
   preview: { port: 5173, strictPort: true, host: true },
   build: { target: 'es2022', sourcemap: false },

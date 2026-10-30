@@ -5,6 +5,8 @@
  * - `se.<empresaId>.<sesionId>.<secreto>`: sesión de empresa (contraseña, PIN o soporte).
  * - `sa.<sesionId>.<secreto>`: sesión de superadministrador.
  * - `eq.<empresaId>.<equipoId>.<secreto>`: equipo (cabecera `X-Equipo`).
+ * - `vi.<empresaId>.<vinculacionId>.<secreto>`: código de vinculación del puente de impresión (3b; un solo uso).
+ * - `pu.<empresaId>.<puenteId>.<secreto>`: credencial del puente de impresión (3b).
  *
  * El analizador es estricto: cualquier otra forma es "mal formado" y quien llama responde 401 sin abrir
  * ningún contexto de empresa ni consultar la base.
@@ -15,6 +17,8 @@ const SECRETO = '[A-Za-z0-9_-]{43}';
 const TOKEN_SESION = new RegExp(`^se\\.(${UUID})\\.(${UUID})\\.(${SECRETO})$`);
 const TOKEN_SUPERADMINISTRADOR = new RegExp(`^sa\\.(${UUID})\\.(${SECRETO})$`);
 const TOKEN_EQUIPO = new RegExp(`^eq\\.(${UUID})\\.(${UUID})\\.(${SECRETO})$`);
+const TOKEN_VINCULACION = new RegExp(`^vi\\.(${UUID})\\.(${UUID})\\.(${SECRETO})$`);
+const TOKEN_PUENTE = new RegExp(`^pu\\.(${UUID})\\.(${UUID})\\.(${SECRETO})$`);
 
 export interface TokenSesion {
   empresaId: string;
@@ -38,6 +42,18 @@ export function parsearTokenSesion(token: string): TokenSesion | null {
   const partes = TOKEN_SESION.exec(token);
   if (partes === null) return null;
   return { empresaId: partes[1]!, sesionId: partes[2]!, secreto: partes[3]! };
+}
+
+export interface TokenVinculacion {
+  empresaId: string;
+  vinculacionId: string;
+  secreto: string;
+}
+
+export interface TokenPuente {
+  empresaId: string;
+  puenteId: string;
+  secreto: string;
 }
 
 /** Partes de un token `sa.…`, o `null` si está mal formado. */
@@ -64,4 +80,30 @@ export function armarTokenSuperadministrador(sesionId: string, secreto: string):
 
 export function armarTokenEquipo(empresaId: string, equipoId: string, secreto: string): string {
   return `eq.${empresaId}.${equipoId}.${secreto}`;
+}
+
+/** Partes de un token `vi.…` de vinculación del puente, o `null` si está mal formado. */
+export function parsearTokenVinculacion(token: string): TokenVinculacion | null {
+  const partes = TOKEN_VINCULACION.exec(token);
+  if (partes === null) return null;
+  return { empresaId: partes[1]!, vinculacionId: partes[2]!, secreto: partes[3]! };
+}
+
+/** Partes de un token `pu.…` del puente, o `null` si está mal formado. */
+export function parsearTokenPuente(token: string): TokenPuente | null {
+  const partes = TOKEN_PUENTE.exec(token);
+  if (partes === null) return null;
+  return { empresaId: partes[1]!, puenteId: partes[2]!, secreto: partes[3]! };
+}
+
+export function armarTokenVinculacion(
+  empresaId: string,
+  vinculacionId: string,
+  secreto: string,
+): string {
+  return `vi.${empresaId}.${vinculacionId}.${secreto}`;
+}
+
+export function armarTokenPuente(empresaId: string, puenteId: string, secreto: string): string {
+  return `pu.${empresaId}.${puenteId}.${secreto}`;
 }

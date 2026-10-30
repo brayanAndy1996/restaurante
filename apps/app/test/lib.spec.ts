@@ -20,10 +20,10 @@ import {
   etiquetaDeRol,
   fechaLarga,
   formatearFecha,
-  formatearMonto,
   pluralSucursales,
   relojDeCuenta,
 } from '../src/lib/formato';
+import { formatearMonto } from '../src/lib/monto';
 import { textoDePrecio } from '../src/modulos/plataforma/plataforma';
 import { montoNormalizado } from '../src/modulos/plataforma/SuscripcionDetallePagina';
 

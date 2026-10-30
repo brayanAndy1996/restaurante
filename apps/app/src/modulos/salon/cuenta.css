@@ -190,3 +190,30 @@
   grid-template-columns: 1fr 1fr;
   gap: var(--espacio-sm);
 }
+
+/* Tickets que se pueden reimprimir (criterio 138): la lista va dentro de la sección plegable */
+.cuenta__tickets {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espacio-md);
+}
+/* La sección plegable ya es la baldosa: la lista de dentro no lleva otro borde (nada de baldosas anidadas) */
+.cuenta__tickets .ui-lista,
+.cuenta__tickets .ui-tabla-envoltorio {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+/* Un grupo por envío, con el mismo título que lleva en la cuenta */
+.cuenta__tickets-grupo {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espacio-sm);
+}
+.cuenta__tickets-titulo {
+  margin: 0;
+  font-size: 1.0625rem;
+  line-height: 1.375rem;
+  font-weight: 700;
+}
