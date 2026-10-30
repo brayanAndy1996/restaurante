@@ -88,15 +88,9 @@ export class PrecuentasService {
     const previa = await this.buscarPorId(precuentaId);
     if (previa !== undefined) {
       if (previa.orden_id !== orden.id) throw idDeClienteReutilizado();
-      // La réplica devuelve lo que dijo la primera respuesta (criterio 102): salió por la impresora de caja si
-      // esa pre-cuenta tiene algún trabajo; no crea otro.
-      const conTrabajo = await this.impresion.precuentasConTrabajo([previa.id]);
-      return this.armar(
-        previa,
-        orden.id,
-        sucursalId,
-        conTrabajo.has(previa.id) ? 'EN_COLA' : 'SIN_IMPRESORA',
-      );
+      // La réplica devuelve lo que dijo la primera respuesta (criterio 102): el trabajo de esa pre-cuenta, si lo
+      // tiene; no crea otro.
+      return this.devolver(previa, orden.id, sucursalId);
     }
     exigirOrdenAbierta(orden);
 
@@ -112,8 +106,9 @@ export class PrecuentasService {
     );
     const versionActual = actual!.version;
     if (vigente !== undefined && vigente.version_orden === versionActual) {
-      // Pedirla otra vez imprime otra (criterio 52): el valor es el del trabajo que se acaba de crear.
-      return this.imprimir(vigente, orden.id, sucursalId);
+      // La vigente no crea otro trabajo (criterios 52 y 114): devuelve el de su emisión. Para sacarla otra vez se
+      // reimprime ese trabajo.
+      return this.devolver(vigente, orden.id, sucursalId);
     }
     const ahora = this.reloj.ahora();
     if (vigente !== undefined) await invalidarPrecuentaVigente(this.conexion, orden.id, ahora);
@@ -188,8 +183,22 @@ export class PrecuentasService {
   }
 
   /**
-   * Arma la respuesta y, si la sucursal tiene impresora de caja, encola el trabajo `PRECUENTA` en esta transacción
-   * (criterio 114): `EN_COLA` si se creó, `SIN_IMPRESORA` si no hay impresora de caja (la pre-cuenta se emite igual).
+   * Arma la respuesta de una pre-cuenta que ya existe, sin crear nada: `EN_COLA` con el id de su trabajo
+   * `PRECUENTA` si lo tiene, `SIN_IMPRESORA` si no (criterio 102).
+   */
+  private async devolver(
+    fila: FilaPrecuenta,
+    ordenId: string,
+    sucursalId: string,
+  ): Promise<PrecuentaRespuesta> {
+    const trabajos = await this.impresion.trabajosDePrecuentas([fila.id]);
+    return this.armar(fila, ordenId, sucursalId, trabajos.get(fila.id) ?? null);
+  }
+
+  /**
+   * Arma la respuesta de una pre-cuenta recién emitida y, si la sucursal tiene impresora de caja, encola su trabajo
+   * `PRECUENTA` en esta transacción (criterio 114): `EN_COLA` con su id, o `SIN_IMPRESORA` si no hay impresora de
+   * caja (la pre-cuenta se emite igual). Solo la pre-cuenta nueva imprime.
    */
   private async imprimir(
     fila: FilaPrecuenta,
@@ -197,18 +206,12 @@ export class PrecuentasService {
     sucursalId: string,
   ): Promise<PrecuentaRespuesta> {
     const caja = await this.impresion.impresoraDeCaja(sucursalId);
-    const respuesta = await this.armar(
-      fila,
-      ordenId,
-      sucursalId,
-      caja === null ? 'SIN_IMPRESORA' : 'EN_COLA',
-    );
-    if (caja !== null) {
-      await this.impresion.encolar([
-        await this.tickets.dePrecuenta(sucursalId, caja.id, respuesta, new Date(fila.emitida_en)),
-      ]);
-    }
-    return respuesta;
+    const sinTrabajo = await this.armar(fila, ordenId, sucursalId, null);
+    if (caja === null) return sinTrabajo;
+    const [trabajoId] = await this.impresion.encolar([
+      await this.tickets.dePrecuenta(sucursalId, caja.id, sinTrabajo, new Date(fila.emitida_en)),
+    ]);
+    return { ...sinTrabajo, impresion: 'EN_COLA', trabajoId: trabajoId! };
   }
 
   private async buscarPorId(id: string): Promise<FilaPrecuenta | undefined> {
@@ -228,7 +231,7 @@ export class PrecuentasService {
     fila: FilaPrecuenta,
     ordenId: string,
     sucursalId: string,
-    impresion: PrecuentaRespuesta['impresion'],
+    trabajoId: string | null,
   ): Promise<PrecuentaRespuesta> {
     const [orden] = await this.conexion.query<{ mozo_id: string | null; comensales: number }>(
       'SELECT mozo_id, comensales FROM orden WHERE id = $1 AND sucursal_id = $2',
@@ -262,7 +265,8 @@ export class PrecuentasService {
       })),
       total: fila.total,
       nota: conIcbper ? `${NOTA_PRECUENTA} ${NOTA_ICBPER}` : NOTA_PRECUENTA,
-      impresion,
+      impresion: trabajoId === null ? 'SIN_IMPRESORA' : 'EN_COLA',
+      trabajoId,
     };
   }
 }

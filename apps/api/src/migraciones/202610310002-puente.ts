@@ -14,9 +14,10 @@
 //   lógico (`documentoTicket`), no bytes: los bytes se arman al entregarlo con la configuración vigente de la
 //   impresora. `VENCIDO` no se guarda: se calcula al leer cuando pasó el `dia_operativo` (criterio 117). Un índice
 //   único parcial impide un segundo trabajo de la misma comanda (los de reimpresión llevan `reimpresion_de_id`).
-//   Se agregan dos columnas que la especificación no lista, nulas y de solo lectura para la API de la PWA: `mesa`
-//   (los nombres de las mesas, para la lista «Trabajos de hoy», criterio 128) y `estacion_id` (para reimprimir en
-//   la impresora actual de la estación si la original está inactiva, criterio 128).
+//   Se agregan cuatro columnas que la especificación no lista, nulas y solo para la lista y la reimpresión de la
+//   PWA (criterio 128): `mesa` (los nombres de las mesas), `estacion_id` (para reimprimir en la impresora actual
+//   de la estación si la original está inactiva), `orden_id` y `envio_numero` (para que la cuenta muestre los
+//   tickets de su orden).
 // - Todos los únicos empiezan por `empresa_id` y las llaves foráneas son compuestas con `empresa_id` (criterios 84
 //   y 131). Tablas de empresa trazables (`sqlTablaDeEmpresaTrazable`, con `llaveDeEquipo`). Privilegios de
 //   `restaurante_api`: SELECT, INSERT y UPDATE; nada se borra. Ninguna migración escribe datos.
@@ -99,6 +100,10 @@ CREATE TABLE trabajo_impresion (
   comanda_id uuid,
   precuenta_id uuid,
   reimpresion_de_id uuid,
+  -- La orden de origen de la comanda o de la pre-cuenta (no cambia al unir mesas; la API la resuelve a la
+  -- principal al leer) y el número del envío de una COMANDA o ADICION (criterio 128).
+  orden_id uuid,
+  envio_numero integer CHECK (envio_numero IS NULL OR envio_numero >= 1),
   -- Los nombres de las mesas de la cuenta, separados por coma; nulo en la página de prueba.
   mesa text CHECK (mesa IS NULL OR char_length(mesa) <= 300),
   estado text NOT NULL DEFAULT 'PENDIENTE' CHECK (estado IN ('PENDIENTE', 'IMPRESO')),
@@ -121,6 +126,8 @@ CREATE TABLE trabajo_impresion (
     FOREIGN KEY (comanda_id, empresa_id) REFERENCES comanda (id, empresa_id),
   CONSTRAINT trabajo_impresion_precuenta_fk
     FOREIGN KEY (precuenta_id, empresa_id) REFERENCES precuenta (id, empresa_id),
+  CONSTRAINT trabajo_impresion_orden_fk
+    FOREIGN KEY (orden_id, empresa_id) REFERENCES orden (id, empresa_id),
   CONSTRAINT trabajo_impresion_reimpresion_fk
     FOREIGN KEY (reimpresion_de_id, empresa_id) REFERENCES trabajo_impresion (id, empresa_id),
   -- Un trabajo es de una comanda o de una pre-cuenta, no de las dos.

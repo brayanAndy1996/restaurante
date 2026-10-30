@@ -13,6 +13,7 @@ import { EventosImpresion } from './eventos-impresion';
 import { ImpresionController } from './impresion.controller';
 import { ImpresorasController } from './impresoras.controller';
 import { ImpresorasService } from './impresoras.service';
+import { OrdenesVigentes } from './ordenes-vigentes';
 import { PuenteController } from './puente.controller';
 import { PuenteGuard, VinculacionGuard } from './puente.guard';
 import { PuentesController } from './puentes.controller';
@@ -43,6 +44,7 @@ import { TrabajosService } from './trabajos.service';
     ImpresorasService,
     DestinosService,
     EventosImpresion,
+    OrdenesVigentes,
     ColaImpresionService,
     { provide: IMPRESION, useExisting: ColaImpresionService },
     AutenticacionPuenteService,
@@ -53,6 +55,6 @@ import { TrabajosService } from './trabajos.service';
     PuenteGuard,
     VinculacionGuard,
   ],
-  exports: [IMPRESION, VALIDADOR_DE_PUENTE],
+  exports: [IMPRESION, VALIDADOR_DE_PUENTE, OrdenesVigentes],
 })
 export class ImpresionModule {}

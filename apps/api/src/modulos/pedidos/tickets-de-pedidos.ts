@@ -81,6 +81,9 @@ export class TicketsDePedidos {
         comandaId: c.id,
         precuentaId: null,
         mesa: mesas.join(', '),
+        ordenId: entrada.ordenId,
+        envioNumero:
+          c.tipo === 'COMANDA' || c.tipo === 'ADICION' ? (entrada.envioNumero ?? null) : null,
         documento: documentoDeComanda(comanda, {
           mesas,
           mozo,
@@ -107,6 +110,8 @@ export class TicketsDePedidos {
       comandaId: null,
       precuentaId: precuenta.id,
       mesa: precuenta.orden.mesas.map((m) => m.nombre).join(', '),
+      ordenId: precuenta.orden.id,
+      envioNumero: null,
       documento: documentoDePrecuenta(precuenta, {
         sucursal: sucursal?.nombre ?? '',
         hora: horaLocal(emitidaEn),

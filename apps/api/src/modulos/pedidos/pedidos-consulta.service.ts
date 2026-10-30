@@ -2,6 +2,7 @@ import { Inject, Injectable, OnModuleInit } from '@nestjs/common';
 import type { EstadoOrden } from '@restaurante/dominio';
 import { QueryTypes, type Sequelize, type Transaction } from 'sequelize';
 import { CONEXION_API } from '../../nucleo/base-de-datos';
+import { OrdenesVigentes } from '../impresion';
 import { UsoDeMesas } from '../salon';
 
 /** Una orden abierta de una sucursal, para otros módulos. */
@@ -35,10 +36,31 @@ export class PedidosConsultaService implements OnModuleInit {
   constructor(
     @Inject(CONEXION_API) private readonly conexion: Sequelize,
     @Inject(UsoDeMesas) private readonly usos: UsoDeMesas,
+    @Inject(OrdenesVigentes) private readonly vigentes: OrdenesVigentes,
   ) {}
 
   onModuleInit(): void {
     this.usos.registrar((mesaIds, transaccion) => this.mesasConOrdenAbierta(mesaIds, transaccion));
+    // 3b: la lista de trabajos de impresión muestra la cuenta principal de las órdenes que se unieron (criterio 128).
+    this.vigentes.registrar((ordenIds) => this.ordenesPrincipales(ordenIds));
+  }
+
+  /**
+   * De cada orden pedida, la orden en la que quedó: ella misma o, si se unió a otra (y esa a otra), la principal
+   * al final de la cadena de uniones.
+   */
+  async ordenesPrincipales(ordenIds: readonly string[]): Promise<Map<string, string>> {
+    const filas = await this.conexion.query<{ origen: string; id: string }>(
+      `WITH RECURSIVE cadena AS (
+         SELECT o.id AS origen, o.id, o.empresa_id, o.unida_a_orden_id
+           FROM orden o WHERE o.id = ANY($1::uuid[])
+         UNION
+         SELECT c.origen, s.id, s.empresa_id, s.unida_a_orden_id
+           FROM cadena c JOIN orden s ON s.id = c.unida_a_orden_id AND s.empresa_id = c.empresa_id)
+       SELECT origen, id FROM cadena WHERE unida_a_orden_id IS NULL`,
+      { bind: [[...ordenIds]], type: QueryTypes.SELECT },
+    );
+    return new Map(filas.map((f) => [f.origen, f.id]));
   }
 
   /** `true` si la sucursal tiene alguna orden `ABIERTA` o `EN_PRECUENTA`. */

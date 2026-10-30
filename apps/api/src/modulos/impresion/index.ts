@@ -16,3 +16,4 @@ export type {
   LineaDeComanda,
   PrecuentaParaTicket,
 } from './escpos';
+export { OrdenesVigentes } from './ordenes-vigentes';

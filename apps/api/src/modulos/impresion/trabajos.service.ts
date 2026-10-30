@@ -20,6 +20,7 @@ import { SesionActual } from '../seguridad';
 import { ColaImpresionService } from './cola-impresion.service';
 import { conMarcas, documentoDePrueba, renderizarTicket } from './escpos';
 import { noEncontrado, sinImpresora } from './errores-impresion';
+import { OrdenesVigentes } from './ordenes-vigentes';
 import type { FilaImpresora } from './lectura-impresoras';
 
 /** Un trabajo con más de este tiempo entre su creación y su entrega sale con la marca de retraso (criterio 118). */
@@ -41,6 +42,8 @@ interface FilaResumen {
   impresora_id: string;
   impresora_nombre: string;
   mesa: string | null;
+  orden_id: string | null;
+  envio_numero: number | null;
   estado: 'PENDIENTE' | 'IMPRESO';
   dia_operativo: string;
   intentos: number;
@@ -73,6 +76,7 @@ export class TrabajosService {
     @Inject(SesionActual) private readonly sesion: SesionActual,
     @Inject(SucursalesConsultaService) private readonly sucursales: SucursalesConsultaService,
     @Inject(ColaImpresionService) private readonly cola: ColaImpresionService,
+    @Inject(OrdenesVigentes) private readonly ordenes: OrdenesVigentes,
   ) {}
 
   // ---- El puente ----------------------------------------------------------------------------------
@@ -193,6 +197,8 @@ export class TrabajosService {
         comandaId: null,
         precuentaId: null,
         mesa: null,
+        ordenId: null,
+        envioNumero: null,
         documento: documentoDePrueba({
           nombre: impresora.nombre,
           anchoMm: impresora.ancho_mm,
@@ -210,7 +216,8 @@ export class TrabajosService {
     const hoy = await this.cola.diaOperativoDe(sucursalId, ahora);
     const desde = consulta.desde === undefined ? null : new Date(consulta.desde);
     const filas = await this.conexion.query<FilaResumen>(
-      `SELECT t.id, t.tipo, t.impresora_id, i.nombre AS impresora_nombre, t.mesa, t.estado,
+      `SELECT t.id, t.tipo, t.impresora_id, i.nombre AS impresora_nombre, t.mesa, t.orden_id,
+              t.envio_numero, t.estado,
               t.dia_operativo::text AS dia_operativo, t.intentos, t.creado_en, t.impreso_en,
               t.reimpresion_de_id
          FROM trabajo_impresion t
@@ -221,6 +228,10 @@ export class TrabajosService {
         ORDER BY t.creado_en DESC, t.id DESC
         LIMIT ${MAXIMO_LISTA}`,
       { bind: [sucursalId, desde, hoy], type: QueryTypes.SELECT },
+    );
+    // La cuenta que ve el mozo: la orden principal si la de origen se unió a otra (criterio 128).
+    const ordenes = await this.ordenes.resolver(
+      filas.flatMap((f) => (f.orden_id === null ? [] : [f.orden_id])),
     );
     const resumen = filas.map((f): TrabajoResumen => {
       const vencido = f.estado === 'PENDIENTE' && f.dia_operativo < hoy;
@@ -234,6 +245,8 @@ export class TrabajosService {
         creadoEn: new Date(f.creado_en).toISOString(),
         impresoEn: f.impreso_en === null ? null : new Date(f.impreso_en).toISOString(),
         reimpresionDe: f.reimpresion_de_id,
+        ordenId: f.orden_id === null ? null : (ordenes.get(f.orden_id) ?? f.orden_id),
+        envioNumero: f.envio_numero,
       };
     });
     return consulta.estado === undefined
@@ -253,10 +266,12 @@ export class TrabajosService {
       comanda_id: string | null;
       precuenta_id: string | null;
       mesa: string | null;
+      orden_id: string | null;
+      envio_numero: number | null;
       impresora_activa: boolean;
     }>(
       `SELECT t.impresora_id, t.estacion_id, t.tipo, t.documento, t.comanda_id, t.precuenta_id, t.mesa,
-              i.activa AS impresora_activa
+              t.orden_id, t.envio_numero, i.activa AS impresora_activa
          FROM trabajo_impresion t
          JOIN impresora i ON i.id = t.impresora_id AND i.empresa_id = t.empresa_id
         WHERE t.id = $1 AND t.sucursal_id = $2`,
@@ -283,6 +298,8 @@ export class TrabajosService {
           comanda_id: original.comanda_id,
           precuenta_id: original.precuenta_id,
           mesa: original.mesa,
+          orden_id: original.orden_id,
+          envio_numero: original.envio_numero,
           dia_operativo: await this.cola.diaOperativoDe(sucursalId, ahora),
           reimpresion_de_id: id,
         },

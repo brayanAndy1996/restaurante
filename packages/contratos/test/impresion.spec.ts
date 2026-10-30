@@ -344,10 +344,26 @@ describe('estadoImpresionRespuestaSchema, trabajoResumenSchema y trabajosConsult
       creadoEn: '2026-10-29T20:00:00.000Z',
       impresoEn: null,
       reimpresionDe: null,
+      ordenId: null,
+      envioNumero: null,
     };
     for (const tipo of TIPOS_TRABAJO) {
       expect(trabajoResumenSchema.safeParse({ ...base, tipo }).success).toBe(true);
     }
+    // La orden (la vigente) y el número del envío de la comanda.
+    expect(
+      trabajoResumenSchema.safeParse({ ...base, tipo: 'ADICION', ordenId: ID_2, envioNumero: 2 })
+        .success,
+    ).toBe(true);
+    for (const malo of [{ ordenId: 'x' }, { envioNumero: 0 }, { envioNumero: 1.5 }]) {
+      expect(trabajoResumenSchema.safeParse({ ...base, tipo: 'COMANDA', ...malo }).success).toBe(
+        false,
+      );
+    }
+    const { ordenId: _o, envioNumero: _e, ...sinOrden } = base;
+    void _o;
+    void _e;
+    expect(trabajoResumenSchema.safeParse({ ...sinOrden, tipo: 'COMANDA' }).success).toBe(false);
     expect(
       trabajoResumenSchema.safeParse({ ...base, tipo: 'COMANDA', estado: 'IMPRESO' }).success,
     ).toBe(true);

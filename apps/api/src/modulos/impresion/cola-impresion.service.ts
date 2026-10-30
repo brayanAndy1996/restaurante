@@ -76,6 +76,8 @@ export class ColaImpresionService implements ImpresionPuerto {
       comanda_id: t.comandaId,
       precuenta_id: t.precuentaId,
       mesa: t.mesa,
+      orden_id: t.ordenId,
+      envio_numero: t.envioNumero,
       dia_operativo: dias.get(t.sucursalId),
     }));
     await this.insertar(empresaId, filas, ahora);
@@ -106,6 +108,8 @@ export class ColaImpresionService implements ImpresionPuerto {
       comanda_id: string | null;
       precuenta_id: string | null;
       mesa: string | null;
+      orden_id: string | null;
+      envio_numero: number | null;
       dia_operativo: string | undefined;
       reimpresion_de_id?: string | null;
     }>,
@@ -113,14 +117,14 @@ export class ColaImpresionService implements ImpresionPuerto {
   ): Promise<void> {
     await this.conexion.query(
       `INSERT INTO trabajo_impresion (id, empresa_id, sucursal_id, impresora_id, estacion_id, tipo, documento,
-                                      comanda_id, precuenta_id, reimpresion_de_id, mesa, estado, dia_operativo,
+                                      comanda_id, precuenta_id, reimpresion_de_id, orden_id, envio_numero, mesa, estado, dia_operativo,
                                       creado_en, actualizado_en)
        SELECT x.id, $2::uuid, x.sucursal_id, x.impresora_id, x.estacion_id, x.tipo, x.documento,
-              x.comanda_id, x.precuenta_id, x.reimpresion_de_id, x.mesa, 'PENDIENTE', x.dia_operativo,
+              x.comanda_id, x.precuenta_id, x.reimpresion_de_id, x.orden_id, x.envio_numero, x.mesa, 'PENDIENTE', x.dia_operativo,
               $3::timestamptz, $3::timestamptz
          FROM jsonb_to_recordset($1::jsonb) AS x(id uuid, sucursal_id uuid, impresora_id uuid,
               estacion_id uuid, tipo text, documento jsonb, comanda_id uuid, precuenta_id uuid,
-              reimpresion_de_id uuid, mesa text, dia_operativo date)`,
+              reimpresion_de_id uuid, orden_id uuid, envio_numero int, mesa text, dia_operativo date)`,
       { bind: [JSON.stringify(filas), empresaId, ahora] },
     );
   }
@@ -141,12 +145,17 @@ export class ColaImpresionService implements ImpresionPuerto {
     return filas[0] ?? null;
   }
 
-  async precuentasConTrabajo(precuentaIds: readonly string[]): Promise<ReadonlySet<string>> {
-    if (precuentaIds.length === 0) return new Set();
-    const filas = await this.conexion.query<{ precuenta_id: string }>(
-      `SELECT DISTINCT precuenta_id FROM trabajo_impresion WHERE precuenta_id = ANY($1::uuid[])`,
+  async trabajosDePrecuentas(
+    precuentaIds: readonly string[],
+  ): Promise<ReadonlyMap<string, string>> {
+    if (precuentaIds.length === 0) return new Map();
+    // El trabajo de la emisión: los de reimpresión llevan `reimpresion_de_id`.
+    const filas = await this.conexion.query<{ precuenta_id: string; id: string }>(
+      `SELECT DISTINCT ON (precuenta_id) precuenta_id, id FROM trabajo_impresion
+        WHERE precuenta_id = ANY($1::uuid[]) AND reimpresion_de_id IS NULL
+        ORDER BY precuenta_id, creado_en, id`,
       { bind: [[...precuentaIds]], type: QueryTypes.SELECT },
     );
-    return new Set(filas.map((f) => f.precuenta_id));
+    return new Map(filas.map((f) => [f.precuenta_id, f.id]));
   }
 }

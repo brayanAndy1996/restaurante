@@ -446,10 +446,16 @@ export const precuentaRespuestaSchema = z.object({
   nota: z.string(),
   /**
    * Qué pasó con el papel (criterio 102, entrega 3b): `EN_COLA` si se creó un trabajo `PRECUENTA` para la impresora
-   * de caja; `SIN_IMPRESORA` si la sucursal no tiene impresora de caja (la pre-cuenta se emite igual). Una réplica
-   * devuelve el mismo valor que la primera respuesta.
+   * de caja; `SIN_IMPRESORA` si la sucursal no tiene impresora de caja (la pre-cuenta se emite igual). Solo una
+   * pre-cuenta nueva crea el trabajo: devolver la vigente o una réplica devuelve el mismo valor que la primera
+   * respuesta, sin crear otro.
    */
   impresion: z.enum(['EN_COLA', 'SIN_IMPRESORA']),
+  /**
+   * El trabajo `PRECUENTA` de esta pre-cuenta (criterios 102 y 114), o `null` si no hay (`SIN_IMPRESORA`). Para
+   * imprimirla otra vez se usa `POST /impresion/trabajos/:id/reimpresion` con este id.
+   */
+  trabajoId: uuidSchema.nullable(),
 });
 
 // ---------------------------------------------------------------------------------------------------

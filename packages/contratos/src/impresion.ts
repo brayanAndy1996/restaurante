@@ -266,6 +266,13 @@ export const trabajoResumenSchema = z.object({
   impresoEn: instanteSchema.nullable(),
   /** El trabajo del que es reimpresión, si lo es. */
   reimpresionDe: uuidSchema.nullable(),
+  /**
+   * La orden de la comanda o de la pre-cuenta, tal como está ahora: si la orden se unió a otra, la principal (la
+   * cuenta que ve el mozo). `null` en la página de prueba.
+   */
+  ordenId: uuidSchema.nullable(),
+  /** El número del envío de una comanda `COMANDA` o `ADICION`; `null` en los demás trabajos. */
+  envioNumero: z.number().int().positive().nullable(),
 });
 
 /** Respuesta de la página de prueba y de la reimpresión (criterios 127 y 128). */

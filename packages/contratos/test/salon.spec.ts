@@ -413,7 +413,24 @@ describe('precuentaRespuestaSchema · impresion (criterio 102)', () => {
     lineas: [],
     total: '0.00',
     nota: 'x',
+    trabajoId: null,
   };
+
+  it('exige trabajoId: el id del trabajo PRECUENTA o null', () => {
+    const { trabajoId: _omitido, ...sin } = base;
+    void _omitido;
+    expect(precuentaRespuestaSchema.safeParse({ ...sin, impresion: 'SIN_IMPRESORA' }).success).toBe(
+      false,
+    );
+    expect(
+      precuentaRespuestaSchema.safeParse({ ...base, impresion: 'EN_COLA', trabajoId: ID_1 })
+        .success,
+    ).toBe(true);
+    expect(
+      precuentaRespuestaSchema.safeParse({ ...base, impresion: 'EN_COLA', trabajoId: 'no-uuid' })
+        .success,
+    ).toBe(false);
+  });
 
   it('exige impresion y acepta EN_COLA y SIN_IMPRESORA', () => {
     expect(precuentaRespuestaSchema.safeParse({ ...base, impresion: 'EN_COLA' }).success).toBe(

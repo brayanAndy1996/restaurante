@@ -19,6 +19,7 @@ import {
   llamar,
   pedirPrecuenta,
   prepararEscenarioP2,
+  unirMesasOk,
   type EscenarioP2,
 } from '../salon-critica/fabrica-p2';
 import { MINUTO } from '../acceso/fabrica-plataforma';
@@ -68,8 +69,11 @@ const trabajosDe = async (sucursalId: string) =>
       reimpresion_de_id: string | null;
       impresora_id: string;
       mesa: string | null;
+      orden_id: string | null;
+      envio_numero: number | null;
     }>(
-      `SELECT id, tipo, estado, intentos, ultimo_error, precuenta_id, reimpresion_de_id, impresora_id, mesa
+      `SELECT id, tipo, estado, intentos, ultimo_error, precuenta_id, reimpresion_de_id, impresora_id, mesa,
+              orden_id, envio_numero
          FROM trabajo_impresion WHERE sucursal_id = $1 ORDER BY creado_en, id`,
       [sucursalId],
     )
@@ -87,45 +91,128 @@ const ponerCaja = async (sucursalId: string, impresoraCajaId: string | null) =>
   );
 
 describe('pre-cuenta en la impresora de caja (criterios 102 y 114)', () => {
-  it('sin impresora de caja la pre-cuenta se emite con SIN_IMPRESORA y sin trabajos; con impresora, EN_COLA y un trabajo PRECUENTA', async () => {
+  it('sin impresora de caja: SIN_IMPRESORA y sin trabajo; con impresora, solo la pre-cuenta nueva crea un trabajo y la vigente y la réplica devuelven el suyo', async () => {
     const L = lineasDe(esc.carta);
     const caja = await impresoraCreada(ctx, T(), A().S2, cuerpoRed({ nombre: unico('Caja') }));
     const mozo = esc.token.mozoS2;
     const orden = await abrirOrden(ctx, esc.salonS2, mozo);
     await enviarOk(ctx, mozo, orden.id, [L.lomo(['3/4'], 1)]);
+    const deCaja = async () => (await trabajosDe(A().S2)).filter((t) => t.tipo === 'PRECUENTA');
 
     const sin = await pedirPrecuenta(ctx, mozo, orden.id);
     exigirEstado(sin, 201, 'pre-cuenta sin impresora de caja');
-    expect(precuentaRespuestaSchema.parse(sin.body).impresion).toBe('SIN_IMPRESORA');
-    expect((await trabajosDe(A().S2)).filter((t) => t.tipo === 'PRECUENTA')).toEqual([]);
+    expect(precuentaRespuestaSchema.parse(sin.body)).toMatchObject({
+      impresion: 'SIN_IMPRESORA',
+      trabajoId: null,
+    });
+    expect(await deCaja()).toEqual([]);
 
+    // La vigente, ya con impresora de caja, no crea un trabajo: el de su emisión no existe, sigue sin papel.
     await ponerCaja(A().S2, caja.id);
-    // Sin cambios en la orden, devolver la vigente imprime otra (criterio 52 y 114).
-    const vigente = await pedirPrecuenta(ctx, mozo, orden.id);
-    exigirEstado(vigente, 201, 'la vigente con impresora de caja');
-    const cuerpo = precuentaRespuestaSchema.parse(vigente.body);
-    expect(cuerpo.impresion).toBe('EN_COLA');
-    expect(cuerpo.id).toBe(precuentaRespuestaSchema.parse(sin.body).id);
-    const trabajos = (await trabajosDe(A().S2)).filter((t) => t.tipo === 'PRECUENTA');
-    expect(trabajos).toHaveLength(1);
-    expect(trabajos[0]).toMatchObject({ precuenta_id: cuerpo.id, impresora_id: caja.id });
+    const vigenteSin = await pedirPrecuenta(ctx, mozo, orden.id);
+    expect(precuentaRespuestaSchema.parse(vigenteSin.body)).toMatchObject({
+      impresion: 'SIN_IMPRESORA',
+      trabajoId: null,
+    });
+    expect(await deCaja()).toEqual([]);
 
-    // Una réplica por el mismo id, con otra clave, repite el valor de la primera respuesta sin otro trabajo.
-    const replica = await pedirPrecuenta(ctx, mozo, orden.id, cuerpo.id, randomUUID());
-    exigirEstado(replica, 201, 'réplica del mismo id');
-    expect(precuentaRespuestaSchema.parse(replica.body).impresion).toBe('EN_COLA');
-    expect((await trabajosDe(A().S2)).filter((t) => t.tipo === 'PRECUENTA')).toHaveLength(1);
-
-    // Una nueva emisión (otro número) sale otra vez, y el ticket lleva la pre-cuenta y su total.
+    // Una pre-cuenta nueva (la orden cambió) crea exactamente un trabajo, con la orden y sin envío.
     await enviarOk(ctx, mozo, orden.id, [L.gaseosa(1)]);
     const nueva = await pedirPrecuenta(ctx, mozo, orden.id);
     exigirEstado(nueva, 201, 'una pre-cuenta nueva');
-    expect(precuentaRespuestaSchema.parse(nueva.body)).toMatchObject({
-      numero: 2,
-      impresion: 'EN_COLA',
+    const cuerpo = precuentaRespuestaSchema.parse(nueva.body);
+    expect(cuerpo).toMatchObject({ numero: 2, impresion: 'EN_COLA' });
+    const trabajos = await deCaja();
+    expect(trabajos).toHaveLength(1);
+    expect(trabajos[0]).toMatchObject({
+      id: cuerpo.trabajoId,
+      precuenta_id: cuerpo.id,
+      impresora_id: caja.id,
+      orden_id: orden.id,
+      envio_numero: null,
     });
-    expect((await trabajosDe(A().S2)).filter((t) => t.tipo === 'PRECUENTA')).toHaveLength(2);
+
+    // La vigente sin cambios y la réplica (mismo id, otra clave) devuelven el trabajo de su emisión, sin otro.
+    for (const res of [
+      await pedirPrecuenta(ctx, mozo, orden.id),
+      await pedirPrecuenta(ctx, mozo, orden.id, cuerpo.id, randomUUID()),
+    ]) {
+      exigirEstado(res, 201, 'vigente o réplica');
+      expect(precuentaRespuestaSchema.parse(res.body)).toMatchObject({
+        id: cuerpo.id,
+        impresion: 'EN_COLA',
+        trabajoId: cuerpo.trabajoId,
+      });
+    }
+    expect(await deCaja()).toHaveLength(1);
+
+    // "Imprimir otra vez" es reimprimir ese trabajo.
+    const otra = await llamar(ctx, mozo, {
+      metodo: 'post',
+      ruta: `/impresion/trabajos/${cuerpo.trabajoId}/reimpresion`,
+      cabeceras: { 'Idempotency-Key': randomUUID() },
+    });
+    exigirEstado(otra, 201, 'reimprimir la pre-cuenta');
+    expect(await deCaja()).toHaveLength(2);
     await ponerCaja(A().S2, null);
+  });
+});
+
+describe('orden y número de envío de los trabajos (criterio 128)', () => {
+  it('la lista trae la orden y el número de envío de cada comanda, y la orden principal si la de origen se unió a otra', async () => {
+    const L = lineasDe(esc.carta);
+    const cocina = await impresoraCreada(ctx, T(), A().S1, cuerpoRed({ nombre: unico('Cocina') }));
+    exigirEstado(
+      await llamar(ctx, T(), {
+        metodo: 'put',
+        ruta: `/sucursales/${A().S1}/estaciones-destino/${esc.carta.cocinaId}`,
+        cuerpo: { destino: 'IMPRESORA', impresoraId: cocina.id },
+      }),
+      200,
+      'Cocina a la impresora',
+    );
+    const mozo = esc.token.mozo;
+    try {
+      const principal = await abrirOrden(ctx, esc.salon, mozo);
+      const absorbida = await abrirOrden(ctx, esc.salon, mozo);
+      await enviarOk(ctx, mozo, principal.id, [L.lomo(['3/4'], 1)]);
+      await enviarOk(ctx, mozo, principal.id, [L.lomo(['Jugoso'], 1)]);
+      await enviarOk(ctx, mozo, absorbida.id, [L.lomo(['Bien cocido'], 1)]);
+
+      const pedir = async () => {
+        const res = await llamar(ctx, mozo, { metodo: 'get', ruta: '/impresion/trabajos' });
+        exigirEstado(res, 200, 'listar');
+        return z.array(trabajoResumenSchema).parse(res.body);
+      };
+      let lista = await pedir();
+      const de = (ordenId: string) =>
+        lista
+          .filter((t) => t.ordenId === ordenId)
+          .map((t) => [t.tipo, t.envioNumero])
+          .sort();
+      expect(de(principal.id)).toEqual([
+        ['ADICION', 2],
+        ['COMANDA', 1],
+      ]);
+      expect(de(absorbida.id)).toEqual([['COMANDA', 1]]);
+
+      // Al unir, la cuenta es la principal: los tickets de la absorbida salen con su orden y su envío.
+      await unirMesasOk(ctx, mozo, principal.id, [absorbida.mesaId]);
+      lista = await pedir();
+      expect(de(absorbida.id)).toEqual([]);
+      expect(de(principal.id)).toEqual([
+        ['ADICION', 2],
+        ['COMANDA', 1],
+        ['COMANDA', 1],
+      ]);
+      expect(lista.every((t) => t.ordenId !== null || t.tipo === 'PRUEBA')).toBe(true);
+    } finally {
+      await llamar(ctx, T(), {
+        metodo: 'put',
+        ruta: `/sucursales/${A().S1}/estaciones-destino/${esc.carta.cocinaId}`,
+        cuerpo: { destino: 'KDS' },
+      });
+    }
   });
 });
 
