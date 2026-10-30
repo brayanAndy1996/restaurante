@@ -70,7 +70,7 @@ apps/api/src/modulos/pedidos/
   eventos-pedidos.ts               registra los eventos con alConfirmar (uno por sala y nombre por operación)
   vista-orden.ts                   arma ordenRespuesta con consultas fijas y totalOrden
   inventario/inventario.puerto.ts  INVENTARIO, InventarioPuerto, InventarioNulo
-  impresion/impresion.puerto.ts    IMPRESION, ImpresionPuerto, ImpresionSoloKds
+  impresion/impresion.puerto.ts    IMPRESION, ImpresionPuerto (lo provee ImpresionModule)
   errores-pedidos.ts
 ```
 
