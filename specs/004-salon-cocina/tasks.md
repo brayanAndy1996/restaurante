@@ -191,10 +191,10 @@ Commit propio.
 
 Commit propio.
 
-- [ ] T40 · backend · Migración `202610310002-puente.ts`; vinculaciones y vinculación del puente, revocación, `PuenteGuard`, `VinculacionGuard` y `AutenticacionGuard` con `@Puente()` y `@VinculacionPuente()`, espacio `/puente` con su sala, `GET /puente/configuracion` y `puente.configuracion`, `IMPRESION.encolar` real (trabajos de comandas y pre-cuentas en la transacción, índice por comanda), `trabajo.nuevo`, `GET /puente/trabajos` con día operativo y vencimiento, `POST …/resultado`. Deja en verde P5 y P6. (criterios 101, 106 a 117, 129 a 133)
-- [ ] T41 · backend · `escpos/`: `renderizarTicket`, tablas de codificación y transliteración, plantillas de comanda (los cuatro tipos), pre-cuenta (sin desglose, con las notas del criterio 51) y prueba, marca de retraso y de reimpresión; `POST …/prueba`, `GET /impresion/trabajos` y `POST …/reimpresion`. Pruebas no protegidas con el emulador: cada plantilla en 58 y 80 mm y en cada juego de caracteres, ajuste de líneas, montos alineados. (criterios 114, 118, 119, 123 a 128)
-- [ ] T42 · frontend · "Vincular puente" con QR (dependencia bajo demanda), texto para copiar y cuenta regresiva; estado del puente y "Revocar"; "Trabajos de hoy" con "Reimprimir"; "Imprimir" en la pre-cuenta y "Reimprimir" en la cuenta. Pruebas de componente. (criterios 137 a 139)
-- [ ] T43 · tester · Suite completa, lint, tipos y build; P5 y P6 en verde.
+- [x] T40 · backend · Migración `202610310002-puente.ts`; vinculaciones y vinculación del puente, revocación, `PuenteGuard`, `VinculacionGuard` y `AutenticacionGuard` con `@Puente()` y `@VinculacionPuente()`, espacio `/puente` con su sala, `GET /puente/configuracion` y `puente.configuracion`, `IMPRESION.encolar` real (trabajos de comandas y pre-cuentas en la transacción, índice por comanda), `trabajo.nuevo`, `GET /puente/trabajos` con día operativo y vencimiento, `POST …/resultado`. Deja en verde P5 y P6. (criterios 101, 106 a 117, 129 a 133)
+- [x] T41 · backend · `escpos/`: `renderizarTicket`, tablas de codificación y transliteración, plantillas de comanda (los cuatro tipos), pre-cuenta (sin desglose, con las notas del criterio 51) y prueba, marca de retraso y de reimpresión; `POST …/prueba`, `GET /impresion/trabajos` y `POST …/reimpresion`. Pruebas no protegidas con el emulador: cada plantilla en 58 y 80 mm y en cada juego de caracteres, ajuste de líneas, montos alineados. (criterios 114, 118, 119, 123 a 128)
+- [x] T42 · frontend · "Vincular puente" con QR (dependencia bajo demanda), texto para copiar y cuenta regresiva; estado del puente y "Revocar"; "Trabajos de hoy" con "Reimprimir"; "Imprimir" en la pre-cuenta y "Reimprimir" en la cuenta. Pruebas de componente. (criterios 137 a 139)
+- [x] T43 · tester · Suite completa, lint, tipos y build; P5 y P6 en verde.
 
 #### C9 · HU-39, RF-78: estado, avisos y validación de punta a punta
 
