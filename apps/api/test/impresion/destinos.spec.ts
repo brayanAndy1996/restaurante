@@ -648,19 +648,8 @@ describe('IMPRESION.destinos · el ruteo de las comandas y el KDS (criterio 61 e
     expect(envio.comandas.map((c) => c.destino)).toEqual(['KDS', 'KDS']);
   });
 
-  it('IMPRESION.encolar acepta trabajos mientras no exista la cola (T40) y no lanza', async () => {
+  it('IMPRESION.encolar sin trabajos no hace nada y devuelve una lista vacía', async () => {
     const puerto = ctx.app.get<ImpresionPuerto>(IMPRESION, { strict: false });
-    await expect(
-      puerto.encolar([
-        {
-          sucursalId: A().S1,
-          impresoraId: randomUUID(),
-          tipo: 'COMANDA',
-          comandaId: randomUUID(),
-          precuentaId: null,
-          documento: {},
-        },
-      ]),
-    ).resolves.toBeUndefined();
+    await expect(puerto.encolar([])).resolves.toEqual([]);
   });
 });

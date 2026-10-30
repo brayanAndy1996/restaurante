@@ -311,6 +311,10 @@ describe('el destino de cada estación se guarda al crear la comanda', () => {
   it('una estación con impresora sale como IMPRESORA y las demás como KDS; no cambia si el destino cambia después', async () => {
     const impresion = ctx.app.get<ImpresionPuerto>(IMPRESION, { strict: false });
     const original = impresion.destinos.bind(impresion);
+    // La impresora de este caso no existe en la base: lo que se prueba es el destino guardado en la comanda, así
+    // que no se encola ningún trabajo (el trabajo real lo prueban `impresion-critica/` y `impresion/cola-puente`).
+    const encolarOriginal = impresion.encolar.bind(impresion);
+    impresion.encolar = async () => [];
     const impresoraId = randomUUID();
     let cuerpo: ReturnType<typeof envio> | undefined;
     let ordenId = '';
@@ -344,6 +348,7 @@ describe('el destino de cada estación se guarda al crear la comanda', () => {
       ]);
     } finally {
       impresion.destinos = original;
+      impresion.encolar = encolarOriginal;
     }
     // Con el destino de vuelta en KDS, la réplica sigue mostrando el destino con el que salió.
     const replica = await enviarComanda(ctx, t().mozo, ordenId, cuerpo);

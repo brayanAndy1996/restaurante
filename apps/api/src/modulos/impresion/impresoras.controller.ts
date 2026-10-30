@@ -5,21 +5,25 @@ import {
   type ImpresoraEntradaValidada,
   type ImpresoraModificarEntradaValidada,
   type ImpresoraRespuesta,
+  type TrabajoCreadoRespuesta,
 } from '@restaurante/contratos';
-import { noImplementado } from '../../nucleo/errores/no-implementado';
 import { PipeUuid, PipeZod } from '../../nucleo/errores/pipes';
-import { Idempotente } from '../../nucleo/idempotencia';
+import { Idempotente, IdempotenteObligatoria } from '../../nucleo/idempotencia';
 import { Permiso } from '../seguridad';
 import { ImpresorasService } from './impresoras.service';
+import { TrabajosService } from './trabajos.service';
 
 /**
  * Impresoras de la sucursal (historia 004, criterios 103 a 105 y 127): `ADMINISTRAR` en todas, con la sucursal en
  * la ruta (el Administrador configura cualquier sucursal de su empresa, con o sin sucursal activa), sin
- * `@RequiereModulo`. La página de prueba sigue como firma de la fase A hasta T41 (con `Idempotency-Key`).
+ * `@RequiereModulo`. La página de prueba (criterio 127) lleva `Idempotency-Key` obligatoria.
  */
 @Controller('sucursales/:sucursalId/impresoras')
 export class ImpresorasController {
-  constructor(@Inject(ImpresorasService) private readonly impresoras: ImpresorasService) {}
+  constructor(
+    @Inject(ImpresorasService) private readonly impresoras: ImpresorasService,
+    @Inject(TrabajosService) private readonly trabajos: TrabajosService,
+  ) {}
 
   /** 200 con las impresoras (activas e inactivas), su estado y sus pendientes; 403; 404. */
   @Get()
@@ -50,9 +54,14 @@ export class ImpresorasController {
     return this.impresoras.modificar(sucursalId, id, cambios);
   }
 
+  /** 201 `{ trabajoId }` (también con la impresora inactiva); 400 sin `Idempotency-Key`; 403; 404. */
   @Post(':id/prueba')
+  @IdempotenteObligatoria()
   @Permiso('ADMINISTRAR')
-  paginaDePrueba(): never {
-    throw noImplementado();
+  paginaDePrueba(
+    @Param('sucursalId', PipeUuid) sucursalId: string,
+    @Param('id', PipeUuid) id: string,
+  ): Promise<TrabajoCreadoRespuesta> {
+    return this.trabajos.paginaDePrueba(sucursalId, id);
   }
 }

@@ -1,25 +1,44 @@
-import { Controller, Delete, Get, Post } from '@nestjs/common';
-import { noImplementado } from '../../nucleo/errores/no-implementado';
+import { Controller, Delete, Get, HttpCode, Inject, Param, Post } from '@nestjs/common';
+import type { PuenteRespuesta, VinculacionRespuesta } from '@restaurante/contratos';
+import { PipeUuid } from '../../nucleo/errores/pipes';
+import { Idempotente } from '../../nucleo/idempotencia';
+import { Permiso } from '../seguridad';
+import { PuentesService } from './puentes.service';
 
 /**
- * Vinculación y lista de puentes de la sucursal (historia 004, criterios 106 y 108). Firmas de la fase A (T35):
- * sin `@Permiso` (en la fase C, `ADMINISTRAR`, con `Idempotency-Key` opcional al crear la vinculación), sin
- * validación y sin lógica.
+ * Vinculación y lista de puentes de la sucursal (historia 004, criterios 106 y 108): `ADMINISTRAR` en todas, con la
+ * sucursal en la ruta (el Administrador configura cualquier sucursal de su empresa, con o sin sucursal activa), sin
+ * `@RequiereModulo`.
  */
 @Controller('sucursales/:sucursalId')
 export class PuentesController {
+  constructor(@Inject(PuentesService) private readonly puentes: PuentesService) {}
+
+  /** 201 `{ token, qr, expiraEn }` con `Idempotency-Key` opcional; 403; 404. Invalida los códigos pendientes. */
   @Post('vinculaciones-puente')
-  crearVinculacion(): never {
-    throw noImplementado();
+  @Idempotente()
+  @Permiso('ADMINISTRAR')
+  crearVinculacion(
+    @Param('sucursalId', PipeUuid) sucursalId: string,
+  ): Promise<VinculacionRespuesta> {
+    return this.puentes.crearVinculacion(sucursalId);
   }
 
+  /** 200 con los puentes de la sucursal, activos y revocados; 403; 404. */
   @Get('puentes')
-  listar(): never {
-    throw noImplementado();
+  @Permiso('ADMINISTRAR')
+  listar(@Param('sucursalId', PipeUuid) sucursalId: string): Promise<PuenteRespuesta[]> {
+    return this.puentes.listar(sucursalId);
   }
 
+  /** 204 (también si ya estaba revocado); 403; 404. */
   @Delete('puentes/:id')
-  revocar(): never {
-    throw noImplementado();
+  @Permiso('ADMINISTRAR')
+  @HttpCode(204)
+  async revocar(
+    @Param('sucursalId', PipeUuid) sucursalId: string,
+    @Param('id', PipeUuid) id: string,
+  ): Promise<void> {
+    await this.puentes.revocar(sucursalId, id);
   }
 }

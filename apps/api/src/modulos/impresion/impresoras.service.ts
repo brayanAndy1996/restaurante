@@ -8,16 +8,19 @@ import type {
 import { QueryTypes, type Sequelize } from 'sequelize';
 import { CONEXION_API, SQLSTATE, restriccionDe, sqlstateDe } from '../../nucleo/base-de-datos';
 import { ContextoEmpresa } from '../../nucleo/contexto-empresa';
+import { diaOperativo } from '@restaurante/dominio';
 import { RELOJ, type Reloj } from '../../nucleo/reloj';
 import { AuditoriaService } from '../auditoria';
 import { CartaConsultaService } from '../carta';
 import { SucursalesConsultaService } from '../plataforma';
+import { EventosImpresion } from './eventos-impresion';
 import { impresoraEnUso, noEncontrado, nombreRepetido } from './errores-impresion';
 import {
   COLUMNAS_IMPRESORA,
   aConexion,
   leerImpresoras,
   type FilaImpresora,
+  type MomentoDeLectura,
 } from './lectura-impresoras';
 
 /** Nombre del índice único de `impresora` (migración `202610310001-impresion`). */
@@ -63,12 +66,13 @@ export class ImpresorasService {
     @Inject(AuditoriaService) private readonly auditoria: AuditoriaService,
     @Inject(SucursalesConsultaService) private readonly sucursales: SucursalesConsultaService,
     @Inject(CartaConsultaService) private readonly carta: CartaConsultaService,
+    @Inject(EventosImpresion) private readonly eventos: EventosImpresion,
   ) {}
 
   /** `GET`: las impresoras de la sucursal con su estado y los trabajos pendientes de cada una (criterio 105). */
   async listar(sucursalId: string): Promise<ImpresoraRespuesta[]> {
     await this.exigirSucursal(sucursalId);
-    return leerImpresoras(this.conexion, sucursalId);
+    return leerImpresoras(this.conexion, sucursalId, await this.momento(sucursalId));
   }
 
   /** Criterio 103: el nombre es único en la sucursal sin distinguir mayúsculas (409). Nace activa. */
@@ -119,6 +123,8 @@ export class ImpresorasService {
         gaveta: entrada.gaveta,
       },
     });
+    // El puente vuelve a pedir su configuración (criterio 110).
+    await this.eventos.configuracionCambio(sucursalId);
     return this.obtener(sucursalId, id);
   }
 
@@ -201,6 +207,7 @@ export class ImpresorasService {
       entidadId: id,
       detalle: { sucursalId, ...diff },
     });
+    await this.eventos.configuracionCambio(sucursalId);
     return this.obtener(sucursalId, id);
   }
 
@@ -231,9 +238,20 @@ export class ImpresorasService {
   }
 
   private async obtener(sucursalId: string, id: string): Promise<ImpresoraRespuesta> {
-    const impresora = (await leerImpresoras(this.conexion, sucursalId, { impresoraId: id }))[0];
+    const impresora = (
+      await leerImpresoras(this.conexion, sucursalId, await this.momento(sucursalId), {
+        impresoraId: id,
+      })
+    )[0];
     if (impresora === undefined) throw noEncontrado('La impresora');
     return impresora;
+  }
+
+  /** El instante y el día operativo de la sucursal para el estado y los pendientes (criterios 105 y 117). */
+  private async momento(sucursalId: string): Promise<MomentoDeLectura> {
+    const ahora = this.reloj.ahora();
+    const horaCorte = await this.sucursales.horaCorte(sucursalId);
+    return { ahora, diaOperativo: diaOperativo(ahora, horaCorte ?? '00:00') };
   }
 
   private async exigirSucursal(sucursalId: string): Promise<void> {

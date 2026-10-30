@@ -36,6 +36,7 @@ import { INVENTARIO, type InventarioPuerto } from './inventario';
 import { mesasVigentesDeOrden } from './mesas-de-orden';
 import { invalidarPrecuentaVigente } from './precuenta-invalidacion';
 import { huellaDeEnvio, huellaDeMarcha, normalizarLineas } from './replica';
+import { TicketsDePedidos } from './tickets-de-pedidos';
 import { VistaOrdenService } from './vista-orden';
 
 interface FilaReplica {
@@ -81,6 +82,7 @@ export class EnviosService {
     @Inject(CartaVentaService) private readonly carta: CartaVentaService,
     @Inject(INVENTARIO) private readonly inventario: InventarioPuerto,
     @Inject(IMPRESION) private readonly impresion: ImpresionPuerto,
+    @Inject(TicketsDePedidos) private readonly tickets: TicketsDePedidos,
     @Inject(EventosPedidos) private readonly eventos: EventosPedidos,
     @Inject(VistaOrdenService) private readonly vista: VistaOrdenService,
   ) {}
@@ -200,7 +202,7 @@ export class EnviosService {
         esperar: i.pedida.tiempo === 2,
       })),
     );
-    const comandas = await guardarComandas(this.conexion, this.impresion, {
+    const comandas = await guardarComandas(this.conexion, this.impresion, this.tickets, {
       empresaId,
       sucursalId,
       ordenId: orden.id,
@@ -209,6 +211,7 @@ export class EnviosService {
       origenId: null,
       ahora,
       partes,
+      envioNumero: numero,
     });
 
     // El inventario, dentro de la transacción y una sola vez por envío (criterio 72): si lanza, se revierte todo.
@@ -411,7 +414,7 @@ export class EnviosService {
         };
       });
     });
-    const comandas = await guardarComandas(this.conexion, this.impresion, {
+    const comandas = await guardarComandas(this.conexion, this.impresion, this.tickets, {
       empresaId,
       sucursalId,
       ordenId: orden.id,

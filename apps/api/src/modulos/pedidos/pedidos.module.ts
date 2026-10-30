@@ -19,6 +19,7 @@ import { PrecuentasController } from './precuentas.controller';
 import { PrecuentasService } from './precuentas.service';
 import { SalonController } from './salon.controller';
 import { SalonService } from './salon.service';
+import { TicketsDePedidos } from './tickets-de-pedidos';
 import { VistaOrdenService } from './vista-orden';
 
 /**
@@ -50,6 +51,7 @@ import { VistaOrdenService } from './vista-orden';
     SalonService,
     VistaOrdenService,
     EventosPedidos,
+    TicketsDePedidos,
   ],
   exports: [PedidosConsultaService],
 })

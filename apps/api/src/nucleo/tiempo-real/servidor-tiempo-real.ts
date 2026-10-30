@@ -172,7 +172,10 @@ export class ServidorTiempoReal implements OnApplicationBootstrap, OnModuleDestr
   }
 
   /** Middleware del espacio `/puente` (criterio 111): rechaza con `NO_AUTENTICADO` todo lo que no sea un `pu.…` vivo. */
-  private async autenticarPuente(socket: Socket, siguiente: (error?: Error) => void): Promise<void> {
+  private async autenticarPuente(
+    socket: Socket,
+    siguiente: (error?: Error) => void,
+  ): Promise<void> {
     const validador = this.validadorDePuente;
     if (validador === null) {
       siguiente(new Error(NO_AUTENTICADO));

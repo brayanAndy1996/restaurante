@@ -12,6 +12,7 @@ import { RELOJ, type Reloj } from '../../nucleo/reloj';
 import { AuditoriaService } from '../auditoria';
 import { CartaConsultaService } from '../carta';
 import { SucursalesConsultaService } from '../plataforma';
+import { EventosImpresion } from './eventos-impresion';
 import { impresoraInvalida, noEncontrado } from './errores-impresion';
 
 interface FilaDestino {
@@ -36,6 +37,7 @@ export class DestinosService {
     @Inject(AuditoriaService) private readonly auditoria: AuditoriaService,
     @Inject(SucursalesConsultaService) private readonly sucursales: SucursalesConsultaService,
     @Inject(CartaConsultaService) private readonly carta: CartaConsultaService,
+    @Inject(EventosImpresion) private readonly eventos: EventosImpresion,
   ) {}
 
   /** Criterio 99: una fila por estación activa de la empresa, con su destino en esta sucursal. */
@@ -145,6 +147,7 @@ export class DestinosService {
           despues: { destino: entrada.destino, impresoraId },
         },
       });
+      await this.eventos.configuracionCambio(sucursalId);
     }
     return this.vista(sucursalId, estacionId);
   }
@@ -216,6 +219,7 @@ export class DestinosService {
           impresoraCajaId: { antes, despues: nueva },
         },
       });
+      await this.eventos.configuracionCambio(sucursalId);
     }
     return this.verImpresion(sucursalId);
   }

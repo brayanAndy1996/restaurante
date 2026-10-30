@@ -1,10 +1,7 @@
-import { CanActivate, ExecutionContext, Injectable } from '@nestjs/common';
+import { CanActivate, ExecutionContext, Inject, Injectable } from '@nestjs/common';
 import type { Request } from 'express';
-import { ErrorAplicacion } from '../../nucleo/errores/error-aplicacion';
-import { noImplementado } from '../../nucleo/errores/no-implementado';
-import { parsearTokenPuente, parsearTokenVinculacion } from '../seguridad';
-
-const MENSAJE = 'Se requiere autenticación para esta operación';
+import type { PeticionConPuente } from '../../nucleo/principal';
+import { AutenticacionPuenteService, puenteNoAutenticado } from './autenticacion-puente.service';
 
 /** `Authorization: Bearer <token>`, o `undefined` si falta o tiene otra forma. */
 function tokenDeBearer(peticion: Request): string | undefined {
@@ -13,40 +10,47 @@ function tokenDeBearer(peticion: Request): string | undefined {
 }
 
 /**
- * Guard de las rutas `/puente/*` con la credencial del puente (`@Puente()`, historia 004, criterios 109 y 129).
- *
- * Firma de la fase A (T35): un token que no tiene la forma de un `pu.…` (sin `Authorization`, mal formado, o de
- * otro tipo: `se.`, `sa.`, `eq.`, `vi.`) ya responde 401 `NO_AUTENTICADO` sin consultar nada; uno bien formado
- * lanza "No implementado" (500) hasta que T40 verifique la fila del puente bajo RLS, abra el contexto de la
- * empresa con el actor `puente:<id>` y deje el puente en la petición.
+ * Guard de las rutas `/puente/*` con la credencial del puente (`@Puente()`, historia 004, criterios 109 y 129; ruta
+ * crítica P6). Parsea el token `pu.<empresa>.<id>.<secreto>`, verifica en un contexto de empresa propio (con la
+ * empresa **del token**) que existe un puente activo con ese id y esa huella, y deja en la petición la empresa, la
+ * sucursal y el puente: de ahí salen el contexto de empresa y el actor `puente:<id>` de la petición. Sin
+ * credencial, con otro tipo de token, mal formada, adulterada, de un puente revocado o de otra empresa: 401
+ * `NO_AUTENTICADO`, siempre con el mismo cuerpo y sin bloqueo por intentos (el secreto tiene 256 bits).
  */
 @Injectable()
 export class PuenteGuard implements CanActivate {
-  canActivate(contexto: ExecutionContext): boolean {
+  constructor(
+    @Inject(AutenticacionPuenteService) private readonly autenticacion: AutenticacionPuenteService,
+  ) {}
+
+  async canActivate(contexto: ExecutionContext): Promise<boolean> {
     if (contexto.getType() !== 'http') return true;
-    const token = tokenDeBearer(contexto.switchToHttp().getRequest<Request>());
-    if (token === undefined || parsearTokenPuente(token) === null) {
-      throw new ErrorAplicacion(401, 'NO_AUTENTICADO', MENSAJE);
-    }
-    throw noImplementado();
+    const peticion = contexto.switchToHttp().getRequest<PeticionConPuente>();
+    const token = tokenDeBearer(peticion);
+    if (token === undefined) throw puenteNoAutenticado();
+    peticion.puente = await this.autenticacion.autenticarPuente(token);
+    return true;
   }
 }
 
 /**
- * Guard de `POST /puente/vinculacion` (`@VinculacionPuente()`, criterios 107 y 109).
- *
- * Firma de la fase A (T35): sin `Authorization` o con un token que no tiene la forma de un `vi.…` responde 401
- * `NO_AUTENTICADO`; uno bien formado lanza "No implementado" (500) hasta que T40 lo valide y responda, si no
- * sirve, 401 `VINCULACION_INVALIDA`.
+ * Guard de `POST /puente/vinculacion` (`@VinculacionPuente()`, criterios 107 y 109). Comprueba el código `vi.…`
+ * (sin usar, sin invalidar, sin vencer y con su secreto) y deja en la petición la vinculación y el id del puente
+ * que nacerá con ella. Mal formado o de otro tipo: 401 `NO_AUTENTICADO`; bien formado pero que no sirve: 401
+ * `VINCULACION_INVALIDA`, el mismo cuerpo para todos los casos. No gasta el código: lo hace el servicio.
  */
 @Injectable()
 export class VinculacionGuard implements CanActivate {
-  canActivate(contexto: ExecutionContext): boolean {
+  constructor(
+    @Inject(AutenticacionPuenteService) private readonly autenticacion: AutenticacionPuenteService,
+  ) {}
+
+  async canActivate(contexto: ExecutionContext): Promise<boolean> {
     if (contexto.getType() !== 'http') return true;
-    const token = tokenDeBearer(contexto.switchToHttp().getRequest<Request>());
-    if (token === undefined || parsearTokenVinculacion(token) === null) {
-      throw new ErrorAplicacion(401, 'NO_AUTENTICADO', MENSAJE);
-    }
-    throw noImplementado();
+    const peticion = contexto.switchToHttp().getRequest<PeticionConPuente>();
+    const token = tokenDeBearer(peticion);
+    if (token === undefined) throw puenteNoAutenticado();
+    peticion.vinculacion = await this.autenticacion.autenticarVinculacion(token);
+    return true;
   }
 }

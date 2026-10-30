@@ -33,3 +33,11 @@ export const impresoraEnUso = (usos: readonly string[]): ErrorAplicacion =>
     'EN_USO',
     `La impresora se usa como ${usos.join(' y como ')}. Cámbialo antes de desactivarla`,
   );
+
+/** 409 `SIN_IMPRESORA`: no hay una impresora activa donde reimprimir el trabajo (criterio 128). */
+export const sinImpresora = (): ErrorAplicacion =>
+  new ErrorAplicacion(
+    409,
+    'SIN_IMPRESORA',
+    'No hay una impresora activa donde reimprimir este ticket',
+  );

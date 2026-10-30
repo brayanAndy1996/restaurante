@@ -41,7 +41,19 @@ describe('salaDeSocketIo', () => {
     }
   });
 
-  it('la sala de puente no tiene destino hasta la entrega 3b', () => {
-    expect(salaDeSocketIo(evento(empresa, { tipo: 'puente', puenteId: randomUUID() }))).toBeNull();
+  it('la sala de puente (3b) lleva la empresa y el puente: p:<empresa>:<puente>', () => {
+    const puente = randomUUID();
+    expect(salaDeSocketIo(evento(empresa, { tipo: 'puente', puenteId: puente }))).toBe(
+      `p:${empresa}:${puente}`,
+    );
+    expect(
+      salaDeSocketIo(evento(empresa, { tipo: 'puente', puenteId: puente.toUpperCase() })),
+    ).toBe(`p:${empresa}:${puente}`);
+  });
+
+  it('una sala de puente con un id que no es UUID no tiene destino', () => {
+    for (const mala of ['', 'no-es-uuid', "p:x' OR 1=1", '../..']) {
+      expect(salaDeSocketIo(evento(empresa, { tipo: 'puente', puenteId: mala })), mala).toBeNull();
+    }
   });
 });

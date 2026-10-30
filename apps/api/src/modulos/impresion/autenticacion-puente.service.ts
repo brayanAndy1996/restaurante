@@ -81,7 +81,8 @@ export class AutenticacionPuenteService implements ValidadorDePuente {
    * con un `UPDATE` condicionado, para que de dos usos simultáneos gane exactamente uno.
    */
   async autenticarVinculacion(token: string | null | undefined): Promise<VinculacionAutenticada> {
-    const partes = typeof token === 'string' && token !== '' ? parsearTokenVinculacion(token) : null;
+    const partes =
+      typeof token === 'string' && token !== '' ? parsearTokenVinculacion(token) : null;
     if (partes === null) throw puenteNoAutenticado();
     const ahora = this.reloj.ahora();
     const vinculacion = await this.contexto.ejecutar(partes.empresaId, async () => {

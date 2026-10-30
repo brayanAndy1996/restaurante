@@ -276,7 +276,9 @@ function validarApiUrlPublica(valor: string | undefined, problemas: string[]): v
     valida = false;
   }
   if (!valida) {
-    problemas.push('API_URL_PUBLICA no es una URL http(s) válida (por ejemplo https://api.ejemplo.pe)');
+    problemas.push(
+      'API_URL_PUBLICA no es una URL http(s) válida (por ejemplo https://api.ejemplo.pe)',
+    );
   }
 }
 
