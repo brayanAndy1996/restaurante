@@ -208,17 +208,18 @@ superusuario, `DB_PROTECCION_CATALOGO=omitir` (ver arriba).
 
 ## Comandos
 
-| Comando                      | Qué hace                                                                      |
-| ---------------------------- | ----------------------------------------------------------------------------- |
-| `pnpm lint`                  | ESLint en todo el monorepo (incluye las reglas del criterio 37)               |
-| `pnpm typecheck`             | Verificación de tipos                                                         |
-| `pnpm build`                 | Compila los paquetes y la API                                                 |
-| `pnpm test`                  | Todas las pruebas (la API necesita `DATABASE_ADMIN_URL`)                      |
-| `pnpm format:check`          | Comprueba el formato con Prettier (`pnpm format` lo corrige)                  |
-| `pnpm dev`                   | API (puerto 3000) y app del personal (puerto 5173) en modo desarrollo         |
-| `pnpm build:compartidos`     | Compila `packages/dominio` y `packages/contratos` (`db:semilla` lo hace)      |
-| `pnpm db:semilla`            | Superadministrador y dos empresas de demostración, con usuarios por rol       |
-| `pnpm plataforma:superadmin` | Crea, desactiva o desbloquea un superadministrador (ver "Superadministrador") |
+| Comando                      | Qué hace                                                                                  |
+| ---------------------------- | ----------------------------------------------------------------------------------------- |
+| `pnpm lint`                  | ESLint en todo el monorepo (incluye las reglas del criterio 37)                           |
+| `pnpm typecheck`             | Verificación de tipos                                                                     |
+| `pnpm build`                 | Compila los paquetes y la API                                                             |
+| `pnpm test`                  | Todas las pruebas (la API necesita `DATABASE_ADMIN_URL`)                                  |
+| `pnpm format:check`          | Comprueba el formato con Prettier (`pnpm format` lo corrige)                              |
+| `pnpm dev`                   | API (puerto 3000) y app del personal (puerto 5173) en modo desarrollo                     |
+| `pnpm build:compartidos`     | Compila `packages/dominio` y `packages/contratos` (`db:semilla` lo hace)                  |
+| `pnpm db:semilla`            | Superadministrador y dos empresas de demostración, con usuarios por rol                   |
+| `pnpm plataforma:superadmin` | Crea, desactiva o desbloquea un superadministrador (ver "Superadministrador")             |
+| `pnpm puente:simular`        | Puente de impresión de mentira, para probar la impresión sin un Android (ver "Impresión") |
 
 ## La app del personal (`apps/app`) y `packages/ui`
 
@@ -260,6 +261,27 @@ Con la rama de trabajo `claude/upbeat-wright-q09k0n`, `pnpm local:preparar` y `p
 - **KDS en un iPad o una tableta.** Deja `/cocina` en primer plano y con la pantalla encendida. Si el navegador pasa a segundo plano o la pantalla se apaga, la conexión en vivo se corta; al volver, la pantalla se pone al día sola, y sin conexión se refresca cada 30 segundos.
 - **Inactividad de Cocina/Barra.** Una sesión de Cocina/Barra, con PIN o con contraseña, se cierra tras 60 minutos sin actividad. Los demás roles siguen con su tiempo: por defecto, 5 minutos con PIN y 30 con contraseña. El de Cocina y Barra se cambia en Ajustes › Acceso, «Cierre por inactividad de Cocina y Barra (minutos)», de 1 a 720; rige desde la siguiente petición.
 - **Pruebas automáticas.** `e2e/salon-cocina.spec.ts` recorre el salón y la cocina con tres celulares de 360 px (`pnpm --filter @restaurante/app e2e`). Ver [`apps/app/README.md`](apps/app/README.md).
+
+## Impresión (3b): cómo probarla sin un Android
+
+La app Android del puente es la entrega 3c. Mientras tanto, `pnpm puente:simular` corre el mismo `SimuladorPuente` de las pruebas (`apps/api/test/soporte/puente/`) contra tu API local: vincula con el texto del QR, se conecta al espacio `/puente`, manda los tickets por TCP a las impresoras de red y reporta el resultado y el latido. Con `--emulador` levanta además una impresora ESC/POS falsa y escribe en la consola cada ticket que recibe, como texto.
+
+1. **Arranca** la API y la app (`pnpm local:preparar` y `pnpm dev`; ver arriba). El puerto de la API es el 3000 y `API_URL_PUBLICA` vale `http://localhost:3000` en desarrollo.
+2. **Crea la impresora apuntando al emulador.** Como `fogon.admin`, en Ajustes › Impresión, crea una impresora de red con host `127.0.0.1` y puerto `9100` (el puerto por defecto del emulador; cambia con `--emulador-puerto`). Elígela como destino de la estación Cocina, o como impresora de caja para las pre-cuentas.
+3. **Pide el código de vinculación.** En Ajustes › Impresión, «Vincular puente» muestra el texto del QR (`restaurante-puente://vincular?api=…&t=vi.…`) con un botón para copiarlo. El código sirve una vez y dura 10 minutos.
+4. **Vincula el simulador.** En otra terminal, desde la raíz del repositorio y con el texto entre comillas:
+
+   ```bash
+   pnpm puente:simular --emulador --qr "restaurante-puente://vincular?api=http%3A%2F%2Flocalhost%3A3000&t=vi...."
+   ```
+
+   Verás en la consola la vinculación, la sucursal, las impresoras que trae la configuración y «Esperando trabajos de impresión». En la app, el aviso de «puente desconectado» desaparece.
+
+5. **Imprime.** Pide la «página de prueba» de la impresora, o abre una mesa como `fogon.mozo`, comanda y envía: el ticket sale en la consola, entre `┌─ Ticket N` y `└─ fin del ticket N`, con las tildes y los anchos del papel de la impresora (`--ancho 58|80` define las columnas del emulador). Con `--marcas` también muestra la transcripción con marcas (`[B]` negrita, `[CORTE]`…).
+
+Opciones: `--api <url>` (si el QR trae una URL pública que tu máquina no alcanza), `--emulador-host`, `--emulador-puerto`, `--ancho`, `--marcas`, `--nombre-equipo` y `--token-archivo` (ver `pnpm puente:simular --ayuda`). El código del QR es de un solo uso, así que el comando guarda la credencial del puente en `.puente-simulador.json` (carpeta desde la que corres el comando; está en `.gitignore`) y, sin `--qr`, la reutiliza: `pnpm puente:simular --emulador` vuelve a conectar sin pedir otro código. Si vinculas otro puente en la sucursal, el anterior queda revocado y el simulador se detiene. Termina con Ctrl+C.
+
+Para ver los estados: apaga el emulador (Ctrl+C) y espera 60 segundos para ver «El puente de impresión está desconectado»; o crea una impresora en otro puerto sin nadie escuchando y verás «La impresora … no responde» con los tickets en cola. El simulador solo imprime en impresoras de red: una Bluetooth queda con estado «Sin datos» y sus trabajos, pendientes (llegan con la app 3c).
 
 ## Pruebas
 

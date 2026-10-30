@@ -5,6 +5,7 @@ import {
   anularItemEntradaSchema,
   anularOrdenEntradaSchema,
   cocinaConsultaSchema,
+  cocinaRespuestaSchema,
   envioEntradaSchema,
   errorRespuestaSchema,
   estadoLineaEntradaSchema,
@@ -443,5 +444,30 @@ describe('precuentaRespuestaSchema · impresion (criterio 102)', () => {
     expect(precuentaRespuestaSchema.safeParse({ ...base, impresion: 'IMPRESA' }).success).toBe(
       false,
     );
+  });
+});
+
+describe('cocinaRespuestaSchema: las estaciones con su destino (criterio 138)', () => {
+  const base = { ahora: '2026-10-30T12:00:00.000Z', pendientes: [], recientes: [] };
+
+  it('acepta estaciones que salen por el KDS (sin impresora) o por una impresora (con su nombre)', () => {
+    const estaciones = [
+      { id: ID_1, nombre: 'Barra', destino: 'KDS', impresora: null },
+      { id: ID_2, nombre: 'Cocina', destino: 'IMPRESORA', impresora: { id: ID_1, nombre: 'Caja' } },
+    ];
+    expect(cocinaRespuestaSchema.parse({ ...base, estaciones }).estaciones).toEqual(estaciones);
+    expect(cocinaRespuestaSchema.parse({ ...base, estaciones: [] }).estaciones).toEqual([]);
+  });
+
+  it('exige la lista y rechaza un destino desconocido o una impresora sin id', () => {
+    expect(cocinaRespuestaSchema.safeParse(base).success).toBe(false);
+    const mala = (extra: object) =>
+      cocinaRespuestaSchema.safeParse({
+        ...base,
+        estaciones: [{ id: ID_1, nombre: 'Barra', destino: 'KDS', impresora: null, ...extra }],
+      }).success;
+    expect(mala({})).toBe(true);
+    expect(mala({ destino: 'PANTALLA' })).toBe(false);
+    expect(mala({ impresora: { nombre: 'Caja' } })).toBe(false);
   });
 });

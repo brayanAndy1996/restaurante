@@ -183,9 +183,7 @@ async function principal(): Promise<void> {
     escribir(`Credencial del puente guardada en ${archivo} (no la subas al repositorio).`);
   };
   const simulador = new SimuladorPuente({
-    ...(qr !== undefined
-      ? { qr }
-      : { api: guardada!.api, token: guardada!.token }),
+    ...(qr !== undefined ? { qr } : { api: guardada!.api, token: guardada!.token }),
     nombreEquipo: values['nombre-equipo'],
     modelo: 'puente:simular',
     versionApp: 'simulador-cli',
@@ -255,7 +253,10 @@ async function principal(): Promise<void> {
       impresora.conexion.puerto === emulador.puerto;
     escribir(`  - ${impresora.nombre}: ${destino}${alEmulador ? ' (emulador)' : ''}`);
   }
-  if (emulador !== null && !impresoras.some((i) => i.conexion.tipo === 'RED' && i.conexion.puerto === emulador.puerto)) {
+  if (
+    emulador !== null &&
+    !impresoras.some((i) => i.conexion.tipo === 'RED' && i.conexion.puerto === emulador.puerto)
+  ) {
     escribir(
       `Ninguna impresora apunta al emulador todavía: créala en la app con host ${emulador.host} y puerto ${emulador.puerto}.`,
     );

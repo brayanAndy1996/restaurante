@@ -584,6 +584,73 @@ describe('IMPRESION.destinos · el ruteo de las comandas y el KDS (criterio 61 e
     );
   });
 
+  it('el KDS trae las estaciones activas con su destino y el nombre de la impresora (criterio 138), con o sin filtro, y el ETag lo cubre', async () => {
+    const { e, i, token, S1 } = await enviarConCocinaEnImpresora();
+    const kds = async (consulta = '', etag?: string) =>
+      llamar(ctx, e.token.cocina, {
+        metodo: 'get',
+        ruta: `/cocina/comandas${consulta}`,
+        ...(etag === undefined ? {} : { cabeceras: { 'If-None-Match': etag } }),
+      });
+    const primera = await kds();
+    exigirEstado(primera, 200, 'KDS');
+    const esperadas = [
+      { id: e.carta.barraId, nombre: 'Barra', destino: 'KDS', impresora: null },
+      {
+        id: e.carta.cocinaId,
+        nombre: 'Cocina',
+        destino: 'IMPRESORA',
+        impresora: { id: i.id, nombre: i.nombre },
+      },
+    ];
+    const ordenar = <T extends { nombre: string }>(lista: T[]) =>
+      [...lista].sort((a, b) => a.nombre.localeCompare(b.nombre));
+    expect(ordenar(cocinaRespuestaSchema.parse(primera.body).estaciones)).toEqual(esperadas);
+
+    // Filtrar las comandas por estación no recorta la lista de estaciones.
+    const filtrada = await kds(`?estacionIds=${e.carta.barraId}`);
+    exigirEstado(filtrada, 200, 'KDS filtrado');
+    expect(ordenar(cocinaRespuestaSchema.parse(filtrada.body).estaciones)).toEqual(esperadas);
+
+    // Con el mismo estado responde 304; si Cocina vuelve al KDS, o la impresora cambia de nombre, el ETag cambia.
+    const etag = primera.headers['etag'] as string;
+    expect((await kds('', etag)).status).toBe(304);
+    exigirEstado(
+      await llamar(ctx, token, {
+        metodo: 'patch',
+        ruta: `/sucursales/${S1}/impresoras/${i.id}`,
+        cuerpo: { nombre: unico('Renombrada') },
+      }),
+      200,
+      'renombrar la impresora',
+    );
+    const renombrada = await kds('', etag);
+    expect(renombrada.status).toBe(200);
+    const nuevoEtag = renombrada.headers['etag'] as string;
+    expect(nuevoEtag).not.toBe(etag);
+    exigirEstado(
+      await poner(S1, e.carta.cocinaId, { destino: 'KDS' }, token),
+      200,
+      'Cocina vuelve al KDS',
+    );
+    const alKds = await kds('', nuevoEtag);
+    expect(alKds.status).toBe(200);
+    expect(
+      cocinaRespuestaSchema.parse(alKds.body).estaciones.every((x) => x.destino === 'KDS'),
+    ).toBe(true);
+  });
+
+  it('el destino de las estaciones de una empresa no se ve en el KDS de otra', async () => {
+    const { e } = await enviarConCocinaEnImpresora();
+    const otra = await prepararEscenarioP2(ctx);
+    const res = await llamar(ctx, otra.token.cocina, { metodo: 'get', ruta: '/cocina/comandas' });
+    exigirEstado(res, 200, 'KDS de otra empresa');
+    const estaciones = cocinaRespuestaSchema.parse(res.body).estaciones;
+    expect(estaciones.length).toBeGreaterThan(0);
+    expect(estaciones.every((x) => x.destino === 'KDS' && x.impresora === null)).toBe(true);
+    expect(estaciones.map((x) => x.id)).not.toContain(e.carta.cocinaId);
+  });
+
   it('las comandas ya creadas conservan su destino cuando la configuración cambia después', async () => {
     const { e, S1, token, L: lineas } = await enviarConCocinaEnImpresora();
     const primera = await abrirOrden(ctx, e.salon, e.token.mozo);

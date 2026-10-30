@@ -1,8 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import {
-  type EstadoImpresionRespuesta,
-  type LatidoEntrada,
-} from '@restaurante/contratos';
+import { type EstadoImpresionRespuesta, type LatidoEntrada } from '@restaurante/contratos';
 import { diaOperativo } from '@restaurante/dominio';
 import { QueryTypes, type Sequelize } from 'sequelize';
 import { CONEXION_API } from '../../nucleo/base-de-datos';

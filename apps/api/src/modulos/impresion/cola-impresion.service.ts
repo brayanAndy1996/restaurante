@@ -5,7 +5,12 @@ import { QueryTypes, type Sequelize } from 'sequelize';
 import { CONEXION_API } from '../../nucleo/base-de-datos';
 import { ContextoEmpresa } from '../../nucleo/contexto-empresa';
 import { RELOJ, type Reloj } from '../../nucleo/reloj';
-import type { DestinoDeEstacion, ImpresionPuerto, TrabajoParaEncolar } from '../pedidos/impresion';
+import type {
+  DestinoDeEstacion,
+  DestinoVisibleDeEstacion,
+  ImpresionPuerto,
+  TrabajoParaEncolar,
+} from '../pedidos/impresion';
 import { SucursalesConsultaService } from '../plataforma';
 import { EventosImpresion } from './eventos-impresion';
 
@@ -54,6 +59,41 @@ export class ColaImpresionService implements ImpresionPuerto {
       estacionIds.map((id): [string, DestinoDeEstacion] => {
         const impresoraId = impresoraDe.get(id.toLowerCase());
         return [id, impresoraId === undefined ? kds : { destino: 'IMPRESORA', impresoraId }];
+      }),
+    );
+  }
+
+  /** Criterio 138: el destino de cada estación con el nombre de su impresora, en una sola consulta. */
+  async destinosVisibles(
+    sucursalId: string,
+    estacionIds: readonly string[],
+  ): Promise<ReadonlyMap<string, DestinoVisibleDeEstacion>> {
+    const kds = { destino: 'KDS' } as const;
+    const ids = [...new Set(estacionIds.map((id) => id.toLowerCase()))];
+    const filas = await this.conexion.query<{
+      estacion_id: string;
+      impresora_id: string;
+      impresora_nombre: string;
+    }>(
+      `SELECT d.estacion_id, i.id AS impresora_id, i.nombre AS impresora_nombre
+         FROM estacion_destino d
+         JOIN impresora i ON i.id = d.impresora_id AND i.empresa_id = d.empresa_id
+        WHERE d.sucursal_id = $1 AND d.estacion_id = ANY($2::uuid[]) AND d.destino = 'IMPRESORA'`,
+      { bind: [sucursalId, ids], type: QueryTypes.SELECT },
+    );
+    const impresoraDe = new Map(filas.map((f) => [f.estacion_id, f]));
+    return new Map(
+      ids.map((id): [string, DestinoVisibleDeEstacion] => {
+        const fila = impresoraDe.get(id);
+        return [
+          id,
+          fila === undefined
+            ? kds
+            : {
+                destino: 'IMPRESORA',
+                impresora: { id: fila.impresora_id, nombre: fila.impresora_nombre },
+              },
+        ];
       }),
     );
   }

@@ -147,6 +147,24 @@ Hazlo después del paso 4, porque la comanda necesita productos y estaciones.
 
 Las fotos de la carta se guardan en la carpeta `archivos/` del proyecto.
 
+#### Impresión sin un Android (sección 3b)
+
+La app del puente (Android) llega en la entrega 3c. Mientras tanto puedes probar la impresión con un puente de mentira que corre en tu computadora y una impresora falsa que muestra los tickets en la consola.
+
+1. **Crea la impresora apuntando al emulador.** Como `fogon.admin`, en _Ajustes › Impresión_, crea una impresora de red con host `127.0.0.1` y puerto `9100`. Elígela como destino de la estación Cocina (y, si quieres, como impresora de caja).
+2. **Copia el texto del QR.** En _Ajustes › Impresión_, pulsa _Vincular puente_ y copia el texto del código (empieza con `restaurante-puente://vincular?…`). Sirve una sola vez y dura 10 minutos.
+3. **Vincula el simulador.** En una terminal nueva, dentro de la carpeta del proyecto, pega el texto entre comillas:
+
+   ```
+   pnpm puente:simular --emulador --qr "restaurante-puente://vincular?api=…&t=vi.…"
+   ```
+
+   La consola dice que el puente está conectado y que espera trabajos. Déjala abierta.
+
+4. **Ver los tickets.** Pide la _página de prueba_ de la impresora, o comanda como `fogon.mozo` (paso 3 del recorrido de arriba): el ticket aparece en la consola como texto, tal como saldría en el papel. Ctrl+C detiene el puente; para volver a conectarlo sin pedir otro código, corre `pnpm puente:simular --emulador`.
+
+Si el texto del QR trae una dirección que tu computadora no alcanza, agrega `--api http://localhost:3000`. Más opciones: `pnpm puente:simular --ayuda`.
+
 ### Probar desde tu celular (opcional)
 
 Tu celular tiene que estar en la misma red Wi-Fi que la computadora.
@@ -211,6 +229,7 @@ pnpm local:preparar
 | ------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------- |
 | `pnpm dev`                           | Arranca la API y la app                                                                                                      |
 | `pnpm local:preparar`                | Prepara la base en Docker con los datos de demostración                                                                      |
+| `pnpm puente:simular --qr "…"`       | Puente de impresión de mentira para probar la impresión sin Android (ver «Impresión sin un Android»)                         |
 | `pnpm test`                          | Corre todas las pruebas automáticas; tarda varios minutos (ver la sección "Pruebas" del `README.md`)                         |
 | `pnpm --filter @restaurante/app e2e` | Pruebas de punta a punta en el navegador (la primera vez: `pnpm --filter @restaurante/app exec playwright install chromium`) |
 | `docker compose stop`                | Detiene PostgreSQL sin borrar los datos                                                                                      |

@@ -505,8 +505,22 @@ export const comandaKdsSchema = z.object({
   lineas: z.array(lineaKdsSchema),
 });
 
+/**
+ * Una estación activa con adónde sale su comanda en la sucursal (criterio 138): el KDS la muestra para que
+ * Cocina/Barra sepa qué estaciones salen por impresora (y no aparecerán en la pantalla). `impresora` es `null`
+ * cuando el destino es el `KDS`.
+ */
+export const estacionKdsSchema = z.object({
+  id: uuidSchema,
+  nombre: z.string(),
+  destino: z.enum(['KDS', 'IMPRESORA']),
+  impresora: z.object({ id: uuidSchema, nombre: z.string() }).nullable(),
+});
+
 export const cocinaRespuestaSchema = z.object({
   ahora: instanteSchema,
+  /** Todas las estaciones activas de la sucursal con su destino, aunque `estacionIds` filtre las comandas. */
+  estaciones: z.array(estacionKdsSchema),
   pendientes: z.array(comandaKdsSchema),
   recientes: z.array(comandaKdsSchema),
 });
@@ -616,6 +630,7 @@ export type CocinaConsulta = z.input<typeof cocinaConsultaSchema>;
 export type EstadoLineaEntrada = z.input<typeof estadoLineaEntradaSchema>;
 export type LineaKds = z.infer<typeof lineaKdsSchema>;
 export type ComandaKds = z.infer<typeof comandaKdsSchema>;
+export type EstacionKds = z.infer<typeof estacionKdsSchema>;
 export type CocinaRespuesta = z.infer<typeof cocinaRespuestaSchema>;
 export type EventoSalonCambio = z.infer<typeof eventoSalonCambioSchema>;
 export type EventoOrdenCambio = z.infer<typeof eventoOrdenCambioSchema>;

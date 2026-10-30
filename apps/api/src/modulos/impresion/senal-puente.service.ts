@@ -62,11 +62,15 @@ export class SenalPuenteService implements OnApplicationBootstrap, OnModuleDestr
     @Inject(CONEXION_API) private readonly conexion: Sequelize,
     @Inject(ContextoEmpresa) private readonly contexto: ContextoEmpresa,
     @Inject(RELOJ) private readonly reloj: Reloj,
-    @Inject(EventosImpresion) private readonly eventos: EventosImpresion,
-    // El servidor de tiempo real depende del validador del puente (que usa este servicio): se pide al arrancar,
-    // no se inyecta, para no cerrar un ciclo de dependencias.
+    // El servidor de tiempo real depende del validador del puente (que usa este servicio) y los eventos dependen
+    // del publicador de Socket.IO (que usa al servidor): `EventosImpresion` y el servidor se piden con `ModuleRef`
+    // cuando hacen falta, no se inyectan, para no cerrar un ciclo de dependencias.
     @Inject(ModuleRef) private readonly modulos: ModuleRef,
   ) {}
+
+  private get eventos(): EventosImpresion {
+    return this.modulos.get(EventosImpresion, { strict: false });
+  }
 
   onApplicationBootstrap(): void {
     // Sin tiempo real nadie recibe el aviso: no hay nada que revisar por reloj.

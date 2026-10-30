@@ -18,7 +18,12 @@ import {
   type AppP5,
 } from '../impresion-critica/fabrica-p5';
 import { llamarPuente, nuevoPuente, type PuenteVinculado } from '../impresion-critica/fabrica-p6';
-import { exigirEstado, llamar, prepararEscenarioP2, type EscenarioP2 } from '../salon-critica/fabrica-p2';
+import {
+  exigirEstado,
+  llamar,
+  prepararEscenarioP2,
+  type EscenarioP2,
+} from '../salon-critica/fabrica-p2';
 import { SenalPuenteService, puenteVuelve } from '../../src/modulos/impresion/senal-puente.service';
 import { abrirCliente } from '../utilidades';
 import { cuerpoBluetooth, cuerpoRed, impresoraCreada } from './ayudas-impresion';
@@ -263,6 +268,7 @@ describe('el puente que deja de latir y vuelve (criterios 120 y 121, revisión c
     const { sucursalId, token, red, puente } = await preparar();
     ctx.reloj.avanzar(SEGUNDO);
     await latir(puente, [{ id: red.id, estado: 'LISTA' }]);
+    avisos(sucursalId);
     ctx.reloj.avanzar(61 * SEGUNDO);
     await senal.revisarAhora();
     expect(avisos(sucursalId)).toBe(1);
@@ -375,7 +381,9 @@ describe('el puente se conecta por el socket (criterios 111 y 120)', () => {
     expect(avisos(sucursalId), 'desconectar y reconectar con señal reciente').toBe(0);
 
     // Sin señal más de 60 segundos la revisión avisa; el socket que vuelve avisa otra vez.
+    ctx.reloj.avanzar(SEGUNDO);
     segundo.cerrar();
+    await esperarSenal(puente.id);
     ctx.reloj.avanzar(61 * SEGUNDO);
     await senal.revisarAhora();
     expect(avisos(sucursalId), 'sin señal por más de 60 segundos').toBe(1);

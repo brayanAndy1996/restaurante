@@ -40,12 +40,28 @@ export interface TrabajoParaEncolar {
   documento: DocumentoTicket;
 }
 
+/** Adónde sale una estación, con el nombre de la impresora (la pantalla del KDS lo muestra, criterio 138). */
+export type DestinoVisibleDeEstacion =
+  | { destino: Extract<DestinoComanda, 'KDS'> }
+  | {
+      destino: Extract<DestinoComanda, 'IMPRESORA'>;
+      impresora: { id: string; nombre: string };
+    };
+
 export interface ImpresionPuerto {
   /** El destino de cada estación pedida; una estación sin configurar sale por el `KDS`. */
   destinos(
     sucursalId: string,
     estacionIds: readonly string[],
   ): Promise<ReadonlyMap<string, DestinoDeEstacion>>;
+  /**
+   * Lo mismo que `destinos`, para mostrarlo: con el id y el nombre de la impresora de las estaciones que salen por
+   * impresora. Una consulta, sin importar cuántas estaciones se pidan.
+   */
+  destinosVisibles(
+    sucursalId: string,
+    estacionIds: readonly string[],
+  ): Promise<ReadonlyMap<string, DestinoVisibleDeEstacion>>;
   /**
    * Encola los trabajos en la transacción en curso, en el orden dado, y devuelve el id de cada uno en el mismo
    * orden. Después de confirmar avisa (`trabajo.nuevo`) al puente de la sucursal si tiene uno vinculado.
@@ -66,6 +82,14 @@ export class ImpresionSoloKds implements ImpresionPuerto {
     sucursalId: string,
     estacionIds: readonly string[],
   ): Promise<ReadonlyMap<string, DestinoDeEstacion>> {
+    void sucursalId;
+    return new Map(estacionIds.map((id) => [id, { destino: 'KDS' } as const]));
+  }
+
+  async destinosVisibles(
+    sucursalId: string,
+    estacionIds: readonly string[],
+  ): Promise<ReadonlyMap<string, DestinoVisibleDeEstacion>> {
     void sucursalId;
     return new Map(estacionIds.map((id) => [id, { destino: 'KDS' } as const]));
   }
