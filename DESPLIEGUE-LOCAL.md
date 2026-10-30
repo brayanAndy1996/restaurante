@@ -110,6 +110,9 @@ con el usuario `superadmin` y la contraseña `Superadmin-Demo-1`.
 
 ### Un recorrido sugerido
 
+Para una versión paso a paso, con datos de ejemplo para cada pantalla y para qué sirve cada función,
+mira [`docs/guia-de-uso/`](docs/guia-de-uso/README.md).
+
 1. **Ingreso y PIN.** Entra como `fogon.admin`, cambia la contraseña y acepta que el equipo te
    recuerde. Cierra la sesión: la próxima vez basta el PIN.
 2. **Otra persona en el mismo equipo.** Desde la pantalla de PIN, agrega a `fogon.mozo`. Luego cambia
