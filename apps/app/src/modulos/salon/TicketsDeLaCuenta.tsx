@@ -3,7 +3,9 @@ import { Aviso, ErrorDeCarga, EsqueletoDeLista, Plegable } from '@restaurante/ui
 import { useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
 import { AvisoPendiente } from '../../componentes/PendienteDeEnvio';
+import { tituloDeEnvio } from './ordenes';
 import { mensajeDeError } from '../../lib/errores';
+import type { TrabajoResumen } from '@restaurante/contratos';
 import { ListaDeTrabajos } from '../impresion/ListaDeTrabajos';
 import {
   claveTrabajos,
@@ -40,7 +42,7 @@ function Tickets({ orden }: { orden: OrdenRespuesta }) {
     queryKey: claveTrabajos(orden.sucursalId),
     queryFn: ({ signal }) => listarTrabajos(undefined, signal),
     refetchInterval: PERIODO_DE_LA_LISTA_MS,
-    select: (trabajos) => trabajosDeLaCuenta(trabajos, orden),
+    select: (trabajos) => trabajosDeLaCuenta(trabajos, orden.id),
   });
   const trabajos = consulta.data;
 
@@ -73,15 +75,63 @@ function Tickets({ orden }: { orden: OrdenRespuesta }) {
           imprime.
         </p>
       ) : trabajos ? (
-        <ListaDeTrabajos
-          etiqueta="Tickets de la cuenta"
-          trabajos={trabajos}
-          conMesa={false}
-          onReimprimir={(id) => void reimpresion.reimprimir(id)}
-          enCurso={reimpresion.enCurso}
-          pendiente={reimpresion.pendiente}
-        />
+        gruposDeTickets(trabajos, orden).map((grupo) => (
+          <section
+            key={grupo.clave}
+            className="cuenta__tickets-grupo"
+            aria-label={`Tickets: ${grupo.titulo}`}
+          >
+            <h4 className="cuenta__tickets-titulo">{grupo.titulo}</h4>
+            <ListaDeTrabajos
+              etiqueta={`Tickets de ${grupo.titulo}`}
+              trabajos={grupo.trabajos}
+              conMesa={false}
+              onReimprimir={(id) => void reimpresion.reimprimir(id)}
+              enCurso={reimpresion.enCurso}
+              pendiente={reimpresion.pendiente}
+            />
+          </section>
+        ))
       ) : null}
     </div>
   );
+}
+
+interface GrupoDeTickets {
+  clave: string;
+  titulo: string;
+  trabajos: TrabajoResumen[];
+}
+
+/**
+ * Los tickets de la cuenta agrupados por envío, con el mismo título que lleva el envío en la cuenta
+ * ("Comanda", "Adición 2"), y al final los que no son de un envío (marchas, anulaciones y pre-cuentas).
+ */
+function gruposDeTickets(
+  trabajos: readonly TrabajoResumen[],
+  orden: OrdenRespuesta,
+): GrupoDeTickets[] {
+  const porEnvio = new Map<number, TrabajoResumen[]>();
+  const otros: TrabajoResumen[] = [];
+  for (const t of trabajos) {
+    if (t.envioNumero === null) {
+      otros.push(t);
+    } else {
+      porEnvio.set(t.envioNumero, [...(porEnvio.get(t.envioNumero) ?? []), t]);
+    }
+  }
+  const grupos: GrupoDeTickets[] = [...porEnvio.entries()]
+    .sort(([a], [b]) => a - b)
+    .map(([numero, lista]) => ({
+      clave: `envio-${numero}`,
+      titulo: tituloDeEnvio(
+        numero,
+        orden.items.some((i) => i.envioNumero === numero && i.esAdicion),
+      ),
+      trabajos: lista,
+    }));
+  if (otros.length > 0) {
+    grupos.push({ clave: 'otros', titulo: 'Marchas, anulaciones y pre-cuentas', trabajos: otros });
+  }
+  return grupos;
 }

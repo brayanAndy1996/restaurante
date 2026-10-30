@@ -204,3 +204,16 @@
   border-radius: 0;
   background: transparent;
 }
+
+/* Un grupo por envío, con el mismo título que lleva en la cuenta */
+.cuenta__tickets-grupo {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espacio-sm);
+}
+.cuenta__tickets-titulo {
+  margin: 0;
+  font-size: 1.0625rem;
+  line-height: 1.375rem;
+  font-weight: 700;
+}

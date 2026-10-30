@@ -100,6 +100,8 @@ const trabajo = (n: number, extra: Partial<TrabajoResumen> = {}): TrabajoResumen
   creadoEn: '2026-10-30T17:31:00.000Z',
   impresoEn: '2026-10-30T17:31:02.000Z',
   reimpresionDe: null,
+  ordenId: null,
+  envioNumero: null,
   ...extra,
 });
 

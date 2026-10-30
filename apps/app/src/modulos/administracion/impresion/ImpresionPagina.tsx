@@ -317,9 +317,11 @@ function ImpresionDeSucursal({ sucursalId }: { sucursalId: string }) {
                   {usos.length > 0
                     ? `Ahora se usa en ${unirNombres(usos)}. Cambia ese destino antes de desactivarla. `
                     : 'Una impresora desactivada no aparece al elegir destinos y no se borra: puedes reactivarla. '}
-                  {editando.pendientes > 0
-                    ? `Sus ${editando.pendientes} trabajos pendientes siguen en cola hasta que venzan.`
-                    : ''}
+                  {editando.pendientes === 1
+                    ? 'Su trabajo pendiente sigue en cola hasta que venza.'
+                    : editando.pendientes > 1
+                      ? `Sus ${editando.pendientes} trabajos pendientes siguen en cola hasta que venzan.`
+                      : ''}
                 </p>
                 <Boton
                   variante="peligro"

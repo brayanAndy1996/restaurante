@@ -92,26 +92,15 @@ export const nombresDeMesas = (mesa: string | null): string[] =>
     .filter((n) => n !== '');
 
 /**
- * Los trabajos que son de esta cuenta. El contrato (`trabajoResumenSchema`) no trae el id de la cuenta ni el
- * número de envío, solo los nombres de sus mesas: se reconoce la cuenta por esas mesas y porque el trabajo
- * nació cuando ella ya estaba abierta. No incluye la página de prueba.
+ * Los trabajos de esta cuenta (criterio 128): los que traen su `ordenId` (con mesas unidas, el de la cuenta
+ * principal). La página de prueba no trae ninguno. En orden de creación.
  */
 export function trabajosDeLaCuenta(
   trabajos: readonly TrabajoResumen[],
-  cuenta: { mesas: readonly { nombre: string }[]; abiertaEn: string },
+  ordenId: string,
 ): TrabajoResumen[] {
-  const mesas = cuenta.mesas.map((m) => m.nombre.trim()).sort();
-  const desde = Date.parse(cuenta.abiertaEn);
   return trabajos
-    .filter((t) => {
-      if (t.tipo === 'PRUEBA') return false;
-      const delTrabajo = nombresDeMesas(t.mesa).sort();
-      return (
-        delTrabajo.length === mesas.length &&
-        delTrabajo.every((n, i) => n === mesas[i]) &&
-        Date.parse(t.creadoEn) >= desde - 1000
-      );
-    })
+    .filter((t) => t.ordenId === ordenId)
     .sort((a, b) => Date.parse(a.creadoEn) - Date.parse(b.creadoEn) || a.id.localeCompare(b.id));
 }
 

@@ -151,8 +151,6 @@ function Cuenta({
   const [precuenta, setPrecuenta] = useState<{
     datos: PrecuentaRespuesta;
     recibidaEn: number;
-    /** Veces que esta pre-cuenta salió a la impresora de caja desde que se abrió la hoja. */
-    copias: number;
   } | null>(null);
   const [falloPrecuenta, setFalloPrecuenta] = useState<string | null>(null);
   // Decisión 10: la pre-cuenta vigente que se vio y dejó de valer (se agregó o se anuló algo).
@@ -223,11 +221,7 @@ function Cuenta({
       void clientes.invalidateQueries({ queryKey: CLAVES_TIEMPO_REAL.orden(ordenId) });
       void clientes.invalidateQueries({ queryKey: CLAVES_TIEMPO_REAL.salon });
       if (montado.current) {
-        setPrecuenta((previa) => ({
-          datos,
-          recibidaEn: Date.now(),
-          copias: previa && previa.datos.numero === datos.numero ? previa.copias + 1 : 1,
-        }));
+        setPrecuenta({ datos, recibidaEn: Date.now() });
         setFalloPrecuenta(null);
       }
     },
@@ -578,15 +572,9 @@ function Cuenta({
               consulta.dataUpdatedAt < precuenta.recibidaEn || esLaVigente(orden, precuenta.datos)
             }
             pidiendo={pedirLaPrecuenta.isPending}
-            copias={precuenta.copias}
             pendiente={envio.pendiente}
             fallo={falloPrecuenta}
             onPedirOtra={() => {
-              setFalloPrecuenta(null);
-              pedirLaPrecuenta.mutate();
-            }}
-            // Pedirla de nuevo con la cuenta igual devuelve la misma pre-cuenta y manda otra copia (criterio 52).
-            onImprimir={() => {
               setFalloPrecuenta(null);
               pedirLaPrecuenta.mutate();
             }}

@@ -43,6 +43,8 @@ const trabajo = (n: number, extra: Partial<TrabajoResumen> = {}): TrabajoResumen
   creadoEn: minutosAntes(20),
   impresoEn: minutosAntes(20),
   reimpresionDe: null,
+  ordenId: ORDEN_ID,
+  envioNumero: null,
   ...extra,
 });
 
@@ -55,11 +57,17 @@ function montar(trabajos: TrabajoResumen[], orden = cuenta()) {
   return s;
 }
 
+/** Abre "Tickets impresos" y devuelve la lista del primer grupo (la que no tiene envío, si no hay otra). */
 async function abrirSeccion() {
   renderApp(RUTA);
   const seccion = await screen.findByRole('button', { name: /Tickets impresos/ });
   await userEvent.click(seccion);
-  return screen.findByRole('list', { name: 'Tickets de la cuenta' });
+  return (await screen.findAllByRole('list', { name: /^Tickets de / }))[0]!;
+}
+
+async function abrirGrupo(titulo: string) {
+  await abrirSeccion();
+  return screen.getByRole('region', { name: `Tickets: ${titulo}` });
 }
 
 describe('Reimprimir en la cuenta de la mesa (criterios 128 y 138)', () => {
@@ -70,47 +78,55 @@ describe('Reimprimir en la cuenta de la mesa (criterios 128 y 138)', () => {
     expect(boton).toHaveAttribute('aria-expanded', 'false');
     expect(s.de('GET', '/impresion/trabajos')).toHaveLength(0);
     await userEvent.click(boton);
-    await screen.findByRole('list', { name: 'Tickets de la cuenta' });
+    await screen.findAllByRole('list', { name: /^Tickets de / });
     expect(s.de('GET', '/impresion/trabajos')).toHaveLength(1);
   });
 
-  it('muestra solo los tickets de esta cuenta: ni de otra mesa, ni anteriores a ella, ni la página de prueba', async () => {
-    montar([
-      trabajo(1, { tipo: 'COMANDA', creadoEn: minutosAntes(24) }),
-      trabajo(2, { tipo: 'ADICION', creadoEn: minutosAntes(10) }),
-      trabajo(3, {
-        tipo: 'PRECUENTA',
-        impresora: { id: uuid(102), nombre: 'Caja' },
-        creadoEn: minutosAntes(2),
-      }),
-      trabajo(4, { mesa: '7' }),
-      trabajo(5, { creadoEn: minutosAntes(120) }),
-      trabajo(6, { tipo: 'PRUEBA', mesa: null }),
-    ]);
-    const lista = await abrirSeccion();
-    const filas = within(lista).getAllByRole('listitem');
-    expect(filas).toHaveLength(3);
-    expect(filas[0]).toHaveTextContent('Comanda');
-    expect(filas[0]).toHaveTextContent('Cocina');
-    expect(filas[1]).toHaveTextContent('Adición');
-    expect(filas[2]).toHaveTextContent('Pre-cuenta');
-    expect(filas[2]).toHaveTextContent('Caja');
-    // En la cuenta no se repite la mesa en cada ticket.
-    expect(lista).not.toHaveTextContent('Mesa 4');
-  });
-
-  it('con mesas unidas reconoce los tickets sin importar el orden de los nombres', async () => {
+  it('muestra solo los tickets de esta cuenta (por su ordenId), agrupados por envío', async () => {
     montar(
-      [trabajo(1, { mesa: '5, 4' }), trabajo(2, { mesa: '4' })],
+      [
+        trabajo(1, { tipo: 'COMANDA', envioNumero: 1, creadoEn: minutosAntes(24) }),
+        trabajo(2, { tipo: 'ADICION', envioNumero: 2, creadoEn: minutosAntes(10) }),
+        trabajo(3, {
+          tipo: 'PRECUENTA',
+          impresora: { id: uuid(102), nombre: 'Caja' },
+          creadoEn: minutosAntes(2),
+        }),
+        trabajo(4, { ordenId: uuid(999), envioNumero: 1 }),
+        trabajo(5, { tipo: 'PRUEBA', mesa: null, ordenId: null }),
+        trabajo(6, { tipo: 'MARCHAR', creadoEn: minutosAntes(5) }),
+      ],
       cuenta({
-        mesas: [
-          { id: uuid(104), nombre: '4' },
-          { id: uuid(105), nombre: '5' },
+        items: [
+          itemDeOrden(1, { nombre: 'Lomo saltado', envioNumero: 1 }),
+          itemDeOrden(2, { nombre: 'Chicha', envioNumero: 2, esAdicion: true }),
         ],
       }),
     );
-    const lista = await abrirSeccion();
-    expect(within(lista).getAllByRole('listitem')).toHaveLength(1);
+    const grupoComanda = await abrirGrupo('Comanda');
+    expect(within(grupoComanda).getAllByRole('listitem')).toHaveLength(1);
+    expect(grupoComanda).toHaveTextContent('Cocina');
+    const grupoAdicion = screen.getByRole('region', { name: 'Tickets: Adición 2' });
+    expect(within(grupoAdicion).getAllByRole('listitem')).toHaveLength(1);
+    const otros = screen.getByRole('region', {
+      name: 'Tickets: Marchas, anulaciones y pre-cuentas',
+    });
+    const filas = within(otros).getAllByRole('listitem');
+    expect(filas).toHaveLength(2);
+    expect(filas[0]).toHaveTextContent('Marcha');
+    expect(filas[1]).toHaveTextContent('Pre-cuenta');
+    expect(filas[1]).toHaveTextContent('Caja');
+    // Ni la otra cuenta ni la página de prueba.
+    expect(screen.getAllByRole('button', { name: /^Reimprimir/ })).toHaveLength(4);
+  });
+
+  it('con mesas unidas, los tickets de la principal salen aunque su mesa sea otra', async () => {
+    montar([
+      trabajo(1, { mesa: '5, 4', envioNumero: 1 }),
+      trabajo(2, { mesa: '4', ordenId: uuid(999) }),
+    ]);
+    const grupo = await abrirGrupo('Comanda');
+    expect(within(grupo).getAllByRole('listitem')).toHaveLength(1);
   });
 
   it('"Reimprimir" manda la reimpresión de ese ticket con una clave de idempotencia y lo confirma', async () => {
@@ -169,7 +185,7 @@ describe('Reimprimir en la cuenta de la mesa (criterios 128 y 138)', () => {
     expect(await screen.findByText('No pudimos cargar los tickets')).toBeVisible();
     falla = false;
     await userEvent.click(screen.getByRole('button', { name: 'Reintentar' }));
-    await screen.findByRole('list', { name: 'Tickets de la cuenta' });
+    await screen.findAllByRole('list', { name: /^Tickets de / });
   });
 
   it('una cuenta sin envíos o que ya no está abierta no ofrece reimprimir', async () => {
@@ -185,8 +201,8 @@ describe('Reimprimir en la cuenta de la mesa (criterios 128 y 138)', () => {
     expect(screen.queryByRole('button', { name: /Tickets impresos/ })).toBeNull();
   });
 
-  it('un ticket de una cuenta anterior de la misma mesa no se ofrece (solo desde que se abrió esta)', async () => {
-    montar([trabajo(1, { creadoEn: minutosAntes(26) })]);
+  it('un ticket de otra cuenta de la misma mesa no se ofrece', async () => {
+    montar([trabajo(1, { ordenId: uuid(999) })]);
     renderApp(RUTA);
     await userEvent.click(await screen.findByRole('button', { name: /Tickets impresos/ }));
     await waitFor(() =>

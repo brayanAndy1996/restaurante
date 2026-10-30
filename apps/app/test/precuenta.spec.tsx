@@ -102,6 +102,7 @@ function precuentaDe(extra: Partial<PrecuentaRespuesta> = {}): PrecuentaRespuest
     total: '169.20',
     nota: NOTA,
     impresion: 'SIN_IMPRESORA',
+    trabajoId: null,
     ...extra,
   };
 }
@@ -219,8 +220,10 @@ describe('Pedir la pre-cuenta (criterios 50 y 95)', () => {
   });
 });
 
-describe('Qué pasó con el papel (criterios 102 y 138)', () => {
-  const EN_COLA = () => precuentaDe({ impresion: 'EN_COLA' });
+describe('Qué pasó con el papel (criterios 102, 128 y 138)', () => {
+  const TRABAJO = uuid(8001);
+  const REIMPRESION = `/impresion/trabajos/${TRABAJO}/reimpresion`;
+  const EN_COLA = () => precuentaDe({ impresion: 'EN_COLA', trabajoId: TRABAJO });
 
   async function abrirHoja() {
     renderApp(RUTA);
@@ -228,8 +231,14 @@ describe('Qué pasó con el papel (criterios 102 y 138)', () => {
     return screen.findByRole('dialog', { name: 'Pre-cuenta' });
   }
 
+  function montarEnCola() {
+    const s = montar({ precuenta: EN_COLA() });
+    s.poner(`POST ${REIMPRESION}`, () => json(201, { trabajoId: uuid(8002) }));
+    return s;
+  }
+
   it('sin impresora de caja lo dice con palabras y no ofrece imprimir', async () => {
-    montar({ precuenta: precuentaDe({ impresion: 'SIN_IMPRESORA' }) });
+    montar({ precuenta: precuentaDe({ impresion: 'SIN_IMPRESORA', trabajoId: null }) });
     const hoja = await abrirHoja();
     const aviso = within(hoja).getByText('Sin impresora de caja');
     expect(aviso).toBeVisible();
@@ -240,7 +249,7 @@ describe('Qué pasó con el papel (criterios 102 y 138)', () => {
   });
 
   it('con impresora de caja, la pre-cuenta sale en cola y se puede mandar otra copia', async () => {
-    montar({ precuenta: EN_COLA() });
+    montarEnCola();
     const hoja = await abrirHoja();
     expect(within(hoja).getByText('En cola')).toBeVisible();
     expect(hoja).toHaveTextContent('La pre-cuenta salió a la impresora de caja.');
@@ -248,29 +257,33 @@ describe('Qué pasó con el papel (criterios 102 y 138)', () => {
     expect(within(hoja).getByRole('button', { name: 'Imprimir otra vez' })).toBeVisible();
   });
 
-  it('"Imprimir otra vez" pide la misma pre-cuenta con otro id y otra clave, y dice que mandó otra copia', async () => {
-    const s = montar({ precuenta: EN_COLA() });
+  it('sin trabajo (trabajoId nulo) no hay botón, aunque diga que está en cola', async () => {
+    montar({ precuenta: precuentaDe({ impresion: 'EN_COLA', trabajoId: null }) });
+    const hoja = await abrirHoja();
+    expect(within(hoja).queryByRole('button', { name: /Imprimir/ })).toBeNull();
+  });
+
+  it('"Imprimir otra vez" reimprime el trabajo de la pre-cuenta con su clave: no pide otra pre-cuenta', async () => {
+    const s = montarEnCola();
     const hoja = await abrirHoja();
     await userEvent.click(within(hoja).getByRole('button', { name: 'Imprimir otra vez' }));
     await waitFor(() =>
       expect(hoja).toHaveTextContent('Mandaste otra copia a la impresora de caja.'),
     );
-    // Sigue siendo la pre-cuenta 1 y sigue vigente.
+    const [reimpresion] = s.de('POST', REIMPRESION);
+    expect(reimpresion?.cabeceras.get('Idempotency-Key')).toMatch(/\S/);
+    // Sigue siendo la pre-cuenta 1 y no se pidió otra.
+    expect(s.de('POST', API)).toHaveLength(1);
     expect(within(hoja).getByText('Pre-cuenta 1')).toBeVisible();
     expect(hoja).not.toHaveTextContent('ya no vale');
-    const [primera, segunda] = s.de('POST', API);
-    expect((segunda?.cuerpo as { id: string }).id).not.toBe((primera?.cuerpo as { id: string }).id);
-    expect(segunda?.cabeceras.get('Idempotency-Key')).not.toBe(
-      primera?.cabeceras.get('Idempotency-Key'),
-    );
   });
 
   it('mientras se manda, el botón lo dice y no se puede tocar dos veces', async () => {
-    const s = montar({ precuenta: EN_COLA() });
+    const s = montarEnCola();
     const hoja = await abrirHoja();
     let responder: (r: Response) => void = () => undefined;
     s.poner(
-      `POST ${API}`,
+      `POST ${REIMPRESION}`,
       () =>
         new Promise<Response>((resolver) => {
           responder = resolver;
@@ -280,42 +293,48 @@ describe('Qué pasó con el papel (criterios 102 y 138)', () => {
     const cargando = await within(hoja).findByRole('button', { name: 'Imprimiendo…' });
     expect(cargando).toBeDisabled();
     await act(async () => {
-      responder(json(201, EN_COLA()));
+      responder(json(201, { trabajoId: uuid(8002) }));
     });
     expect(await within(hoja).findByRole('button', { name: 'Imprimir otra vez' })).toBeEnabled();
-    expect(s.de('POST', API)).toHaveLength(2);
+    expect(s.de('POST', REIMPRESION)).toHaveLength(1);
   });
 
-  it('un corte al reintentar repite la petición con la misma clave y el mismo id: no sale dos veces', async () => {
-    const s = montar({ precuenta: EN_COLA() });
+  it('un corte al reimprimir repite la petición con la misma clave: no sale dos veces', async () => {
+    const s = montarEnCola();
     const hoja = await abrirHoja();
     let intentos = 0;
-    s.poner(`POST ${API}`, () => {
+    s.poner(`POST ${REIMPRESION}`, () => {
       intentos += 1;
       return intentos < 3
         ? json(503, { codigo: 'ERROR_INTERNO', mensaje: 'No disponible' })
-        : json(201, EN_COLA());
+        : json(201, { trabajoId: uuid(8002) });
     });
     await userEvent.click(within(hoja).getByRole('button', { name: 'Imprimir otra vez' }));
     await waitFor(() => expect(hoja).toHaveTextContent('Mandaste otra copia'));
-    const llamadas = s.de('POST', API).slice(1);
+    const llamadas = s.de('POST', REIMPRESION);
     expect(llamadas).toHaveLength(3);
     expect(new Set(llamadas.map((l) => l.cabeceras.get('Idempotency-Key'))).size).toBe(1);
-    expect(new Set(llamadas.map((l) => (l.cuerpo as { id: string }).id)).size).toBe(1);
   });
 
-  it('si no se pudo, lo dice dentro de la hoja y se puede volver a tocar', async () => {
-    const s = montar({ precuenta: EN_COLA() });
+  it('si falla, lo dice dentro de la hoja y al volver a tocar usa la misma clave', async () => {
+    const s = montarEnCola();
     const hoja = await abrirHoja();
-    s.poner(`POST ${API}`, () => json(500, { codigo: 'ERROR_INTERNO', mensaje: 'Falló' }));
+    let respuesta: Response = json(500, { codigo: 'ERROR_INTERNO', mensaje: 'Falló' });
+    s.poner(`POST ${REIMPRESION}`, () => respuesta);
     await userEvent.click(within(hoja).getByRole('button', { name: 'Imprimir otra vez' }));
     const aviso = await within(hoja).findByRole('alert');
     expect(aviso).toHaveTextContent('No pudimos imprimir la pre-cuenta');
-    expect(within(hoja).getByRole('button', { name: 'Imprimir otra vez' })).toBeEnabled();
+    respuesta = json(201, { trabajoId: uuid(8002) });
+    await userEvent.click(within(hoja).getByRole('button', { name: 'Imprimir otra vez' }));
+    await waitFor(() => expect(hoja).toHaveTextContent('Mandaste otra copia'));
+    const [primera, segunda] = s.de('POST', REIMPRESION);
+    expect(segunda?.cabeceras.get('Idempotency-Key')).toBe(
+      primera?.cabeceras.get('Idempotency-Key'),
+    );
   });
 
   it('una pre-cuenta que ya no vale no se ofrece para imprimir: se pide otra', async () => {
-    const s = montar({ precuenta: EN_COLA() });
+    const s = montarEnCola();
     const hoja = await abrirHoja();
     await waitFor(() => expect(s.de('GET', `/ordenes/${ORDEN_ID}`).length).toBeGreaterThan(1));
     await cambiarLaCuenta(s);

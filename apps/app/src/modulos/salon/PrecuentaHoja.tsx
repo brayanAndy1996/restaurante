@@ -10,6 +10,7 @@ import {
 } from '@restaurante/ui';
 import { AvisoPendiente } from '../../componentes/PendienteDeEnvio';
 import { horaDeLima, montoEnSoles } from '../../lib/formato';
+import { useReimpresion } from '../impresion/trabajos';
 import { tituloDeMesas } from './ordenes';
 import { TEXTO_DE_IMPRESION, esFraseDeIcbper, frasesDeLaNota } from './precuenta';
 import './precuenta.css';
@@ -18,17 +19,13 @@ interface PropsPrecuenta {
   precuenta: PrecuentaRespuesta;
   /** `false` si después de pedirla se agregó o se anuló algo (decisión 10): la hoja lo dice y ofrece otra. */
   vale: boolean;
-  /** Se está pidiendo otra pre-cuenta o mandando otra copia a la impresora. */
+  /** Se está pidiendo otra pre-cuenta. */
   pidiendo: boolean;
-  /** Cuántas veces se mandó esta pre-cuenta a la impresora de caja desde que se abrió (1 la primera vez). */
-  copias: number;
   /** Un pedido espera la red. */
   pendiente: boolean;
   /** Lo que salió mal al pedir otra, si algo salió mal. */
   fallo: string | null;
   onPedirOtra: () => void;
-  /** Manda otra copia de esta misma pre-cuenta a la impresora de caja. */
-  onImprimir: () => void;
   onCerrar: () => void;
 }
 
@@ -42,14 +39,15 @@ export function PrecuentaHoja({
   precuenta,
   vale,
   pidiendo,
-  copias,
   pendiente,
   fallo,
   onPedirOtra,
-  onImprimir,
   onCerrar,
 }: PropsPrecuenta) {
   const { orden, lineas } = precuenta;
+  // Otra copia es una reimpresión del trabajo de esta pre-cuenta (criterio 128), no una pre-cuenta nueva.
+  const reimpresion = useReimpresion();
+  const puedeImprimir = vale && precuenta.impresion === 'EN_COLA' && precuenta.trabajoId !== null;
   const comensales = `${orden.comensales} ${orden.comensales === 1 ? 'comensal' : 'comensales'}`;
   return (
     <Hoja abierta onCerrar={onCerrar} titulo="Pre-cuenta" className="hoja-precuenta">
@@ -110,27 +108,34 @@ export function PrecuentaHoja({
           ))}
         </div>
 
-        {vale ? <ImpresionDeLaPrecuenta impresion={precuenta.impresion} copias={copias} /> : null}
+        {vale ? (
+          <ImpresionDeLaPrecuenta
+            impresion={precuenta.impresion}
+            otraCopia={reimpresion.hecho !== null}
+          />
+        ) : null}
 
         <div className="precuenta__pie">
-          <AvisoPendiente pendiente={pendiente} />
+          <AvisoPendiente pendiente={pendiente || reimpresion.pendiente} />
           {fallo ? (
-            <Aviso
-              tipo="error"
-              titulo={vale ? 'No pudimos imprimir la pre-cuenta' : 'No pudimos pedir la pre-cuenta'}
-            >
+            <Aviso tipo="error" titulo="No pudimos pedir la pre-cuenta">
               {fallo}
+            </Aviso>
+          ) : null}
+          {reimpresion.fallo ? (
+            <Aviso tipo="error" titulo="No pudimos imprimir la pre-cuenta">
+              {reimpresion.fallo.mensaje}
             </Aviso>
           ) : null}
           {vale ? (
             <>
-              {precuenta.impresion === 'EN_COLA' ? (
+              {puedeImprimir && precuenta.trabajoId ? (
                 <Boton
                   bloque
                   icono={IconoImpresora}
-                  cargando={pidiendo}
-                  textoCargando={pendiente ? 'Pendiente de envío' : 'Imprimiendo…'}
-                  onClick={onImprimir}
+                  cargando={reimpresion.enCurso !== null}
+                  textoCargando={reimpresion.pendiente ? 'Pendiente de envío' : 'Imprimiendo…'}
+                  onClick={() => void reimpresion.reimprimir(precuenta.trabajoId as string)}
                 >
                   Imprimir otra vez
                 </Boton>
@@ -164,10 +169,10 @@ export function PrecuentaHoja({
 /** Qué pasó con el papel: "En cola" o "Sin impresora de caja", dicho con palabras y con icono. */
 function ImpresionDeLaPrecuenta({
   impresion,
-  copias,
+  otraCopia,
 }: {
   impresion: PrecuentaRespuesta['impresion'];
-  copias: number;
+  otraCopia: boolean;
 }) {
   if (impresion === 'SIN_IMPRESORA') {
     return (
@@ -182,7 +187,7 @@ function ImpresionDeLaPrecuenta({
       <EtiquetaDeEstado tono="alerta" icono={IconoPendiente}>
         {texto.etiqueta}
       </EtiquetaDeEstado>
-      <p>{copias > 1 ? texto.otraCopia : texto.ayuda}</p>
+      <p>{otraCopia ? texto.otraCopia : texto.ayuda}</p>
     </div>
   );
 }

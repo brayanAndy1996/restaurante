@@ -508,6 +508,16 @@ describe('Ajustes › Impresión: editar y desactivar (criterio 104)', () => {
     });
   });
 
+  it('con un solo trabajo pendiente lo dice en singular', async () => {
+    api({ impresoras: [impresora(1, 'Cocina', { pendientes: 1 })] });
+    await abrir();
+    await userEvent.click(screen.getByRole('button', { name: /Cocina/ }));
+    expect(
+      screen.getByText(/Su trabajo pendiente sigue en cola hasta que venza\./),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/1 trabajos/)).toBeNull();
+  });
+
   it('desactiva una impresora libre y la deja en la lista como inactiva, con opción de reactivarla', async () => {
     const s = api({ impresoras: [impresora(1, 'Cocina', { pendientes: 2 })] });
     await abrir();
