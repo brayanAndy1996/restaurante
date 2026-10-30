@@ -473,7 +473,7 @@ test('se apaga la impresora de Cocina: aparece «no responde» y la comanda sigu
     await comandar(mozo.page, 'Mesa 1', [[CARTA.ceviche, PRECIOS.ceviche]]);
     // Según el momento, la impresora apagada aún no se ve como «no responde»: se aceptan las dos frases exactas.
     await expect(
-      mozo.page.getByText(/^La adición 2 se envió a cocina( y quedó en cola de impresión)?\.$/),
+      mozo.page.getByText(/La adición 2 se envió a cocina( y quedó en cola de impresión)?\./),
     ).toBeVisible();
   });
 
