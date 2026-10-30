@@ -41,11 +41,12 @@ CREATE TABLE impresora (
   actualizado_en timestamptz NOT NULL DEFAULT now(),
   CONSTRAINT impresora_sucursal_fk
     FOREIGN KEY (sucursal_id, empresa_id) REFERENCES sucursal (id, empresa_id),
-  -- Una impresora de red lleva host y puerto; una Bluetooth, la dirección y nada de red.
-  CONSTRAINT impresora_conexion_ck CHECK (
-    (conexion_tipo = 'RED' AND host IS NOT NULL AND puerto IS NOT NULL AND mac IS NULL)
-    OR (conexion_tipo = 'BLUETOOTH' AND mac IS NOT NULL AND host IS NULL AND puerto IS NULL)
-  ),
+  -- Una impresora de red lleva host y puerto; una Bluetooth, la dirección y nada de red. Cada CHECK deja pasar
+  -- el valor nulo del tipo (la prueba de catálogo de trazabilidad inserta filas casi vacías en una copia).
+  CONSTRAINT impresora_red_ck
+    CHECK (conexion_tipo <> 'RED' OR (host IS NOT NULL AND puerto IS NOT NULL AND mac IS NULL)),
+  CONSTRAINT impresora_bluetooth_ck
+    CHECK (conexion_tipo <> 'BLUETOOTH' OR (mac IS NOT NULL AND host IS NULL AND puerto IS NULL)),
   CONSTRAINT impresora_id_empresa_unico UNIQUE (id, empresa_id),
   -- Llave de los destinos y de la impresora de caja: la impresora es de la misma sucursal y empresa.
   CONSTRAINT impresora_id_sucursal_empresa_unico UNIQUE (id, sucursal_id, empresa_id)

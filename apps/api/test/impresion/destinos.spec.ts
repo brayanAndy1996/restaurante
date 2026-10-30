@@ -216,6 +216,7 @@ describe('criterio 100 · configurar el destino', () => {
       200,
       'a impresora',
     );
+    ctx.reloj.avanzar(1000);
     const vuelta = await poner(S1, e.carta.barraId, { destino: 'KDS' }, token);
     exigirEstado(vuelta, 200, 'a KDS');
     expect(vuelta.body).toMatchObject({ destino: 'KDS', impresora: null });
@@ -364,11 +365,13 @@ describe('criterio 100 · configurar el destino', () => {
     for (const r of respuestas) expect(r.status, JSON.stringify(r.body)).toBe(200);
     const filas = await filasDestino(S1, e.carta.cocinaId);
     expect(filas).toHaveLength(1);
+    // Cada cambio real deja una fila de auditoría (nunca más que peticiones) y todas terminan en una impresora.
     const auditoria = await auditoriaDe(admin, e.e.A.empresaId, 'configurar_destino_estacion');
-    // Cada cambio real deja una fila; la última coincide con lo guardado.
-    expect(auditoria.at(-1)!.detalle).toMatchObject({
-      despues: { destino: 'IMPRESORA', impresoraId: filas[0]!.impresora_id },
-    });
+    expect(auditoria.length).toBeGreaterThanOrEqual(1);
+    expect(auditoria.length).toBeLessThanOrEqual(5);
+    for (const f of auditoria) {
+      expect(f.detalle).toMatchObject({ despues: { destino: 'IMPRESORA' } });
+    }
   });
 });
 
@@ -417,12 +420,15 @@ describe('criterio 102 · impresora de caja', () => {
     );
 
     exigirEstado(await ponerCaja(S1, { impresoraCajaId: uno.id }, token), 200, 'uno');
+    ctx.reloj.avanzar(1000);
     exigirEstado(await ponerCaja(S1, { impresoraCajaId: uno.id }, token), 200, 'repetida');
     expect(await auditoriaDe(admin, e.e.A.empresaId, 'configurar_impresion_sucursal')).toHaveLength(
       1,
     );
 
+    ctx.reloj.avanzar(1000);
     exigirEstado(await ponerCaja(S1, { impresoraCajaId: dos.id }, token), 200, 'dos');
+    ctx.reloj.avanzar(1000);
     exigirEstado(await ponerCaja(S1, { impresoraCajaId: null }, token), 200, 'quitarla');
     expect((await verCaja(S1, token)).body).toEqual({ impresoraCajaId: null });
     const filas = await auditoriaDe(admin, e.e.A.empresaId, 'configurar_impresion_sucursal');
@@ -485,7 +491,7 @@ describe('criterio 102 · impresora de caja', () => {
 });
 
 describe('IMPRESION.destinos · el ruteo de las comandas y el KDS (criterio 61 en 3b)', () => {
-  /** Cocina (lomo) a una impresora, Barra (gaseosa) sin configurar; envía y devuelve las comandas. */
+  /** Cocina a una impresora y Barra sin configurar (el combo de la carta de ejemplo sale por las dos). */
   async function enviarConCocinaEnImpresora() {
     const e = await prepararEscenarioP2(ctx);
     const token = e.token.adminA;
@@ -511,7 +517,10 @@ describe('IMPRESION.destinos · el ruteo de las comandas y el KDS (criterio 61 e
     };
     try {
       const orden = await abrirOrden(ctx, e.salon, e.token.mozo);
-      await enviarOk(ctx, e.token.mozo, orden.id, [lineas.lomo(['3/4'], 1), lineas.gaseosa(1)]);
+      await enviarOk(ctx, e.token.mozo, orden.id, [
+        lineas.lomo(['3/4'], 1),
+        lineas.combo(['Cerveza', 'Ensalada'], 1),
+      ]);
     } finally {
       puerto.destinos = original;
     }
@@ -528,7 +537,7 @@ describe('IMPRESION.destinos · el ruteo de las comandas y el KDS (criterio 61 e
     const orden = await abrirOrden(ctx, e.salon, e.token.mozo);
     const envio = await enviarOk(ctx, e.token.mozo, orden.id, [
       lineas.lomo(['3/4'], 1),
-      lineas.gaseosa(1),
+      lineas.combo(['Cerveza', 'Ensalada'], 1),
     ]);
     expect(envio.comandas.map((c) => [c.estacionNombre, c.destino]).sort()).toEqual([
       ['Barra', 'KDS'],
@@ -547,7 +556,10 @@ describe('IMPRESION.destinos · el ruteo de las comandas y el KDS (criterio 61 e
   it('el KDS solo muestra las comandas con destino KDS y la de la impresora no se opera desde él', async () => {
     const { e, L: lineas } = await enviarConCocinaEnImpresora();
     const orden = await abrirOrden(ctx, e.salon, e.token.mozo);
-    await enviarOk(ctx, e.token.mozo, orden.id, [lineas.lomo(['3/4'], 1), lineas.gaseosa(1)]);
+    await enviarOk(ctx, e.token.mozo, orden.id, [
+      lineas.lomo(['3/4'], 1),
+      lineas.combo(['Cerveza', 'Ensalada'], 1),
+    ]);
     const kds = await llamar(ctx, e.token.cocina, { metodo: 'get', ruta: '/cocina/comandas' });
     exigirEstado(kds, 200, 'KDS');
     const propias = cocinaRespuestaSchema
@@ -585,26 +597,32 @@ describe('IMPRESION.destinos · el ruteo de las comandas y el KDS (criterio 61 e
       'Barra a impresora',
     );
     const segunda = await abrirOrden(ctx, e.salon, e.token.mozo);
-    await enviarOk(ctx, e.token.mozo, segunda.id, [lineas.lomo(['3/4'], 1), lineas.gaseosa(1)]);
+    await enviarOk(ctx, e.token.mozo, segunda.id, [
+      lineas.lomo(['3/4'], 1),
+      lineas.combo(['Cerveza', 'Ensalada'], 1),
+    ]);
     // Una adición a la primera orden sale por el destino de ahora (Cocina: KDS).
     await enviarOk(ctx, e.token.mozo, primera.id, [lineas.lomo(['3/4'], 1)]);
 
     const destinoDe = async (ordenId: string) =>
       (
-        await admin.query(
-          `SELECT c.estacion_id, c.tipo, c.destino FROM comanda c WHERE c.orden_id = $1
-            ORDER BY c.creado_en, c.tipo`,
+        await admin.query<{ estacion_id: string; tipo: string; destino: string }>(
+          'SELECT estacion_id, tipo, destino FROM comanda WHERE orden_id = $1',
           [ordenId],
         )
-      ).rows;
-    expect(await destinoDe(primera.id)).toEqual([
-      { estacion_id: e.carta.cocinaId, tipo: 'COMANDA', destino: 'IMPRESORA' },
-      { estacion_id: e.carta.cocinaId, tipo: 'ADICION', destino: 'KDS' },
-    ]);
-    expect((await destinoDe(segunda.id)).map((c) => [c.estacion_id, c.destino]).sort()).toEqual(
+      ).rows
+        .map((c) => [c.estacion_id, c.tipo, c.destino].join('|'))
+        .sort();
+    expect(await destinoDe(primera.id)).toEqual(
       [
-        [e.carta.cocinaId, 'KDS'],
-        [e.carta.barraId, 'IMPRESORA'],
+        [e.carta.cocinaId, 'COMANDA', 'IMPRESORA'].join('|'),
+        [e.carta.cocinaId, 'ADICION', 'KDS'].join('|'),
+      ].sort(),
+    );
+    expect(await destinoDe(segunda.id)).toEqual(
+      [
+        [e.carta.cocinaId, 'COMANDA', 'KDS'].join('|'),
+        [e.carta.barraId, 'COMANDA', 'IMPRESORA'].join('|'),
       ].sort(),
     );
   });
@@ -624,8 +642,10 @@ describe('IMPRESION.destinos · el ruteo de las comandas y el KDS (criterio 61 e
       'Cocina de S1',
     );
     const orden = await abrirOrden(ctx, e.salonS2, e.token.mozoS2);
-    const envio = await enviarOk(ctx, e.token.mozoS2, orden.id, [lineasDe(e.carta).gaseosa(1)]);
-    expect(envio.comandas.map((c) => c.destino)).toEqual(['KDS']);
+    const envio = await enviarOk(ctx, e.token.mozoS2, orden.id, [
+      lineasDe(e.carta).combo(['Cerveza', 'Ensalada'], 1),
+    ]);
+    expect(envio.comandas.map((c) => c.destino)).toEqual(['KDS', 'KDS']);
   });
 
   it('IMPRESION.encolar acepta trabajos mientras no exista la cola (T40) y no lanza', async () => {

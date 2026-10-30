@@ -55,10 +55,27 @@ export async function auditoriaDe(admin: Client, empresaId: string, accion: stri
   return filasDeAuditoria(admin, 'empresa_id = $1 AND accion = $2', [empresaId, accion]);
 }
 
-/** Cuántas filas de auditoría tiene la empresa en total. */
+/** Las acciones auditadas de la impresión de este grupo (criterio 130). */
+export const ACCIONES_DE_IMPRESION = [
+  'crear_impresora',
+  'modificar_impresora',
+  'configurar_destino_estacion',
+  'configurar_impresion_sucursal',
+] as const;
+
+/** Cuántas filas de auditoría de la impresión tiene la empresa (abrir sesiones también audita, por eso se filtra). */
 export async function totalAuditoria(admin: Client, empresaId: string): Promise<number> {
   const { rows } = await admin.query<{ n: string }>(
-    'SELECT count(*)::text AS n FROM auditoria WHERE empresa_id = $1',
+    'SELECT count(*)::text AS n FROM auditoria WHERE empresa_id = $1 AND accion = ANY($2::text[])',
+    [empresaId, [...ACCIONES_DE_IMPRESION]],
+  );
+  return Number(rows[0]!.n);
+}
+
+/** Impresoras de una empresa (las pruebas comparten la base, así que se cuenta por empresa). */
+export async function totalImpresoras(admin: Client, empresaId: string): Promise<number> {
+  const { rows } = await admin.query<{ n: string }>(
+    'SELECT count(*)::text AS n FROM impresora WHERE empresa_id = $1',
     [empresaId],
   );
   return Number(rows[0]!.n);

@@ -26,6 +26,7 @@ import {
   rutaImpresion,
   rutaImpresoras,
   totalAuditoria,
+  totalImpresoras,
   unico,
 } from './ayudas-impresion';
 
@@ -133,7 +134,7 @@ describe('criterio 103 · alta', () => {
   });
 
   it('valida los límites y rechaza campos desconocidos con 400, sin crear nada', async () => {
-    const antes = (await admin.query('SELECT count(*)::int AS n FROM impresora')).rows[0].n;
+    const antes = await totalImpresoras(admin, A().empresaId);
     const red = { tipo: 'RED', host: '192.168.1.50', puerto: 9100 };
     const malos: Record<string, unknown>[] = [
       { nombre: '' },
@@ -170,7 +171,7 @@ describe('criterio 103 · alta', () => {
     delete (sinAncho as Record<string, unknown>).anchoMm;
     esperarError(await crear(A().S1, sinAncho), 400, 'DATOS_INVALIDOS');
     esperarError(await crear(A().S1, {}), 400, 'DATOS_INVALIDOS');
-    expect((await admin.query('SELECT count(*)::int AS n FROM impresora')).rows[0].n).toBe(antes);
+    expect(await totalImpresoras(admin, A().empresaId)).toBe(antes);
   });
 
   it('el nombre es único en la sucursal sin distinguir mayúsculas (409); en otra sucursal o empresa se repite', async () => {
@@ -184,13 +185,13 @@ describe('criterio 103 · alta', () => {
   });
 
   it('una sucursal de B o inexistente es 404 con el mismo cuerpo, y no crea nada', async () => {
-    const antes = (await admin.query('SELECT count(*)::int AS n FROM impresora')).rows[0].n;
+    const antes = await totalImpresoras(admin, A().empresaId);
     const deB = await crear(B().S1, cuerpoRed());
     const inexistente = await crear(randomUUID(), cuerpoRed());
     esperarError(inexistente, 404, 'NO_ENCONTRADO');
     expect(deB.status).toBe(404);
     expect(deB.body).toEqual(inexistente.body);
-    expect((await admin.query('SELECT count(*)::int AS n FROM impresora')).rows[0].n).toBe(antes);
+    expect(await totalImpresoras(admin, A().empresaId)).toBe(antes);
   });
 
   it('con la misma Idempotency-Key devuelve lo guardado sin crear otra', async () => {
@@ -212,7 +213,7 @@ describe('criterio 103 · alta', () => {
     const i = await impresoraCreada(ctx, T(), A().S2, cuerpoBluetooth());
     const filas = await auditoriaDe(admin, A().empresaId, 'crear_impresora');
     expect(filas).toHaveLength(antes + 1);
-    const fila = filas.at(-1)!;
+    const fila = filas.find((f) => f.entidad_id === i.id)!;
     expect(fila).toMatchObject({
       sucursal_id: A().S2,
       actor_usuario_id: A().base.admin.id,
@@ -246,6 +247,7 @@ describe('criterio 104 · editar y desactivar', () => {
       gaveta: true,
     });
     exigirEstado(res, 200, 'campos simples');
+    ctx.reloj.avanzar(1000);
     expect(res.body).toMatchObject({
       nombre: nuevoNombre,
       anchoMm: 58,
@@ -259,6 +261,7 @@ describe('criterio 104 · editar y desactivar', () => {
       conexion: { tipo: 'BLUETOOTH', mac: 'AA:BB:CC:00:11:22' },
     });
     exigirEstado(res, 200, 'a Bluetooth');
+    ctx.reloj.avanzar(1000);
     expect(res.body.conexion).toEqual({ tipo: 'BLUETOOTH', mac: 'AA:BB:CC:00:11:22' });
     expect(await filaDeImpresora(i.id)).toMatchObject({
       conexion_tipo: 'BLUETOOTH',
@@ -507,7 +510,7 @@ describe('permisos · ADMINISTRAR en las rutas de impresoras', () => {
       ['patch', `${rutaImpresoras(A().S1)}/${i.id}`, { nombre: 'Otra' }],
     ];
     const antes = await totalAuditoria(admin, A().empresaId);
-    const filas = (await admin.query('SELECT count(*)::int AS n FROM impresora')).rows[0].n;
+    const filas = await totalImpresoras(admin, A().empresaId);
     for (const [rol, persona] of personas) {
       const sesiones = await sesionesDe(ctx, persona, A().S1);
       const tokens = { contraseña: sesiones.contrasena, PIN: sesiones.pin };
@@ -524,7 +527,7 @@ describe('permisos · ADMINISTRAR en las rutas de impresoras', () => {
       }
     }
     expect(await totalAuditoria(admin, A().empresaId)).toBe(antes);
-    expect((await admin.query('SELECT count(*)::int AS n FROM impresora')).rows[0].n).toBe(filas);
+    expect(await totalImpresoras(admin, A().empresaId)).toBe(filas);
     expect(await filaDeImpresora(i.id)).toMatchObject({ nombre: i.nombre });
     // Sin sesión, 401.
     expect(

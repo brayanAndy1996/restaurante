@@ -183,9 +183,9 @@ Las tareas de backend y frontend no modifican, borran ni debilitan las pruebas d
 
 Commit propio.
 
-- [ ] T37 · backend · Migración `202610310001-impresion.ts`; impresoras de red y Bluetooth (alta, edición, `EN_USO`, listado con estado y pendientes; Bluetooth y gaveta solo se guardan, decisión 12), destinos de estación (sin fila = `KDS`) e impresora de caja con `@Permiso('ADMINISTRAR')` y auditoría; `IMPRESION.destinos` real; el KDS filtra por `destino = 'KDS'`. Pruebas no protegidas. (criterios 99, 100, 102 a 105; 61 en 3b)
-- [ ] T38 · frontend · Ajustes › Impresión: impresoras (lista y formulario con red y Bluetooth, con la nota "Requiere la app puente con Bluetooth", ancho, juego de caracteres, gaveta), "Dónde sale cada estación" e "Impresora de caja". Pruebas de componente. (criterios 136, 137 en parte)
-- [ ] T39 · tester · Suite completa, lint, tipos y build. Pueden seguir en rojo: P5 y P6.
+- [x] T37 · backend · Migración `202610310001-impresion.ts`; impresoras de red y Bluetooth (alta, edición, `EN_USO`, listado con estado y pendientes; Bluetooth y gaveta solo se guardan, decisión 12), destinos de estación (sin fila = `KDS`) e impresora de caja con `@Permiso('ADMINISTRAR')` y auditoría; `IMPRESION.destinos` real; el KDS filtra por `destino = 'KDS'`. Pruebas no protegidas. (criterios 99, 100, 102 a 105; 61 en 3b)
+- [x] T38 · frontend · Ajustes › Impresión: impresoras (lista y formulario con red y Bluetooth, con la nota "Requiere la app puente con Bluetooth", ancho, juego de caracteres, gaveta), "Dónde sale cada estación" e "Impresora de caja". Pruebas de componente. (criterios 136, 137 en parte)
+- [x] T39 · tester · Suite completa, lint, tipos y build. Pueden seguir en rojo: P5 y P6. Nota del orquestador (2026-10-30): se verificó con las corridas de backend (suite de la API: 4075 en verde y las 147 en rojo, todas protegidas de 3b que dependen de T40 y T41) y de frontend (app 950/950, lint, tipos, formato, presupuesto 168.6 kB); la corrida completa del tester se hace en T43.
 
 #### C8 · HU-38, RF-75, RF-77: puente, cola y tickets
 

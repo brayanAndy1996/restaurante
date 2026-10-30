@@ -283,7 +283,7 @@ describe('criterio 84 · llaves compuestas entre empresas', () => {
       tabla: 'estacion_destino',
       columna: 'estacion_id',
       deB: () => B.estacion1,
-      sinChocar: () => ({}),
+      sinChocar: () => ({ sucursal_id: A.sucursal2, destino: 'KDS', impresora_id: null }),
     },
     {
       nombre: 'estacion_destino.impresora_id',
@@ -297,14 +297,14 @@ describe('criterio 84 · llaves compuestas entre empresas', () => {
       tabla: 'impresion_sucursal',
       columna: 'sucursal_id',
       deB: () => B.sucursal2,
-      sinChocar: () => ({ impresora_caja_id: null }),
+      sinChocar: () => ({ sucursal_id: A.sucursal2, impresora_caja_id: null }),
     },
     {
       nombre: 'impresion_sucursal.impresora_caja_id',
       tabla: 'impresion_sucursal',
       columna: 'impresora_caja_id',
       deB: () => B.impresora,
-      sinChocar: () => ({ sucursal_id: A.sucursal2 }),
+      sinChocar: () => ({ sucursal_id: A.sucursal2, impresora_caja_id: A.impresoraS2 }),
     },
   ];
 
@@ -377,7 +377,7 @@ describe('únicos y CHECK de esta migración', () => {
   it('el nombre de la impresora es único en la sucursal sin mayúsculas, y vale en otra sucursal y en otra empresa', async () => {
     const nombre = await nombreDe(A.impresora);
     const repetido = await comoApi(A.empresaId, () =>
-      errorDe(copia('impresora', { nombre: nombre.toUpperCase() })),
+      errorDe(copia('impresora', { nombre: nombre.toUpperCase(), sucursal_id: A.sucursal1 })),
     );
     expect(repetido.code, repetido.message).toBe('23505');
     expect(repetido.constraint).toBe('impresora_nombre_unico');
