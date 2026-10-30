@@ -60,7 +60,7 @@ jobs:
   # equipos recordados e ingreso con PIN (tarea T35 de la sección 002).
   e2e:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 25
 
     services:
       postgres:

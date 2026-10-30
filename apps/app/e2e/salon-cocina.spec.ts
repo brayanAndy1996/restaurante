@@ -12,12 +12,14 @@ import { afirmarPantallaDeCelular, entrarEnCelular, medirPantalla } from './ayud
 import {
   CARTA,
   PRECIOS,
+  abrirElComandero,
   afirmarClavesDelSalon,
   afirmarEstadoDeMesa,
   baldosaDeMesa,
   crearEscenarioDeSalon,
   cuentaPorApi,
   destino,
+  elegirProducto,
   esperarLaCuenta,
   itemDeCuenta,
   tarjetaDeCocina,
@@ -101,21 +103,6 @@ async function verPorEnviar(page: Page): Promise<Locator> {
   const panel = page.getByRole('region', { name: 'Por enviar' });
   await expect(panel).toBeVisible();
   return panel;
-}
-
-/** Abre el comandero desde la cuenta y deja la carta a la vista. */
-async function abrirElComandero(page: Page, titulo: string): Promise<void> {
-  await page.getByRole('link', { name: 'Agregar', exact: true }).click();
-  await expect(page.getByRole('heading', { name: `Agregar a ${titulo}`, level: 1 })).toBeVisible();
-  await expect(page.getByRole('region', { name: 'Carta' })).toBeVisible();
-}
-
-/** Toca un producto de la carta del comandero; abre su hoja. */
-async function elegirProducto(page: Page, nombre: string, precio: string) {
-  await page.getByRole('button', { name: `${nombre}, ${precio}`, exact: true }).click();
-  const hoja = page.getByRole('dialog', { name: nombre });
-  await expect(hoja).toBeVisible();
-  return hoja;
 }
 
 /** El PIN del supervisor en el teclado propio de la ventana de clave (el del sistema nunca se abre). */
