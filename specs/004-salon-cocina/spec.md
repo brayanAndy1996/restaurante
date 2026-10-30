@@ -6,7 +6,7 @@
   - **Se dejan para otras secciones** (decisiones 2 a 4 y 13): HU-18 y RF-34 (mostrador, sección 4), RF-33 (descuentos y cortesías, sección 4), HU-20, RF-38 y RF-67 a RF-70 (stock y porciones, sección 6; aquí queda el punto de enganche), la app Android del puente (entrega propia 3c).
   - Fuente de negocio: `fuentes.md` de esta carpeta (extracto literal, rev. 25 y 21), las decisiones del usuario de 002 y 003 y las "Decisiones del usuario (2026-10-29)" de esta especificación, que mandan donde completan o cambian `fuentes.md`. Los criterios las citan como "decisión N".
 - **Ruta crítica:** sí, en parte (decidida por el orquestador el 2026-10-29, con la propuesta del especificador: P0 a P4 en 3a, P5 y P6 en 3b; el resto no es crítico). Ver "Clasificación de ruta crítica".
-- **Estado:** 3a terminada (2026-10-29); en curso 3b.
+- **Estado:** 3a terminada (2026-10-29); 3b terminada (2026-10-30); 3c pendiente.
 
 ## Objetivo
 
@@ -564,7 +564,7 @@ Todas las tablas de `public` con `id uuid`, `empresa_id`, `creado_en`, `actualiz
 - **`sucursal_acceso.minutos_inactividad_cocina`** (módulo seguridad, tabla de 002; decisión 11): `smallint NOT NULL DEFAULT 60`, `CHECK` de 1 a 720. Las filas existentes quedan con 60; sin fila, vale 60.
 - **Esquema `tiempo_real`** (dueño `restaurante_migrador`, `USAGE` solo para `restaurante_tiempo_real`): `socket_io_attachments (id bigserial, created_at timestamptz, payload bytea)`, la tabla que usa el adaptador para mensajes grandes. Rol `restaurante_tiempo_real` creado por `db:preparar` (`LOGIN`, sin `BYPASSRLS`, `CREATEROLE` ni `CREATEDB`, sin membresías).
 
-**Entrega 3b** (módulo impresión; cuatro migraciones, `202610310001` a `202610310004`, ver `plan.md`, "Migraciones")
+**Entrega 3b** (módulo impresión; cinco migraciones, `202610310001` a `202610310005`, ver `plan.md`, "Migraciones")
 
 - **`impresora`**: `sucursal_id`, `nombre` (1 a 40), `conexion_tipo` (`CHECK IN ('RED','BLUETOOTH')`), `host null`, `puerto integer null` (1 a 65535), `mac null`, `ancho_mm smallint` (`CHECK IN (58, 80)`), `juego_caracteres` (`CHECK IN (…)`), `gaveta`, `activa`. `CHECK` de que `RED` tiene `host` y `puerto` y `BLUETOOTH` tiene `mac`. Único `(sucursal_id, lower(nombre))`.
 - **`estacion_destino`**: `sucursal_id`, `estacion_id`, `destino` (`CHECK IN ('KDS','IMPRESORA')`), `impresora_id null` (FK compuesta; `CHECK` de que `IMPRESORA` la tiene). Único `(sucursal_id, estacion_id)`.
@@ -628,12 +628,17 @@ Decididos por el orquestador el 2026-10-29; no cambian nada de lo que aprobó el
 - **Las líneas `MARCHAR` guardan la cantidad fija del momento de la marcha.** Si después se anula parte del ítem, la línea de la comanda `MARCHAR` sigue mostrando la cantidad marchada; la anulación sale en su propia comanda `ANULACION` (criterio 38) y la línea original de la comanda del envío sí muestra la cantidad vigente (criterio 62).
 - **Margen del presupuesto de la PWA.** Después de 3a quedan unos 2.9 kB gzip de margen en el presupuesto de tamaño de la PWA (170 kB gzip, de 003). La siguiente entrega que sume código a lo que mide el presupuesto (3b o la sección 4) debe cargarlo bajo demanda o proponer, con su motivo, subir el presupuesto (plan, "Riesgos").
 
-### Riesgos aceptados de 3b (ronda 1 del ataque y revisión T50)
+### Riesgos aceptados de 3b (rondas 1 a 4 del ataque y revisión T50)
 
 Decididos por el orquestador el 2026-10-30; no cambian nada de lo que aprobó el usuario:
 
 - **Un puente que nunca dio señal no genera aviso de desconexión.** Si `puente.ultima_senal_en` es nulo (se vinculó y nunca se conectó ni mandó un latido), nunca se genera el aviso de desconexión del criterio 120 por él: la revisión periódica solo avisa a los puentes que alguna vez dieron señal.
 - **Una pre-cuenta emitida sin impresora de caja no se imprime hasta que la orden cambie.** Si se emitió con `impresion: 'SIN_IMPRESORA'` (`trabajoId: null`, criterio 102) y después el Administrador configura la impresora de caja, pedir otra pre-cuenta sin cambios devuelve la vigente con los mismos valores (criterio 52) y no hay trabajo que reimprimir (criterio 128). Sale en papel la siguiente pre-cuenta, cuando la orden cambie (un envío, una anulación o una unión con ítems).
+- **Una respuesta de `GET /puente/trabajos` puede pasar del tope con muchas impresoras.** Cada impresora que no tiene ningún ticket en el lote aporta uno aunque ya se haya pasado de `MAXIMO_BYTES_RESPUESTA_TRABAJOS` (criterio 113). Con las 50 impresoras activas de la sucursal y un ticket grande pendiente en cada una, la respuesta pesa, en el peor caso, unos 14 MB de bytes ESC/POS (el tope más 50 tickets de 256 KB; unos 19 MB en base64). Se acepta: el armado sigue acotado (hasta 20 trabajos por impresora y 256 KB por ticket) y el puente trata la respuesta como cualquier otra.
+- **Un ticket cortado pierde su final en el papel.** Cuando un ticket no cabe, por el límite de bloques de la plantilla o por el tope de 256 KB, lo que se corta no sale: las últimas líneas del documento. Se acepta porque el aviso dice cuántas líneas faltan, el trabajo queda como «Incompleto» en «Trabajos de hoy» y la cuenta completa está en la app. Una reimpresión con la misma impresora sale igual de cortada.
+- **Dos avisos cuando el renderizador corta después del aviso de la plantilla.** Si la plantilla ya cortó el cuerpo del ticket con su aviso «Ticket incompleto» y el tope de bytes corta todavía después de ese aviso, el papel lleva dos avisos. El segundo cuenta también lo que dejó la plantilla, así que su número es el total de líneas que faltan. Se acepta: es el caso de un documento que no cabe en el máximo de bloques y, además, pasa el tope de bytes.
+- **Los trabajos anteriores a `omitidos` cuentan 0 líneas omitidas.** Un trabajo guardado antes de la ronda 4, cuyo aviso de la plantilla no trae el número de líneas omitidas (`omitidos`), suma 0 en el «faltan N» del renderizador (criterio 126). Se acepta: solo afecta a trabajos creados antes de esa corrección, y la marca `incompleto` sigue siendo correcta.
+- **Validación repetida al encolar (observación de rendimiento).** Al encolar, cada documento pasa por zod en `errorDelDocumento` y otra vez en el renderizador que mide si sale cortado (`cortadosPorElTope`), que además arma el ticket completo para medirlo, todo dentro de la transacción del envío (criterio 101). Se acepta: el costo está acotado por los máximos de entrada (criterio 126) y no cambia lo que se imprime.
 
 ## Preguntas abiertas
 

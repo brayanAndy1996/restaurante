@@ -280,12 +280,13 @@ Con fecha posterior a `202610290005`. Todas las tablas de `public` con `sqlTabla
 
 **3b**
 
-Cuatro migraciones, `202610310001` a `202610310004`:
+Cinco migraciones, `202610310001` a `202610310005`:
 
 - `202610310001-impresion.ts` (C7): `impresora`, `estacion_destino`, `impresion_sucursal`.
 - `202610310002-puente.ts` (C8): `vinculacion_puente`, `puente`, `trabajo_impresion`.
 - `202610310003-puente-desconexion-avisada.ts` (C9, T44): columna `puente.desconexion_avisada_en` (criterio 120). `down` borra la columna.
 - `202610310004` (fase D, ronda 1 del ataque de 3b y revisión T50; el nombre lo elige el backend): el error de armado de `trabajo_impresion` (el texto en `ultimo_error` o en una columna propia, y una columna o un estado de error en el `CHECK` de `estado` que lo saca de la cola, criterio 126), el índice único parcial `(empresa_id, precuenta_id) WHERE tipo = 'PRECUENTA' AND reimpresion_de_id IS NULL` (un trabajo `PRECUENTA` por pre-cuenta) y, si el backend los usa, el índice de pendientes por impresora (113) y el de códigos de vinculación vigentes (106). No escribe datos; `down` deja el esquema de la `0003`. Las migraciones ya aplicadas (`0001` a `0003`) no se editan.
+- `202610310005-impresion-ataque-ronda2.ts` (fase D, ronda 2 del ataque de 3b): `trabajo_impresion.incompleto boolean NOT NULL DEFAULT false` (criterio 126; `true` si el documento termina con el aviso de corte). El sistema lo escribe al encolar, reimprimir o entregar. No escribe datos; `down` quita la columna.
 
 Ninguna migración escribe datos. `pnpm db:revertir` de cada una deja el esquema de la anterior.
 

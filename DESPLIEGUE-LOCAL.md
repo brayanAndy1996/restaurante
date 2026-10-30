@@ -10,9 +10,11 @@ secciones ya aprobadas y cerradas. Hoy son:
 - **Sección 3a, Salón y Cocina:** mapa de mesas, abrir mesa, comandero, envío a cocina por estación,
   tiempos 1 y 2, pantalla de cocina (KDS) con avisos de "Listo", anulaciones con clave, mover y unir
   mesas, y pre-cuenta en pantalla, todo en tiempo real.
+- **Sección 3b, Impresión básica:** impresoras de red por estación y de caja, vinculación del puente por
+  QR, cola de trabajos con reenvío, tickets ESC/POS y un simulador del puente para probarla sin Android
+  (la app Android llega en la 3c).
 
-Las secciones siguientes (impresión, caja, etc.) se trabajan en otra rama y llegan a `main` cuando se
-aprueban.
+Las secciones siguientes (caja, etc.) se trabajan en otra rama y llegan a `main` cuando se aprueban.
 
 ## 1. Lo que necesitas instalar
 
@@ -161,7 +163,7 @@ La app del puente (Android) llega en la entrega 3c. Mientras tanto puedes probar
 
    La consola dice que el puente está conectado y que espera trabajos. Déjala abierta.
 
-4. **Ver los tickets.** Pide la _página de prueba_ de la impresora, o comanda como `fogon.mozo` (paso 3 del recorrido de arriba): el ticket aparece en la consola como texto, tal como saldría en el papel. Ctrl+C detiene el puente; para volver a conectarlo sin pedir otro código, corre `pnpm puente:simular --emulador`.
+4. **Ver los tickets.** Pide la _página de prueba_ de la impresora, o comanda como `fogon.mozo` (paso 3 de «Salón y cocina», sección 3a): el ticket aparece en la consola como texto, tal como saldría en el papel. Ctrl+C detiene el puente; para volver a conectarlo sin pedir otro código, corre `pnpm puente:simular --emulador`.
 
 Si el texto del QR trae una dirección que tu computadora no alcanza, agrega `--api http://localhost:3000`. Más opciones: `pnpm puente:simular --ayuda`.
 
@@ -213,6 +215,9 @@ usuario `postgres`).
 | La API no arranca: «DATABASE_TIEMPO_REAL_URL es obligatoria con TIEMPO_REAL=habilitado» | Tu `.env` es anterior a la sección 3a. Copia desde `.env.example` `DB_PASSWORD_TIEMPO_REAL`, `DATABASE_TIEMPO_REAL_URL` y `TIEMPO_REAL=habilitado`, y luego ejecuta `pnpm local:preparar` (crea el rol y aplica las migraciones) |
 | El KDS o el salón no se actualizan solos                                                | Deja la pantalla en primer plano: en un iPad o una tableta, el navegador en segundo plano corta la conexión. Sin conexión, la pantalla se refresca cada 30 segundos                                                              |
 | Una cuenta quedó bloqueada por 5 intentos fallidos                                      | Espera 15 minutos o, si es el superadministrador, `pnpm plataforma:superadmin desbloquear superadmin`                                                                                                                            |
+| `pnpm puente:simular` dice «El código del QR no sirve»                                  | El código dura 10 minutos y sirve una sola vez; pedir otro invalida el anterior. Pide uno nuevo en Ajustes › Impresión y copia el texto completo, entre comillas.                                                                |
+| `pnpm puente:simular` dice «La API no reconoce la credencial del puente»                | Se revocó esta vinculación, porque se vinculó otro puente en la sucursal o se revocó desde la app. Borra `.puente-simulador.json` y vincula con un código nuevo.                                                                 |
+| La app dice «La impresora … no responde»                                                | Comprueba que `pnpm puente:simular --emulador` siga corriendo y que la impresora apunte a `127.0.0.1` y al puerto del emulador (9100 por defecto).                                                                               |
 
 ## 8. Empezar de cero
 
