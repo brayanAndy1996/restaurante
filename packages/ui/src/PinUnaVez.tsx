@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Aviso } from './Aviso';
 import { Boton } from './Boton';
 import { IconoCopiar, IconoOk } from './iconos';
+import { copiarTexto } from './utilidades';
 
 interface PropsPinUnaVez {
   /** Persona a la que pertenece el PIN. */
@@ -11,32 +12,6 @@ interface PropsPinUnaVez {
   onListo: () => void;
   /** Qué hacer con el PIN; por defecto, entregarlo en persona. */
   recomendacion?: string;
-}
-
-/** Copia texto aunque la página no sea un contexto seguro (por ejemplo, en una red local). */
-async function copiar(texto: string): Promise<boolean> {
-  try {
-    if (navigator.clipboard) {
-      await navigator.clipboard.writeText(texto);
-      return true;
-    }
-  } catch {
-    // Se intenta el método antiguo.
-  }
-  const area = document.createElement('textarea');
-  area.value = texto;
-  area.setAttribute('readonly', '');
-  area.style.position = 'fixed';
-  area.style.opacity = '0';
-  document.body.appendChild(area);
-  area.select();
-  try {
-    return document.execCommand('copy');
-  } catch {
-    return false;
-  } finally {
-    area.remove();
-  }
 }
 
 /**
@@ -66,7 +41,7 @@ export function PinUnaVez({ nombre, pin, onListo, recomendacion }: PropsPinUnaVe
       <Boton
         bloque
         icono={copiado === 'si' ? IconoOk : IconoCopiar}
-        onClick={async () => setCopiado((await copiar(pin)) ? 'si' : 'no')}
+        onClick={async () => setCopiado((await copiarTexto(pin)) ? 'si' : 'no')}
       >
         {copiado === 'si' ? 'PIN copiado' : 'Copiar PIN'}
       </Boton>

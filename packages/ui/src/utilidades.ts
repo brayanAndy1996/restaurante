@@ -20,3 +20,29 @@ export function useCoincide(consulta: string): boolean {
 
 /** Ancho desde el que las listas pasan a tabla y la navegación pasa a riel (DESIGN.md). */
 export const CONSULTA_TABLET = '(min-width: 768px)';
+
+/** Copia texto aunque la página no sea un contexto seguro (por ejemplo, en una red local). */
+export async function copiarTexto(texto: string): Promise<boolean> {
+  try {
+    if (navigator.clipboard) {
+      await navigator.clipboard.writeText(texto);
+      return true;
+    }
+  } catch {
+    // Se intenta el método antiguo.
+  }
+  const area = document.createElement('textarea');
+  area.value = texto;
+  area.setAttribute('readonly', '');
+  area.style.position = 'fixed';
+  area.style.opacity = '0';
+  document.body.appendChild(area);
+  area.select();
+  try {
+    return document.execCommand('copy');
+  } catch {
+    return false;
+  } finally {
+    area.remove();
+  }
+}

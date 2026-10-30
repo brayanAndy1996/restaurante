@@ -2,6 +2,7 @@ import {
   Inject,
   Injectable,
   Logger,
+  Optional,
   type OnApplicationBootstrap,
   type OnModuleDestroy,
 } from '@nestjs/common';
@@ -16,12 +17,15 @@ import { CANAL_DEL_ESPACIO_PWA, PoolDelAdaptador } from './adaptador-postgres';
 import { OPCIONES_TIEMPO_REAL, RUTA_TIEMPO_REAL, type OpcionesTiempoReal } from './opciones';
 import {
   salaDeEmpresa,
+  salaDePuente,
   salaDeSesion,
   salaDeSocketIo,
   salaDeSucursal,
   type DatosDeConexion,
+  type DatosDeConexionDePuente,
 } from './salas';
 import { VALIDADOR_DE_CONEXIONES, type ValidadorDeConexiones } from './validador-de-conexiones';
+import { VALIDADOR_DE_PUENTE, type ValidadorDePuente } from './validador-de-puente';
 
 /** Cada cuánto cada instancia revisa sus conexiones locales (criterio 66: "a más tardar en 60 segundos"). */
 export const INTERVALO_DE_REVISION_MS = 60_000;
@@ -29,7 +33,6 @@ export const INTERVALO_DE_REVISION_MS = 60_000;
 /** Los mensajes de error con los que se rechaza una conexión. */
 const NO_AUTENTICADO = 'NO_AUTENTICADO';
 const ERROR_INTERNO = 'ERROR_INTERNO';
-const NO_IMPLEMENTADO = 'No implementado';
 
 /** Peso a partir del cual un evento es un error de programación (criterio 69). */
 const PESO_MAXIMO_DE_EVENTO = 4096;
@@ -48,6 +51,9 @@ const PESO_MAXIMO_DE_EVENTO = 4096;
  * - **Publicación (67):** `publicar` traduce la sala del evento a una sala que siempre lleva la empresa.
  * - **Varias instancias (68, 70):** adaptador de PostgreSQL con su propio pool y su rol sin privilegios sobre
  *   `public`; el arranque rechaza un rol privilegiado.
+ * - **Espacio del puente (3b, criterio 111):** `/puente` valida `auth: { token: 'pu.…' }` con el mismo código de las
+ *   peticiones HTTP del puente y mete la conexión en una sola sala, `p:<empresa>:<puente>`; al conectarse y al
+ *   desconectarse actualiza la señal del puente. `desconectarPuente` cierra sus conexiones al revocarlo.
  *
  * Con el tiempo real deshabilitado, todos los métodos no hacen nada.
  */
@@ -64,6 +70,9 @@ export class ServidorTiempoReal implements OnApplicationBootstrap, OnModuleDestr
     @Inject(ENTORNO) private readonly entorno: Entorno,
     @Inject(OPCIONES_TIEMPO_REAL) private readonly opciones: OpcionesTiempoReal,
     @Inject(VALIDADOR_DE_CONEXIONES) private readonly validador: ValidadorDeConexiones,
+    @Optional()
+    @Inject(VALIDADOR_DE_PUENTE)
+    private readonly validadorDePuente: ValidadorDePuente | null = null,
   ) {}
 
   /** `true` si la API sirve Socket.IO. */
@@ -104,9 +113,12 @@ export class ServidorTiempoReal implements OnApplicationBootstrap, OnModuleDestr
       void this.autenticar(socket, siguiente);
     });
     io.on('connection', (socket) => this.alConectar(socket));
-    // Espacio del puente de impresión (3b, criterio 111). Firma de la fase A (T35): rechaza toda conexión hasta
-    // que T40 verifique el token `pu.…` y asigne la sala del puente.
-    io.of(ESPACIO_PUENTE).use((_socket, siguiente) => siguiente(new Error(NO_IMPLEMENTADO)));
+    // Espacio del puente de impresión (3b, criterio 111): solo entra un `pu.…` de un puente activo.
+    const espacioPuente = io.of(ESPACIO_PUENTE);
+    espacioPuente.use((socket, siguiente) => {
+      void this.autenticarPuente(socket, siguiente);
+    });
+    espacioPuente.on('connection', (socket) => this.alConectarPuente(socket));
     this.io = io;
     // Listo para recibir lo que publiquen las otras instancias antes de que `app.init()` termine.
     await pool.esperarEscucha(CANAL_DEL_ESPACIO_PWA);
@@ -159,6 +171,75 @@ export class ServidorTiempoReal implements OnApplicationBootstrap, OnModuleDestr
     }
   }
 
+  /** Middleware del espacio `/puente` (criterio 111): rechaza con `NO_AUTENTICADO` todo lo que no sea un `pu.…` vivo. */
+  private async autenticarPuente(socket: Socket, siguiente: (error?: Error) => void): Promise<void> {
+    const validador = this.validadorDePuente;
+    if (validador === null) {
+      siguiente(new Error(NO_AUTENTICADO));
+      return;
+    }
+    const auth: unknown = socket.handshake.auth;
+    const datos =
+      typeof auth === 'object' && auth !== null ? (auth as Record<string, unknown>) : {};
+    const token = typeof datos.token === 'string' ? datos.token : undefined;
+    try {
+      const puente = await validador.validar(token);
+      const conexion: DatosDeConexionDePuente = {
+        empresaId: puente.empresaId,
+        puenteId: puente.puenteId,
+        sucursalId: puente.sucursalId,
+      };
+      socket.data = conexion;
+      siguiente();
+    } catch (error) {
+      if (error instanceof ErrorAplicacion) {
+        siguiente(new Error(NO_AUTENTICADO));
+        return;
+      }
+      this.logger.error(
+        'No se pudo validar una conexión del puente de impresión',
+        error instanceof Error ? error.stack : String(error),
+      );
+      siguiente(new Error(ERROR_INTERNO));
+    }
+  }
+
+  /**
+   * Una conexión del puente entra a su única sala (el servidor es el único que la asigna, criterio 65) y deja su
+   * señal al conectarse y al desconectarse (criterio 111).
+   */
+  private alConectarPuente(socket: Socket): void {
+    const conexion = socket.data as DatosDeConexionDePuente;
+    const puente = {
+      empresaId: conexion.empresaId,
+      puenteId: conexion.puenteId,
+      sucursalId: conexion.sucursalId,
+    };
+    socket.join(salaDePuente(conexion.empresaId, conexion.puenteId));
+    const registrar = (cuando: 'conectar' | 'desconectar') => {
+      const validador = this.validadorDePuente;
+      if (validador === null) return;
+      const tarea =
+        cuando === 'conectar' ? validador.alConectar(puente) : validador.alDesconectar(puente);
+      tarea.catch((error: unknown) => {
+        this.logger.error(
+          `No se pudo registrar la señal del puente al ${cuando}`,
+          error instanceof Error ? error.stack : String(error),
+        );
+      });
+    };
+    registrar('conectar');
+    socket.on('disconnect', () => registrar('desconectar'));
+    let avisado = false;
+    socket.onAny((evento: string) => {
+      if (avisado) return;
+      avisado = true;
+      this.logger.warn(
+        `Un puente emitió ${JSON.stringify(String(evento).slice(0, 60))} y se ignoró`,
+      );
+    });
+  }
+
   /** Una conexión autenticada entra a sus salas; el servidor es el único que las asigna (criterio 65). */
   private alConectar(socket: Socket): void {
     const { empresaId, sesionId, sucursalId } = socket.data as DatosDeConexion;
@@ -185,11 +266,9 @@ export class ServidorTiempoReal implements OnApplicationBootstrap, OnModuleDestr
     if (this.io === null) return;
     const sala = salaDeSocketIo(evento);
     if (sala === null) {
-      if (evento.sala.tipo !== 'puente') {
-        this.logger.warn(
-          `Se descartó el evento "${evento.nombre}": su empresa o su sala no son válidas`,
-        );
-      }
+      this.logger.warn(
+        `Se descartó el evento "${evento.nombre}": su empresa o su sala no son válidas`,
+      );
       return;
     }
     try {
@@ -199,7 +278,8 @@ export class ServidorTiempoReal implements OnApplicationBootstrap, OnModuleDestr
           `El evento "${evento.nombre}" pesa ${peso} bytes (el límite es ${PESO_MAXIMO_DE_EVENTO})`,
         );
       }
-      this.io.to(sala).emit(evento.nombre, evento.datos);
+      const espacio = evento.sala.tipo === 'puente' ? this.io.of(ESPACIO_PUENTE) : this.io;
+      espacio.to(sala).emit(evento.nombre, evento.datos);
     } catch (error) {
       this.logger.error(
         `No se pudo publicar el evento "${evento.nombre}"`,
@@ -226,6 +306,23 @@ export class ServidorTiempoReal implements OnApplicationBootstrap, OnModuleDestr
           error instanceof Error ? error.stack : String(error),
         );
       }
+    }
+  }
+
+  /**
+   * Desconecta las conexiones de un puente de impresión (al revocarlo o reemplazarlo, criterio 108), en esta
+   * instancia y, por el adaptador, en las demás. Solo toca la sala de ese puente de esa empresa.
+   */
+  async desconectarPuente(empresaId: string, puenteId: string): Promise<void> {
+    const io = this.io;
+    if (io === null) return;
+    try {
+      io.of(ESPACIO_PUENTE).in(salaDePuente(empresaId, puenteId)).disconnectSockets(true);
+    } catch (error) {
+      this.logger.error(
+        'No se pudo desconectar un puente',
+        error instanceof Error ? error.stack : String(error),
+      );
     }
   }
 

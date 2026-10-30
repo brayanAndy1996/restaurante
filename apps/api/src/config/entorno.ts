@@ -50,6 +50,8 @@ const entornoSchema = z.object({
   // PostgreSQL usa su propio rol (`restaurante_tiempo_real`) y su propia conexión.
   TIEMPO_REAL: z.enum(ESTADOS_TIEMPO_REAL).optional(),
   DATABASE_TIEMPO_REAL_URL: urlPostgres.optional(),
+  // URL pública de la API que va en el QR de vinculación del puente de impresión (historia 004, 3b, criterio 106).
+  API_URL_PUBLICA: z.string().optional(),
 });
 
 type EntornoLeido = z.infer<typeof entornoSchema>;
@@ -88,6 +90,13 @@ export interface Entorno extends Omit<
   TIEMPO_REAL: EstadoTiempoReal;
   /** Conexión del adaptador de Socket.IO con el rol `restaurante_tiempo_real` (2 conexiones); puede faltar. */
   DATABASE_TIEMPO_REAL_URL?: string | undefined;
+  /**
+   * URL base pública de la API, sin barra final: la que el puente de impresión usa para hablar con ella y la que va
+   * en el texto del QR de vinculación (`restaurante-puente://vincular?api=<URL>&t=<código>`, criterio 106). Con
+   * `NODE_ENV` `development` o `test` y sin definir, `http://localhost:<PORT>`; en producción puede faltar
+   * (`undefined`) y entonces crear un código de vinculación responde un error interno con el motivo en el log.
+   */
+  API_URL_PUBLICA: string | undefined;
 }
 
 /** Carpeta del almacén en disco si no se define `ARCHIVOS_DIRECTORIO`. */
@@ -178,6 +187,7 @@ export function cargarEntorno(env: NodeJS.ProcessEnv = process.env): Entorno {
       ? (limpio.ARCHIVOS_DRIVER as DriverDeArchivos)
       : undefined;
   validarArchivos(limpio, driver, problemas);
+  validarApiUrlPublica(limpio.API_URL_PUBLICA, problemas);
 
   if (problemas.length > 0 || !resultado.success) throw new EntornoInvalidoError(problemas);
   const driverPorDefecto: DriverDeArchivos | undefined =
@@ -187,6 +197,9 @@ export function cargarEntorno(env: NodeJS.ProcessEnv = process.env): Entorno {
         ? 'disco'
         : undefined;
   const driverFinal = resultado.data.ARCHIVOS_DRIVER ?? driverPorDefecto;
+  const apiUrlPublica =
+    resultado.data.API_URL_PUBLICA ??
+    (conDefectos ? `http://localhost:${resultado.data.PORT}` : undefined);
   const urlPublica =
     resultado.data.ARCHIVOS_URL_PUBLICA ??
     (driverFinal === 'disco' ? `http://localhost:${resultado.data.PORT}/archivos` : undefined);
@@ -199,6 +212,7 @@ export function cargarEntorno(env: NodeJS.ProcessEnv = process.env): Entorno {
     ARCHIVOS_URL_PUBLICA: urlPublica?.replace(/\/+$/, ''),
     TIEMPO_REAL:
       resultado.data.TIEMPO_REAL ?? (limpio.NODE_ENV === 'test' ? 'deshabilitado' : 'habilitado'),
+    API_URL_PUBLICA: apiUrlPublica?.replace(/\/+$/, ''),
   };
 }
 
@@ -248,6 +262,21 @@ function validarArchivos(
         'ARCHIVOS_URL_PUBLICA no es una URL http(s) válida (por ejemplo https://fotos.ejemplo.pe)',
       );
     }
+  }
+}
+
+/** `API_URL_PUBLICA`, si se define, debe ser una URL http(s): es lo que el puente de impresión escanea en el QR. */
+function validarApiUrlPublica(valor: string | undefined, problemas: string[]): void {
+  if (valor === undefined) return;
+  let valida = false;
+  try {
+    const url = new URL(valor);
+    valida = url.protocol === 'http:' || url.protocol === 'https:';
+  } catch {
+    valida = false;
+  }
+  if (!valida) {
+    problemas.push('API_URL_PUBLICA no es una URL http(s) válida (por ejemplo https://api.ejemplo.pe)');
   }
 }
 

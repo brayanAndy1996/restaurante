@@ -13,11 +13,15 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { AvisoPendiente } from '../../../componentes/PendienteDeEnvio';
 import { MUTACION_SIN_PAUSA, useEnvioPendiente } from '../../../lib/envios';
 import { mensajeDeError } from '../../../lib/errores';
+import { usePermiso } from '../../acceso/permisos';
 import { useSesionActiva } from '../../acceso/sesion';
 import { MarcoDeAjustes } from '../MarcoDeAjustes';
 import { DondeSaleCadaEstacion, ImpresoraDeCaja } from './DestinosDeImpresion';
 import { FormularioDeImpresora } from './FormularioDeImpresora';
 import { ListaDeImpresoras } from './ListaDeImpresoras';
+import { PaginaDePrueba } from './PaginaDePrueba';
+import { PuenteDeImpresion } from './PuenteDeImpresion';
+import { TrabajosDeHoy } from './TrabajosDeHoy';
 import {
   POR_DEFECTO_DE_IMPRESORA,
   borradorDeImpresora,
@@ -58,7 +62,9 @@ function mostrarProblema() {
   });
 }
 
-/** Ajustes › Impresión (criterios 99 a 105, 136 y 137 en parte): impresoras, destinos y caja. */
+/**
+ * Ajustes › Impresión (criterios 99 a 105 y 136 a 139): impresoras, destinos, caja, puente y trabajos de hoy.
+ */
 export function ImpresionPagina() {
   const sesion = useSesionActiva();
   if (!sesion.sucursal) {
@@ -76,6 +82,8 @@ export function ImpresionPagina() {
 function ImpresionDeSucursal({ sucursalId }: { sucursalId: string }) {
   const clientes = useQueryClient();
   const claveLista = claveImpresoras(sucursalId);
+  // La lista de trabajos es de quien atiende mesas (criterio 128); el Administrador siempre puede.
+  const veTrabajos = usePermiso('ATENDER_MESA') !== 'prohibido';
 
   const consultaImpresoras = useQuery({
     queryKey: claveLista,
@@ -294,6 +302,9 @@ function ImpresionDeSucursal({ sucursalId }: { sucursalId: string }) {
         enfocarNombre={modo.tipo === 'nueva'}
       >
         {editando ? (
+          <PaginaDePrueba sucursalId={sucursalId} impresora={editando} enviar={envio.enviar} />
+        ) : null}
+        {editando ? (
           <div className="ui-acciones__separada impresion__grupo">
             {falloDesactivar ? (
               <Aviso tipo="error" titulo={falloDesactivar.titulo}>
@@ -414,6 +425,10 @@ function ImpresionDeSucursal({ sucursalId }: { sucursalId: string }) {
             enviar={envio.enviar}
           />
         )}
+
+        <PuenteDeImpresion sucursalId={sucursalId} enviar={envio.enviar} />
+
+        {veTrabajos ? <TrabajosDeHoy sucursalId={sucursalId} /> : null}
       </>
     );
   }

@@ -1,0 +1,6 @@
+/* Lista de trabajos de impresión (004, 3b): se carga con Ajustes › Impresión y con la cuenta */
+
+/* El botón "Reimprimir" no se parte ni se achica: el título de la fila cede el ancho */
+.trabajo .ui-fila__derecha .ui-boton {
+  white-space: nowrap;
+}

@@ -12,3 +12,4 @@ export {
   METADATO_SUPERADMINISTRADOR,
   METADATO_VINCULACION_PUENTE,
 } from './metadatos';
+export type { PeticionConPuente, PuenteAutenticado, VinculacionAutenticada } from './puente';

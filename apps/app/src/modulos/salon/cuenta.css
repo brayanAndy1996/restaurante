@@ -190,3 +190,10 @@
   grid-template-columns: 1fr 1fr;
   gap: var(--espacio-sm);
 }
+
+/* Tickets que se pueden reimprimir (criterio 138): la lista va dentro de la sección plegable */
+.cuenta__tickets {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espacio-md);
+}

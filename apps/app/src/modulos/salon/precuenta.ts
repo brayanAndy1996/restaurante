@@ -59,4 +59,20 @@ export function frasesDeLaNota(nota: string): string[] {
 /** La frase del ICBPER, para destacarla (criterio 51). */
 export const esFraseDeIcbper = (frase: string): boolean => /ICBPER/i.test(frase);
 
-export const TEXTO_SIN_IMPRESION = 'La impresión llega con el puente de impresión.';
+/**
+ * Qué pasó con el papel (criterios 102 y 138): `impresion` de la respuesta de la pre-cuenta. Pedirla ya manda el
+ * ticket a la impresora de caja, así que "En cola" es lo normal; "Sin impresora de caja" es una sucursal que
+ * no eligió una.
+ */
+export const TEXTO_DE_IMPRESION = {
+  EN_COLA: {
+    etiqueta: 'En cola',
+    ayuda: 'La pre-cuenta salió a la impresora de caja.',
+    otraCopia: 'Mandaste otra copia a la impresora de caja.',
+  },
+  SIN_IMPRESORA: {
+    titulo: 'Sin impresora de caja',
+    ayuda:
+      'Esta pre-cuenta solo se ve en pantalla. Pide al Administrador que elija la impresora de caja en Ajustes › Impresión.',
+  },
+} as const;

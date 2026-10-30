@@ -167,7 +167,7 @@ describe('Pedir la pre-cuenta (criterios 50 y 95)', () => {
     expect(within(lomo as HTMLElement).getByText('S/ 67.00')).toHaveClass('precuenta__importe');
   });
 
-  it('el total lleva IGV incluido y no se desglosa; dice que no es un comprobante y que aún no se imprime', async () => {
+  it('el total lleva IGV incluido y no se desglosa; dice que no es un comprobante y que no hay impresora', async () => {
     montar();
     renderApp(RUTA);
     await userEvent.click(await screen.findByRole('button', { name: 'Pedir pre-cuenta' }));
@@ -177,7 +177,7 @@ describe('Pedir la pre-cuenta (criterios 50 y 95)', () => {
     expect(hoja).toHaveTextContent('IGV incluido');
     expect(within(hoja).getByText('S/ 169.20')).toBeVisible();
     expect(hoja).toHaveTextContent('Precios con IGV incluido. No es un comprobante de pago.');
-    expect(hoja).toHaveTextContent('La impresión llega con el puente de impresión.');
+    expect(hoja).toHaveTextContent('Sin impresora de caja');
     // Sin desglose de IGV ni de base imponible (decisión 5).
     expect(hoja).not.toHaveTextContent(/base imponible|subtotal|IGV \(|18\s?%|op\. gravada/i);
     // Sin ICBPER en la cuenta, la hoja no lo menciona.
@@ -216,6 +216,113 @@ describe('Pedir la pre-cuenta (criterios 50 y 95)', () => {
     const aviso = await screen.findByRole('alert');
     expect(aviso).toHaveTextContent('No pudimos pedir la pre-cuenta');
     expect(aviso).toHaveTextContent('Aún no hay nada vigente en la cuenta');
+  });
+});
+
+describe('Qué pasó con el papel (criterios 102 y 138)', () => {
+  const EN_COLA = () => precuentaDe({ impresion: 'EN_COLA' });
+
+  async function abrirHoja() {
+    renderApp(RUTA);
+    await userEvent.click(await screen.findByRole('button', { name: 'Pedir pre-cuenta' }));
+    return screen.findByRole('dialog', { name: 'Pre-cuenta' });
+  }
+
+  it('sin impresora de caja lo dice con palabras y no ofrece imprimir', async () => {
+    montar({ precuenta: precuentaDe({ impresion: 'SIN_IMPRESORA' }) });
+    const hoja = await abrirHoja();
+    const aviso = within(hoja).getByText('Sin impresora de caja');
+    expect(aviso).toBeVisible();
+    expect(hoja).toHaveTextContent('Esta pre-cuenta solo se ve en pantalla');
+    expect(hoja).toHaveTextContent('Pide al Administrador que elija la impresora de caja');
+    expect(within(hoja).queryByText('En cola')).toBeNull();
+    expect(within(hoja).queryByRole('button', { name: /Imprimir/ })).toBeNull();
+  });
+
+  it('con impresora de caja, la pre-cuenta sale en cola y se puede mandar otra copia', async () => {
+    montar({ precuenta: EN_COLA() });
+    const hoja = await abrirHoja();
+    expect(within(hoja).getByText('En cola')).toBeVisible();
+    expect(hoja).toHaveTextContent('La pre-cuenta salió a la impresora de caja.');
+    expect(within(hoja).queryByText('Sin impresora de caja')).toBeNull();
+    expect(within(hoja).getByRole('button', { name: 'Imprimir otra vez' })).toBeVisible();
+  });
+
+  it('"Imprimir otra vez" pide la misma pre-cuenta con otro id y otra clave, y dice que mandó otra copia', async () => {
+    const s = montar({ precuenta: EN_COLA() });
+    const hoja = await abrirHoja();
+    await userEvent.click(within(hoja).getByRole('button', { name: 'Imprimir otra vez' }));
+    await waitFor(() => expect(hoja).toHaveTextContent('Mandaste otra copia a la impresora de caja.'));
+    // Sigue siendo la pre-cuenta 1 y sigue vigente.
+    expect(within(hoja).getByText('Pre-cuenta 1')).toBeVisible();
+    expect(hoja).not.toHaveTextContent('ya no vale');
+    const [primera, segunda] = s.de('POST', API);
+    expect((segunda?.cuerpo as { id: string }).id).not.toBe((primera?.cuerpo as { id: string }).id);
+    expect(segunda?.cabeceras.get('Idempotency-Key')).not.toBe(
+      primera?.cabeceras.get('Idempotency-Key'),
+    );
+  });
+
+  it('mientras se manda, el botón lo dice y no se puede tocar dos veces', async () => {
+    const s = montar({ precuenta: EN_COLA() });
+    const hoja = await abrirHoja();
+    let responder: (r: Response) => void = () => undefined;
+    s.poner(
+      `POST ${API}`,
+      () =>
+        new Promise<Response>((resolver) => {
+          responder = resolver;
+        }),
+    );
+    await userEvent.click(within(hoja).getByRole('button', { name: 'Imprimir otra vez' }));
+    const cargando = await within(hoja).findByRole('button', { name: 'Imprimiendo…' });
+    expect(cargando).toBeDisabled();
+    await act(async () => {
+      responder(json(201, EN_COLA()));
+    });
+    expect(await within(hoja).findByRole('button', { name: 'Imprimir otra vez' })).toBeEnabled();
+    expect(s.de('POST', API)).toHaveLength(2);
+  });
+
+  it('un corte al reintentar repite la petición con la misma clave y el mismo id: no sale dos veces', async () => {
+    const s = montar({ precuenta: EN_COLA() });
+    const hoja = await abrirHoja();
+    let intentos = 0;
+    s.poner(`POST ${API}`, () => {
+      intentos += 1;
+      return intentos < 3
+        ? json(503, { codigo: 'ERROR_INTERNO', mensaje: 'No disponible' })
+        : json(201, EN_COLA());
+    });
+    await userEvent.click(within(hoja).getByRole('button', { name: 'Imprimir otra vez' }));
+    await waitFor(() => expect(hoja).toHaveTextContent('Mandaste otra copia'));
+    const llamadas = s.de('POST', API).slice(1);
+    expect(llamadas).toHaveLength(3);
+    expect(new Set(llamadas.map((l) => l.cabeceras.get('Idempotency-Key'))).size).toBe(1);
+    expect(new Set(llamadas.map((l) => (l.cuerpo as { id: string }).id)).size).toBe(1);
+  });
+
+  it('si no se pudo, lo dice dentro de la hoja y se puede volver a tocar', async () => {
+    const s = montar({ precuenta: EN_COLA() });
+    const hoja = await abrirHoja();
+    s.poner(`POST ${API}`, () =>
+      json(500, { codigo: 'ERROR_INTERNO', mensaje: 'Falló' }),
+    );
+    await userEvent.click(within(hoja).getByRole('button', { name: 'Imprimir otra vez' }));
+    const aviso = await within(hoja).findByRole('alert');
+    expect(aviso).toHaveTextContent('No pudimos imprimir la pre-cuenta');
+    expect(within(hoja).getByRole('button', { name: 'Imprimir otra vez' })).toBeEnabled();
+  });
+
+  it('una pre-cuenta que ya no vale no se ofrece para imprimir: se pide otra', async () => {
+    const s = montar({ precuenta: EN_COLA() });
+    const hoja = await abrirHoja();
+    await waitFor(() => expect(s.de('GET', `/ordenes/${ORDEN_ID}`).length).toBeGreaterThan(1));
+    await cambiarLaCuenta(s);
+    expect(await within(hoja).findByText('Esta pre-cuenta ya no vale')).toBeVisible();
+    expect(within(hoja).queryByText('En cola')).toBeNull();
+    expect(within(hoja).queryByRole('button', { name: 'Imprimir otra vez' })).toBeNull();
+    expect(within(hoja).getByRole('button', { name: 'Pedir otra pre-cuenta' })).toBeVisible();
   });
 });
 
