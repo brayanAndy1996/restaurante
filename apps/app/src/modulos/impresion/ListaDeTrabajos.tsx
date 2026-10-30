@@ -34,20 +34,23 @@ interface Props {
 
 function EtiquetasDeTrabajo({ trabajo }: { trabajo: TrabajoResumen }) {
   const estado = ESTADO_DE_TRABAJO[trabajo.estado];
+  const sinArmar = noSePudoArmar(trabajo);
   return (
     <span className="etiquetas">
-      <EtiquetaDeEstado tono={estado.tono} icono={estado.icono}>
-        {estado.texto}
-      </EtiquetaDeEstado>
-      {trabajo.estado === 'PENDIENTE' && trabajo.intentos > 0 ? (
-        <EtiquetaDeEstado tono="alerta">{textoDeIntentos(trabajo.intentos)}</EtiquetaDeEstado>
-      ) : null}
-      {trabajo.reimpresionDe ? <EtiquetaDeEstado tono="info">Reimpresión</EtiquetaDeEstado> : null}
-      {noSePudoArmar(trabajo) ? (
+      {sinArmar ? (
+        // "Pendiente" prometería una impresión que no va a ocurrir: el ticket ni siquiera existe.
         <EtiquetaDeEstado tono="mal" icono={IconoError}>
           No se pudo armar el ticket
         </EtiquetaDeEstado>
+      ) : (
+        <EtiquetaDeEstado tono={estado.tono} icono={estado.icono}>
+          {estado.texto}
+        </EtiquetaDeEstado>
+      )}
+      {!sinArmar && trabajo.estado === 'PENDIENTE' && trabajo.intentos > 0 ? (
+        <EtiquetaDeEstado tono="alerta">{textoDeIntentos(trabajo.intentos)}</EtiquetaDeEstado>
       ) : null}
+      {trabajo.reimpresionDe ? <EtiquetaDeEstado tono="info">Reimpresión</EtiquetaDeEstado> : null}
     </span>
   );
 }

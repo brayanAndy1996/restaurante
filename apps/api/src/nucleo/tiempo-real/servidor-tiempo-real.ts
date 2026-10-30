@@ -219,20 +219,25 @@ export class ServidorTiempoReal implements OnApplicationBootstrap, OnModuleDestr
       sucursalId: conexion.sucursalId,
     };
     socket.join(salaDePuente(conexion.empresaId, conexion.puenteId));
-    const registrar = (cuando: 'conectar' | 'desconectar') => {
-      const validador = this.validadorDePuente;
-      if (validador === null) return;
-      const tarea =
-        cuando === 'conectar' ? validador.alConectar(puente) : validador.alDesconectar(puente);
-      tarea.catch((error: unknown) => {
-        this.logger.error(
-          `No se pudo registrar la señal del puente al ${cuando}`,
-          error instanceof Error ? error.stack : String(error),
-        );
-      });
+    const validador = this.validadorDePuente;
+    const falla = (cuando: string) => (error: unknown) => {
+      this.logger.error(
+        `No se pudo registrar la señal del puente al ${cuando}`,
+        error instanceof Error ? error.stack : String(error),
+      );
     };
-    registrar('conectar');
-    socket.on('disconnect', () => registrar('desconectar'));
+    if (validador !== null) {
+      // Si lo revocaron entre la validación y este momento, la conexión se cierra: `desconectarPuente` ya pasó.
+      validador
+        .alConectar(puente)
+        .then((activo) => {
+          if (!activo) socket.disconnect(true);
+        })
+        .catch(falla('conectar'));
+    }
+    socket.on('disconnect', () => {
+      validador?.alDesconectar(puente).catch(falla('desconectar'));
+    });
     let avisado = false;
     socket.onAny((evento: string) => {
       if (avisado) return;
@@ -347,6 +352,7 @@ export class ServidorTiempoReal implements OnApplicationBootstrap, OnModuleDestr
   private async revisar(): Promise<void> {
     const io = this.io;
     if (io === null) return;
+    await this.revisarPuentes(io);
     const porEmpresa = new Map<string, Map<string, Socket[]>>();
     for (const socket of io.sockets.sockets.values()) {
       const { empresaId, sesionId } = socket.data as Partial<DatosDeConexion>;
@@ -365,6 +371,38 @@ export class ServidorTiempoReal implements OnApplicationBootstrap, OnModuleDestr
       } catch (error) {
         this.logger.error(
           'No se pudieron revisar las sesiones conectadas de una empresa',
+          error instanceof Error ? error.stack : String(error),
+        );
+      }
+    }
+  }
+
+  /**
+   * Cierra las conexiones del espacio `/puente` cuyo puente ya no está activo (revocado o reemplazado). Cubre lo que
+   * `desconectarPuente` no alcanzó: una revocación que llegó de otra instancia por un adaptador caído, o una
+   * conexión que se autenticó justo al revocar. Una consulta por empresa.
+   */
+  private async revisarPuentes(io: Server): Promise<void> {
+    const validador = this.validadorDePuente;
+    if (validador === null) return;
+    const porEmpresa = new Map<string, Map<string, Socket[]>>();
+    for (const socket of io.of(ESPACIO_PUENTE).sockets.values()) {
+      const { empresaId, puenteId } = socket.data as Partial<DatosDeConexionDePuente>;
+      if (empresaId === undefined || puenteId === undefined) continue;
+      const puentes = porEmpresa.get(empresaId) ?? new Map<string, Socket[]>();
+      puentes.set(puenteId, [...(puentes.get(puenteId) ?? []), socket]);
+      porEmpresa.set(empresaId, puentes);
+    }
+    for (const [empresaId, puentes] of porEmpresa) {
+      try {
+        const activos = await validador.siguenActivos(empresaId, [...puentes.keys()]);
+        for (const [puenteId, sockets] of puentes) {
+          if (activos.has(puenteId)) continue;
+          for (const socket of sockets) socket.disconnect(true);
+        }
+      } catch (error) {
+        this.logger.error(
+          'No se pudieron revisar los puentes conectados de una empresa',
           error instanceof Error ? error.stack : String(error),
         );
       }

@@ -3,6 +3,7 @@ import {
   trabajoResumenSchema,
   type EstadoTrabajo,
   type TipoTrabajo,
+  type TrabajosConsulta,
   type TrabajoResumen,
 } from '@restaurante/contratos';
 import {
@@ -38,11 +39,7 @@ export const claveTrabajosDeOrden = (sucursalId: string, ordenId: string) =>
 // --- Llamadas a la API ----------------------------------------------------------------------------
 
 /** Filtros de `GET /impresion/trabajos`; los dos se aplican en la API, antes del límite. */
-export interface FiltroDeTrabajos {
-  estado?: EstadoTrabajo;
-  /** Solo los de esta cuenta (con mesas unidas, la principal). */
-  ordenId?: string;
-}
+export type FiltroDeTrabajos = Pick<TrabajosConsulta, 'estado' | 'ordenId'>;
 
 /**
  * `GET /impresion/trabajos`: los del día operativo de la sucursal activa. Es una consulta que se repite
@@ -93,16 +90,11 @@ export const ESTADO_DE_TRABAJO: Record<
 export const textoDeIntentos = (n: number): string => (n === 1 ? '1 intento' : `${n} intentos`);
 
 /**
- * Lo que el backend marca en `ultimoError` cuando el ticket no se pudo armar (error al generar su contenido),
- * distinto de un fallo de la impresora. PENDIENTE DEL BACKEND: se ajusta aquí cuando `trabajoResumenSchema`
- * traiga el campo o un estado nuevo; mientras no coincida con nada, la lista no muestra el aviso.
+ * `true` si el ticket no se pudo armar (error al generar su contenido): nunca llegó a la impresora y no cuenta
+ * como pendiente. La API lo dice con `sinTicket`; `ultimoError` trae el detalle técnico, que no se muestra.
  */
-export const MARCA_DE_ARMADO_FALLIDO = 'ARMADO_FALLIDO';
-
-/** `true` si el ticket nunca llegó a la impresora porque no se pudo armar (no se reintenta solo). */
-export function noSePudoArmar(trabajo: TrabajoResumen & { ultimoError?: string | null }): boolean {
-  return trabajo.estado !== 'IMPRESO' && trabajo.ultimoError === MARCA_DE_ARMADO_FALLIDO;
-}
+export const noSePudoArmar = (trabajo: Pick<TrabajoResumen, 'sinTicket'>): boolean =>
+  trabajo.sinTicket === true;
 
 export const EXPLICACION_DE_ARMADO_FALLIDO =
   'El sistema no pudo preparar el contenido, así que no se mandó a la impresora. Avisa a soporte.';

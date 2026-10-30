@@ -4,8 +4,8 @@ import type { DestinoComanda, TipoComanda } from '@restaurante/dominio';
 /**
  * Puerto de impresión del módulo de pedidos (historia 004, plan "Impresión"): el envío, la marcha, la
  * anulación y la pre-cuenta le preguntan adónde sale cada estación y le piden encolar los trabajos de
- * impresión, dentro de su transacción. En 3a todo sale por el KDS y no se encola nada (`ImpresionSoloKds`); en 3b
- * lo provee `ImpresionModule`.
+ * impresión, dentro de su transacción. Lo provee `ImpresionModule` (en 3a, antes de la impresión, todo salía por
+ * el KDS y no se encolaba nada).
  */
 
 /** Token de Nest del puerto de impresión. */
@@ -74,40 +74,4 @@ export interface ImpresionPuerto {
    * vigente o una réplica no crea otro trabajo, devuelve este.
    */
   trabajosDePrecuentas(precuentaIds: readonly string[]): Promise<ReadonlyMap<string, string>>;
-}
-
-/** Puerto de 3a: toda estación sale por el KDS y no se encola nada. */
-export class ImpresionSoloKds implements ImpresionPuerto {
-  async destinos(
-    sucursalId: string,
-    estacionIds: readonly string[],
-  ): Promise<ReadonlyMap<string, DestinoDeEstacion>> {
-    void sucursalId;
-    return new Map(estacionIds.map((id) => [id, { destino: 'KDS' } as const]));
-  }
-
-  async destinosVisibles(
-    sucursalId: string,
-    estacionIds: readonly string[],
-  ): Promise<ReadonlyMap<string, DestinoVisibleDeEstacion>> {
-    void sucursalId;
-    return new Map(estacionIds.map((id) => [id, { destino: 'KDS' } as const]));
-  }
-
-  async encolar(trabajos: readonly TrabajoParaEncolar[]): Promise<string[]> {
-    void trabajos;
-    return [];
-  }
-
-  async impresoraDeCaja(sucursalId: string): Promise<{ id: string } | null> {
-    void sucursalId;
-    return null;
-  }
-
-  async trabajosDePrecuentas(
-    precuentaIds: readonly string[],
-  ): Promise<ReadonlyMap<string, string>> {
-    void precuentaIds;
-    return new Map();
-  }
 }

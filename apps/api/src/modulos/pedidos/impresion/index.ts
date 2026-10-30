@@ -1,4 +1,4 @@
-export { IMPRESION, ImpresionSoloKds } from './impresion.puerto';
+export { IMPRESION } from './impresion.puerto';
 export type {
   DestinoDeEstacion,
   DestinoVisibleDeEstacion,

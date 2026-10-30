@@ -217,7 +217,7 @@ describe('orden y número de envío de los trabajos (criterio 128)', () => {
 });
 
 describe('página de prueba, lista de trabajos, reimpresión y resultado', () => {
-  it('la página de prueba funciona con la impresora inactiva y el ticket trae la muestra de caracteres', async () => {
+  it('la página de prueba se crea con la impresora inactiva, no se entrega mientras lo esté y sale al activarla (criterio 127)', async () => {
     const impresora = await impresoraCreada(
       ctx,
       T(),
@@ -235,6 +235,17 @@ describe('página de prueba, lista de trabajos, reimpresión y resultado', () =>
       'desactivar',
     );
     const id = await crearPrueba(ctx, T(), A().S1, impresora.id);
+    // Inactiva: el trabajo espera (criterio 113), no se entrega.
+    expect((await trabajosDelPuente(ctx, puente)).filter((t) => t.id === id)).toHaveLength(0);
+    exigirEstado(
+      await llamar(ctx, T(), {
+        metodo: 'patch',
+        ruta: `/sucursales/${A().S1}/impresoras/${impresora.id}`,
+        cuerpo: { activa: true },
+      }),
+      200,
+      'activar',
+    );
     const entregados = (await trabajosDelPuente(ctx, puente)).filter((t) => t.id === id);
     expect(entregados).toHaveLength(1);
     const { tickets } = interpretarEscPos(Buffer.from(entregados[0]!.bytes, 'base64'), {

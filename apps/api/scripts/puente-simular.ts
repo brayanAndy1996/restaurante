@@ -14,7 +14,7 @@
 // reutiliza esa credencial, así que se puede detener y volver a correr sin pedir otro QR. Termina con Ctrl+C.
 //
 // No usa la base de datos: habla con la API por HTTP y Socket.IO, igual que lo hará la app (entrega 3c).
-import { readFile, writeFile } from 'node:fs/promises';
+import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 import { armarQrPuente, leerQrPuente } from '@restaurante/contratos';
@@ -24,6 +24,7 @@ import {
   SimuladorPuente,
   type TicketEmulado,
 } from '../test/soporte/puente';
+import { guardarArchivoPrivado } from './lib/archivo-privado';
 
 const ARCHIVO_POR_DEFECTO = '.puente-simulador.json';
 const PUERTO_POR_DEFECTO = 9100;
@@ -179,7 +180,7 @@ async function principal(): Promise<void> {
   const guardarToken = async (token: string): Promise<void> => {
     const api = simulador.urlApi;
     if (api === null) return;
-    await writeFile(archivo, `${JSON.stringify({ api, token }, null, 2)}\n`, { mode: 0o600 });
+    await guardarArchivoPrivado(archivo, `${JSON.stringify({ api, token }, null, 2)}\n`);
     escribir(`Credencial del puente guardada en ${archivo} (no la subas al repositorio).`);
   };
   const simulador = new SimuladorPuente({

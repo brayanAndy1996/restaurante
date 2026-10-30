@@ -118,14 +118,30 @@ export class AutenticacionPuenteService implements ValidadorDePuente {
 
   /**
    * La señal del puente al conectarse (criterio 111): `ultima_senal_en` con el reloj de la API. Si el puente
-   * volvía (más de 60 segundos sin señal), avisa con `impresion.estado` (criterio 120).
+   * volvía (más de 60 segundos sin señal), avisa con `impresion.estado` (criterio 120). `false` si el puente ya no
+   * está activo.
    */
-  alConectar(puente: PuenteDeConexion): Promise<void> {
+  alConectar(puente: PuenteDeConexion): Promise<boolean> {
     return this.senal.marcarSenal(puente);
   }
 
-  /** La señal del puente al desconectarse (criterio 111). */
+  /** De los puentes dados, los que siguen activos (la revisión periódica de las conexiones, criterio 108). */
+  async siguenActivos(empresaId: string, puenteIds: readonly string[]): Promise<Set<string>> {
+    if (puenteIds.length === 0) return new Set();
+    return this.contexto.ejecutar(empresaId, async () => {
+      const filas = await this.conexion.query<{ id: string }>(
+        'SELECT id FROM puente WHERE id = ANY($1::uuid[]) AND activo',
+        { bind: [[...puenteIds]], type: QueryTypes.SELECT },
+      );
+      return new Set(filas.map((f) => f.id));
+    });
+  }
+
+  /**
+   * La señal del puente al desconectarse (criterio 111): guarda el instante, pero no cuenta como que el puente
+   * "vuelve" (no limpia el aviso de desconexión ni publica nada).
+   */
   alDesconectar(puente: PuenteDeConexion): Promise<void> {
-    return this.senal.marcarSenal(puente);
+    return this.senal.marcarDesconexion(puente);
   }
 }

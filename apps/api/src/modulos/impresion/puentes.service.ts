@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, Logger, type OnApplicationBootstrap } from '@nestjs/common';
 import {
   MINUTOS_VIGENCIA_VINCULACION,
   armarQrPuente,
@@ -19,6 +19,7 @@ import { ServidorTiempoReal } from '../../nucleo/tiempo-real';
 import { AuditoriaService } from '../auditoria';
 import { SucursalesConsultaService } from '../plataforma';
 import { Credenciales, armarTokenPuente, armarTokenVinculacion } from '../seguridad';
+import { ErrorAplicacion } from '../../nucleo/errores/error-aplicacion';
 import { vinculacionInvalida } from './autenticacion-puente.service';
 import { noEncontrado } from './errores-impresion';
 
@@ -43,7 +44,10 @@ const iso = (fecha: Date | null): string | null =>
  *
  * - **Código de vinculación (106):** `vi.<empresa>.<id>.<secreto>` con un secreto de 32 bytes aleatorios del que
  *   solo se guarda la huella; vence a los 10 minutos con el reloj de la API; crear otro invalida los pendientes de
- *   esa sucursal.
+ *   esa sucursal, bajo un cerrojo de transacción por sucursal: de dos códigos pedidos a la vez queda uno solo
+ *   vigente. La ruta no es idempotente (el secreto no debe quedar guardado en la respuesta de la idempotencia):
+ *   repetir la petición crea otro código e invalida el anterior. Sin `API_URL_PUBLICA` responde 503
+ *   `CONFIGURACION_INCOMPLETA`.
  * - **Vincular (107):** un solo uso (un `UPDATE … WHERE usada_en IS NULL` condicionado, bajo un cerrojo de
  *   transacción por sucursal: de dos usos simultáneos gana exactamente uno); revoca al puente activo anterior de la
  *   sucursal y cierra su conexión de Socket.IO después de confirmar (108). La petición ya corre con el actor
@@ -51,7 +55,9 @@ const iso = (fecha: Date | null): string | null =>
  * - **Revocar (108):** `DELETE` es idempotente (repetirlo es 204 sin efecto ni auditoría).
  */
 @Injectable()
-export class PuentesService {
+export class PuentesService implements OnApplicationBootstrap {
+  private readonly logger = new Logger(PuentesService.name);
+
   constructor(
     @Inject(CONEXION_API) private readonly conexion: Sequelize,
     @Inject(ContextoEmpresa) private readonly contexto: ContextoEmpresa,
@@ -63,6 +69,15 @@ export class PuentesService {
     @Inject(ServidorTiempoReal) private readonly tiempoReal: ServidorTiempoReal,
   ) {}
 
+  onApplicationBootstrap(): void {
+    if (this.entorno.API_URL_PUBLICA === undefined) {
+      this.logger.warn(
+        'API_URL_PUBLICA no está configurada: no se pueden crear códigos de vinculación del puente de impresión ' +
+          '(responden 503 CONFIGURACION_INCOMPLETA) hasta definirla',
+      );
+    }
+  }
+
   // ---- Administrador ------------------------------------------------------------------------------
 
   /** `POST /sucursales/:sucursalId/vinculaciones-puente` (criterio 106). */
@@ -70,10 +85,18 @@ export class PuentesService {
     await this.exigirSucursal(sucursalId);
     const api = this.entorno.API_URL_PUBLICA;
     if (api === undefined) {
-      throw new Error(
-        'API_URL_PUBLICA no está configurada: no se puede armar el QR de vinculación',
+      this.logger.error('API_URL_PUBLICA no está configurada: no se puede armar el QR de vinculación');
+      throw new ErrorAplicacion(
+        503,
+        'CONFIGURACION_INCOMPLETA',
+        'El servidor no tiene configurada su dirección pública, así que no se puede crear el código de vinculación. Avisa a soporte.',
       );
     }
+    // Dos códigos pedidos a la vez se turnan: el segundo invalida al primero, y queda uno solo vigente.
+    await this.conexion.query('SELECT pg_advisory_xact_lock(hashtextextended($1::text, 0))', {
+      bind: [`vinculacion-puente:${sucursalId}`],
+      type: QueryTypes.SELECT,
+    });
     const ahora = this.reloj.ahora();
     const empresaId = this.contexto.empresaActual();
     const expiraEn = new Date(ahora.getTime() + MINUTOS_VIGENCIA_VINCULACION * 60_000);

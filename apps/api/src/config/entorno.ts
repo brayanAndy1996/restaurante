@@ -94,7 +94,8 @@ export interface Entorno extends Omit<
    * URL base pública de la API, sin barra final: la que el puente de impresión usa para hablar con ella y la que va
    * en el texto del QR de vinculación (`restaurante-puente://vincular?api=<URL>&t=<código>`, criterio 106). Con
    * `NODE_ENV` `development` o `test` y sin definir, `http://localhost:<PORT>`; en producción puede faltar
-   * (`undefined`) y entonces crear un código de vinculación responde un error interno con el motivo en el log.
+   * (`undefined`): la API avisa con un `warn` al arrancar y crear un código de vinculación responde 503
+   * `CONFIGURACION_INCOMPLETA`.
    */
   API_URL_PUBLICA: string | undefined;
 }

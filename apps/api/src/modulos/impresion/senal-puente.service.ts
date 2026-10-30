@@ -103,12 +103,12 @@ export class SenalPuenteService implements OnApplicationBootstrap, OnModuleDestr
 
   /**
    * La señal del puente por el socket (criterio 111): `ultima_senal_en` = ahora. Si el puente volvía, publica
-   * `impresion.estado`. Un puente revocado no deja señal.
+   * `impresion.estado`. Un puente revocado no deja señal y la respuesta es `false` (ya no está activo).
    */
-  async marcarSenal(puente: PuenteVigilado): Promise<void> {
+  async marcarSenal(puente: PuenteVigilado): Promise<boolean> {
     const ahora = this.reloj.ahora();
     this.vigilar(puente);
-    await this.contexto.ejecutar(
+    return this.contexto.ejecutar(
       puente.empresaId,
       async () => {
         const filas = await this.conexion.query<{
@@ -120,7 +120,7 @@ export class SenalPuenteService implements OnApplicationBootstrap, OnModuleDestr
           { bind: [puente.puenteId], type: QueryTypes.SELECT },
         );
         const antes = filas[0];
-        if (antes === undefined) return;
+        if (antes === undefined) return false;
         await this.conexion.query(
           `UPDATE puente SET ultima_senal_en = $2, desconexion_avisada_en = NULL, actualizado_en = $2
             WHERE id = $1`,
@@ -129,6 +129,30 @@ export class SenalPuenteService implements OnApplicationBootstrap, OnModuleDestr
         if (puenteVuelve(antes.ultima_senal_en, antes.desconexion_avisada_en, ahora)) {
           this.eventos.impresionEstado(puente.sucursalId);
         }
+        return true;
+      },
+      { actor: { sistema: `puente:${puente.puenteId}` } },
+    );
+  }
+
+  /**
+   * La señal del puente al desconectarse su socket (criterio 111): `ultima_senal_en` = ahora, sin más. Cerrar un
+   * socket no es que el puente "vuelva": no limpia `desconexion_avisada_en` ni publica `impresion.estado`. Y solo
+   * cuenta si el puente seguía con señal (ni 60 segundos callado ni con su desconexión ya avisada): un socket que
+   * se cierra tarde no resucita a un puente que ya se dio por desconectado (falla F4 de la ronda 1 del ataque).
+   */
+  async marcarDesconexion(puente: PuenteVigilado): Promise<void> {
+    const ahora = this.reloj.ahora();
+    const limite = new Date(ahora.getTime() - MS_PUENTE_CONECTADO);
+    await this.contexto.ejecutar(
+      puente.empresaId,
+      async () => {
+        await this.conexion.query(
+          `UPDATE puente SET ultima_senal_en = $2, actualizado_en = $2
+            WHERE id = $1 AND activo AND desconexion_avisada_en IS NULL
+              AND ultima_senal_en IS NOT NULL AND ultima_senal_en >= $3`,
+          { bind: [puente.puenteId, ahora, limite], type: QueryTypes.UPDATE },
+        );
       },
       { actor: { sistema: `puente:${puente.puenteId}` } },
     );

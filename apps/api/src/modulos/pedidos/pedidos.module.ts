@@ -27,7 +27,7 @@ import { VistaOrdenService } from './vista-orden';
  * `comanda_linea` (migración `202610300002-pedidos`), `anulacion_item` y `precuenta` (T22). Usa
  * `MesasConsultaService` (salón), `CartaVentaService` y `CartaConsultaService` (carta) y `UsuariosConsultaService`
  * (seguridad); nunca consulta tablas ajenas. `INVENTARIO` lo provee `InventarioModule` (global) e `IMPRESION`,
- * `ImpresionModule` (3b; en 3a lo proveía `ImpresionSoloKds`). Exporta solo
+ * `ImpresionModule` (3b). Exporta solo
  * `PedidosConsultaService`, que usará la sección 4.
  */
 @Module({

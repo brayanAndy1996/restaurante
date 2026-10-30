@@ -1,7 +1,6 @@
 import { Controller, Delete, Get, HttpCode, Inject, Param, Post } from '@nestjs/common';
 import type { PuenteRespuesta, VinculacionRespuesta } from '@restaurante/contratos';
 import { PipeUuid } from '../../nucleo/errores/pipes';
-import { Idempotente } from '../../nucleo/idempotencia';
 import { Permiso } from '../seguridad';
 import { PuentesService } from './puentes.service';
 
@@ -14,9 +13,12 @@ import { PuentesService } from './puentes.service';
 export class PuentesController {
   constructor(@Inject(PuentesService) private readonly puentes: PuentesService) {}
 
-  /** 201 `{ token, qr, expiraEn }` con `Idempotency-Key` opcional; 403; 404. Invalida los códigos pendientes. */
+  /**
+   * 201 `{ token, qr, expiraEn }`; 403; 404; 503 `CONFIGURACION_INCOMPLETA` sin `API_URL_PUBLICA`. Invalida los
+   * códigos pendientes. No es idempotente a propósito: la respuesta lleva el secreto del código y la idempotencia
+   * la guardaría; un reintento solo crea otro código e invalida el anterior.
+   */
   @Post('vinculaciones-puente')
-  @Idempotente()
   @Permiso('ADMINISTRAR')
   crearVinculacion(
     @Param('sucursalId', PipeUuid) sucursalId: string,

@@ -581,6 +581,19 @@ describe('Trabajos de hoy (criterios 128 y 139)', () => {
     expect(seccion).toHaveTextContent('5 trabajos');
   });
 
+  it('un ticket que no se pudo armar lo dice con palabras, en lugar de «Pendiente»', async () => {
+    api({
+      trabajos: [
+        trabajo(1, { estado: 'PENDIENTE', impresoEn: null, sinTicket: true, ultimoError: 'x' }),
+      ],
+    });
+    const seccion = await abrirLista();
+    const fila = within(seccion).getAllByRole('listitem')[0]!;
+    expect(within(fila).getByText('No se pudo armar el ticket')).toBeVisible();
+    expect(within(fila).getByText(/no pudo preparar el contenido/)).toBeVisible();
+    expect(within(fila).queryByText('Pendiente')).toBeNull();
+  });
+
   it('la página de prueba no se reimprime desde aquí; todo lo demás sí', async () => {
     api({ trabajos: TRABAJOS });
     const seccion = await abrirLista();
