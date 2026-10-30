@@ -1,11 +1,11 @@
 import {
-  MAXIMO_BLOQUES_TICKET,
   VERSION_DOCUMENTO_TICKET,
   type BloqueTicket,
   type DocumentoTicket,
 } from '@restaurante/contratos';
 import type { TipoComanda } from '@restaurante/dominio';
-import { etiquetaDeMesas, juntarEnLineas, limpiarTexto } from './texto';
+import { ajustarAlPresupuesto } from './presupuesto';
+import { juntarEnLineas, lineasDeMesas, limpiarTexto } from './texto';
 
 /**
  * Plantilla de la comanda de una estación (historia 004, criterio 124). Arma el documento lógico; los bytes los
@@ -60,9 +60,6 @@ const ETIQUETA_TIPO: Readonly<Record<TipoComanda, string>> = {
   ANULACION: 'ANULACIÓN',
 };
 
-/** Con tantos bloques se juntan los modificadores en una línea y se quitan las líneas en blanco. */
-const BLOQUES_PARA_COMPACTAR = MAXIMO_BLOQUES_TICKET - 20;
-
 function bloquesDeLinea(
   linea: LineaDeComanda,
   tipo: TipoComanda,
@@ -72,13 +69,13 @@ function bloquesDeLinea(
   const bloques: BloqueTicket[] = [
     {
       tipo: 'linea',
-      texto: limpiarTexto(tipo === 'ANULACION' ? `ANULADO ${cantidad}` : cantidad),
+      texto: tipo === 'ANULACION' ? `ANULADO ${cantidad}` : cantidad,
       negrita: true,
     },
   ];
   const contexto = limpiarTexto(linea.contexto);
   if (contexto.length > 0) {
-    bloques.push({ tipo: 'linea', texto: limpiarTexto(`(${contexto})`), sangria: 2 });
+    bloques.push({ tipo: 'linea', texto: `(${contexto})`, sangria: 2 });
   }
   const modificadores = linea.modificadores.map(limpiarTexto).filter((m) => m.length > 0);
   if (compacto && modificadores.length > 0) {
@@ -90,12 +87,7 @@ function bloquesDeLinea(
   }
   const observacion = limpiarTexto(linea.observacion);
   if (observacion.length > 0) {
-    bloques.push({
-      tipo: 'linea',
-      texto: limpiarTexto(`Obs: ${observacion}`),
-      negrita: true,
-      sangria: 2,
-    });
+    bloques.push({ tipo: 'linea', texto: `Obs: ${observacion}`, negrita: true, sangria: 2 });
   }
   if (linea.paraLlevar) bloques.push({ tipo: 'marca', texto: 'PARA LLEVAR' });
   if (linea.esperar && (tipo === 'COMANDA' || tipo === 'ADICION')) {
@@ -104,17 +96,30 @@ function bloquesDeLinea(
   return bloques;
 }
 
-function armar(
-  comanda: ComandaParaTicket,
-  contexto: ContextoDeComanda,
-  compacto: boolean,
-): BloqueTicket[] {
+/** Toda la parte en un texto: "3 × Hamburguesa (Combo) · Extra queso, Sin sal · Obs: bien cocida · PARA LLEVAR". */
+function textoDeLinea(linea: LineaDeComanda, tipo: TipoComanda): string {
+  const cantidad = `${linea.cantidad} × ${limpiarTexto(linea.nombre)}`;
+  const partes = [tipo === 'ANULACION' ? `ANULADO ${cantidad}` : cantidad];
+  const contexto = limpiarTexto(linea.contexto);
+  if (contexto.length > 0) partes[0] += ` (${contexto})`;
+  const modificadores = linea.modificadores.map(limpiarTexto).filter((m) => m.length > 0);
+  if (modificadores.length > 0) partes.push(modificadores.join(', '));
+  const observacion = limpiarTexto(linea.observacion);
+  if (observacion.length > 0) partes.push(`Obs: ${observacion}`);
+  if (linea.paraLlevar) partes.push('PARA LLEVAR');
+  if (linea.esperar && (tipo === 'COMANDA' || tipo === 'ADICION')) partes.push('ESPERAR');
+  return partes.join(' · ');
+}
+
+function encabezadoDe(comanda: ComandaParaTicket, contexto: ContextoDeComanda): BloqueTicket[] {
   const encabezado: BloqueTicket[] = [
     {
       tipo: 'titulo',
       texto: limpiarTexto(`${comanda.estacion.toUpperCase()} · ${ETIQUETA_TIPO[comanda.tipo]}`),
     },
-    { tipo: 'titulo', texto: etiquetaDeMesas(contexto.mesas) },
+    ...lineasDeMesas(contexto.mesas, true).map(
+      (texto): BloqueTicket => ({ tipo: 'titulo', texto }),
+    ),
     {
       tipo: 'columnas',
       izquierda: limpiarTexto(`Mozo: ${contexto.mozo}`),
@@ -126,16 +131,42 @@ function armar(
   }
   const motivo = limpiarTexto(comanda.motivo);
   if (comanda.tipo === 'ANULACION' && motivo.length > 0) {
-    encabezado.push({ tipo: 'linea', texto: limpiarTexto(`Motivo: ${motivo}`), negrita: true });
+    // Un motivo largo sale completo, en varias líneas (`aLargoValido` lo reparte).
+    encabezado.push({ tipo: 'linea', texto: `Motivo: ${motivo}`, negrita: true });
   }
   encabezado.push({ tipo: 'regla', caracter: '-' });
+  return encabezado;
+}
 
+function cuerpoCompleto(
+  comanda: ComandaParaTicket,
+  compacto: boolean,
+): BloqueTicket[] {
   const cuerpo: BloqueTicket[] = [];
   comanda.lineas.forEach((linea, i) => {
     if (i > 0 && !compacto) cuerpo.push({ tipo: 'espacio' });
     cuerpo.push(...bloquesDeLinea(linea, comanda.tipo, compacto));
   });
-  return [...encabezado, ...cuerpo];
+  return cuerpo;
+}
+
+/** Una parte por línea de texto, sin líneas en blanco ni marcas aparte. */
+function cuerpoDenso(comanda: ComandaParaTicket): BloqueTicket[] {
+  return comanda.lineas.map(
+    (linea): BloqueTicket => ({
+      tipo: 'linea',
+      texto: textoDeLinea(linea, comanda.tipo),
+      negrita: true,
+    }),
+  );
+}
+
+/** Las partes una detrás de otra, rellenando cada línea hasta el máximo de un bloque. */
+function cuerpoEmpaquetado(comanda: ComandaParaTicket): BloqueTicket[] {
+  return juntarEnLineas(
+    comanda.lineas.map((linea) => textoDeLinea(linea, comanda.tipo)),
+    ' | ',
+  ).map((texto): BloqueTicket => ({ tipo: 'linea', texto }));
 }
 
 /**
@@ -149,7 +180,13 @@ export function documentoDeComanda(
   comanda: ComandaParaTicket,
   contexto: ContextoDeComanda,
 ): DocumentoTicket {
-  let bloques = armar(comanda, contexto, false);
-  if (bloques.length > BLOQUES_PARA_COMPACTAR) bloques = armar(comanda, contexto, true);
+  // Nunca pasa de `PRESUPUESTO_DE_BLOQUES`: del más completo al más denso, el primero que cabe (ver
+  // `ajustarAlPresupuesto`); las marcas de retraso y de reimpresión siempre tienen lugar.
+  const bloques = ajustarAlPresupuesto(encabezadoDe(comanda, contexto), [
+    () => cuerpoCompleto(comanda, false),
+    () => cuerpoCompleto(comanda, true),
+    () => cuerpoDenso(comanda),
+    () => cuerpoEmpaquetado(comanda),
+  ]);
   return { version: VERSION_DOCUMENTO_TICKET, tipo: comanda.tipo, bloques };
 }

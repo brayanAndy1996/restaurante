@@ -91,8 +91,10 @@ export async function puenteDeEstado(
 /**
  * El estado y los trabajos pendientes de cada impresora de la sucursal (criterios 105 y 121). El estado es lo que
  * reportó el puente en su último latido, pero solo mientras el puente está conectado: sin puente, o con el puente
- * sin señal, o sin que haya reportado esa impresora, es `DESCONOCIDO`. Un pendiente cuyo día operativo ya pasó
- * está vencido y no cuenta (criterio 117).
+ * sin señal, o sin que haya reportado esa impresora, es `DESCONOCIDO`. Una impresora Bluetooth siempre es
+ * `DESCONOCIDO` (en 3b el puente no imprime por ahí y el latido no guarda su estado). Un pendiente cuyo día
+ * operativo ya pasó está vencido y no cuenta (criterio 117), ni uno cuyo ticket no se pudo armar (`error_render`:
+ * no depende de la impresora, así que no es parte de su cola).
  */
 export async function estadoDeImpresoras(
   conexion: Sequelize,
@@ -107,14 +109,24 @@ export async function estadoDeImpresoras(
   const pendientes = await conexion.query<{ impresora_id: string; n: number }>(
     `SELECT impresora_id, count(*)::int AS n FROM trabajo_impresion
       WHERE sucursal_id = $1 AND estado = 'PENDIENTE' AND dia_operativo >= $2::date
-        AND impresora_id = ANY($3::uuid[])
+        AND error_render IS NULL AND impresora_id = ANY($3::uuid[])
       GROUP BY impresora_id`,
     { bind: [sucursalId, momento.diaOperativo, [...ids]], type: QueryTypes.SELECT },
   );
   const cola = new Map(pendientes.map((p) => [p.impresora_id, p.n]));
+  // Aunque haya un estado guardado (de antes de cambiar la conexión), una Bluetooth nunca tiene estado en 3b.
+  const bluetooth = new Set(
+    (
+      await conexion.query<{ id: string }>(
+        `SELECT id FROM impresora WHERE sucursal_id = $1 AND conexion_tipo = 'BLUETOOTH' AND id = ANY($2::uuid[])`,
+        { bind: [sucursalId, [...ids]], type: QueryTypes.SELECT },
+      )
+    ).map((f) => f.id),
+  );
   return new Map(
     ids.map((id) => {
-      const reportado = activo?.conectado === true ? activo.impresoras[id] : undefined;
+      const reportado =
+        activo?.conectado === true && !bluetooth.has(id) ? activo.impresoras[id] : undefined;
       return [
         id,
         {

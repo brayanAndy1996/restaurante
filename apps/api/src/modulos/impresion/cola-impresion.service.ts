@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import { diaOperativo } from '@restaurante/dominio';
 import { QueryTypes, type Sequelize } from 'sequelize';
 import { CONEXION_API } from '../../nucleo/base-de-datos';
@@ -12,6 +12,7 @@ import type {
   TrabajoParaEncolar,
 } from '../pedidos/impresion';
 import { SucursalesConsultaService } from '../plataforma';
+import { errorDeDocumento } from './escpos';
 import { EventosImpresion } from './eventos-impresion';
 
 /**
@@ -28,9 +29,17 @@ import { EventosImpresion } from './eventos-impresion';
  * fecha de creación es la del reloj de la API (nunca `now()` de la base), el día operativo sale de la hora de
  * corte de la sucursal (criterio 117) y el aviso `trabajo.nuevo` sale solo después de confirmar y solo si la
  * sucursal tiene un puente vinculado (criterio 112).
+ *
+ * `encolar` valida cada documento con `documentoTicketSchema` antes de guardarlo. Las plantillas garantizan un
+ * documento válido, así que un documento inválido es un error de programación: el envío no se revierte por eso
+ * (la comida tiene que salir), el error se registra y el trabajo se guarda con `error_render` para que se vea en
+ * "Trabajos de hoy", no se entregue nunca y no ocupe lugar en la cola del puente. La columna `mesa` de la lista se
+ * recorta con "…" a los 300 caracteres que admite.
  */
 @Injectable()
 export class ColaImpresionService implements ImpresionPuerto {
+  private readonly logger = new Logger(ColaImpresionService.name);
+
   constructor(
     @Inject(CONEXION_API) private readonly conexion: Sequelize,
     @Inject(ContextoEmpresa) private readonly contexto: ContextoEmpresa,
@@ -63,13 +72,16 @@ export class ColaImpresionService implements ImpresionPuerto {
     );
   }
 
-  /** Criterio 138: el destino de cada estación con el nombre de su impresora, en una sola consulta. */
+  /**
+   * Criterio 138: el destino de cada estación con el nombre de su impresora, en una sola consulta. Las claves son
+   * los ids pedidos, tal cual (igual que `destinos`).
+   */
   async destinosVisibles(
     sucursalId: string,
     estacionIds: readonly string[],
   ): Promise<ReadonlyMap<string, DestinoVisibleDeEstacion>> {
     const kds = { destino: 'KDS' } as const;
-    const ids = [...new Set(estacionIds.map((id) => id.toLowerCase()))];
+    if (estacionIds.length === 0) return new Map();
     const filas = await this.conexion.query<{
       estacion_id: string;
       impresora_id: string;
@@ -79,12 +91,15 @@ export class ColaImpresionService implements ImpresionPuerto {
          FROM estacion_destino d
          JOIN impresora i ON i.id = d.impresora_id AND i.empresa_id = d.empresa_id
         WHERE d.sucursal_id = $1 AND d.estacion_id = ANY($2::uuid[]) AND d.destino = 'IMPRESORA'`,
-      { bind: [sucursalId, ids], type: QueryTypes.SELECT },
+      {
+        bind: [sucursalId, [...new Set(estacionIds.map((id) => id.toLowerCase()))]],
+        type: QueryTypes.SELECT,
+      },
     );
     const impresoraDe = new Map(filas.map((f) => [f.estacion_id, f]));
     return new Map(
-      ids.map((id): [string, DestinoVisibleDeEstacion] => {
-        const fila = impresoraDe.get(id);
+      estacionIds.map((id): [string, DestinoVisibleDeEstacion] => {
+        const fila = impresoraDe.get(id.toLowerCase());
         return [
           id,
           fila === undefined
@@ -115,10 +130,11 @@ export class ColaImpresionService implements ImpresionPuerto {
       documento: t.documento,
       comanda_id: t.comandaId,
       precuenta_id: t.precuentaId,
-      mesa: t.mesa,
+      mesa: recortarMesa(t.mesa),
       orden_id: t.ordenId,
       envio_numero: t.envioNumero,
       dia_operativo: dias.get(t.sucursalId),
+      error_render: this.errorDelDocumento(t.documento, t.tipo),
     }));
     await this.insertar(empresaId, filas, ahora);
     for (const sucursalId of dias.keys()) {
@@ -152,21 +168,35 @@ export class ColaImpresionService implements ImpresionPuerto {
       envio_numero: number | null;
       dia_operativo: string | undefined;
       reimpresion_de_id?: string | null;
+      error_render?: string | null;
     }>,
     ahora: Date,
   ): Promise<void> {
     await this.conexion.query(
       `INSERT INTO trabajo_impresion (id, empresa_id, sucursal_id, impresora_id, estacion_id, tipo, documento,
                                       comanda_id, precuenta_id, reimpresion_de_id, orden_id, envio_numero, mesa, estado, dia_operativo,
-                                      creado_en, actualizado_en)
+                                      error_render, creado_en, actualizado_en)
        SELECT x.id, $2::uuid, x.sucursal_id, x.impresora_id, x.estacion_id, x.tipo, x.documento,
               x.comanda_id, x.precuenta_id, x.reimpresion_de_id, x.orden_id, x.envio_numero, x.mesa, 'PENDIENTE', x.dia_operativo,
-              $3::timestamptz, $3::timestamptz
+              x.error_render, $3::timestamptz, $3::timestamptz
          FROM jsonb_to_recordset($1::jsonb) AS x(id uuid, sucursal_id uuid, impresora_id uuid,
               estacion_id uuid, tipo text, documento jsonb, comanda_id uuid, precuenta_id uuid,
-              reimpresion_de_id uuid, orden_id uuid, envio_numero int, mesa text, dia_operativo date)`,
+              reimpresion_de_id uuid, orden_id uuid, envio_numero int, mesa text, dia_operativo date,
+              error_render text)`,
       { bind: [JSON.stringify(filas), empresaId, ahora] },
     );
+  }
+
+  /**
+   * El error de un documento que no se podría armar (o `null` si está bien). Se registra: es un error de las
+   * plantillas, no de quien envía.
+   */
+  errorDelDocumento(documento: unknown, tipo: string): string | null {
+    const error = errorDeDocumento(documento);
+    if (error !== null) {
+      this.logger.error(`Se guardó un trabajo ${tipo} sin ticket: ${error}`);
+    }
+    return error;
   }
 
   /** El día operativo de la sucursal en un instante, con su hora de corte (criterio 117). */
@@ -198,4 +228,16 @@ export class ColaImpresionService implements ImpresionPuerto {
     );
     return new Map(filas.map((f) => [f.precuenta_id, f.id]));
   }
+}
+
+/** Caracteres que admite la columna `trabajo_impresion.mesa`. */
+export const LARGO_MESA_DE_TRABAJO = 300;
+
+/** Los nombres de las mesas de la lista de trabajos: con más de 300 caracteres se recortan con "…". */
+export function recortarMesa(mesa: string | null): string | null {
+  if (mesa === null) return null;
+  const caracteres = Array.from(mesa);
+  return caracteres.length <= LARGO_MESA_DE_TRABAJO
+    ? mesa
+    : `${caracteres.slice(0, LARGO_MESA_DE_TRABAJO - 1).join('').trimEnd()}…`;
 }

@@ -13,7 +13,8 @@
 // - `trabajo_impresion`: un ticket en cola para una impresora (criterios 101, 113 a 117 y 126). Guarda el documento
 //   lógico (`documentoTicket`), no bytes: los bytes se arman al entregarlo con la configuración vigente de la
 //   impresora. `VENCIDO` no se guarda: se calcula al leer cuando pasó el `dia_operativo` (criterio 117). Un índice
-//   único parcial impide un segundo trabajo de la misma comanda (los de reimpresión llevan `reimpresion_de_id`).
+//   único parcial impide un segundo trabajo de la misma comanda (los de reimpresión llevan `reimpresion_de_id`); el
+//   de la pre-cuenta, que aquí es solo un índice de búsqueda, es único desde la migración `202610310004`.
 //   Se agregan cuatro columnas que la especificación no lista, nulas y solo para la lista y la reimpresión de la
 //   PWA (criterio 128): `mesa` (los nombres de las mesas), `estacion_id` (para reimprimir en la impresora actual
 //   de la estación si la original está inactiva), `orden_id` y `envio_numero` (para que la cuenta muestre los
@@ -104,7 +105,8 @@ CREATE TABLE trabajo_impresion (
   -- principal al leer) y el número del envío de una COMANDA o ADICION (criterio 128).
   orden_id uuid,
   envio_numero integer CHECK (envio_numero IS NULL OR envio_numero >= 1),
-  -- Los nombres de las mesas de la cuenta, separados por coma; nulo en la página de prueba.
+  -- Los nombres de las mesas de la cuenta, separados por coma y recortados con "…" si pasan de 300 caracteres (la
+  -- API los recorta al encolar); nulo en la página de prueba.
   mesa text CHECK (mesa IS NULL OR char_length(mesa) <= 300),
   estado text NOT NULL DEFAULT 'PENDIENTE' CHECK (estado IN ('PENDIENTE', 'IMPRESO')),
   -- El día operativo de la sucursal al crearlo; pasado ese día, un pendiente es VENCIDO (criterio 117).
@@ -143,7 +145,7 @@ CREATE INDEX trabajo_impresion_cola_idx
 -- Los pendientes de cada impresora (criterios 105 y 121).
 CREATE INDEX trabajo_impresion_impresora_idx ON trabajo_impresion (empresa_id, impresora_id)
   WHERE estado = 'PENDIENTE';
--- Una comanda, un trabajo (criterio 101); las reimpresiones llevan su propio \`reimpresion_de_id\`.
+-- Una comanda, un trabajo (criterio 101); las reimpresiones llevan su propio reimpresion_de_id.
 CREATE UNIQUE INDEX trabajo_impresion_comanda_unico ON trabajo_impresion (empresa_id, comanda_id)
   WHERE comanda_id IS NOT NULL AND reimpresion_de_id IS NULL;
 CREATE INDEX trabajo_impresion_precuenta_idx ON trabajo_impresion (empresa_id, precuenta_id)

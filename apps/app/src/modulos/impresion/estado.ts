@@ -13,7 +13,13 @@ import { CLAVES_TIEMPO_REAL } from '../../lib/tiempo-real';
  * reglas que deciden qué decir. Va en el paquete inicial, así que no importa montos ni nada pesado.
  */
 
-/** Cada cuánto se vuelve a mirar el estado, aunque no llegue ningún evento (criterio 122). */
+/** Cada cuánto se vuelve a pedir el estado a la API, aunque no llegue ningún evento (criterio 122). */
+export const PERIODO_DE_CONSULTA_MS = 30_000;
+
+/**
+ * Cada cuánto se vuelve a evaluar lo que ya se tiene (criterio 122): el "hace N s" y el paso a "desconectado"
+ * se calculan con la hora de la API más el tiempo transcurrido, sin pedir nada.
+ */
 export const PERIODO_DE_REEVALUACION_MS = 15_000;
 
 /** Pasado este tiempo sin señal, el puente cuenta como desconectado (criterio 121). */
@@ -164,8 +170,8 @@ export function resumenDeImpresion(
 }
 
 /**
- * El estado de la impresión de la sucursal, vuelto a pedir cada 15 s y al instante con el evento
- * `impresion.estado` (`lib/tiempo-real.ts`). También se vuelve a dibujar cada 15 s: si una consulta
+ * El estado de la impresión de la sucursal, vuelto a pedir cada 30 s y al instante con el evento
+ * `impresion.estado` (`lib/tiempo-real.ts`). Se vuelve a dibujar cada 15 s: si una consulta
  * falla, "hace 2 min" y el paso a "desconectado" no se quedan congelados. `desdeLaRespuestaMs` es el
  * tiempo que pasó desde que llegó la respuesta, para usar con la hora de la API.
  */
@@ -174,7 +180,7 @@ export function useEstadoDeImpresion(sucursalId: string | undefined) {
     queryKey: claveEstadoImpresion(sucursalId ?? ''),
     queryFn: ({ signal }) => leerEstadoDeImpresion(signal),
     enabled: !!sucursalId,
-    refetchInterval: PERIODO_DE_REEVALUACION_MS,
+    refetchInterval: PERIODO_DE_CONSULTA_MS,
   });
   const [, dibujar] = useState(0);
   useEffect(() => {

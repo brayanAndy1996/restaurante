@@ -29,9 +29,9 @@ export class EstadoImpresionService {
   ) {}
 
   /**
-   * `POST /puente/latido` (criterio 120): guarda la señal del puente y el estado de cada impresora (con su
+   * `POST /puente/latido` (criterio 120): guarda la señal del puente y el estado de cada impresora de red (con su
    * `estadoDesde`); la versión de la app es la de la vinculación y no cambia. Una impresora de otra sucursal, de
-   * otra empresa o inexistente se ignora. Publica `impresion.estado` en la sala de la sucursal solo si cambió algún
+   * otra empresa, Bluetooth o inexistente se ignora. Publica `impresion.estado` en la sala de la sucursal solo si cambió algún
    * estado o si el puente vuelve (más de 60 segundos sin señal, o su desconexión ya se había avisado); el mismo
    * estado repetido no publica nada. Deja al puente bajo la vigilancia de la revisión de señal.
    */
@@ -50,10 +50,11 @@ export class EstadoImpresionService {
     const actual = filas[0];
     if (actual === undefined) return;
 
+    // Solo las impresoras de red de su sucursal: en 3b una Bluetooth no imprime y nunca tiene estado (decisión 12).
     const propias = new Set(
       (
         await this.conexion.query<{ id: string }>(
-          'SELECT id FROM impresora WHERE sucursal_id = $1',
+          `SELECT id FROM impresora WHERE sucursal_id = $1 AND conexion_tipo = 'RED'`,
           {
             bind: [puente.sucursalId],
             type: QueryTypes.SELECT,

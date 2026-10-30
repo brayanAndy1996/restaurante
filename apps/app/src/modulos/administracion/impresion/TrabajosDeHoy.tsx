@@ -15,20 +15,22 @@ import { mensajeDeError } from '../../../lib/errores';
 import { ListaDeTrabajos } from '../../impresion/ListaDeTrabajos';
 import { claveTrabajos, listarTrabajos, useReimpresion } from '../../impresion/trabajos';
 
-type Filtro = EstadoTrabajo | 'todos';
+/**
+ * "Vencidos" no es un filtro: la lista es del día operativo y un trabajo vence al pasar el día, así que a
+ * esa hora ya no está en la lista. Un ticket vencido de hoy se ve igual en "Todos", con su etiqueta.
+ */
+type Filtro = Exclude<EstadoTrabajo, 'VENCIDO'> | 'todos';
 
 const FILTROS: readonly OpcionDeSegmento<Filtro>[] = [
   { valor: 'todos', etiqueta: 'Todos' },
   { valor: 'PENDIENTE', etiqueta: 'Pendientes' },
   { valor: 'IMPRESO', etiqueta: 'Impresos' },
-  { valor: 'VENCIDO', etiqueta: 'Vencidos' },
 ];
 
 const VACIO: Record<Filtro, string> = {
   todos: 'Aún no se mandó nada a imprimir hoy. Los tickets aparecen aquí apenas se envían.',
   PENDIENTE: 'No hay tickets pendientes: todo lo que se mandó ya se imprimió.',
   IMPRESO: 'Todavía no se imprimió ningún ticket hoy.',
-  VENCIDO: 'No hay tickets vencidos.',
 };
 
 /** Cada cuánto se vuelve a pedir la lista mientras se mira (los tickets pasan de pendiente a impreso). */
@@ -44,7 +46,7 @@ export function TrabajosDeHoy({ sucursalId }: { sucursalId: string }) {
   const reimpresion = useReimpresion();
   const consulta = useQuery({
     queryKey: claveTrabajos(sucursalId, filtro),
-    queryFn: ({ signal }) => listarTrabajos(filtro === 'todos' ? undefined : filtro, signal),
+    queryFn: ({ signal }) => listarTrabajos(filtro === 'todos' ? {} : { estado: filtro }, signal),
     refetchInterval: PERIODO_DE_LA_LISTA_MS,
   });
   const trabajos = consulta.data;

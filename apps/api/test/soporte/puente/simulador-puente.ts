@@ -5,7 +5,7 @@ import {
   IDS_IMPRESOS_RECORDADOS,
   INTERVALO_LATIDO_MS,
   INTERVALO_PEDIR_TRABAJOS_MS,
-  MAXIMO_TRABAJOS_ENTREGA,
+  MAXIMO_TRABAJOS_POR_IMPRESORA,
   VERSION_PROTOCOLO_PUENTE,
   configuracionPuenteSchema,
   eventoTrabajoNuevoDatosSchema,
@@ -433,7 +433,7 @@ export class SimuladorPuente {
         lote.map((t) => t.id),
       );
       avance = await this.procesarLote(lote);
-    } while (lote.length >= MAXIMO_TRABAJOS_ENTREGA && avance > 0 && this.puedeTrabajar());
+    } while (hayMasPorPedir(lote) && avance > 0 && this.puedeTrabajar());
   }
 
   /** Imprime el lote en el orden recibido; devuelve cuántos trabajos quedaron resueltos (impresos u omitidos). */
@@ -842,4 +842,13 @@ export class SimuladorPuente {
         : `${tipo} ${typeof detalle === 'string' ? detalle : JSON.stringify(detalle)}`,
     );
   }
+}
+
+/** Si el lote llenó el cupo de alguna impresora, la API puede tener más trabajos suyos esperando. */
+function hayMasPorPedir(lote: readonly TrabajoParaImprimir[]): boolean {
+  const porImpresora = new Map<string, number>();
+  for (const trabajo of lote) {
+    porImpresora.set(trabajo.impresoraId, (porImpresora.get(trabajo.impresoraId) ?? 0) + 1);
+  }
+  return [...porImpresora.values()].some((n) => n >= MAXIMO_TRABAJOS_POR_IMPRESORA);
 }

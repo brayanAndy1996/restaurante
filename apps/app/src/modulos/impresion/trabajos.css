@@ -4,3 +4,9 @@
 .trabajo .ui-fila__derecha .ui-boton {
   white-space: nowrap;
 }
+
+/* El porqué de un ticket que no se pudo armar: debajo de las etiquetas, sin pasar de la fila */
+.trabajo__falla {
+  margin: var(--espacio-xs) 0 0;
+  max-width: 48ch;
+}

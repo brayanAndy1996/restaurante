@@ -252,6 +252,8 @@ export const estadoImpresionRespuestaSchema = z.object({
 export const trabajosConsultaSchema = z.strictObject({
   desde: instanteSchema.optional(),
   estado: estadoTrabajoSchema.optional(),
+  /** Solo los trabajos de esa orden (la cuenta pide solo sus tickets); la orden de origen o la principal a la que se unió. */
+  ordenId: uuidSchema.optional(),
 });
 
 export const trabajoResumenSchema = z.object({
@@ -273,6 +275,13 @@ export const trabajoResumenSchema = z.object({
   ordenId: uuidSchema.nullable(),
   /** El número del envío de una comanda `COMANDA` o `ADICION`; `null` en los demás trabajos. */
   envioNumero: z.number().int().positive().nullable(),
+  /**
+   * Por qué el trabajo no se imprime: el ticket no se pudo armar (no se entrega y no cuenta como pendiente de la
+   * impresora) o el último fallo que reportó el puente. `null` si no hay error.
+   */
+  ultimoError: z.string().nullable().optional(),
+  /** `true` si el ticket no se pudo armar: no se entrega nunca y solo se puede reimprimir con otro documento. */
+  sinTicket: z.boolean().optional(),
 });
 
 /** Respuesta de la página de prueba y de la reimpresión (criterios 127 y 128). */

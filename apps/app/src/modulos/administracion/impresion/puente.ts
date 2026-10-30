@@ -103,8 +103,14 @@ export const MENSAJES_DEL_PUENTE = {
   NO_ENCONTRADO: 'Ese puente ya no está. Actualizamos la pantalla.',
 } as const;
 
+/** El 503 `CONFIGURACION_INCOMPLETA` del código de vinculación: la API no sabe su propia dirección pública. */
+export const MENSAJE_DE_CONFIGURACION_INCOMPLETA =
+  'Falta configurar la dirección pública del sistema. Avísale a soporte.';
+
 /** Por qué no se pudo generar el código. */
 export const falloDeVinculacion = (error: unknown): string =>
   error instanceof ErrorApi && error.codigo === 'PROHIBIDO'
     ? 'Solo un Administrador puede vincular el puente.'
-    : mensajeDeError(error);
+    : error instanceof ErrorApi && error.codigo === 'CONFIGURACION_INCOMPLETA'
+      ? MENSAJE_DE_CONFIGURACION_INCOMPLETA
+      : mensajeDeError(error);

@@ -29,6 +29,7 @@ import { horaDeLima } from '../../lib/formato';
 import { montoEnSoles } from '../../lib/monto';
 import { CLAVES_TIEMPO_REAL } from '../../lib/tiempo-real';
 import { usePermiso } from '../acceso/permisos';
+import { avisoDeImpresion, useEstadoDeImpresion } from '../impresion/estado';
 import { useSesionActiva } from '../acceso/sesion';
 import {
   claveDeBorrador,
@@ -49,6 +50,7 @@ import {
   itemsPorMarchar,
   marcharItems,
   resumenDeCuenta,
+  textoDeEnvioHecho,
   textoDeItems,
   textoDeModificadores,
   tituloDeMesas,
@@ -93,6 +95,21 @@ const MENSAJES_DE_MARCHA = {
   ORDEN_NO_ABIERTA: 'Esta cuenta ya no está abierta.',
   NO_ENCONTRADO: 'Esta cuenta ya no existe.',
 } as const;
+
+/**
+ * "Pedido enviado": dice que la comanda se envió a cocina, no que ya salió el ticket. Si el estado de la
+ * impresión (la misma consulta del aviso de todas las pantallas) indica un problema, añade que quedó en cola.
+ */
+function AvisoDeEnvio({ numero, esAdicion }: { numero: number; esAdicion: boolean }) {
+  const sesion = useSesionActiva();
+  const { estado, desdeLaRespuestaMs } = useEstadoDeImpresion(sesion.sucursal?.id);
+  const problema = estado ? avisoDeImpresion(estado, desdeLaRespuestaMs) !== null : false;
+  return (
+    <Aviso tipo="ok" titulo="Pedido enviado">
+      {textoDeEnvioHecho(numero, esAdicion, problema)}
+    </Aviso>
+  );
+}
 
 /** `/salon/ordenes/:id`: la cuenta de la mesa (criterio 90 de 004). */
 export function OrdenPagina() {
@@ -328,13 +345,7 @@ function Cuenta({
           Esta es la cuenta principal. Lo que tenías por enviar sigue en «Por enviar».
         </Aviso>
       ) : null}
-      {enviado ? (
-        <Aviso tipo="ok" titulo="Pedido enviado">
-          {enviado.esAdicion || enviado.numero > 1
-            ? `La adición ${enviado.numero} ya salió a cocina.`
-            : 'La comanda ya salió a cocina.'}
-        </Aviso>
-      ) : null}
+      {enviado ? <AvisoDeEnvio numero={enviado.numero} esAdicion={enviado.esAdicion} /> : null}
       {consulta.isError ? (
         <Aviso tipo="alerta" titulo="No pudimos actualizar la cuenta">
           Lo que ves puede estar desactualizado. Seguimos intentando.

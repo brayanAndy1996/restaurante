@@ -9,7 +9,7 @@ import type { AddressInfo } from 'node:net';
 import {
   CABECERA_PROTOCOLO_PUENTE,
   ESPACIO_PUENTE,
-  MAXIMO_TRABAJOS_ENTREGA,
+  MAXIMO_TRABAJOS_POR_IMPRESORA,
   VERSION_PROTOCOLO_PUENTE,
   armarQrPuente,
   latidoEntradaSchema,
@@ -266,9 +266,15 @@ export class ApiFalsaDelPuente {
       return;
     }
     if (metodo === 'GET' && ruta === '/puente/trabajos') {
+      // Como la API: hasta MAXIMO_TRABAJOS_POR_IMPRESORA por impresora, en orden de creación.
+      const porImpresora = new Map<string, number>();
       const lote = this.trabajos
-        .filter((t) => t.estado === 'PENDIENTE')
-        .slice(0, MAXIMO_TRABAJOS_ENTREGA)
+        .filter((t) => {
+          if (t.estado !== 'PENDIENTE') return false;
+          const cuenta = (porImpresora.get(t.impresoraId) ?? 0) + 1;
+          porImpresora.set(t.impresoraId, cuenta);
+          return cuenta <= MAXIMO_TRABAJOS_POR_IMPRESORA;
+        })
         .map(({ id, impresoraId, tipo, creadoEn, bytes }) => ({
           id,
           impresoraId,

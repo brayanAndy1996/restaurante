@@ -3,6 +3,7 @@ import {
   Boton,
   ContenidoDeFila,
   EtiquetaDeEstado,
+  IconoError,
   IconoImpresora,
   TablaResponsiva,
   type ColumnaDeTabla,
@@ -10,7 +11,9 @@ import {
 import { horaDeLima } from '../../lib/formato';
 import {
   ESTADO_DE_TRABAJO,
+  EXPLICACION_DE_ARMADO_FALLIDO,
   TEXTO_DE_TIPO,
+  noSePudoArmar,
   textoDeIntentos,
   textoDeMesasDeTrabajo,
 } from './trabajos';
@@ -40,7 +43,24 @@ function EtiquetasDeTrabajo({ trabajo }: { trabajo: TrabajoResumen }) {
         <EtiquetaDeEstado tono="alerta">{textoDeIntentos(trabajo.intentos)}</EtiquetaDeEstado>
       ) : null}
       {trabajo.reimpresionDe ? <EtiquetaDeEstado tono="info">Reimpresión</EtiquetaDeEstado> : null}
+      {noSePudoArmar(trabajo) ? (
+        <EtiquetaDeEstado tono="mal" icono={IconoError}>
+          No se pudo armar el ticket
+        </EtiquetaDeEstado>
+      ) : null}
     </span>
+  );
+}
+
+/** Las etiquetas del trabajo y, si el ticket no se pudo armar, por qué no salió y qué hacer. */
+function EstadoDeTrabajo({ trabajo }: { trabajo: TrabajoResumen }) {
+  return (
+    <>
+      <EtiquetasDeTrabajo trabajo={trabajo} />
+      {noSePudoArmar(trabajo) ? (
+        <p className="texto-ayuda trabajo__falla">{EXPLICACION_DE_ARMADO_FALLIDO}</p>
+      ) : null}
+    </>
   );
 }
 
@@ -92,7 +112,7 @@ export function ListaDeTrabajos({
           },
         ]
       : []),
-    { id: 'estado', encabezado: 'Estado', celda: (t) => <EtiquetasDeTrabajo trabajo={t} /> },
+    { id: 'estado', encabezado: 'Estado', celda: (t) => <EstadoDeTrabajo trabajo={t} /> },
     {
       id: 'acciones',
       encabezado: 'Acciones',
@@ -116,7 +136,7 @@ export function ListaDeTrabajos({
               titulo={mesa ? `${TEXTO_DE_TIPO[t.tipo]} · ${mesa}` : TEXTO_DE_TIPO[t.tipo]}
               ayuda={`${t.impresora.nombre} · ${horaDeLima(t.creadoEn)}`}
               derecha={boton(t)}
-              extra={<EtiquetasDeTrabajo trabajo={t} />}
+              extra={<EstadoDeTrabajo trabajo={t} />}
             />
           </div>
         );

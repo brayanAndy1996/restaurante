@@ -1,10 +1,10 @@
 import {
-  MAXIMO_BLOQUES_TICKET,
   VERSION_DOCUMENTO_TICKET,
   type BloqueTicket,
   type DocumentoTicket,
 } from '@restaurante/contratos';
-import { descripcionDeMesas, formatoMonto, juntarEnLineas, limpiarTexto } from './texto';
+import { ajustarAlPresupuesto } from './presupuesto';
+import { formatoMonto, juntarEnLineas, limpiarTexto, lineasDeMesas } from './texto';
 
 /**
  * Plantilla de la pre-cuenta (historia 004, criterio 125): nombre de la sucursal, "PRE-CUENTA N.º 2", mesas,
@@ -42,22 +42,15 @@ export interface ContextoDePrecuenta {
   hora: string;
 }
 
-/**
- * Con tantos bloques los modificadores de cada producto se juntan en pocas líneas y, si aun así son muchos, se
- * omiten (el precio ya los incluye): así el documento nunca pasa el máximo de bloques.
- */
-const BLOQUES_PARA_COMPACTAR = MAXIMO_BLOQUES_TICKET - 20;
-
-function armar(
+function encabezadoDe(
   precuenta: PrecuentaParaTicket,
   contexto: ContextoDePrecuenta,
-  nivel: 'completo' | 'compacto' | 'sin-modificadores',
 ): BloqueTicket[] {
   const mesas = precuenta.orden.mesas.map((m) => m.nombre);
-  const bloques: BloqueTicket[] = [
+  return [
     { tipo: 'titulo', texto: limpiarTexto(contexto.sucursal) },
     { tipo: 'titulo', texto: `PRE-CUENTA N.º ${precuenta.numero}` },
-    { tipo: 'linea', texto: descripcionDeMesas(mesas) },
+    ...lineasDeMesas(mesas, false).map((texto): BloqueTicket => ({ tipo: 'linea', texto })),
     {
       tipo: 'columnas',
       izquierda: limpiarTexto(`Mozo: ${precuenta.orden.mozo.nombre}`),
@@ -66,6 +59,28 @@ function armar(
     { tipo: 'linea', texto: `Comensales: ${precuenta.orden.comensales}` },
     { tipo: 'regla', caracter: '-' },
   ];
+}
+
+function pieDe(precuenta: PrecuentaParaTicket): BloqueTicket[] {
+  return [
+    { tipo: 'regla', caracter: '=' },
+    {
+      tipo: 'linea',
+      texto: `TOTAL S/ ${formatoMonto(precuenta.total)}`,
+      negrita: true,
+      alinear: 'derecha',
+    },
+    { tipo: 'espacio' },
+    { tipo: 'linea', texto: limpiarTexto(precuenta.nota) },
+  ];
+}
+
+/** Las líneas de la cuenta, con todos los modificadores, con ellos juntos en pocas líneas, o sin ellos. */
+function cuerpoDe(
+  precuenta: PrecuentaParaTicket,
+  nivel: 'completo' | 'compacto' | 'sin-modificadores',
+): BloqueTicket[] {
+  const bloques: BloqueTicket[] = [];
   for (const l of precuenta.lineas) {
     const modificadores = l.modificadores.map(limpiarTexto).filter((m) => m.length > 0);
     bloques.push({
@@ -81,28 +96,32 @@ function armar(
       bloques.push({ tipo: 'linea', texto, sangria: 2 });
     }
   }
-  bloques.push(
-    { tipo: 'regla', caracter: '=' },
-    {
-      tipo: 'linea',
-      texto: `TOTAL S/ ${formatoMonto(precuenta.total)}`,
-      negrita: true,
-      alinear: 'derecha',
-    },
-    { tipo: 'espacio' },
-    { tipo: 'linea', texto: limpiarTexto(precuenta.nota) },
-  );
   return bloques;
+}
+
+/** Último recurso: cada línea con su monto en un texto ("2 × Pizza  S/ 42.00"), rellenando cada línea del ticket. */
+function cuerpoEmpaquetado(precuenta: PrecuentaParaTicket): BloqueTicket[] {
+  return juntarEnLineas(
+    precuenta.lineas.map((l) => `${limpiarTexto(`${l.cantidad} × ${l.nombre}`)}  ${formatoMonto(l.total)}`),
+    ' | ',
+  ).map((texto): BloqueTicket => ({ tipo: 'linea', texto }));
 }
 
 export function documentoDePrecuenta(
   precuenta: PrecuentaParaTicket,
   contexto: ContextoDePrecuenta,
 ): DocumentoTicket {
-  let bloques = armar(precuenta, contexto, 'completo');
-  if (bloques.length > BLOQUES_PARA_COMPACTAR) bloques = armar(precuenta, contexto, 'compacto');
-  if (bloques.length > BLOQUES_PARA_COMPACTAR) {
-    bloques = armar(precuenta, contexto, 'sin-modificadores');
-  }
+  // Nunca pasa de `PRESUPUESTO_DE_BLOQUES`: los modificadores se juntan, luego se omiten (el precio ya los
+  // incluye) y, en una cuenta de miles de líneas, cada línea y su monto van en un texto. El total siempre sale.
+  const bloques = ajustarAlPresupuesto(
+    encabezadoDe(precuenta, contexto),
+    [
+      () => cuerpoDe(precuenta, 'completo'),
+      () => cuerpoDe(precuenta, 'compacto'),
+      () => cuerpoDe(precuenta, 'sin-modificadores'),
+      () => cuerpoEmpaquetado(precuenta),
+    ],
+    pieDe(precuenta),
+  );
   return { version: VERSION_DOCUMENTO_TICKET, tipo: 'PRECUENTA', bloques };
 }

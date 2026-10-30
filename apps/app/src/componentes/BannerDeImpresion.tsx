@@ -13,8 +13,8 @@ const RUTA_DE_IMPRESION = '/administracion/impresion';
 /**
  * Aviso de impresión en todas las pantallas de la sucursal (criterios 122 y 138 de 004): el puente está
  * desconectado o sin señal, no hay puente, o una impresora no responde. Dice cuántos tickets quedan en cola.
- * Sale solo mientras dura el problema y no aparece si la sucursal no tiene impresoras. Se reevalúa cada 15 s
- * y al instante con el evento `impresion.estado`. Sin conexión con la API no se muestra: lo dicho sería viejo
+ * Sale solo mientras dura el problema y no aparece si la sucursal no tiene impresoras. Se pide cada 30 s, se
+ * reevalúa cada 15 s y se vuelve a pedir al instante con el evento `impresion.estado` o al crear una impresora. Sin conexión con la API no se muestra: lo dicho sería viejo
  * y el banner de «Sin conexión» ya explica lo que pasa.
  */
 export function BannerDeImpresion() {

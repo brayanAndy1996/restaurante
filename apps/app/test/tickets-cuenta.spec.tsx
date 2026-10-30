@@ -82,6 +82,16 @@ describe('Reimprimir en la cuenta de la mesa (criterios 128 y 138)', () => {
     expect(s.de('GET', '/impresion/trabajos')).toHaveLength(1);
   });
 
+  it('pide a la API solo los tickets de esta cuenta (?ordenId=…), no la lista del día', async () => {
+    const s = montar([trabajo(1)]);
+    await abrirSeccion();
+    const urls = s.simulado.mock.calls
+      .map(([entrada]) => String(entrada))
+      .filter((u) => u.includes('/impresion/trabajos'));
+    expect(urls).toHaveLength(1);
+    expect(new URL(urls[0]!).searchParams.get('ordenId')).toBe(ORDEN_ID);
+  });
+
   it('muestra solo los tickets de esta cuenta (por su ordenId), agrupados por envío', async () => {
     montar(
       [

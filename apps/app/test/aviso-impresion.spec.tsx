@@ -303,7 +303,7 @@ describe('Aviso de impresión en la app (criterio 122)', () => {
     await waitFor(() => expect(s.de('GET', '/impresion/estado')).toHaveLength(1));
     expect(banner()).toBeNull();
 
-    // Se cae una impresora: el servidor avisa y la app lo vuelve a pedir sin esperar los 15 s.
+    // Se cae una impresora: el servidor avisa y la app lo vuelve a pedir sin esperar los 30 s.
     s.poner(impresoraCaida());
     const socket = socketVigente()!;
     act(() => socket.desdeElServidor('impresion.estado', { sucursalId: ID.sucursalA }));
@@ -317,7 +317,7 @@ describe('Aviso de impresión en la app (criterio 122)', () => {
     expect(s.de('GET', '/impresion/estado')).toHaveLength(3);
   });
 
-  it('también se reevalúa solo cada 15 s, en segundo plano', async () => {
+  it('vuelve a pedir el estado cada 30 s, en segundo plano', async () => {
     vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval', 'Date'] });
     const s = conServidor(sesionDeRol('MOZO'), sano());
     renderApp('/salon');
@@ -326,6 +326,13 @@ describe('Aviso de impresión en la app (criterio 122)', () => {
     expect(s.de('GET', '/impresion/estado')[0]?.cabeceras.get('X-Actividad')).toBe('segundo-plano');
 
     s.poner(puenteCaido());
+    // A los 15 s se vuelve a evaluar lo que ya se tiene, pero no se pide nada.
+    await act(async () => {
+      vi.advanceTimersByTime(15_000);
+    });
+    expect(s.de('GET', '/impresion/estado')).toHaveLength(1);
+    expect(banner()).toBeNull();
+    // A los 30 s sí: la API dice que el puente cayó.
     await act(async () => {
       vi.advanceTimersByTime(14_000);
     });
@@ -337,10 +344,10 @@ describe('Aviso de impresión en la app (criterio 122)', () => {
     expect(s.de('GET', '/impresion/estado')).toHaveLength(2);
     expect(s.de('GET', '/impresion/estado')[1]?.cabeceras.get('X-Actividad')).toBe('segundo-plano');
 
-    // Y se recupera en la vuelta siguiente.
+    // Y se recupera en la vuelta siguiente (30 s después).
     s.poner(sano());
     await act(async () => {
-      vi.advanceTimersByTime(15_000);
+      vi.advanceTimersByTime(30_000);
     });
     await waitFor(() => expect(banner()).toBeNull());
     expect(s.de('GET', '/impresion/estado')).toHaveLength(3);
@@ -354,7 +361,7 @@ describe('Aviso de impresión en la app (criterio 122)', () => {
     await screen.findByRole('grid', { name: 'Mesas de Salón' });
     await waitFor(() => expect(s.de('GET', '/impresion/estado')).toHaveLength(1));
     expect(banner()).toBeNull();
-    // La siguiente consulta falla (500): el dibujo de cada 15 s calcula con la hora de la API.
+    // A los 15 s no hay consulta nueva: el dibujo de cada 15 s calcula con la hora de la API.
     s.poner(null as unknown as EstadoImpresionRespuesta);
     await act(async () => {
       vi.advanceTimersByTime(15_000);

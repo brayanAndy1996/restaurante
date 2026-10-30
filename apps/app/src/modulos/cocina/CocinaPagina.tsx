@@ -71,31 +71,40 @@ function CocinaDeSucursal({ empresaId, sucursalId }: { empresaId: string; sucurs
   const [estacionesVistas, setEstacionesVistas] = useState<readonly EstacionKds[] | undefined>(
     undefined,
   );
-  // Una estación recordada que ya no existe (otra sucursal, estación desactivada) se ignora.
+  // Solo las que salen por esta pantalla son filtros (criterio 138): las de impresora no tienen nada que
+  // mostrar aquí, y filtrar por ellas dejaría la pantalla vacía.
+  const filtrables = useMemo(
+    () => estacionesVistas?.filter((e) => e.destino === 'KDS') ?? [],
+    [estacionesVistas],
+  );
+  const porImpresora = useMemo(
+    () => estacionesVistas?.filter((e) => e.destino === 'IMPRESORA') ?? [],
+    [estacionesVistas],
+  );
+  // Una estación recordada que ya no sirve de filtro (otra sucursal, desactivada o ahora por impresora) se
+  // ignora; la elección guardada en el equipo no se toca.
   const efectivas = useMemo(
     () =>
-      estacionesVistas
-        ? elegidas.filter((id) => estacionesVistas.some((e) => e.id === id))
-        : elegidas,
-    [elegidas, estacionesVistas],
+      estacionesVistas ? elegidas.filter((id) => filtrables.some((e) => e.id === id)) : elegidas,
+    [elegidas, estacionesVistas, filtrables],
   );
 
   const consulta = useCocina(sucursalId, efectivas);
   const datos = consulta.data;
   const cocina = datos?.cocina;
-  if (cocina && cocina.estaciones !== estacionesVistas) setEstacionesVistas(cocina.estaciones);
+  const estacionesDeLaRespuesta = cocina?.estaciones;
+  useEffect(() => {
+    if (estacionesDeLaRespuesta) setEstacionesVistas(estacionesDeLaRespuesta);
+  }, [estacionesDeLaRespuesta]);
   const ahora = useAhoraDeCocina(datos);
   const acciones = useAccionesDeCocina(sucursalId);
-
-  const estaciones = estacionesVistas ?? [];
-  const porImpresora = estaciones.filter((e) => e.destino === 'IMPRESORA');
 
   function alternarEstacion(id: string) {
     const siguiente = efectivas.includes(id)
       ? efectivas.filter((e) => e !== id)
       : [...efectivas, id];
     // Elegirlas todas es lo mismo que no filtrar.
-    const lista = siguiente.length === estaciones.length ? [] : siguiente;
+    const lista = siguiente.length === filtrables.length ? [] : siguiente;
     setElegidas(lista);
     guardarEstacionesDelEquipo(empresaId, sucursalId, lista);
   }
@@ -197,14 +206,14 @@ function CocinaDeSucursal({ empresaId, sucursalId }: { empresaId: string; sucurs
         onKeyDownCapture={despertarSonido}
       >
         <div className="cocina__herramientas">
-          {estaciones.length > 1 ? (
+          {filtrables.length > 1 ? (
             <div className="ui-segmentos cocina__filtros" role="group" aria-label="Estaciones">
               <FiltroDeEstacion
                 etiqueta="Todas"
                 elegido={efectivas.length === 0}
                 onClick={verTodas}
               />
-              {estaciones.map((e) => (
+              {filtrables.map((e) => (
                 <FiltroDeEstacion
                   key={e.id}
                   etiqueta={e.nombre}

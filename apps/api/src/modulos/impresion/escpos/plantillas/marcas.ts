@@ -1,4 +1,8 @@
-import type { BloqueTicket, DocumentoTicket } from '@restaurante/contratos';
+import {
+  MAXIMO_BLOQUES_TICKET,
+  type BloqueTicket,
+  type DocumentoTicket,
+} from '@restaurante/contratos';
 import { limpiarTexto } from './texto';
 
 /** El texto de la marca de una reimpresión (criterio 128). */
@@ -46,6 +50,23 @@ export function conMarcas(documento: DocumentoTicket, marcas: MarcasDeTicket): D
       alinear: 'centro',
     });
   }
-  if (nuevos.length > 0) nuevos.push({ tipo: 'espacio' });
-  return { ...documento, bloques: [...nuevos, ...documento.bloques] };
+  if (nuevos.length === 0) return { ...documento, bloques: [...documento.bloques] };
+  nuevos.push({ tipo: 'espacio' });
+  // Las plantillas dejan lugar para las marcas. Un documento guardado antes de eso, o armado por otro camino, que
+  // llegue al máximo pierde su cola, y se dice en el propio ticket: el trabajo se entrega igual.
+  const exceso = nuevos.length + documento.bloques.length - MAXIMO_BLOQUES_TICKET;
+  if (exceso <= 0) return { ...documento, bloques: [...nuevos, ...documento.bloques] };
+  const conservados = documento.bloques.slice(0, documento.bloques.length - exceso - 1);
+  return {
+    ...documento,
+    bloques: [
+      ...nuevos,
+      ...conservados,
+      {
+        tipo: 'linea',
+        texto: `... Ticket incompleto: faltan ${exceso + 1} líneas. Mira la cuenta en la pantalla.`,
+        negrita: true,
+      },
+    ],
+  };
 }

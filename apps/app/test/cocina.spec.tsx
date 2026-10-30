@@ -627,11 +627,17 @@ describe('Cocina: filtros de estación (criterio 96)', () => {
       'aria-pressed',
       'true',
     );
-    expect(ultimaConsulta(s)).not.toContain('estacionIds');
+    await waitFor(() => expect(ultimaConsulta(s)).not.toContain('estacionIds'));
   });
 });
 
 describe('Cocina: estaciones que salen por impresora (criterio 138)', () => {
+  const otraKds = () => ({
+    id: uuid(61),
+    nombre: 'Postres',
+    destino: 'KDS' as const,
+    impresora: null,
+  });
   const porImpresora = [
     ESTACIONES_KDS[0]!,
     {
@@ -642,8 +648,11 @@ describe('Cocina: estaciones que salen por impresora (criterio 138)', () => {
     },
   ];
 
-  it('dice qué estación sale por impresora y que no aparece en la pantalla', async () => {
-    servidorDeCocina(sesionDeRol('COCINA_BARRA'), cocinaDe([comandaKds(1)], [], porImpresora));
+  it('dice qué estación sale por impresora y que no aparece en la pantalla ni como filtro', async () => {
+    const s = servidorDeCocina(
+      sesionDeRol('COCINA_BARRA'),
+      cocinaDe([comandaKds(1)], [], porImpresora),
+    );
     renderApp('/cocina');
     const lista = await screen.findByRole('list', { name: 'Estaciones que salen por impresora' });
     const items = within(lista).getAllByRole('listitem');
@@ -651,13 +660,54 @@ describe('Cocina: estaciones que salen por impresora (criterio 138)', () => {
     expect(items[0]).toHaveTextContent(
       'Barra sale por la impresora Impresora de la barra y no aparece en esta pantalla.',
     );
-    // Sigue en los filtros, y la de la pantalla no se menciona.
-    expect(
-      within(screen.getByRole('group', { name: 'Estaciones' })).getByRole('button', {
-        name: 'Barra',
-      }),
-    ).toBeVisible();
     expect(lista).not.toHaveTextContent('Cocina sale');
+    // Con una sola estación en la pantalla no hay nada que filtrar: ni "Barra" ni "Cocina" son filtros.
+    await screen.findByRole('article', { name: /Mesa 1/ });
+    expect(screen.queryByRole('group', { name: 'Estaciones' })).toBeNull();
+    expect(ultimaConsulta(s)).not.toContain('estacionIds');
+  });
+
+  it('con varias estaciones en la pantalla, solo esas son filtros; la de impresora no', async () => {
+    const tres = [
+      ...ESTACIONES_KDS,
+      {
+        id: uuid(60),
+        nombre: 'Parrilla',
+        destino: 'IMPRESORA' as const,
+        impresora: { id: uuid(102), nombre: 'Impresora de la parrilla' },
+      },
+    ];
+    servidorDeCocina(sesionDeRol('COCINA_BARRA'), cocinaDe([comandaKds(1)], [], tres));
+    renderApp('/cocina');
+    const grupo = await screen.findByRole('group', { name: 'Estaciones' });
+    expect(
+      within(grupo)
+        .getAllByRole('button')
+        .map((b) => b.textContent),
+    ).toEqual(['Todas', 'Cocina', 'Barra']);
+    expect(
+      await screen.findByText(/Parrilla sale por la impresora Impresora de la parrilla/),
+    ).toBeVisible();
+  });
+
+  it('descarta una estación recordada que ahora sale por impresora: la pantalla no queda vacía', async () => {
+    localStorage.setItem(
+      `restaurante.cocina.estaciones.${ID.empresa}.${ID.sucursalA}`,
+      JSON.stringify([Z_BARRA]),
+    );
+    const tres = [ESTACIONES_KDS[0]!, porImpresora[1]!, otraKds()];
+    const s = servidorDeCocina(sesionDeRol('COCINA_BARRA'), cocinaDe([comandaKds(1)], [], tres));
+    renderApp('/cocina');
+    await screen.findByRole('article', { name: /Mesa 1/ });
+    const grupo = await screen.findByRole('group', { name: 'Estaciones' });
+    expect(within(grupo).getByRole('button', { name: 'Todas' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+    expect(within(grupo).queryByRole('button', { name: 'Barra' })).toBeNull();
+    // La consulta final ya no pide la estación que sale por impresora.
+    await waitFor(() => expect(ultimaConsulta(s)).not.toContain('estacionIds'));
+    expect(screen.getByRole('article', { name: /Mesa 1/ })).toBeVisible();
   });
 
   it('si todas las estaciones salen por la pantalla, no dice nada', async () => {

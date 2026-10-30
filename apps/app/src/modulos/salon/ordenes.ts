@@ -103,6 +103,20 @@ export interface GrupoDeEnvio {
 export const tituloDeEnvio = (numero: number, esAdicion: boolean): string =>
   esAdicion || numero > 1 ? `Adición ${numero}` : 'Comanda';
 
+/**
+ * Lo que se le dice al mozo tras enviar. No promete que el ticket ya salió: eso depende de la impresora. Si el
+ * estado de la impresión indica un problema (sin puente, puente caído o impresora que no responde), se dice
+ * que quedó en cola de impresión.
+ */
+export function textoDeEnvioHecho(
+  numero: number,
+  esAdicion: boolean,
+  problemaDeImpresion: boolean,
+): string {
+  const que = esAdicion || numero > 1 ? `La adición ${numero}` : 'La comanda';
+  return `${que} se envió a cocina${problemaDeImpresion ? ' y quedó en cola de impresión' : ''}.`;
+}
+
 /** Agrupa los ítems por envío, en el orden en que se enviaron (los ítems de un envío quedan juntos). */
 export function agruparPorEnvio(items: readonly ItemRespuesta[]): GrupoDeEnvio[] {
   const grupos = new Map<string, GrupoDeEnvio>();

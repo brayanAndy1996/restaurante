@@ -294,6 +294,60 @@ describe('Ajustes › Impresión: crear (criterios 103 y 136)', () => {
     expect(s.de('GET', RUTA_IMPRESORAS)).toHaveLength(1);
   });
 
+  it('al crear una impresora vuelve a pedir el estado: el aviso de «sin puente» sale al instante', async () => {
+    let hayImpresoras = false;
+    const s = api(
+      {},
+      {
+        'GET /impresion/estado': () =>
+          json(200, {
+            ahora: '2026-10-30T17:00:00.000Z',
+            puente: null,
+            impresoras: hayImpresoras
+              ? [
+                  {
+                    id: uuid(500),
+                    nombre: 'Cocina',
+                    estado: 'DESCONOCIDO',
+                    estadoDesde: null,
+                    pendientes: 0,
+                  },
+                ]
+              : [],
+          }),
+        [`POST ${RUTA_IMPRESORAS}`]: ({ cuerpo }) => {
+          hayImpresoras = true;
+          return json(201, { ...(cuerpo as object), ...impresora(0, 'Cocina'), id: uuid(500) });
+        },
+      },
+    );
+    await abrir();
+    await waitFor(() => expect(s.de('GET', '/impresion/estado').length).toBeGreaterThan(0));
+    expect(screen.queryByText('No hay un puente de impresión vinculado')).toBeNull();
+    const antes = s.de('GET', '/impresion/estado').length;
+
+    await userEvent.click(boton('Agregar impresora'));
+    await userEvent.type(campo('Nombre de la impresora'), 'Cocina');
+    await userEvent.type(campo('Dirección de la impresora'), '192.168.1.50');
+    await userEvent.click(boton('Crear impresora'));
+    await screen.findByText(/Impresora Cocina creada/);
+
+    expect(await screen.findByText('No hay un puente de impresión vinculado')).toBeVisible();
+    expect(s.de('GET', '/impresion/estado').length).toBeGreaterThan(antes);
+  });
+
+  it('al modificar una impresora también vuelve a pedir el estado', async () => {
+    const s = api({ impresoras: [impresora(1, 'Cocina')] });
+    await abrir();
+    await waitFor(() => expect(s.de('GET', '/impresion/estado').length).toBeGreaterThan(0));
+    const antes = s.de('GET', '/impresion/estado').length;
+    await userEvent.click(screen.getByRole('button', { name: /Cocina/ }));
+    await userEvent.click(boton('58 mm'));
+    await userEvent.click(boton('Guardar'));
+    await screen.findByText('Cambios de Cocina guardados.');
+    await waitFor(() => expect(s.de('GET', '/impresion/estado').length).toBeGreaterThan(antes));
+  });
+
   it('con 58 mm, otro juego de caracteres y gaveta, manda exactamente eso', async () => {
     const s = api();
     await abrir();

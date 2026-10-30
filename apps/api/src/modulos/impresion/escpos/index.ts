@@ -41,3 +41,4 @@ export type { ImpresoraDePrueba } from './plantillas/prueba';
 export { TEXTO_REIMPRESION, TEXTO_RETRASO, conMarcas } from './plantillas/marcas';
 export type { MarcasDeTicket } from './plantillas/marcas';
 export { adaptarTexto } from './tablas-codificacion';
+export { LARGO_ERROR_DE_TRABAJO, errorDeDocumento, recortarError } from './validar-documento';

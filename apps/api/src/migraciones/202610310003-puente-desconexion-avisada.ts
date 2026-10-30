@@ -2,8 +2,9 @@
 // dar señal.
 //
 // - `puente.desconexion_avisada_en`: el instante en que la API publicó `impresion.estado` porque el puente llevaba más
-//   de 60 segundos sin señal (la revisión periódica). Nulo mientras no se ha avisado esa desconexión. Cualquier señal
-//   del puente (latido o socket) la vuelve a dejar en nulo y, si estaba fijada, avisa que el puente volvió. Así cada
+//   de 60 segundos sin señal (la revisión periódica). Nulo mientras no se ha avisado esa desconexión. Una señal del
+//   puente (latido o conexión del socket) la vuelve a dejar en nulo y, si estaba fijada, avisa que el puente volvió;
+//   la desconexión del socket no (un socket que se cierra no es que el puente haya vuelto). Así cada
 //   cambio de estado se publica una sola vez, también con varias instancias de la API: la revisión la fija con un
 //   `UPDATE … WHERE desconexion_avisada_en IS NULL` y solo publica quien lo ganó.
 //

@@ -31,18 +31,34 @@ export const PREFIJO_DE_TRABAJOS = ['impresion', 'trabajos'] as const;
 export const claveTrabajos = (sucursalId: string, estado: EstadoTrabajo | 'todos' = 'todos') =>
   [...PREFIJO_DE_TRABAJOS, sucursalId, estado] as const;
 
+/** Los tickets de una sola cuenta (la sección "Tickets impresos" de la mesa). */
+export const claveTrabajosDeOrden = (sucursalId: string, ordenId: string) =>
+  [...PREFIJO_DE_TRABAJOS, sucursalId, 'orden', ordenId] as const;
+
 // --- Llamadas a la API ----------------------------------------------------------------------------
+
+/** Filtros de `GET /impresion/trabajos`; los dos se aplican en la API, antes del límite. */
+export interface FiltroDeTrabajos {
+  estado?: EstadoTrabajo;
+  /** Solo los de esta cuenta (con mesas unidas, la principal). */
+  ordenId?: string;
+}
 
 /**
  * `GET /impresion/trabajos`: los del día operativo de la sucursal activa. Es una consulta que se repite
  * sola, así que no cuenta como actividad de la persona.
  */
-export const listarTrabajos = (estado?: EstadoTrabajo, senal?: AbortSignal) =>
-  api.get(`/impresion/trabajos${estado ? `?estado=${estado}` : ''}`, {
+export function listarTrabajos(filtro: FiltroDeTrabajos = {}, senal?: AbortSignal) {
+  const parametros = new URLSearchParams();
+  if (filtro.estado) parametros.set('estado', filtro.estado);
+  if (filtro.ordenId) parametros.set('ordenId', filtro.ordenId);
+  const consulta = parametros.toString();
+  return api.get(`/impresion/trabajos${consulta ? `?${consulta}` : ''}`, {
     esquema: listaDe(trabajoResumenSchema),
     segundoPlano: true,
     ...(senal ? { senal } : {}),
   });
+}
 
 /**
  * `POST /impresion/trabajos/:id/reimpresion` (criterio 128). La `Idempotency-Key` es obligatoria y viene de
@@ -75,6 +91,21 @@ export const ESTADO_DE_TRABAJO: Record<
 };
 
 export const textoDeIntentos = (n: number): string => (n === 1 ? '1 intento' : `${n} intentos`);
+
+/**
+ * Lo que el backend marca en `ultimoError` cuando el ticket no se pudo armar (error al generar su contenido),
+ * distinto de un fallo de la impresora. PENDIENTE DEL BACKEND: se ajusta aquí cuando `trabajoResumenSchema`
+ * traiga el campo o un estado nuevo; mientras no coincida con nada, la lista no muestra el aviso.
+ */
+export const MARCA_DE_ARMADO_FALLIDO = 'ARMADO_FALLIDO';
+
+/** `true` si el ticket nunca llegó a la impresora porque no se pudo armar (no se reintenta solo). */
+export function noSePudoArmar(trabajo: TrabajoResumen & { ultimoError?: string | null }): boolean {
+  return trabajo.estado !== 'IMPRESO' && trabajo.ultimoError === MARCA_DE_ARMADO_FALLIDO;
+}
+
+export const EXPLICACION_DE_ARMADO_FALLIDO =
+  'El sistema no pudo preparar el contenido, así que no se mandó a la impresora. Avisa a soporte.';
 
 /** Las mesas de un trabajo ("4" o "4, 5") dichas como en la cuenta: "Mesa 4", "Mesas 4 y 5". */
 export function textoDeMesasDeTrabajo(mesa: string | null): string | null {

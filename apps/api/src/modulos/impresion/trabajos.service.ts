@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import {
-  MAXIMO_TRABAJOS_ENTREGA,
+  MAXIMO_TRABAJOS_POR_IMPRESORA,
   type ResultadoTrabajoEntrada,
   type TipoTrabajo,
   type TrabajoParaImprimir,
@@ -18,7 +18,13 @@ import { RELOJ, horaLocal, type Reloj } from '../../nucleo/reloj';
 import { SucursalesConsultaService } from '../plataforma';
 import { SesionActual } from '../seguridad';
 import { ColaImpresionService } from './cola-impresion.service';
-import { conMarcas, documentoDePrueba, renderizarTicket } from './escpos';
+import {
+  conMarcas,
+  documentoDePrueba,
+  errorDeDocumento,
+  recortarError,
+  renderizarTicket,
+} from './escpos';
 import { noEncontrado, sinImpresora } from './errores-impresion';
 import { OrdenesVigentes } from './ordenes-vigentes';
 import type { FilaImpresora } from './lectura-impresoras';
@@ -50,6 +56,8 @@ interface FilaResumen {
   creado_en: Date;
   impreso_en: Date | null;
   reimpresion_de_id: string | null;
+  ultimo_error: string | null;
+  error_render: string | null;
 }
 
 const MAXIMO_LISTA = 200;
@@ -57,9 +65,12 @@ const MAXIMO_LISTA = 200;
 /**
  * Los trabajos de impresión (historia 004, 3b, criterios 113 a 118, 127 y 128; ruta crítica P5 y P6).
  *
- * - **Del puente:** `entregar` da hasta 50 `PENDIENTE` de las impresoras de su sucursal en orden de creación, con
- *   los bytes armados en ese momento con la configuración vigente de la impresora; `resultado` los cierra o suma un
- *   intento. Todo se limita a la sucursal del puente: un trabajo de otra sucursal o de otra empresa es 404, igual
+ * - **Del puente:** `entregar` da hasta `MAXIMO_TRABAJOS_POR_IMPRESORA` (20) `PENDIENTE` de cada impresora de su
+ *   sucursal, en orden de creación dentro de cada una, con los bytes armados en ese momento con la configuración
+ *   vigente de la impresora; `resultado` los cierra o suma un intento. El reparto es por impresora para que los
+ *   trabajos atascados de una (apagada, sin papel) no dejen sin entrega a las demás. No se entregan los de
+ *   impresoras inactivas ni Bluetooth (en 3b no se imprime por ahí, decisión 12) ni los que no se pudieron armar
+ *   (`error_render`: no ocupan lugar y la lista de la PWA los muestra con su error). Todo se limita a la sucursal del puente: un trabajo de otra sucursal o de otra empresa es 404, igual
  *   que uno inexistente.
  * - **Vencimiento (117):** un `PENDIENTE` cuyo día operativo ya pasó (hora de corte de la sucursal, reloj de la API)
  *   es `VENCIDO`: no se entrega y no se acepta su resultado (409). Se calcula al leer, sin tareas programadas.
@@ -86,23 +97,30 @@ export class TrabajosService {
     const ahora = this.reloj.ahora();
     const hoy = await this.cola.diaOperativoDe(puente.sucursalId, ahora);
     const filas = await this.conexion.query<FilaEntrega>(
-      `SELECT t.id, t.impresora_id, t.tipo, t.creado_en, t.documento, i.ancho_mm, i.juego_caracteres
-         FROM trabajo_impresion t
-         JOIN impresora i ON i.id = t.impresora_id AND i.empresa_id = t.empresa_id
-        WHERE t.sucursal_id = $1 AND t.estado = 'PENDIENTE' AND t.dia_operativo >= $2::date
-        ORDER BY t.creado_en, t.id
-        LIMIT $3`,
-      { bind: [puente.sucursalId, hoy, MAXIMO_TRABAJOS_ENTREGA], type: QueryTypes.SELECT },
+      `SELECT id, impresora_id, tipo, creado_en, documento, ancho_mm, juego_caracteres
+         FROM (SELECT t.id, t.impresora_id, t.tipo, t.creado_en, t.documento, i.ancho_mm, i.juego_caracteres,
+                      row_number() OVER (PARTITION BY t.impresora_id ORDER BY t.creado_en, t.id) AS posicion
+                 FROM trabajo_impresion t
+                 JOIN impresora i ON i.id = t.impresora_id AND i.empresa_id = t.empresa_id
+                WHERE t.sucursal_id = $1 AND t.estado = 'PENDIENTE' AND t.dia_operativo >= $2::date
+                  AND t.error_render IS NULL AND i.activa AND i.conexion_tipo = 'RED') x
+        WHERE posicion <= $3
+        ORDER BY creado_en, id`,
+      {
+        bind: [puente.sucursalId, hoy, MAXIMO_TRABAJOS_POR_IMPRESORA],
+        type: QueryTypes.SELECT,
+      },
     );
     const entregados: TrabajoParaImprimir[] = [];
+    const sinTicket: Array<{ id: string; error: string }> = [];
     for (const fila of filas) {
       const creado = new Date(fila.creado_en);
-      // El documento guardado queda intacto: la marca de retraso se agrega solo a lo que se manda (criterio 118).
-      const documento =
-        ahora.getTime() - creado.getTime() > MS_RETRASO
-          ? conMarcas(fila.documento, { retraso: { horaEnvio: horaLocal(creado) } })
-          : fila.documento;
       try {
+        // El documento guardado queda intacto: la marca de retraso se agrega solo a lo que se manda (criterio 118).
+        const documento =
+          ahora.getTime() - creado.getTime() > MS_RETRASO
+            ? conMarcas(fila.documento, { retraso: { horaEnvio: horaLocal(creado) } })
+            : fila.documento;
         const bytes = renderizarTicket(documento, {
           anchoMm: fila.ancho_mm,
           juegoCaracteres: fila.juego_caracteres,
@@ -115,12 +133,24 @@ export class TrabajosService {
           bytes: Buffer.from(bytes).toString('base64'),
         });
       } catch (error) {
-        // Un documento que no se puede armar no debe frenar los demás trabajos de la cola.
+        // Un documento que no se puede armar no debe frenar los demás trabajos de la cola ni quedarse en ella:
+        // se marca con su error (se ve en "Trabajos de hoy") y no se vuelve a entregar.
+        const motivo = recortarError(
+          error instanceof Error ? error.message : `No se pudo armar el ticket: ${String(error)}`,
+        );
         this.logger.error(
           `No se pudo armar el ticket del trabajo ${fila.id}`,
           error instanceof Error ? error.stack : String(error),
         );
+        sinTicket.push({ id: fila.id, error: motivo });
       }
+    }
+    for (const { id, error } of sinTicket) {
+      await this.conexion.query(
+        `UPDATE trabajo_impresion SET error_render = $2, actualizado_en = $3
+          WHERE id = $1 AND error_render IS NULL`,
+        { bind: [id, error, ahora], type: QueryTypes.UPDATE },
+      );
     }
     if (entregados.length > 0) {
       await this.conexion.query(
@@ -209,31 +239,43 @@ export class TrabajosService {
     return { trabajoId: trabajoId! };
   }
 
-  /** `GET /impresion/trabajos` (criterio 128): los de la sucursal activa, en su día operativo (o desde `desde`). */
+  /**
+   * `GET /impresion/trabajos` (criterio 128): los de la sucursal activa, en su día operativo (o desde `desde`),
+   * los más nuevos primero, hasta `MAXIMO_LISTA`. `estado` y `ordenId` se aplican en la consulta, antes del límite:
+   * pedir los `IMPRESO` o los de una cuenta nunca queda corto porque haya 200 trabajos más nuevos de otro estado u
+   * otra cuenta. `ordenId` es la cuenta que ve el mozo: la orden y las que se le unieron.
+   */
   async listar(consulta: TrabajosConsulta): Promise<TrabajoResumen[]> {
     const sucursalId = this.sesion.sucursalActiva();
     const ahora = this.reloj.ahora();
     const hoy = await this.cola.diaOperativoDe(sucursalId, ahora);
     const desde = consulta.desde === undefined ? null : new Date(consulta.desde);
+    const ordenes =
+      consulta.ordenId === undefined ? null : await this.ordenes.delaCuenta(consulta.ordenId);
     const filas = await this.conexion.query<FilaResumen>(
       `SELECT t.id, t.tipo, t.impresora_id, i.nombre AS impresora_nombre, t.mesa, t.orden_id,
               t.envio_numero, t.estado,
               t.dia_operativo::text AS dia_operativo, t.intentos, t.creado_en, t.impreso_en,
-              t.reimpresion_de_id
+              t.reimpresion_de_id, t.ultimo_error, t.error_render
          FROM trabajo_impresion t
          JOIN impresora i ON i.id = t.impresora_id AND i.empresa_id = t.empresa_id
         WHERE t.sucursal_id = $1
           AND (($2::timestamptz IS NULL AND t.dia_operativo = $3::date)
                OR ($2::timestamptz IS NOT NULL AND t.creado_en >= $2::timestamptz))
+          AND ($4::text IS NULL
+               OR ($4 = 'IMPRESO' AND t.estado = 'IMPRESO')
+               OR ($4 = 'PENDIENTE' AND t.estado = 'PENDIENTE' AND t.dia_operativo >= $3::date)
+               OR ($4 = 'VENCIDO' AND t.estado = 'PENDIENTE' AND t.dia_operativo < $3::date))
+          AND ($5::uuid[] IS NULL OR t.orden_id = ANY($5::uuid[]))
         ORDER BY t.creado_en DESC, t.id DESC
         LIMIT ${MAXIMO_LISTA}`,
-      { bind: [sucursalId, desde, hoy], type: QueryTypes.SELECT },
+      { bind: [sucursalId, desde, hoy, consulta.estado ?? null, ordenes], type: QueryTypes.SELECT },
     );
     // La cuenta que ve el mozo: la orden principal si la de origen se unió a otra (criterio 128).
-    const ordenes = await this.ordenes.resolver(
+    const principales = await this.ordenes.resolver(
       filas.flatMap((f) => (f.orden_id === null ? [] : [f.orden_id])),
     );
-    const resumen = filas.map((f): TrabajoResumen => {
+    return filas.map((f): TrabajoResumen => {
       const vencido = f.estado === 'PENDIENTE' && f.dia_operativo < hoy;
       return {
         id: f.id,
@@ -245,13 +287,12 @@ export class TrabajosService {
         creadoEn: new Date(f.creado_en).toISOString(),
         impresoEn: f.impreso_en === null ? null : new Date(f.impreso_en).toISOString(),
         reimpresionDe: f.reimpresion_de_id,
-        ordenId: f.orden_id === null ? null : (ordenes.get(f.orden_id) ?? f.orden_id),
+        ordenId: f.orden_id === null ? null : (principales.get(f.orden_id) ?? f.orden_id),
         envioNumero: f.envio_numero,
+        ultimoError: f.estado === 'IMPRESO' ? null : (f.error_render ?? f.ultimo_error),
+        sinTicket: f.error_render !== null,
       };
     });
-    return consulta.estado === undefined
-      ? resumen
-      : resumen.filter((t) => t.estado === consulta.estado);
   }
 
   /** `POST /impresion/trabajos/:id/reimpresion` (criterio 128). */
@@ -285,6 +326,7 @@ export class TrabajosService {
     if (impresoraId === null) throw sinImpresora();
 
     const nuevoId = randomUUID();
+    const documento = conMarcas(original.documento, { reimpresion: true });
     await this.cola.insertar(
       this.contexto.empresaActual(),
       [
@@ -294,7 +336,7 @@ export class TrabajosService {
           impresora_id: impresoraId,
           estacion_id: original.estacion_id,
           tipo: original.tipo,
-          documento: conMarcas(original.documento, { reimpresion: true }),
+          documento,
           comanda_id: original.comanda_id,
           precuenta_id: original.precuenta_id,
           mesa: original.mesa,
@@ -302,6 +344,7 @@ export class TrabajosService {
           envio_numero: original.envio_numero,
           dia_operativo: await this.cola.diaOperativoDe(sucursalId, ahora),
           reimpresion_de_id: id,
+          error_render: this.cola.errorDelDocumento(documento, original.tipo),
         },
       ],
       ahora,

@@ -38,8 +38,13 @@ export const ESPACIO_PUENTE = '/puente';
 export const INTERVALO_PEDIR_TRABAJOS_MS = 30_000;
 export const INTERVALO_LATIDO_MS = 20_000;
 
-/** Trabajos que entrega `GET /puente/trabajos` de una vez y ids impresos que el puente recuerda. */
-export const MAXIMO_TRABAJOS_ENTREGA = 50;
+/**
+ * Trabajos que entrega `GET /puente/trabajos` de una vez **por impresora** (en orden de creación dentro de cada una;
+ * una impresora con muchos trabajos sin imprimir no frena a las demás) y ids impresos que el puente recuerda. Si el
+ * puente recibe esa cantidad para alguna impresora, vuelve a pedir en cuanto termine el lote. No se entregan
+ * trabajos de impresoras inactivas ni Bluetooth (en 3b) ni los que no se pudieron armar.
+ */
+export const MAXIMO_TRABAJOS_POR_IMPRESORA = 20;
 export const IDS_IMPRESOS_RECORDADOS = 500;
 
 /** Cuánto tarda en darse por desconectado un puente sin señal (criterio 121) y cuánto dura una vinculación. */

@@ -62,7 +62,7 @@ export function PuenteDeImpresion({ sucursalId, enviar }: Props) {
   const consultaEstado = useQuery({
     queryKey: claveEstadoImpresion(sucursalId),
     queryFn: ({ signal }) => leerEstadoDeImpresion(signal),
-    // Sin código a la vista, el aviso de todas las pantallas ya lo vuelve a pedir cada 15 s y con el evento.
+    // Sin código a la vista, el aviso de todas las pantallas ya lo vuelve a pedir cada 30 s y con el evento.
     refetchInterval: vinculando ? PERIODO_DE_VINCULACION_MS : false,
   });
   const estado = consultaEstado.data;

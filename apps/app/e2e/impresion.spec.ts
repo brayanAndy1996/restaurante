@@ -471,7 +471,7 @@ test('se apaga la impresora de Cocina: aparece «no responde» y la comanda sigu
 
   await test.step('el Mozo envía un ceviche (Cocina) con la impresora apagada', async () => {
     await comandar(mozo.page, 'Mesa 1', [[CARTA.ceviche, PRECIOS.ceviche]]);
-    await expect(mozo.page.getByText('La adición 2 ya salió a cocina.')).toBeVisible();
+    await expect(mozo.page.getByText('La adición 2 se envió a cocina.')).toBeVisible();
   });
 
   await test.step('todos ven que la impresora no responde y cuántos tickets esperan', async () => {
@@ -584,7 +584,7 @@ test('se detiene el puente: aparece «puente desconectado» y la comanda y la pr
 
   await test.step('el Mozo envía otro lomo y pide la pre-cuenta: los dos quedan en cola', async () => {
     await comandar(mozo.page, 'Mesa 1', [[CARTA.lomo, PRECIOS.lomo]]);
-    await expect(mozo.page.getByText('La adición 3 ya salió a cocina.')).toBeVisible();
+    await expect(mozo.page.getByText('La adición 3 se envió a cocina.')).toBeVisible();
 
     await mozo.page.getByRole('button', { name: 'Pedir pre-cuenta' }).click();
     const hoja = mozo.page.getByRole('dialog', { name: 'Pre-cuenta' });

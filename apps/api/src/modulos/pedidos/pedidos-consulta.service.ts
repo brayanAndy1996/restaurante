@@ -42,7 +42,10 @@ export class PedidosConsultaService implements OnModuleInit {
   onModuleInit(): void {
     this.usos.registrar((mesaIds, transaccion) => this.mesasConOrdenAbierta(mesaIds, transaccion));
     // 3b: la lista de trabajos de impresión muestra la cuenta principal de las órdenes que se unieron (criterio 128).
-    this.vigentes.registrar((ordenIds) => this.ordenesPrincipales(ordenIds));
+    this.vigentes.registrar(
+      (ordenIds) => this.ordenesPrincipales(ordenIds),
+      (ordenId) => this.ordenesUnidasA(ordenId),
+    );
   }
 
   /**
@@ -61,6 +64,20 @@ export class PedidosConsultaService implements OnModuleInit {
       { bind: [[...ordenIds]], type: QueryTypes.SELECT },
     );
     return new Map(filas.map((f) => [f.origen, f.id]));
+  }
+
+  /** La orden pedida y todas las que terminaron unidas a ella (la cadena de uniones al revés). */
+  async ordenesUnidasA(ordenId: string): Promise<string[]> {
+    const filas = await this.conexion.query<{ id: string }>(
+      `WITH RECURSIVE absorbidas AS (
+         SELECT o.id, o.empresa_id FROM orden o WHERE o.id = $1
+         UNION
+         SELECT h.id, h.empresa_id
+           FROM orden h JOIN absorbidas a ON h.unida_a_orden_id = a.id AND h.empresa_id = a.empresa_id)
+       SELECT id FROM absorbidas`,
+      { bind: [ordenId], type: QueryTypes.SELECT },
+    );
+    return filas.map((f) => f.id);
   }
 
   /** `true` si la sucursal tiene alguna orden `ABIERTA` o `EN_PRECUENTA`. */

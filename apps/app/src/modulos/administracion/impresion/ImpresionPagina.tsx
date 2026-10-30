@@ -14,7 +14,7 @@ import { AvisoPendiente } from '../../../componentes/PendienteDeEnvio';
 import { MUTACION_SIN_PAUSA, useEnvioPendiente } from '../../../lib/envios';
 import { mensajeDeError } from '../../../lib/errores';
 import { usePermiso } from '../../acceso/permisos';
-import { PERIODO_DE_REEVALUACION_MS } from '../../impresion/estado';
+import { PERIODO_DE_REEVALUACION_MS, claveEstadoImpresion } from '../../impresion/estado';
 import { useSesionActiva } from '../../acceso/sesion';
 import { MarcoDeAjustes } from '../MarcoDeAjustes';
 import { DondeSaleCadaEstacion, ImpresoraDeCaja } from './DestinosDeImpresion';
@@ -89,8 +89,8 @@ function ImpresionDeSucursal({ sucursalId }: { sucursalId: string }) {
   const consultaImpresoras = useQuery({
     queryKey: claveLista,
     queryFn: ({ signal }) => listarImpresoras(sucursalId, signal),
-    // El estado y los pendientes de cada impresora cambian solos: se vuelven a pedir con el aviso (15 s) y
-    // con el evento `impresion.estado`.
+    // El estado y los pendientes de cada impresora cambian solos: se vuelven a pedir cada 15 s y con el evento
+    // `impresion.estado`.
     refetchInterval: PERIODO_DE_REEVALUACION_MS,
   });
   const consultaDestinos = useQuery({
@@ -127,10 +127,14 @@ function ImpresionDeSucursal({ sucursalId }: { sucursalId: string }) {
 
   // --- Escrituras: sin red no se pierden, quedan "Pendiente de envío" y salen solas -----------------
   const envio = useEnvioPendiente();
-  const guardarEnCache = (guardada: ImpresoraRespuesta) =>
+  const guardarEnCache = (guardada: ImpresoraRespuesta) => {
     clientes.setQueryData<ImpresoraRespuesta[]>(claveLista, (anterior) =>
       conImpresoraGuardada(anterior ?? [], guardada),
     );
+    // Una impresora nueva (o activada) puede dejar a la sucursal sin puente que la alcance: el aviso de todas
+    // las pantallas lo dice al instante, sin esperar la vuelta de 30 s (criterio 122).
+    void clientes.invalidateQueries({ queryKey: claveEstadoImpresion(sucursalId) });
+  };
 
   const crearM = useMutation({
     ...MUTACION_SIN_PAUSA,

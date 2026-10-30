@@ -8,7 +8,7 @@ import { mensajeDeError } from '../../lib/errores';
 import type { TrabajoResumen } from '@restaurante/contratos';
 import { ListaDeTrabajos } from '../impresion/ListaDeTrabajos';
 import {
-  claveTrabajos,
+  claveTrabajosDeOrden,
   listarTrabajos,
   trabajosDeLaCuenta,
   useReimpresion,
@@ -39,8 +39,9 @@ export function TicketsDeLaCuenta({ orden }: { orden: OrdenRespuesta }) {
 function Tickets({ orden }: { orden: OrdenRespuesta }) {
   const reimpresion = useReimpresion();
   const consulta = useQuery({
-    queryKey: claveTrabajos(orden.sucursalId),
-    queryFn: ({ signal }) => listarTrabajos(undefined, signal),
+    queryKey: claveTrabajosDeOrden(orden.sucursalId, orden.id),
+    // La API filtra por cuenta: no se baja la lista de todo el día para quedarse con unos pocos tickets.
+    queryFn: ({ signal }) => listarTrabajos({ ordenId: orden.id }, signal),
     refetchInterval: PERIODO_DE_LA_LISTA_MS,
     select: (trabajos) => trabajosDeLaCuenta(trabajos, orden.id),
   });

@@ -5,7 +5,7 @@ import {
   type DocumentoTicket,
   type JuegoCaracteres,
 } from '@restaurante/contratos';
-import { limpiarTexto } from './texto';
+import { aLargoValido, limpiarTexto } from './texto';
 
 /** La muestra de caracteres de la página de prueba (criterio 127). */
 export const MUESTRA_DE_CARACTERES = 'áéíóú ÁÉÍÓÚ ñ Ñ ü ¿¡ S/ 1,234.50';
@@ -26,7 +26,7 @@ export function documentoDePrueba(impresora: ImpresoraDePrueba): DocumentoTicket
   return {
     version: VERSION_DOCUMENTO_TICKET,
     tipo: 'PRUEBA',
-    bloques: [
+    bloques: aLargoValido([
       { tipo: 'titulo', texto: 'PÁGINA DE PRUEBA' },
       { tipo: 'linea', texto: limpiarTexto(`Impresora: ${impresora.nombre}`) },
       {
@@ -37,6 +37,6 @@ export function documentoDePrueba(impresora: ImpresoraDePrueba): DocumentoTicket
       { tipo: 'regla', caracter: '=' },
       { tipo: 'linea', texto: MUESTRA_DE_CARACTERES },
       { tipo: 'regla', caracter: '=' },
-    ],
+    ]),
   };
 }

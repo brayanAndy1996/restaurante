@@ -200,6 +200,9 @@ export class ImpresorasService {
       if (esNombreRepetido(error)) throw nombreRepetido();
       throw error;
     }
+    // Si cambió cómo se conecta, lo que el puente reportó de ella ya no vale: vuelve a `DESCONOCIDO` hasta el
+    // próximo latido (una Bluetooth no tiene estado en 3b).
+    if (diff.conexion !== undefined) await this.reiniciarEstado(sucursalId, id);
     await this.auditoria.registrar({
       accion: 'modificar_impresora',
       sucursalId,
@@ -209,6 +212,20 @@ export class ImpresorasService {
     });
     await this.eventos.configuracionCambio(sucursalId);
     return this.obtener(sucursalId, id);
+  }
+
+  /**
+   * Quita el estado que el puente reportó de la impresora (`puente.estado_impresoras`) y avisa del cambio. El
+   * `UPDATE` bloquea la fila del puente: un latido en curso termina antes y uno nuevo ya ve la conexión nueva.
+   */
+  private async reiniciarEstado(sucursalId: string, impresoraId: string): Promise<void> {
+    const cambiados = await this.conexion.query<{ id: string }>(
+      `UPDATE puente SET estado_impresoras = estado_impresoras - $2::text, actualizado_en = $3
+        WHERE sucursal_id = $1 AND jsonb_exists(estado_impresoras, $2::text)
+        RETURNING id`,
+      { bind: [sucursalId, impresoraId, this.reloj.ahora()], type: QueryTypes.SELECT },
+    );
+    if (cambiados.length > 0) this.eventos.impresionEstado(sucursalId);
   }
 
   /** 409 `EN_USO` si la impresora es destino de alguna estación o la impresora de caja de la sucursal. */

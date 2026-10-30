@@ -340,6 +340,30 @@ describe('Vincular puente: QR, texto y cuenta regresiva (criterios 106 y 137)', 
     );
   });
 
+  it('si falta la dirección pública del sistema (503), lo dice en palabras y no lo reintenta', async () => {
+    const s = api(
+      {},
+      {
+        [`POST ${RUTA_VINCULACION}`]: () =>
+          json(503, {
+            codigo: 'CONFIGURACION_INCOMPLETA',
+            mensaje: 'Falta la dirección pública de la API',
+          }),
+      },
+    );
+    const puente = await abrir();
+    await userEvent.click(await within(puente).findByRole('button', { name: 'Vincular puente' }));
+    expect(await within(puente).findByText('No pudimos generar el código')).toBeVisible();
+    expect(
+      within(puente).getByText(
+        'Falta configurar la dirección pública del sistema. Avísale a soporte.',
+      ),
+    ).toBeVisible();
+    // No es un corte de paso: repetir no lo arregla, así que sale una sola petición.
+    expect(s.de('POST', RUTA_VINCULACION)).toHaveLength(1);
+    expect(within(puente).queryByRole('img', { name: /Código QR/ })).toBeNull();
+  });
+
   it('cancelar cierra el panel sin tocar nada más', async () => {
     api({}, { [`POST ${RUTA_VINCULACION}`]: () => json(201, codigo()) });
     const puente = await abrir();
@@ -585,8 +609,10 @@ describe('Trabajos de hoy (criterios 128 y 139)', () => {
     const seccion = await screen.findByRole('region', { name: 'Trabajos de hoy' });
     expect(await within(seccion).findByText('Sin trabajos')).toBeVisible();
     expect(seccion).toHaveTextContent('Aún no se mandó nada a imprimir hoy');
-    await userEvent.click(within(seccion).getByRole('button', { name: 'Vencidos' }));
-    expect(await within(seccion).findByText('No hay tickets vencidos.')).toBeVisible();
+    await userEvent.click(within(seccion).getByRole('button', { name: 'Impresos' }));
+    expect(
+      await within(seccion).findByText('Todavía no se imprimió ningún ticket hoy.'),
+    ).toBeVisible();
   });
 
   it('"Reimprimir" manda la reimpresión de ese ticket con una clave de idempotencia y avisa que quedó en cola', async () => {
