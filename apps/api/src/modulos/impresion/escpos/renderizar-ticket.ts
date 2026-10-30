@@ -37,6 +37,14 @@ const GS = 0x1d;
 const LF = 0x0a;
 /** Líneas que avanza el papel antes del corte, para que el corte no pase sobre la última línea. */
 const AVANCE_ANTES_DEL_CORTE = 4;
+/** Bytes del estilo que `finalizar()` puede escribir para volver al estado base: `ESC a`, `ESC E` y `GS !` (3 cada uno). */
+const BYTES_ESTILO_DEL_CIERRE = 9;
+/** Bytes del avance y el corte de `finalizar()`: `ESC d n` (3) y `GS V 66 0` (4). */
+const BYTES_AVANCE_Y_CORTE = 7;
+/** Lo más que escribe `finalizar()` después de la última línea: el estilo base, el avance y el corte. */
+const BYTES_DEL_CIERRE = BYTES_ESTILO_DEL_CIERRE + BYTES_AVANCE_Y_CORTE;
+/** Holgura en bytes que el tope ya tenía sobre el cierre; se conserva para que el tope efectivo no crezca. */
+const HOLGURA_DEL_CIERRE = 4;
 /**
  * Bytes que se dejan libres bajo `MAXIMO_BYTES_TICKET` para lo que se escribe después de cortar: el aviso de
  * incompleto (unos 75 caracteres, a lo más tres líneas de 32 columnas con sus comandos de estilo) y el avance con el
@@ -68,7 +76,7 @@ class EscritorEscPos {
 
   /** A partir de aquí las líneas pueden usar la reserva (es para el aviso de corte). */
   usarReserva(): void {
-    this.limite = MAXIMO_BYTES_TICKET - AVANCE_ANTES_DEL_CORTE - 16;
+    this.limite = MAXIMO_BYTES_TICKET - BYTES_DEL_CIERRE - HOLGURA_DEL_CIERRE;
   }
 
   /**
@@ -101,6 +109,7 @@ class EscritorEscPos {
 
   finalizar(): Uint8Array {
     this.estilo('izquierda', false, false);
+    // Avance (`BYTES_AVANCE_Y_CORTE` en total, con el corte); el estilo de arriba ocupa a lo más `BYTES_ESTILO_DEL_CIERRE`.
     this.bytes.push(ESC, 0x64, AVANCE_ANTES_DEL_CORTE, GS, 0x56, 66, 0);
     return Uint8Array.from(this.bytes);
   }
