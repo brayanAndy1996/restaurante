@@ -18,6 +18,7 @@ import { PuenteController } from './puente.controller';
 import { PuenteGuard, VinculacionGuard } from './puente.guard';
 import { PuentesController } from './puentes.controller';
 import { PuentesService } from './puentes.service';
+import { SenalPuenteService } from './senal-puente.service';
 import { TrabajosService } from './trabajos.service';
 
 /**
@@ -51,6 +52,7 @@ import { TrabajosService } from './trabajos.service';
     { provide: VALIDADOR_DE_PUENTE, useExisting: AutenticacionPuenteService },
     PuentesService,
     TrabajosService,
+    SenalPuenteService,
     EstadoImpresionService,
     PuenteGuard,
     VinculacionGuard,

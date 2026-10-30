@@ -8,6 +8,7 @@ import type { PuenteAutenticado, VinculacionAutenticada } from '../../nucleo/pri
 import type { PuenteDeConexion, ValidadorDePuente } from '../../nucleo/tiempo-real';
 import { RELOJ, type Reloj } from '../../nucleo/reloj';
 import { Credenciales, parsearTokenPuente, parsearTokenVinculacion } from '../seguridad';
+import { SenalPuenteService } from './senal-puente.service';
 
 /** Huella de relleno para comparar igual cuando no hay fila (32 bytes, como una huella SHA-256). */
 const SIN_HUELLA = Buffer.alloc(32);
@@ -46,6 +47,7 @@ export class AutenticacionPuenteService implements ValidadorDePuente {
     @Inject(CONEXION_API) private readonly conexion: Sequelize,
     @Inject(Credenciales) private readonly credenciales: Credenciales,
     @Inject(RELOJ) private readonly reloj: Reloj,
+    @Inject(SenalPuenteService) private readonly senal: SenalPuenteService,
   ) {}
 
   /** El puente activo de un token `pu.…`, o 401 `NO_AUTENTICADO` si está mal formado, adulterado o revocado. */
@@ -114,29 +116,16 @@ export class AutenticacionPuenteService implements ValidadorDePuente {
     return this.autenticarPuente(token);
   }
 
-  /** La señal del puente al conectarse (criterio 111): `ultima_senal_en` con el reloj de la API. */
+  /**
+   * La señal del puente al conectarse (criterio 111): `ultima_senal_en` con el reloj de la API. Si el puente
+   * volvía (más de 60 segundos sin señal), avisa con `impresion.estado` (criterio 120).
+   */
   alConectar(puente: PuenteDeConexion): Promise<void> {
-    return this.marcarSenal(puente);
+    return this.senal.marcarSenal(puente);
   }
 
   /** La señal del puente al desconectarse (criterio 111). */
   alDesconectar(puente: PuenteDeConexion): Promise<void> {
-    return this.marcarSenal(puente);
-  }
-
-  private async marcarSenal(puente: PuenteDeConexion): Promise<void> {
-    const ahora = this.reloj.ahora();
-    await this.contexto.ejecutar(
-      puente.empresaId,
-      async () => {
-        // Un puente revocado no deja señal (la conexión se cierra al revocarlo).
-        await this.conexion.query(
-          `UPDATE puente SET ultima_senal_en = $2, actualizado_en = $2
-            WHERE id = $1 AND activo`,
-          { bind: [puente.puenteId, ahora], type: QueryTypes.UPDATE },
-        );
-      },
-      { actor: { sistema: `puente:${puente.puenteId}` } },
-    );
+    return this.senal.marcarSenal(puente);
   }
 }

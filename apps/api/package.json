@@ -15,7 +15,8 @@
     "db:migrar": "tsx scripts/migrar.ts",
     "db:revertir": "tsx scripts/migrar.ts revertir",
     "db:semilla": "tsx scripts/semilla.ts",
-    "plataforma:superadmin": "tsx scripts/superadministrador.ts"
+    "plataforma:superadmin": "tsx scripts/superadministrador.ts",
+    "puente:simular": "tsx scripts/puente-simular.ts"
   },
   "dependencies": {
     "@nestjs/common": "^11.2.8",
