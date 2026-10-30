@@ -219,6 +219,20 @@ describe('SimuladorPuente', () => {
       expect(simulador.peticionesDeTrabajos).toBeGreaterThanOrEqual(3);
     });
 
+    it('con X-Puente-Hay-Mas pero sin avanzar (la impresora no responde), no vuelve a pedir enseguida: espera (ronda 3)', async () => {
+      // Un puerto cerrado: el trabajo no sale. La API sigue diciendo "hay más", pero el lote no avanzó.
+      const muerta = api.agregarImpresoraDeRed('127.0.0.1', 1, 'Muerta');
+      api.topeDeBytes = ticket('uno').length + 5;
+      api.encolar(muerta.id, ticket('t1'), { avisar: false });
+      api.encolar(muerta.id, ticket('t2'), { avisar: false });
+      // La espera de reintento de la impresora (5 s) y el intervalo (60 s) quedan fuera de la prueba.
+      const simulador = await vinculado({ esperaInicialMs: 5000, esperaMaximaMs: 5000 });
+      await simulador.iniciar();
+      await new Promise((r) => setTimeout(r, 400));
+      expect(simulador.impresiones).toHaveLength(0);
+      expect(simulador.peticionesDeTrabajos).toBe(1);
+    });
+
     it('detener para los temporizadores: ya no pide trabajos', async () => {
       const simulador = await vinculado({ intervaloTrabajosMs: 30 });
       await simulador.iniciar();

@@ -193,7 +193,10 @@ const base64Schema = z
   .string()
   .max(MAXIMO_LARGO_BASE64_TICKET, 'El ticket pesa más que MAXIMO_BYTES_TICKET')
   // Con más de `max` el largo ya se rechazó arriba: no se recorre un texto enorme una segunda vez.
-  .refine((texto) => texto.length > MAXIMO_LARGO_BASE64_TICKET || esBase64(texto), 'Debe ser base64');
+  .refine(
+    (texto) => texto.length > MAXIMO_LARGO_BASE64_TICKET || esBase64(texto),
+    'Debe ser base64',
+  );
 
 /** Un trabajo de `GET /puente/trabajos`: los `bytes` ESC/POS ya vienen armados para esa impresora. */
 export const trabajoParaImprimirSchema = z.object({
