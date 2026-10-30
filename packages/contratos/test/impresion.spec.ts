@@ -493,9 +493,15 @@ describe('documentoTicketSchema (criterio 126)', () => {
     expect(bloqueTicketSchema.safeParse({ tipo: 'linea', texto: 'x', aviso: 'OTRO' }).success).toBe(
       false,
     );
-    expect(bloqueTicketSchema.safeParse({ tipo: 'marca', texto: 'x', aviso: 'RETRASO' }).success).toBe(
-      false,
-    );
+    expect(
+      bloqueTicketSchema.safeParse({ tipo: 'marca', texto: 'x', aviso: 'RETRASO' }).success,
+    ).toBe(false);
+  });
+
+  it('columnas acepta derechaAlFinal booleano', () => {
+    const columnas = { tipo: 'columnas', izquierda: 'a', derecha: 'b' };
+    expect(bloqueTicketSchema.safeParse({ ...columnas, derechaAlFinal: true }).success).toBe(true);
+    expect(bloqueTicketSchema.safeParse({ ...columnas, derechaAlFinal: 'si' }).success).toBe(false);
   });
 
   it('limita el número de bloques', () => {

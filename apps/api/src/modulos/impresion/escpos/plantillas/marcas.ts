@@ -63,10 +63,6 @@ export function conMarcas(documento: DocumentoTicket, marcas: MarcasDeTicket): D
   const conservados = documento.bloques.slice(0, documento.bloques.length - exceso - 1);
   return {
     ...documento,
-    bloques: [
-      ...nuevos,
-      ...conservados,
-      avisoDeCorte(exceso + 1),
-    ],
+    bloques: [...nuevos, ...conservados, avisoDeCorte(exceso + 1)],
   };
 }

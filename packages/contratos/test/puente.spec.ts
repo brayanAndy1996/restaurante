@@ -32,7 +32,7 @@ describe('constantes del protocolo', () => {
     expect(ESPACIO_PUENTE).toBe('/puente');
   });
 
-  it('una respuesta de trabajos pasa de poco más de 1 MB solo por el primer trabajo de una impresora (ronda 2, F5)', () => {
+  it('el tope de bytes de una respuesta de trabajos, su cabecera y el tope de impresoras (ronda 2, F5)', () => {
     expect(MAXIMO_BYTES_RESPUESTA_TRABAJOS).toBe(1_000_000);
     expect(CABECERA_HAY_MAS_TRABAJOS).toBe('X-Puente-Hay-Mas');
     // El tope de impresoras de una sucursal es el que el latido acepta.

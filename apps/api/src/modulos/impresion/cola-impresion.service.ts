@@ -173,7 +173,10 @@ export class ColaImpresionService implements ImpresionPuerto {
     ahora: Date,
   ): Promise<void> {
     // `incompleto` sale del documento (el aviso estructural de corte), nunca de quien llama (ronda 2, F1).
-    const conIncompleto = filas.map((f) => ({ ...f, incompleto: documentoIncompleto(f.documento) }));
+    const conIncompleto = filas.map((f) => ({
+      ...f,
+      incompleto: documentoIncompleto(f.documento),
+    }));
     await this.conexion.query(
       `INSERT INTO trabajo_impresion (id, empresa_id, sucursal_id, impresora_id, estacion_id, tipo, documento,
                                       comanda_id, precuenta_id, reimpresion_de_id, orden_id, envio_numero, mesa, estado, dia_operativo,

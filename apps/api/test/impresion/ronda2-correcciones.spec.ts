@@ -30,6 +30,7 @@ import {
   unirMesasOk,
   type EscenarioP2,
 } from '../salon-critica/fabrica-p2';
+import { sesionContrasena } from '../carta-critica/fabrica-permisos-carta';
 import { abrirCliente } from '../utilidades';
 import { cuerpoRed, impresoraCreada, unico } from './ayudas-impresion';
 
@@ -129,15 +130,21 @@ describe('F1 · el trabajo incompleto se marca y la reimpresión lo conserva', (
       bloques: [{ tipo: 'linea', texto: 'Lomo' }],
     });
 
-    const lista = await listar(esc.token.adminA);
+    const sesion = await sesionContrasena(ctx, A().base.admin, sucursalId);
+    const lista = await listar(sesion);
     expect(lista.find((t) => t.id === incompleto)?.incompleto).toBe(true);
     expect(lista.find((t) => t.id === parecido)?.incompleto).toBe(false);
     expect(lista.find((t) => t.id === normal)?.incompleto).toBe(false);
 
-    const res = await conClave(ctx, T(), 'post', `/impresion/trabajos/${incompleto}/reimpresion`);
+    const res = await conClave(
+      ctx,
+      sesion,
+      'post',
+      `/impresion/trabajos/${incompleto}/reimpresion`,
+    );
     exigirEstado(res, 201, 'reimprimir el incompleto');
     const reimpreso = res.body.trabajoId as string;
-    const despues = await listar(esc.token.adminA);
+    const despues = await listar(sesion);
     expect(despues.find((t) => t.id === reimpreso)).toMatchObject({
       reimpresionDe: incompleto,
       incompleto: true,
@@ -150,10 +157,11 @@ describe('F5 · el tope de bytes de GET /puente/trabajos', () => {
     const sucursalId = A().S2;
     const impresora = await impresoraCreada(ctx, T(), sucursalId, cuerpoRed({ anchoMm: 80 }));
     const puente = await nuevoPuente(ctx, T(), A(), sucursalId);
-    // Cada trabajo pesa unos 100 KB (400 bloques): 12 pasan del tope de 1 MB.
+    // Cada trabajo pesa unos 250 KB (1000 bloques): 12 pasan del tope de 1 MB.
     const ids: string[] = [];
     for (let i = 0; i < 12; i += 1) {
-      ids.push(await encolarDocumento(sucursalId, impresora.id, documentoGrande(400, `T${i}`)));
+      ids.push(await encolarDocumento(sucursalId, impresora.id, documentoGrande(1000, `T${i}`)));
+      ctx.reloj.avanzar(1000);
     }
     const entregados: string[] = [];
     let vueltas = 0;
@@ -195,6 +203,7 @@ describe('F5 · el tope de bytes de GET /puente/trabajos', () => {
     const dos = await impresoraCreada(ctx, T(), sucursalId, cuerpoRed({ anchoMm: 58 }));
     // 3000 bloques de 190 caracteres en 58 mm: más de medio MB cada uno, juntos pasan el tope.
     const a = await encolarDocumento(sucursalId, uno.id, documentoGrande(3000, 'A'));
+    ctx.reloj.avanzar(1000);
     const b = await encolarDocumento(sucursalId, dos.id, documentoGrande(3000, 'B'));
     const res = await llamarPuente(ctx, puente.token, 'get', '/puente/trabajos');
     exigirEstado(res, 200, 'pedir los trabajos');
@@ -204,6 +213,7 @@ describe('F5 · el tope de bytes de GET /puente/trabajos', () => {
     expect(bytes).toBeGreaterThan(1_000_000);
     expect(res.headers['x-puente-hay-mas']).toBeUndefined();
     // Y un tercer trabajo de la primera impresora espera: ya llegó al tope.
+    ctx.reloj.avanzar(1000);
     const c = await encolarDocumento(sucursalId, uno.id, documentoGrande(10, 'C'));
     const siguiente = (await trabajosDelPuente(ctx, puente)).map((t) => t.id);
     expect(siguiente).toEqual([a, b]);

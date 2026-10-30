@@ -152,6 +152,8 @@ describe('I2 · la lista de trabajos filtra antes del límite y por cuenta (crit
       const unida = await deLaCuenta(principal.id);
       expect(unida).toHaveLength(2);
       expect(unida.every((id) => id === principal.id)).toBe(true);
+      // Ronda 2 (F3): la orden absorbida ya no es una cuenta; sus trabajos son de la principal.
+      expect(await deLaCuenta(absorbida.id)).toEqual([]);
       expect(await deLaCuenta(aparte.id)).toEqual([aparte.id]);
       // Junto con el estado, y un ordenId mal formado es 400.
       expect(await listar(mozo, `?ordenId=${principal.id}&estado=IMPRESO`)).toEqual([]);
