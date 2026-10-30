@@ -79,19 +79,31 @@ export function ListaDeTrabajos({
   pendiente,
   conMesa = true,
 }: Props) {
-  const boton = (t: TrabajoResumen) => {
+  /**
+   * "Reimprimir". En la tabla (tableta) va solo con el icono, para que la fila quepa en la columna de
+   * Ajustes sin desplazarse; su nombre accesible es el mismo que el del botón con texto.
+   */
+  const boton = (t: TrabajoResumen, soloIcono = false) => {
     if (t.tipo === 'PRUEBA') return null;
     const hace = enCurso === t.id;
+    const contexto = `${TEXTO_DE_TIPO[t.tipo].toLowerCase()} de ${t.impresora.nombre} de las ${horaDeLima(t.creadoEn)}`;
     return (
       <Boton
         icono={IconoImpresora}
         cargando={hace}
-        textoCargando={pendiente ? 'Pendiente de envío' : 'Reimprimiendo…'}
+        {...(soloIcono
+          ? { title: 'Reimprimir' }
+          : { textoCargando: pendiente ? 'Pendiente de envío' : 'Reimprimiendo…' })}
         disabled={enCurso !== null && !hace}
         onClick={() => onReimprimir(t.id)}
       >
-        Reimprimir{' '}
-        <span className="ui-solo-lectores">{`${TEXTO_DE_TIPO[t.tipo].toLowerCase()} de ${t.impresora.nombre} de las ${horaDeLima(t.creadoEn)}`}</span>
+        {soloIcono ? (
+          <span className="ui-solo-lectores">{`Reimprimir ${contexto}`}</span>
+        ) : (
+          <>
+            Reimprimir <span className="ui-solo-lectores">{contexto}</span>
+          </>
+        )}
       </Boton>
     );
   };
@@ -103,18 +115,22 @@ export function ListaDeTrabajos({
       sinSaltos: true,
       celda: (t) => horaDeLima(t.creadoEn),
     },
-    { id: 'tipo', encabezado: 'Ticket', celda: (t) => <b>{TEXTO_DE_TIPO[t.tipo]}</b> },
+    {
+      // El tipo y la mesa van juntos: una columna menos.
+      id: 'tipo',
+      sinSaltos: true,
+      encabezado: conMesa ? 'Ticket y mesa' : 'Ticket',
+      celda: (t) => {
+        const mesa = conMesa ? textoDeMesasDeTrabajo(t.mesa) : null;
+        return (
+          <>
+            <b>{TEXTO_DE_TIPO[t.tipo]}</b>
+            {mesa ? <span className="trabajo__mesa">{mesa}</span> : null}
+          </>
+        );
+      },
+    },
     { id: 'impresora', encabezado: 'Impresora', celda: (t) => t.impresora.nombre },
-    ...(conMesa
-      ? [
-          {
-            id: 'mesa',
-            encabezado: 'Mesa',
-            sinSaltos: true,
-            celda: (t: TrabajoResumen) => textoDeMesasDeTrabajo(t.mesa) ?? '—',
-          },
-        ]
-      : []),
     { id: 'estado', encabezado: 'Estado', celda: (t) => <EstadoDeTrabajo trabajo={t} /> },
     {
       id: 'acciones',
@@ -122,29 +138,31 @@ export function ListaDeTrabajos({
       encabezadoOculto: true,
       alinear: 'derecha',
       sinSaltos: true,
-      celda: (t) => boton(t),
+      celda: (t) => boton(t, true),
     },
   ];
 
   return (
-    <TablaResponsiva
-      etiqueta={etiqueta}
-      filas={[...trabajos]}
-      clave={(t) => t.id}
-      filaEnLista={(t) => {
-        const mesa = conMesa ? textoDeMesasDeTrabajo(t.mesa) : null;
-        return (
-          <div className="ui-fila trabajo">
-            <ContenidoDeFila
-              titulo={mesa ? `${TEXTO_DE_TIPO[t.tipo]} · ${mesa}` : TEXTO_DE_TIPO[t.tipo]}
-              ayuda={`${t.impresora.nombre} · ${horaDeLima(t.creadoEn)}`}
-              derecha={boton(t)}
-              extra={<EstadoDeTrabajo trabajo={t} />}
-            />
-          </div>
-        );
-      }}
-      columnas={columnas}
-    />
+    <div className="trabajos">
+      <TablaResponsiva
+        etiqueta={etiqueta}
+        filas={[...trabajos]}
+        clave={(t) => t.id}
+        filaEnLista={(t) => {
+          const mesa = conMesa ? textoDeMesasDeTrabajo(t.mesa) : null;
+          return (
+            <div className="ui-fila trabajo">
+              <ContenidoDeFila
+                titulo={mesa ? `${TEXTO_DE_TIPO[t.tipo]} · ${mesa}` : TEXTO_DE_TIPO[t.tipo]}
+                ayuda={`${t.impresora.nombre} · ${horaDeLima(t.creadoEn)}`}
+                derecha={boton(t)}
+                extra={<EstadoDeTrabajo trabajo={t} />}
+              />
+            </div>
+          );
+        }}
+        columnas={columnas}
+      />
+    </div>
   );
 }
