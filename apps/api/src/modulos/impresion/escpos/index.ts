@@ -25,7 +25,8 @@
  *   documento guardado, que queda intacto. `retraso.horaEnvio` es la hora de creación del trabajo.
  * - Bytes (`renderizarTicket(documento, impresora)`): `impresora` es `{ anchoMm, juegoCaracteres }` vigentes al
  *   entregar; devuelve el `Uint8Array` que se manda por TCP (`ESC @` … `GS V`) y lanza `Error` si el documento
- *   no cumple `documentoTicketSchema`.
+ *   no cumple `documentoTicketSchema`. Nunca pasa de `MAXIMO_BYTES_TICKET` (256 KB): si no cupo, lo corta con el aviso
+ *   de incompleto. `renderizarTicketDetallado` da además `recortado`, para marcar el trabajo `incompleto`.
  *
  * - Incompleto (`esIncompleto(documento)`): `true` si a una plantilla no le cupo todo (un caso extremo) y el ticket
  *   termina con "Ticket incompleto: faltan N líneas. Revisa la cuenta en la app."; el trabajo se guarda marcado.
@@ -33,8 +34,8 @@
  * Los tipos de documento son `COMANDA`, `ADICION`, `MARCHAR`, `ANULACION`, `PRECUENTA` y `PRUEBA`; el tipo del
  * documento es el del trabajo.
  */
-export { renderizarTicket } from './renderizar-ticket';
-export type { ImpresoraParaRenderizar } from './renderizar-ticket';
+export { renderizarTicket, renderizarTicketDetallado } from './renderizar-ticket';
+export type { ImpresoraParaRenderizar, TicketRenderizado } from './renderizar-ticket';
 export { documentoDeComanda } from './plantillas/comanda';
 export type { ComandaParaTicket, ContextoDeComanda, LineaDeComanda } from './plantillas/comanda';
 export { documentoDePrecuenta } from './plantillas/precuenta';

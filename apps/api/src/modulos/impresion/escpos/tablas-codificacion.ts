@@ -121,14 +121,44 @@ const esDeControl = (caracter: string): boolean => {
   return codigo < 0x20 || (codigo >= 0x7f && codigo <= 0x9f);
 };
 
-/** El texto con el carácter reemplazado por algo que la página pueda escribir (o `?`). */
+/**
+ * Lo más largo que puede ser el reemplazo de **un** carácter que la página no tiene (ronda 3 del ataque, criterio
+ * 123): "…" → "...", "€" → "EUR", "ǆ" → "dz". Si la descomposición es más larga (U+FDFA "ﷺ" se descompone en 18
+ * caracteres) el reemplazo es un solo `?`. Así un texto adaptado nunca pesa más de este múltiplo de lo que mide en
+ * el documento (`textoSchema` cuenta un carácter por cada uno).
+ */
+export const MAXIMO_REEMPLAZO = 3;
+
+/** Reemplazos ya calculados, por página y modo: `sustituir` repite los mismos pocos caracteres miles de veces. */
+const CACHE_DE_REEMPLAZOS = new Map<string, Map<string, string>>();
+const MAXIMO_EN_CACHE = 2048;
+
+/** El texto con el carácter reemplazado por algo que la página pueda escribir (o `?`); a lo más `MAXIMO_REEMPLAZO`. */
 function sustituir(caracter: string, pagina: PaginaDeCodigos, sinTildes: boolean): string {
+  const clave = `${pagina}${sinTildes ? '-' : '+'}`;
+  let cache = CACHE_DE_REEMPLAZOS.get(clave);
+  if (cache === undefined) {
+    cache = new Map();
+    CACHE_DE_REEMPLAZOS.set(clave, cache);
+  }
+  const guardado = cache.get(caracter);
+  if (guardado !== undefined) return guardado;
+  const calculado = calcularReemplazo(caracter, pagina, sinTildes);
+  if (cache.size >= MAXIMO_EN_CACHE) cache.clear();
+  cache.set(caracter, calculado);
+  return calculado;
+}
+
+function calcularReemplazo(caracter: string, pagina: PaginaDeCodigos, sinTildes: boolean): string {
   if (sinTildes && SE_QUITAN_SIN_TILDES.has(caracter)) return '';
   const tabla = CODIGOS[pagina];
   const fijo = SUSTITUCIONES[caracter];
   const candidato = fijo ?? caracter.normalize('NFKD').replace(MARCAS_COMBINANTES, '');
+  const letras = Array.from(candidato);
+  // Una descomposición larga (compatibilidad de "ﷺ", "㍿"...) no se escribe: un solo `?`.
+  if (letras.length > MAXIMO_REEMPLAZO) return '?';
   let resultado = '';
-  for (const c of candidato) {
+  for (const c of letras) {
     resultado += ASCII_IMPRIMIBLE.test(c) || (!sinTildes && tabla.has(c)) ? c : '?';
   }
   return resultado;
@@ -137,7 +167,8 @@ function sustituir(caracter: string, pagina: PaginaDeCodigos, sinTildes: boolean
 /**
  * Deja el texto en lo que el juego de caracteres puede escribir. Lo que no existe en la página se reemplaza
  * ("Á" → "A" en PC437, "×" → "x"); en `SIN_TILDES` todo sale en ASCII ("Ají" → "Aji", "Ñ" → "N", "¿" → "").
- * Los caracteres de control se vuelven espacios y lo desconocido, `?`.
+ * Los caracteres de control se vuelven espacios y lo desconocido, `?`. Cada carácter da a lo más `MAXIMO_REEMPLAZO`
+ * caracteres: el texto adaptado mide como mucho eso por el del documento.
  */
 export function adaptarTexto(texto: string, juego: JuegoCaracteres): string {
   const pagina = paginaDeJuego(juego);

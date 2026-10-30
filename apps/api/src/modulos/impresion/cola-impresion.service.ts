@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { Inject, Injectable, Logger } from '@nestjs/common';
+import type { AnchoPapelMm, DocumentoTicket, JuegoCaracteres } from '@restaurante/contratos';
 import { diaOperativo } from '@restaurante/dominio';
 import { QueryTypes, type Sequelize } from 'sequelize';
 import { CONEXION_API } from '../../nucleo/base-de-datos';
@@ -12,7 +13,7 @@ import type {
   TrabajoParaEncolar,
 } from '../pedidos/impresion';
 import { SucursalesConsultaService } from '../plataforma';
-import { errorDeDocumento, esIncompleto } from './escpos';
+import { errorDeDocumento, esIncompleto, renderizarTicketDetallado } from './escpos';
 import { EventosImpresion } from './eventos-impresion';
 
 /**
@@ -172,10 +173,12 @@ export class ColaImpresionService implements ImpresionPuerto {
     }>,
     ahora: Date,
   ): Promise<void> {
-    // `incompleto` sale del documento (el aviso estructural de corte), nunca de quien llama (ronda 2, F1).
+    // `incompleto` sale del documento (el aviso estructural de corte) o de que el ticket, armado para su impresora,
+    // pase de `MAXIMO_BYTES_TICKET`; nunca de quien llama (ronda 2, F1; ronda 3).
+    const cortados = await this.cortadosPorElTope(filas);
     const conIncompleto = filas.map((f) => ({
       ...f,
-      incompleto: documentoIncompleto(f.documento),
+      incompleto: documentoIncompleto(f.documento) || cortados.has(f.id),
     }));
     await this.conexion.query(
       `INSERT INTO trabajo_impresion (id, empresa_id, sucursal_id, impresora_id, estacion_id, tipo, documento,
@@ -190,6 +193,48 @@ export class ColaImpresionService implements ImpresionPuerto {
               error_render text, incompleto boolean)`,
       { bind: [JSON.stringify(conIncompleto), empresaId, ahora] },
     );
+  }
+
+  /**
+   * Los ids de las filas cuyo ticket, armado con la configuración actual de su impresora, pasaría de
+   * `MAXIMO_BYTES_TICKET` y saldría cortado. El armado está acotado (se detiene en el tope) y un documento que no se
+   * puede armar no se cuenta aquí: queda con su `error_render`. Al entregar se vuelve a decidir con la configuración
+   * vigente en ese momento (`TrabajosService.entregar`).
+   */
+  private async cortadosPorElTope(
+    filas: ReadonlyArray<{
+      id: string;
+      impresora_id: string;
+      documento: unknown;
+      error_render?: string | null;
+    }>,
+  ): Promise<Set<string>> {
+    const cortados = new Set<string>();
+    const aArmar = filas.filter((f) => f.error_render === null || f.error_render === undefined);
+    if (aArmar.length === 0) return cortados;
+    const impresoras = await this.conexion.query<{
+      id: string;
+      ancho_mm: AnchoPapelMm;
+      juego_caracteres: JuegoCaracteres;
+    }>(`SELECT id, ancho_mm, juego_caracteres FROM impresora WHERE id = ANY($1::uuid[])`, {
+      bind: [[...new Set(aArmar.map((f) => f.impresora_id))]],
+      type: QueryTypes.SELECT,
+    });
+    const porId = new Map(impresoras.map((i) => [i.id, i]));
+    for (const fila of aArmar) {
+      const impresora = porId.get(fila.impresora_id);
+      if (impresora === undefined) continue;
+      try {
+        const { recortado } = renderizarTicketDetallado(fila.documento as DocumentoTicket, {
+          anchoMm: impresora.ancho_mm,
+          juegoCaracteres: impresora.juego_caracteres,
+        });
+        if (recortado) cortados.add(fila.id);
+      } catch {
+        // No se pudo armar: ya lo dice `error_render`, y al entregar se registra.
+      }
+    }
+    return cortados;
   }
 
   /**

@@ -19,7 +19,12 @@ import { RELOJ, horaLocal, type Reloj } from '../../nucleo/reloj';
 import { SucursalesConsultaService } from '../plataforma';
 import { SesionActual } from '../seguridad';
 import { ColaImpresionService } from './cola-impresion.service';
-import { conMarcas, documentoDePrueba, recortarError, renderizarTicket } from './escpos';
+import {
+  conMarcas,
+  documentoDePrueba,
+  recortarError,
+  renderizarTicketDetallado,
+} from './escpos';
 import { noEncontrado, sinImpresora } from './errores-impresion';
 import { OrdenesVigentes } from './ordenes-vigentes';
 import type { FilaImpresora } from './lectura-impresoras';
@@ -103,6 +108,11 @@ export class TrabajosService {
    * creación y, cuando el siguiente de una impresora ya no cabe, esa impresora no recibe más en esta respuesta (sus
    * trabajos salen en orden). De cada impresora con pendientes sale al menos uno aunque pase el tope. Lo que no
    * entró sale en la siguiente llamada (`hayMas`). Los documentos se leen de a pocos: cientos de KB cada uno.
+   *
+   * Ronda 3 del ataque: ningún ticket pasa de `MAXIMO_BYTES_TICKET` (256 KB; el renderizador lo corta y avisa), así
+   * que la respuesta pesa a lo más el tope más un ticket, y armarla está acotado en tiempo y en memoria (a lo más 20
+   * por impresora y hasta que se llena el tope; los demás ni se leen ni se arman). Un ticket que salió cortado deja
+   * su trabajo en `incompleto = true`.
    */
   async entregar(puente: PuenteAutenticado): Promise<EntregaDeTrabajos> {
     const ahora = this.reloj.ahora();
@@ -124,6 +134,7 @@ export class TrabajosService {
     );
     const entregados: TrabajoParaImprimir[] = [];
     const sinTicket: Array<{ id: string; error: string }> = [];
+    const cortados: string[] = [];
     const entregadosPorImpresora = new Map<string, number>();
     const cerradas = new Set<string>();
     let bytesTotales = 0;
@@ -159,7 +170,7 @@ export class TrabajosService {
             ahora.getTime() - creado.getTime() > MS_RETRASO
               ? conMarcas(documentoGuardado, { retraso: { horaEnvio: horaLocal(creado) } })
               : documentoGuardado;
-          const bytes = renderizarTicket(documento, {
+          const { bytes, recortado } = renderizarTicketDetallado(documento, {
             anchoMm: fila.ancho_mm,
             juegoCaracteres: fila.juego_caracteres,
           });
@@ -170,6 +181,7 @@ export class TrabajosService {
             hayMas = true;
             continue;
           }
+          if (recortado) cortados.push(fila.id);
           bytesTotales += bytes.length;
           entregadosPorImpresora.set(
             fila.impresora_id,
@@ -201,6 +213,15 @@ export class TrabajosService {
         `UPDATE trabajo_impresion SET error_render = $2, actualizado_en = $3
           WHERE id = $1 AND error_render IS NULL`,
         { bind: [id, error, ahora], type: QueryTypes.UPDATE },
+      );
+    }
+    if (cortados.length > 0) {
+      // El ticket pasó de `MAXIMO_BYTES_TICKET` con la configuración vigente de la impresora: sale cortado, con el
+      // aviso de incompleto, y la lista de "Trabajos de hoy" lo dice (ronda 3 del ataque, criterio 126).
+      await this.conexion.query(
+        `UPDATE trabajo_impresion SET incompleto = true, actualizado_en = $2
+          WHERE id = ANY($1::uuid[]) AND NOT incompleto`,
+        { bind: [cortados, ahora], type: QueryTypes.UPDATE },
       );
     }
     if (entregados.length > 0) {

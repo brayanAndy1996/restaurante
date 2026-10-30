@@ -196,27 +196,35 @@ describe('F5 · el tope de bytes de GET /puente/trabajos', () => {
     expect(entregados).toEqual(ids);
   });
 
-  it('un trabajo que por sí solo pasa el tope sale igual: al menos uno por impresora', async () => {
+  it('aunque las respuestas pasen el tope, sale al menos un trabajo de cada impresora', async () => {
     const sucursalId = A().S1;
     const puente = await nuevoPuente(ctx, T(), A(), sucursalId);
-    const uno = await impresoraCreada(ctx, T(), sucursalId, cuerpoRed({ anchoMm: 58 }));
-    const dos = await impresoraCreada(ctx, T(), sucursalId, cuerpoRed({ anchoMm: 58 }));
-    // 3000 bloques de 190 caracteres en 58 mm: más de medio MB cada uno, juntos pasan el tope.
-    const a = await encolarDocumento(sucursalId, uno.id, documentoGrande(3000, 'A'));
-    ctx.reloj.avanzar(1000);
-    const b = await encolarDocumento(sucursalId, dos.id, documentoGrande(3000, 'B'));
+    // Desde la ronda 3 ningún ticket pasa de 256 KB: 5 impresoras con un ticket lleno cada una (1,3 MB) pasan el
+    // tope de 1 MB de la respuesta y las 5 reciben su primer trabajo.
+    const impresoras: string[] = [];
+    const primeros: string[] = [];
+    for (let i = 0; i < 5; i += 1) {
+      const impresora = await impresoraCreada(ctx, T(), sucursalId, cuerpoRed({ anchoMm: 58 }));
+      impresoras.push(impresora.id);
+      // 3000 bloques de 190 caracteres en 58 mm: pasarían de medio MB; salen cortados en 256 KB.
+      primeros.push(
+        await encolarDocumento(sucursalId, impresora.id, documentoGrande(3000, `P${i}`)),
+      );
+      ctx.reloj.avanzar(1000);
+    }
     const res = await llamarPuente(ctx, puente.token, 'get', '/puente/trabajos');
     exigirEstado(res, 200, 'pedir los trabajos');
     const lote = res.body as Array<{ id: string; impresoraId: string; bytes: string }>;
-    expect(lote.map((t) => t.id)).toEqual([a, b]);
+    expect(lote.map((t) => t.id)).toEqual(primeros);
     const bytes = lote.reduce((n, t) => n + Buffer.from(t.bytes, 'base64').length, 0);
     expect(bytes).toBeGreaterThan(1_000_000);
+    for (const t of lote)
+      expect(Buffer.from(t.bytes, 'base64').length).toBeLessThanOrEqual(262_144);
     expect(res.headers['x-puente-hay-mas']).toBeUndefined();
-    // Y un tercer trabajo de la primera impresora espera: ya llegó al tope.
-    ctx.reloj.avanzar(1000);
-    const c = await encolarDocumento(sucursalId, uno.id, documentoGrande(10, 'C'));
+    // Y un segundo trabajo de la primera impresora espera: la respuesta ya llegó al tope.
+    const c = await encolarDocumento(sucursalId, impresoras[0]!, documentoGrande(10, 'C'));
     const siguiente = (await trabajosDelPuente(ctx, puente)).map((t) => t.id);
-    expect(siguiente).toEqual([a, b]);
+    expect(siguiente).toEqual(primeros);
     expect(siguiente).not.toContain(c);
   });
 });

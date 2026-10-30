@@ -302,9 +302,20 @@ export const VERSION_DOCUMENTO_TICKET = 1;
 /**
  * Bloques que puede llevar un documento y largo de cada texto. 3000 bloques cubren los límites de entrada de un
  * envío (50 líneas de un combo de 20 componentes, o de un plato con 30 modificadores y observación) y una
- * pre-cuenta de 600 ítems; un ticket de 3000 bloques de 200 caracteres son unos 650 KB de ESC/POS.
+ * pre-cuenta de 600 ítems. Los bloques no acotan el tamaño de los bytes (un bloque puede ser de 200 caracteres que,
+ * en papel, son varias líneas): para eso está `MAXIMO_BYTES_TICKET`.
  */
 export const MAXIMO_BLOQUES_TICKET = 3000;
+
+/**
+ * Tope de bytes ESC/POS de **un** ticket ya renderizado (256 KB; ronda 3 del ataque de 3b, criterio 126). Se mide
+ * sobre los bytes finales, después de adaptar el texto al juego de caracteres de la impresora, no sobre el
+ * documento: nada que escriba una persona puede hacer un ticket más pesado. Si el ticket pasaría ese tope, el
+ * renderizador lo corta antes, lo cierra con el aviso "Ticket incompleto" y el trabajo queda `incompleto: true`.
+ * Los máximos de entrada de un envío (50 líneas de un combo de 20 componentes, una pre-cuenta de 600 ítems) pesan
+ * entre 35 KB y 110 KB, así que un ticket normal no se acerca.
+ */
+export const MAXIMO_BYTES_TICKET = 262_144;
 export const LARGO_TEXTO_TICKET = 200;
 export const SANGRIA_MAXIMA_TICKET = 8;
 export const LINEAS_MAXIMAS_ESPACIO_TICKET = 10;
