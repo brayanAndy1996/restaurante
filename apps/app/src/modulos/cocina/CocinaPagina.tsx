@@ -1,4 +1,4 @@
-import type { ComandaKds } from '@restaurante/contratos';
+import type { ComandaKds, EstacionKds } from '@restaurante/contratos';
 import {
   Aviso,
   ErrorDeCarga,
@@ -21,14 +21,8 @@ import { AvisoPendiente } from '../../componentes/PendienteDeEnvio';
 import { useConexion } from '../../lib/conexion';
 import { useEstadoTiempoReal } from '../../lib/tiempo-real';
 import { useSesionActiva } from '../acceso/sesion';
-import { useVistaDeSucursal } from '../disponibilidad/useVistaDeSucursal';
 import { resumenDeImpresion, useEstadoDeImpresion } from '../impresion/estado';
-import {
-  estacionesDeLasComandas,
-  etiquetaDeMesas,
-  pendientesEnOrden,
-  recientesEnOrden,
-} from './cocina';
+import { etiquetaDeMesas, pendientesEnOrden, recientesEnOrden } from './cocina';
 import './cocina.css';
 import {
   estacionesDelEquipo,
@@ -71,32 +65,30 @@ function CocinaDeSucursal({ empresaId, sucursalId }: { empresaId: string; sucurs
   const [elegidas, setElegidas] = useState<string[]>(() =>
     estacionesDelEquipo(empresaId, sucursalId),
   );
-  // La lista de estaciones sale de la carta de la sucursal (una sola vez); si no llega, se arma con las que
-  // aparecen en las comandas.
-  const vista = useVistaDeSucursal(sucursalId, { refrescar: false });
-  const estacionesDeLaCarta = vista.data?.vista.estaciones;
+  // La lista de estaciones sale de la misma respuesta de la cocina: todas las activas, aunque el filtro pida
+  // solo algunas, cada una con su destino (criterio 138). Al cambiar el filtro la consulta es otra y por un
+  // momento no hay respuesta: se conserva la última lista para que los filtros no desaparezcan.
+  const [estacionesVistas, setEstacionesVistas] = useState<readonly EstacionKds[] | undefined>(
+    undefined,
+  );
   // Una estación recordada que ya no existe (otra sucursal, estación desactivada) se ignora.
   const efectivas = useMemo(
     () =>
-      estacionesDeLaCarta
-        ? elegidas.filter((id) => estacionesDeLaCarta.some((e) => e.id === id))
+      estacionesVistas
+        ? elegidas.filter((id) => estacionesVistas.some((e) => e.id === id))
         : elegidas,
-    [elegidas, estacionesDeLaCarta],
+    [elegidas, estacionesVistas],
   );
 
   const consulta = useCocina(sucursalId, efectivas);
   const datos = consulta.data;
   const cocina = datos?.cocina;
+  if (cocina && cocina.estaciones !== estacionesVistas) setEstacionesVistas(cocina.estaciones);
   const ahora = useAhoraDeCocina(datos);
   const acciones = useAccionesDeCocina(sucursalId);
 
-  const estaciones = useMemo(() => {
-    const todas = new Map<string, string>();
-    for (const e of estacionesDeLaCarta ?? []) todas.set(e.id, e.nombre);
-    for (const e of estacionesDeLasComandas(cocina))
-      if (!todas.has(e.id)) todas.set(e.id, e.nombre);
-    return [...todas].map(([id, nombre]) => ({ id, nombre }));
-  }, [estacionesDeLaCarta, cocina]);
+  const estaciones = estacionesVistas ?? [];
+  const porImpresora = estaciones.filter((e) => e.destino === 'IMPRESORA');
 
   function alternarEstacion(id: string) {
     const siguiente = efectivas.includes(id)
@@ -246,6 +238,17 @@ function CocinaDeSucursal({ empresaId, sucursalId }: { empresaId: string; sucurs
             </div>
           </div>
           <EstadoDeImpresion sucursalId={sucursalId} />
+          {porImpresora.length > 0 ? (
+            <ul className="cocina__destinos" aria-label="Estaciones que salen por impresora">
+              {porImpresora.map((e) => (
+                <li key={e.id} className="ui-campo__ayuda">
+                  <Icono icono={IconoImpresora} tamano={16} />
+                  {`${e.nombre} sale por la impresora ${e.impresora?.nombre ?? ''}`.trim()}
+                  {' y no aparece en esta pantalla.'}
+                </li>
+              ))}
+            </ul>
+          ) : null}
           {tiempoReal === 'caido' ? (
             <p className="ui-campo__ayuda" role="status">
               Sin conexión en vivo. La cocina se actualiza cada 30 segundos.

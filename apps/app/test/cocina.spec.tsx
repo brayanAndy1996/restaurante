@@ -7,7 +7,7 @@ import { espera } from '../src/lib/api';
 import { conLineaEn, conTodoListo } from '../src/modulos/cocina/cocina';
 import { usarMotorDeSonido, type MotorDeSonido } from '../src/modulos/cocina/sonido';
 import { ID, json, renderApp, servidor, type Manejador } from './ayudas';
-import { cocinaDe, comandaKds, lineaKds, Z_BARRA, Z_COCINA } from './ayudas-cocina';
+import { cocinaDe, comandaKds, ESTACIONES_KDS, lineaKds, Z_BARRA, Z_COCINA } from './ayudas-cocina';
 import { socketVigente } from './ayudas-tiempo-real';
 import { salon, sesionDeRol, uuid } from './ayudas-salon';
 
@@ -15,11 +15,6 @@ import { salon, sesionDeRol, uuid } from './ayudas-salon';
 
 const TOKEN =
   'se.11111111-1111-4111-8111-111111111111.22222222-2222-4222-8222-222222222222.secreto';
-
-const ESTACIONES = [
-  { id: Z_COCINA, nombre: 'Cocina' },
-  { id: Z_BARRA, nombre: 'Barra' },
-];
 
 /**
  * Un KDS que cambia: cada cambio sube la versión (su `ETag`) y repetir la versión da 304. Las escrituras
@@ -38,13 +33,6 @@ function servidorDeCocina(
       cabeceras.get('If-None-Match') === `"${version}"`
         ? json(304)
         : json(200, actual, { ETag: `"${version}"` }),
-    'GET /carta/sucursal': () =>
-      json(200, {
-        sucursalId: ID.sucursalA,
-        diaOperativo: '2026-10-29',
-        estaciones: ESTACIONES,
-        familias: [],
-      }),
     'PUT /cocina/lineas/*/estado': ({ url, cuerpo }) => {
       const lineaId = url.pathname.split('/')[3] ?? '';
       actual = conLineaEn(actual, lineaId, (cuerpo as { estado: 'LISTO' }).estado);
@@ -602,6 +590,30 @@ describe('Cocina: filtros de estación (criterio 96)', () => {
     ).toEqual([]);
   });
 
+  it('las estaciones salen de la respuesta de la cocina: no pide la carta de la sucursal', async () => {
+    const s = servidorDeCocina(sesionDeRol('COCINA_BARRA'), cocinaDe([comandaKds(1)]));
+    renderApp('/cocina');
+    const grupo = await screen.findByRole('group', { name: 'Estaciones' });
+    expect(within(grupo).getByRole('button', { name: 'Cocina' })).toBeVisible();
+    expect(within(grupo).getByRole('button', { name: 'Barra' })).toBeVisible();
+    expect(s.llamadas.some((l) => l.ruta === '/carta/sucursal')).toBe(false);
+  });
+
+  it('al filtrar, los filtros siguen a la vista mientras llega la respuesta nueva', async () => {
+    servidorDeCocina(sesionDeRol('COCINA_BARRA'), cocinaDe([comandaKds(1)]));
+    renderApp('/cocina');
+    const grupo = await screen.findByRole('group', { name: 'Estaciones' });
+    await screen.findByRole('article', { name: /Mesa 1/ });
+    await userEvent.click(within(grupo).getByRole('button', { name: 'Barra' }));
+    // La consulta cambió y todavía no hay respuesta: la lista de estaciones no se vacía.
+    expect(screen.getByRole('group', { name: 'Estaciones' })).toBeVisible();
+    expect(
+      within(screen.getByRole('group', { name: 'Estaciones' })).getByRole('button', {
+        name: 'Cocina',
+      }),
+    ).toBeVisible();
+  });
+
   it('ignora una estación recordada que ya no existe', async () => {
     localStorage.setItem(
       `restaurante.cocina.estaciones.${ID.empresa}.${ID.sucursalA}`,
@@ -616,6 +628,43 @@ describe('Cocina: filtros de estación (criterio 96)', () => {
       'true',
     );
     expect(ultimaConsulta(s)).not.toContain('estacionIds');
+  });
+});
+
+describe('Cocina: estaciones que salen por impresora (criterio 138)', () => {
+  const porImpresora = [
+    ESTACIONES_KDS[0]!,
+    {
+      id: Z_BARRA,
+      nombre: 'Barra',
+      destino: 'IMPRESORA' as const,
+      impresora: { id: uuid(101), nombre: 'Impresora de la barra' },
+    },
+  ];
+
+  it('dice qué estación sale por impresora y que no aparece en la pantalla', async () => {
+    servidorDeCocina(sesionDeRol('COCINA_BARRA'), cocinaDe([comandaKds(1)], [], porImpresora));
+    renderApp('/cocina');
+    const lista = await screen.findByRole('list', { name: 'Estaciones que salen por impresora' });
+    const items = within(lista).getAllByRole('listitem');
+    expect(items).toHaveLength(1);
+    expect(items[0]).toHaveTextContent(
+      'Barra sale por la impresora Impresora de la barra y no aparece en esta pantalla.',
+    );
+    // Sigue en los filtros, y la de la pantalla no se menciona.
+    expect(
+      within(screen.getByRole('group', { name: 'Estaciones' })).getByRole('button', {
+        name: 'Barra',
+      }),
+    ).toBeVisible();
+    expect(lista).not.toHaveTextContent('Cocina sale');
+  });
+
+  it('si todas las estaciones salen por la pantalla, no dice nada', async () => {
+    servidorDeCocina(sesionDeRol('COCINA_BARRA'), cocinaDe([comandaKds(1)]));
+    renderApp('/cocina');
+    await screen.findByRole('article', { name: /Mesa 1/ });
+    expect(screen.queryByRole('list', { name: 'Estaciones que salen por impresora' })).toBeNull();
   });
 });
 

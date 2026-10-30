@@ -186,13 +186,3 @@ export function conComandaVista(
     c.id === comandaId && !esDeCocina(c) && c.vistaEn === null ? { ...c, vistaEn } : c,
   );
 }
-
-/** Las estaciones que se ven en las comandas, para los filtros cuando no se sabe la lista completa. */
-export function estacionesDeLasComandas(
-  cocina: CocinaRespuesta | undefined,
-): { id: string; nombre: string }[] {
-  const vistas = new Map<string, string>();
-  for (const c of [...(cocina?.pendientes ?? []), ...(cocina?.recientes ?? [])])
-    vistas.set(c.estacion.id, c.estacion.nombre);
-  return [...vistas].map(([id, nombre]) => ({ id, nombre }));
-}
