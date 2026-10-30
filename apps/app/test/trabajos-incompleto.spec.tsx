@@ -67,7 +67,7 @@ describe('Ticket que salió incompleto', () => {
 
   it('dice el texto exacto de la explicación', () => {
     expect(EXPLICACION_DE_TICKET_INCOMPLETO).toBe(
-      'El ticket era demasiado largo y salió recortado. Revisa la cuenta en la app.',
+      'El ticket es demasiado largo y sale recortado. Revisa la cuenta en la app.',
     );
   });
 

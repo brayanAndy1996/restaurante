@@ -108,7 +108,7 @@ export const salioIncompleto = (
 ): boolean => trabajo.incompleto === true && trabajo.sinTicket !== true;
 
 export const EXPLICACION_DE_TICKET_INCOMPLETO =
-  'El ticket era demasiado largo y salió recortado. Revisa la cuenta en la app.';
+  'El ticket es demasiado largo y sale recortado. Revisa la cuenta en la app.';
 
 /** Las mesas de un trabajo ("4" o "4, 5") dichas como en la cuenta: "Mesa 4", "Mesas 4 y 5". */
 export function textoDeMesasDeTrabajo(mesa: string | null): string | null {
