@@ -66,11 +66,15 @@ export class PedidosConsultaService implements OnModuleInit {
     return new Map(filas.map((f) => [f.origen, f.id]));
   }
 
-  /** La orden pedida y todas las que terminaron unidas a ella (la cadena de uniones al revés). */
+  /**
+   * La orden pedida y todas las que terminaron unidas a ella (la cadena de uniones al revés), con la misma regla de
+   * `ordenesPrincipales`: solo si la orden pedida es una principal (no se unió a otra). Una orden `UNIDA`, o que no
+   * existe, no tiene cuenta propia: lista vacía.
+   */
   async ordenesUnidasA(ordenId: string): Promise<string[]> {
     const filas = await this.conexion.query<{ id: string }>(
       `WITH RECURSIVE absorbidas AS (
-         SELECT o.id, o.empresa_id FROM orden o WHERE o.id = $1
+         SELECT o.id, o.empresa_id FROM orden o WHERE o.id = $1 AND o.unida_a_orden_id IS NULL
          UNION
          SELECT h.id, h.empresa_id
            FROM orden h JOIN absorbidas a ON h.unida_a_orden_id = a.id AND h.empresa_id = a.empresa_id)

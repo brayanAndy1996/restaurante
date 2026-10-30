@@ -60,8 +60,29 @@ export function centrarCon(texto: string, ancho: number, relleno: string): strin
  * la primera línea y la izquierda continúa en las siguientes (con la primera más corta); si la derecha es tan
  * larga que una palabra de la izquierda no cabe a su lado, la izquierda va primero y la derecha, sola y
  * alineada, al final.
+ *
+ * Con `derechaAlFinal`, si no caben juntas la izquierda sale completa, en líneas seguidas, y la derecha queda
+ * alineada al borde en la última línea (si le cabe) o sola en una línea más: el texto de la izquierda no se
+ * interrumpe con la derecha (un nombre largo de la pre-cuenta se lee de corrido y su monto cierra el renglón).
  */
-export function armarColumnas(izquierda: string, derecha: string, columnas: number): string[] {
+export function armarColumnas(
+  izquierda: string,
+  derecha: string,
+  columnas: number,
+  derechaAlFinal = false,
+): string[] {
+  if (derechaAlFinal && derecha.length > 0 && izquierda.length > 0) {
+    if (izquierda.length + 1 + derecha.length <= columnas) {
+      return [rellenarDerecha(izquierda, columnas - derecha.length) + derecha];
+    }
+    const lineas = partirEnLineas(izquierda, columnas);
+    const ultima = lineas[lineas.length - 1]!;
+    const abajo = partirEnLineas(derecha, columnas).map((l) => rellenarIzquierda(l, columnas));
+    if (abajo.length === 1 && ultima.length + 1 + derecha.length <= columnas) {
+      return [...lineas.slice(0, -1), rellenarDerecha(ultima, columnas - derecha.length) + derecha];
+    }
+    return [...lineas, ...abajo];
+  }
   const lugarIzquierda = columnas - derecha.length - 1;
   if (derecha.length === 0) return partirEnLineas(izquierda, columnas);
   const palabraMasLarga = Math.max(0, ...izquierda.split(/\s+/).map((p) => p.length));

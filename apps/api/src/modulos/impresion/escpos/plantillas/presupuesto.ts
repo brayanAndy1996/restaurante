@@ -11,21 +11,33 @@ export const RESERVA_PARA_MARCAS = 4;
 /** Bloques que puede tener un documento recién armado. */
 export const PRESUPUESTO_DE_BLOQUES = MAXIMO_BLOQUES_TICKET - RESERVA_PARA_MARCAS;
 
-/** El aviso que cierra un ticket al que no le cupo todo (último recurso, siempre visible). */
-function avisoDeCorte(omitidos: number): BloqueTicket {
+/**
+ * El aviso que cierra un ticket al que no le cupo todo (último recurso, siempre visible). Remite a la app y no a la
+ * pantalla: la estación de una impresora no aparece en el KDS. Lleva la marca estructural `INCOMPLETO` (la que
+ * mira `esIncompleto`), que ningún texto de una persona puede tener.
+ */
+export function avisoDeCorte(omitidos: number): BloqueTicket {
   return {
     tipo: 'linea',
-    texto: `... Ticket incompleto: faltan ${omitidos} líneas. Mira la cuenta en la pantalla.`,
+    texto: `... Ticket incompleto: faltan ${omitidos} líneas. Revisa la cuenta en la app.`,
     negrita: true,
+    aviso: 'INCOMPLETO',
   };
+}
+
+/** `true` si al documento no le cupo todo y termina con el aviso de corte (se guarda como `incompleto`). */
+export function esIncompleto(documento: { bloques: readonly BloqueTicket[] }): boolean {
+  return documento.bloques.some((b) => b.tipo === 'linea' && b.aviso === 'INCOMPLETO');
 }
 
 /**
  * Arma el documento de una plantilla para que nunca pase del presupuesto de bloques. `niveles` da el cuerpo del
  * ticket del más completo al más denso; se usa el primero que cabe junto con el encabezado y el pie (que
- * siempre salen completos: el total de una pre-cuenta no se pierde). Si ni el más denso cabe (un ticket de
- * miles de líneas), el cuerpo se corta y el ticket termina con un aviso que dice cuántas líneas faltan: nunca se
- * pierde nada sin decirlo. Todo texto largo se reparte en bloques (`aLargoValido`).
+ * siempre salen completos: el total de una pre-cuenta no se pierde). Con 3000 bloques caben completos los
+ * máximos de entrada (50 líneas de un combo de 20 componentes, 50 de un plato con 30 modificadores y observación,
+ * una pre-cuenta de 600 ítems); si un caso extremo todavía no cabe, el cuerpo se corta y el ticket termina con un
+ * aviso que dice cuántas líneas faltan (`esIncompleto` lo reconoce): nunca se pierde nada sin decirlo. Todo texto
+ * largo se reparte en bloques (`aLargoValido`).
  */
 export function ajustarAlPresupuesto(
   encabezado: readonly BloqueTicket[],

@@ -137,13 +137,27 @@ export function aLargoValido(bloques: readonly BloqueTicket[]): BloqueTicket[] {
       case 'columnas': {
         const [izq, ...restoIzq] = partirTexto(bloque.izquierda);
         const [der, ...restoDer] = partirTexto(bloque.derecha);
-        salida.push({ ...bloque, izquierda: izq!, derecha: der! });
         const estilo = {
           ...(bloque.negrita === undefined ? {} : { negrita: bloque.negrita }),
           ...(bloque.dobleAlto === undefined ? {} : { dobleAlto: bloque.dobleAlto }),
         };
-        for (const texto of restoIzq) {
-          salida.push({ tipo: 'linea', texto, sangria: SANGRIA_DE_CONTINUACION, ...estilo });
+        if (bloque.derechaAlFinal === true && restoIzq.length > 0) {
+          // La izquierda pasa del máximo de un bloque: sus trozos van seguidos y la derecha acompaña al último.
+          const trozos = [izq!, ...restoIzq];
+          trozos.slice(0, -1).forEach((texto, i) => {
+            salida.push({
+              tipo: 'linea',
+              texto,
+              ...(i === 0 ? {} : { sangria: SANGRIA_DE_CONTINUACION }),
+              ...estilo,
+            });
+          });
+          salida.push({ ...bloque, izquierda: trozos[trozos.length - 1]!, derecha: der! });
+        } else {
+          salida.push({ ...bloque, izquierda: izq!, derecha: der! });
+          for (const texto of restoIzq) {
+            salida.push({ tipo: 'linea', texto, sangria: SANGRIA_DE_CONTINUACION, ...estilo });
+          }
         }
         for (const texto of restoDer) {
           salida.push({ tipo: 'linea', texto, alinear: 'derecha', ...estilo });

@@ -31,8 +31,18 @@ export class OrdenesVigentes {
     this.buscador = absorbidas ?? null;
   }
 
-  /** La orden y las que se le unieron (una sola, ella misma, si no hay quien lo sepa): para filtrar por cuenta. */
-  async delaCuenta(ordenId: string): Promise<string[]> {
+  /**
+   * Las órdenes cuyos trabajos son los de la cuenta `ordenId`, con la misma regla de `resolver` (la que llena el
+   * `ordenId` de cada trabajo de la respuesta): si `ordenId` se unió a otra, ya no es una cuenta y no tiene
+   * trabajos (lista vacía); si es la principal, ella y todas las que terminaron unidas a ella. Sin quien conozca las
+   * uniones, solo ella misma.
+   */
+  async delaCuenta(pedida: string): Promise<string[]> {
+    // La base devuelve los ids en minúsculas; el que llega por la consulta puede traerlas en mayúsculas.
+    const ordenId = pedida.toLowerCase();
+    if (this.resolutor === null && this.buscador === null) return [ordenId];
+    const principal = (await this.resolver([ordenId])).get(ordenId) ?? ordenId;
+    if (principal !== ordenId) return [];
     const ids = this.buscador === null ? [] : await this.buscador(ordenId);
     return [...new Set([ordenId, ...ids])];
   }

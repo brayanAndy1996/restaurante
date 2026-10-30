@@ -1,5 +1,6 @@
 import { createConnection } from 'node:net';
 import {
+  CABECERA_HAY_MAS_TRABAJOS,
   CABECERA_PROTOCOLO_PUENTE,
   ESPACIO_PUENTE,
   IDS_IMPRESOS_RECORDADOS,
@@ -419,10 +420,15 @@ export class SimuladorPuente {
     if (!this.puedeTrabajar()) return;
     let lote: TrabajoParaImprimir[];
     let avance: number;
+    const api = { hayMas: false };
     do {
       try {
         this.peticionesDeTrabajos += 1;
-        const cuerpo = await this.http('GET', '/puente/trabajos');
+        // La API avisa con una cabecera que algo no entró por el tope de bytes de la respuesta.
+        api.hayMas = false;
+        const cuerpo = await this.http('GET', '/puente/trabajos', undefined, undefined, (r) => {
+          api.hayMas = r.headers.get(CABECERA_HAY_MAS_TRABAJOS) === '1';
+        });
         lote = this.leer(z.array(trabajoParaImprimirSchema), cuerpo, 'los trabajos');
       } catch (error) {
         this.anotar('error-trabajos', textoDeError(error));
@@ -433,7 +439,7 @@ export class SimuladorPuente {
         lote.map((t) => t.id),
       );
       avance = await this.procesarLote(lote);
-    } while (hayMasPorPedir(lote) && avance > 0 && this.puedeTrabajar());
+    } while ((api.hayMas || hayMasPorPedir(lote)) && avance > 0 && this.puedeTrabajar());
   }
 
   /** Imprime el lote en el orden recibido; devuelve cuántos trabajos quedaron resueltos (impresos u omitidos). */
@@ -776,6 +782,7 @@ export class SimuladorPuente {
     ruta: string,
     cuerpo?: unknown,
     tokenDeVinculacion?: string,
+    alRecibir?: (respuesta: Response) => void,
   ): Promise<unknown> {
     const esVinculacion = tokenDeVinculacion !== undefined;
     const token = tokenDeVinculacion ?? this.tokenActual;
@@ -797,6 +804,7 @@ export class SimuladorPuente {
     } catch (error) {
       throw new ErrorProtocoloPuente(0, 'SIN_RED', `${metodo} ${ruta}: ${textoDeError(error)}`);
     }
+    alRecibir?.(respuesta);
     const texto = await respuesta.text();
     let datos: unknown = texto === '' ? undefined : texto;
     if (texto !== '') {

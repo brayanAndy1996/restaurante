@@ -18,7 +18,8 @@ import {
  * 2. **Conectar.** Abre Socket.IO en `/tiempo-real`, espacio `/puente`, con `auth: { token: 'pu.…' }`. Recibe
  *    `trabajo.nuevo` y `puente.configuracion`.
  * 3. **Imprimir.** `GET /puente/trabajos` al conectarse, al recibir `trabajo.nuevo` y cada 30 segundos (hasta
- *    `MAXIMO_TRABAJOS_POR_IMPRESORA` por impresora; con ese lote lleno vuelve a pedir); manda los
+ *    `MAXIMO_TRABAJOS_POR_IMPRESORA` por impresora y `MAXIMO_BYTES_RESPUESTA_TRABAJOS` en total; con ese lote lleno o
+ *    con la cabecera `X-Puente-Hay-Mas: 1` vuelve a pedir en cuanto termina); manda los
  *    `bytes` (base64) por TCP a la impresora de cada trabajo, en el orden recibido, y reporta con
  *    `POST /puente/trabajos/:id/resultado`. La entrega es "al menos una vez": el puente recuerda los últimos 500
  *    ids impresos para no imprimir dos veces un trabajo repetido.
@@ -46,6 +47,16 @@ export const INTERVALO_LATIDO_MS = 20_000;
  * trabajos de impresoras inactivas ni Bluetooth (en 3b) ni los que no se pudieron armar.
  */
 export const MAXIMO_TRABAJOS_POR_IMPRESORA = 20;
+
+/**
+ * Tope de bytes ESC/POS (ya decodificados) de una respuesta de `GET /puente/trabajos`, sumados los de todos los
+ * trabajos. Siempre sale al menos un trabajo de cada impresora que tenga pendientes aunque por sí solo lo pase
+ * (un ticket muy largo no se queda sin entregar); los trabajos de una impresora salen en orden, así que lo que no
+ * entra sale en la siguiente llamada. Cuando quedó algo sin entrar por este tope, la respuesta lleva la cabecera
+ * `X-Puente-Hay-Mas: 1` y el puente vuelve a pedir en cuanto termina el lote.
+ */
+export const MAXIMO_BYTES_RESPUESTA_TRABAJOS = 1_000_000;
+export const CABECERA_HAY_MAS_TRABAJOS = 'X-Puente-Hay-Mas';
 export const IDS_IMPRESOS_RECORDADOS = 500;
 
 /** Cuánto tarda en darse por desconectado un puente sin señal (criterio 121) y cuánto dura una vinculación. */

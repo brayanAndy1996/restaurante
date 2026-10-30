@@ -392,9 +392,14 @@ describe('documentoDePrecuenta (criterios 51 y 125)', () => {
       fila('2 × Ají de gallina', '1,234.50'),
       '  Sin ají',
       fila('1 × Chicha morada', '8.00'),
+      // Un nombre que ocupa más de una línea sale de corrido y su monto cierra el renglón (ronda 2, F1).
       ...(ancho === 58
-        ? ['3 × Hamburguesa clásica   126.70', 'con queso, tocino y huevo frito']
-        : [fila('3 × Hamburguesa clásica con queso, tocino', '126.70'), 'y huevo frito']),
+        ? [
+            '3 × Hamburguesa clásica con',
+            'queso, tocino y huevo frito',
+            '126.70'.padStart(columnas),
+          ]
+        : ['3 × Hamburguesa clásica con queso, tocino y', fila('huevo frito', '126.70')]),
       '='.repeat(columnas),
       'TOTAL S/ 1,369.20'.padStart(columnas),
       '',
@@ -511,18 +516,25 @@ describe('documentoDePrecuenta (criterios 51 y 125)', () => {
         cantidad: 1,
         total: '10.00',
       }));
-    // 200 líneas con modificadores: los modificadores de cada producto se juntan en una línea.
-    const docCompacto = documentoDePrecuenta({ ...precuenta, lineas: con(200) }, contexto);
+    // 200 líneas con modificadores caben completas: cada modificador en su línea.
+    const docCompleto = documentoDePrecuenta({ ...precuenta, lineas: con(200) }, contexto);
+    expect(docCompleto.bloques.length).toBeLessThanOrEqual(MAXIMO_BLOQUES_TICKET - 3);
+    const completas = textos(imprimir(docCompleto, 58, 'PC850'));
+    const j = completas.findIndex((l) => l.startsWith('1 × Plato 199'));
+    expect(j).toBeGreaterThan(0);
+    expect(completas.slice(j + 1, j + 3)).toEqual(['  A', '  B']);
+    // 1200 líneas (con el máximo de 3000 bloques): los modificadores de cada producto se juntan en una línea.
+    const docCompacto = documentoDePrecuenta({ ...precuenta, lineas: con(1200) }, contexto);
     expect(docCompacto.bloques.length).toBeLessThanOrEqual(MAXIMO_BLOQUES_TICKET - 3);
     const lineas = textos(imprimir(docCompacto, 58, 'PC850'));
-    const i = lineas.findIndex((l) => l.startsWith('1 × Plato 199'));
+    const i = lineas.findIndex((l) => l.startsWith('1 × Plato 1199'));
     expect(i).toBeGreaterThan(0);
     expect(lineas[i + 1]).toBe('  A, B');
-    // 400 líneas: ni así caben los modificadores, y se omiten (los precios ya los incluyen).
-    const docMinimo = documentoDePrecuenta({ ...precuenta, lineas: con(400) }, contexto);
+    // 1600 líneas: ni así caben los modificadores, y se omiten (los precios ya los incluyen).
+    const docMinimo = documentoDePrecuenta({ ...precuenta, lineas: con(1600) }, contexto);
     expect(docMinimo.bloques.length).toBeLessThanOrEqual(MAXIMO_BLOQUES_TICKET - 3);
     const todas = textos(imprimir(docMinimo, 58, 'PC850'));
-    expect(todas.some((l) => l.startsWith('1 × Plato 399'))).toBe(true);
+    expect(todas.some((l) => l.startsWith('1 × Plato 1599'))).toBe(true);
     expect(todas).not.toContain('  A, B');
   });
 });

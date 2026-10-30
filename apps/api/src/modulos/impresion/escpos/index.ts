@@ -27,6 +27,9 @@
  *   entregar; devuelve el `Uint8Array` que se manda por TCP (`ESC @` … `GS V`) y lanza `Error` si el documento
  *   no cumple `documentoTicketSchema`.
  *
+ * - Incompleto (`esIncompleto(documento)`): `true` si a una plantilla no le cupo todo (un caso extremo) y el ticket
+ *   termina con "Ticket incompleto: faltan N líneas. Revisa la cuenta en la app."; el trabajo se guarda marcado.
+ *
  * Los tipos de documento son `COMANDA`, `ADICION`, `MARCHAR`, `ANULACION`, `PRECUENTA` y `PRUEBA`; el tipo del
  * documento es el del trabajo.
  */
@@ -40,5 +43,6 @@ export { MUESTRA_DE_CARACTERES, documentoDePrueba } from './plantillas/prueba';
 export type { ImpresoraDePrueba } from './plantillas/prueba';
 export { TEXTO_REIMPRESION, TEXTO_RETRASO, conMarcas } from './plantillas/marcas';
 export type { MarcasDeTicket } from './plantillas/marcas';
+export { esIncompleto } from './plantillas/presupuesto';
 export { adaptarTexto } from './tablas-codificacion';
 export { LARGO_ERROR_DE_TRABAJO, errorDeDocumento, recortarError } from './validar-documento';

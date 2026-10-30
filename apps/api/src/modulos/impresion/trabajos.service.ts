@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import {
+  MAXIMO_BYTES_RESPUESTA_TRABAJOS,
   MAXIMO_TRABAJOS_POR_IMPRESORA,
   type ResultadoTrabajoEntrada,
   type TipoTrabajo,
@@ -31,10 +32,19 @@ interface FilaEntrega {
   impresora_id: string;
   tipo: TipoTrabajo;
   creado_en: Date;
-  documento: DocumentoTicket;
   ancho_mm: 58 | 80;
   juego_caracteres: FilaImpresora['juego_caracteres'];
 }
+
+/** Lo que `GET /puente/trabajos` responde: los trabajos y si quedaron otros esperando por el tope de bytes. */
+export interface EntregaDeTrabajos {
+  trabajos: TrabajoParaImprimir[];
+  /** `true` si algo no entró por `MAXIMO_BYTES_RESPUESTA_TRABAJOS`: el puente vuelve a pedir al terminar el lote. */
+  hayMas: boolean;
+}
+
+/** Documentos que se leen y se arman por vez al entregar (cada uno puede pesar cientos de KB). */
+const DOCUMENTOS_POR_LECTURA = 10;
 
 interface FilaResumen {
   id: string;
@@ -45,6 +55,7 @@ interface FilaResumen {
   orden_id: string | null;
   envio_numero: number | null;
   estado: 'PENDIENTE' | 'IMPRESO';
+  incompleto: boolean;
   dia_operativo: string;
   intentos: number;
   creado_en: Date;
@@ -86,13 +97,19 @@ export class TrabajosService {
 
   // ---- El puente ----------------------------------------------------------------------------------
 
-  /** `GET /puente/trabajos` (criterio 113). */
-  async entregar(puente: PuenteAutenticado): Promise<TrabajoParaImprimir[]> {
+  /**
+   * `GET /puente/trabajos` (criterios 113 y 118). Hasta `MAXIMO_TRABAJOS_POR_IMPRESORA` por impresora y, en total,
+   * `MAXIMO_BYTES_RESPUESTA_TRABAJOS` de bytes ESC/POS (ronda 2 del ataque, F5): se arma cada ticket en el orden de
+   * creación y, cuando el siguiente de una impresora ya no cabe, esa impresora no recibe más en esta respuesta (sus
+   * trabajos salen en orden). De cada impresora con pendientes sale al menos uno aunque pase el tope. Lo que no
+   * entró sale en la siguiente llamada (`hayMas`). Los documentos se leen de a pocos: cientos de KB cada uno.
+   */
+  async entregar(puente: PuenteAutenticado): Promise<EntregaDeTrabajos> {
     const ahora = this.reloj.ahora();
     const hoy = await this.cola.diaOperativoDe(puente.sucursalId, ahora);
     const filas = await this.conexion.query<FilaEntrega>(
-      `SELECT id, impresora_id, tipo, creado_en, documento, ancho_mm, juego_caracteres
-         FROM (SELECT t.id, t.impresora_id, t.tipo, t.creado_en, t.documento, i.ancho_mm, i.juego_caracteres,
+      `SELECT id, impresora_id, tipo, creado_en, ancho_mm, juego_caracteres
+         FROM (SELECT t.id, t.impresora_id, t.tipo, t.creado_en, i.ancho_mm, i.juego_caracteres,
                       row_number() OVER (PARTITION BY t.impresora_id ORDER BY t.creado_en, t.id) AS posicion
                  FROM trabajo_impresion t
                  JOIN impresora i ON i.id = t.impresora_id AND i.empresa_id = t.empresa_id
@@ -107,36 +124,76 @@ export class TrabajosService {
     );
     const entregados: TrabajoParaImprimir[] = [];
     const sinTicket: Array<{ id: string; error: string }> = [];
-    for (const fila of filas) {
-      const creado = new Date(fila.creado_en);
-      try {
-        // El documento guardado queda intacto: la marca de retraso se agrega solo a lo que se manda (criterio 118).
-        const documento =
-          ahora.getTime() - creado.getTime() > MS_RETRASO
-            ? conMarcas(fila.documento, { retraso: { horaEnvio: horaLocal(creado) } })
-            : fila.documento;
-        const bytes = renderizarTicket(documento, {
-          anchoMm: fila.ancho_mm,
-          juegoCaracteres: fila.juego_caracteres,
-        });
-        entregados.push({
-          id: fila.id,
-          impresoraId: fila.impresora_id,
-          tipo: fila.tipo,
-          creadoEn: creado.toISOString(),
-          bytes: Buffer.from(bytes).toString('base64'),
-        });
-      } catch (error) {
-        // Un documento que no se puede armar no debe frenar los demás trabajos de la cola ni quedarse en ella:
-        // se marca con su error (se ve en "Trabajos de hoy") y no se vuelve a entregar.
-        const motivo = recortarError(
-          error instanceof Error ? error.message : `No se pudo armar el ticket: ${String(error)}`,
+    const entregadosPorImpresora = new Map<string, number>();
+    const cerradas = new Set<string>();
+    let bytesTotales = 0;
+    let hayMas = false;
+    // ¿Esta fila ya no puede entrar? Una impresora cerrada, o una que ya tiene uno con el tope lleno.
+    const noEntra = (fila: FilaEntrega): boolean =>
+      cerradas.has(fila.impresora_id) ||
+      ((entregadosPorImpresora.get(fila.impresora_id) ?? 0) > 0 &&
+        bytesTotales >= MAXIMO_BYTES_RESPUESTA_TRABAJOS);
+    for (let desde = 0; desde < filas.length; desde += DOCUMENTOS_POR_LECTURA) {
+      const grupo = filas.slice(desde, desde + DOCUMENTOS_POR_LECTURA);
+      const pedidos = grupo.filter((f) => !noEntra(f)).map((f) => f.id);
+      const documentos = new Map<string, DocumentoTicket>();
+      if (pedidos.length > 0) {
+        const leidos = await this.conexion.query<{ id: string; documento: DocumentoTicket }>(
+          `SELECT id, documento FROM trabajo_impresion WHERE id = ANY($1::uuid[])`,
+          { bind: [pedidos], type: QueryTypes.SELECT },
         );
-        this.logger.error(
-          `No se pudo armar el ticket del trabajo ${fila.id}`,
-          error instanceof Error ? error.stack : String(error),
-        );
-        sinTicket.push({ id: fila.id, error: motivo });
+        for (const l of leidos) documentos.set(l.id, l.documento);
+      }
+      for (const fila of grupo) {
+        if (noEntra(fila)) {
+          cerradas.add(fila.impresora_id);
+          hayMas = true;
+          continue;
+        }
+        const documentoGuardado = documentos.get(fila.id);
+        if (documentoGuardado === undefined) continue;
+        const creado = new Date(fila.creado_en);
+        try {
+          // El documento guardado queda intacto: la marca de retraso se agrega solo a lo que se manda (criterio 118).
+          const documento =
+            ahora.getTime() - creado.getTime() > MS_RETRASO
+              ? conMarcas(documentoGuardado, { retraso: { horaEnvio: horaLocal(creado) } })
+              : documentoGuardado;
+          const bytes = renderizarTicket(documento, {
+            anchoMm: fila.ancho_mm,
+            juegoCaracteres: fila.juego_caracteres,
+          });
+          const yaTiene = (entregadosPorImpresora.get(fila.impresora_id) ?? 0) > 0;
+          if (yaTiene && bytesTotales + bytes.length > MAXIMO_BYTES_RESPUESTA_TRABAJOS) {
+            // No cabe: esta impresora espera a la siguiente llamada (sus trabajos salen en orden).
+            cerradas.add(fila.impresora_id);
+            hayMas = true;
+            continue;
+          }
+          bytesTotales += bytes.length;
+          entregadosPorImpresora.set(
+            fila.impresora_id,
+            (entregadosPorImpresora.get(fila.impresora_id) ?? 0) + 1,
+          );
+          entregados.push({
+            id: fila.id,
+            impresoraId: fila.impresora_id,
+            tipo: fila.tipo,
+            creadoEn: creado.toISOString(),
+            bytes: Buffer.from(bytes).toString('base64'),
+          });
+        } catch (error) {
+          // Un documento que no se puede armar no debe frenar los demás trabajos de la cola ni quedarse en ella:
+          // se marca con su error (se ve en "Trabajos de hoy") y no se vuelve a entregar.
+          const motivo = recortarError(
+            error instanceof Error ? error.message : `No se pudo armar el ticket: ${String(error)}`,
+          );
+          this.logger.error(
+            `No se pudo armar el ticket del trabajo ${fila.id}`,
+            error instanceof Error ? error.stack : String(error),
+          );
+          sinTicket.push({ id: fila.id, error: motivo });
+        }
       }
     }
     for (const { id, error } of sinTicket) {
@@ -153,7 +210,7 @@ export class TrabajosService {
         { bind: [entregados.map((e) => e.id), ahora], type: QueryTypes.UPDATE },
       );
     }
-    return entregados;
+    return { trabajos: entregados, hayMas };
   }
 
   /** `POST /puente/trabajos/:id/resultado` (criterio 115). */
@@ -248,7 +305,7 @@ export class TrabajosService {
       consulta.ordenId === undefined ? null : await this.ordenes.delaCuenta(consulta.ordenId);
     const filas = await this.conexion.query<FilaResumen>(
       `SELECT t.id, t.tipo, t.impresora_id, i.nombre AS impresora_nombre, t.mesa, t.orden_id,
-              t.envio_numero, t.estado,
+              t.envio_numero, t.estado, t.incompleto,
               t.dia_operativo::text AS dia_operativo, t.intentos, t.creado_en, t.impreso_en,
               t.reimpresion_de_id, t.ultimo_error, t.error_render
          FROM trabajo_impresion t
@@ -285,6 +342,7 @@ export class TrabajosService {
         envioNumero: f.envio_numero,
         ultimoError: f.estado === 'IMPRESO' ? null : (f.error_render ?? f.ultimo_error),
         sinTicket: f.error_render !== null,
+        incompleto: f.incompleto,
       };
     });
   }
@@ -303,10 +361,10 @@ export class TrabajosService {
       mesa: string | null;
       orden_id: string | null;
       envio_numero: number | null;
-      impresora_activa: boolean;
+      impresora_utilizable: boolean;
     }>(
       `SELECT t.impresora_id, t.estacion_id, t.tipo, t.documento, t.comanda_id, t.precuenta_id, t.mesa,
-              t.orden_id, t.envio_numero, i.activa AS impresora_activa
+              t.orden_id, t.envio_numero, (i.activa AND i.conexion_tipo = 'RED') AS impresora_utilizable
          FROM trabajo_impresion t
          JOIN impresora i ON i.id = t.impresora_id AND i.empresa_id = t.empresa_id
         WHERE t.id = $1 AND t.sucursal_id = $2`,
@@ -315,7 +373,9 @@ export class TrabajosService {
     const original = filas[0];
     if (original === undefined) throw noEncontrado('El trabajo');
 
-    let impresoraId: string | null = original.impresora_activa ? original.impresora_id : null;
+    // Una impresora que pasó a Bluetooth no imprime en 3b (decisión 12): se trata como una inactiva. Si tampoco hay
+    // otra de red activa para la estación (o la caja), 409 sin crear el trabajo (ronda 2 del ataque, F4).
+    let impresoraId: string | null = original.impresora_utilizable ? original.impresora_id : null;
     if (impresoraId === null) impresoraId = await this.impresoraActual(sucursalId, original);
     if (impresoraId === null) throw sinImpresora();
 
@@ -347,18 +407,29 @@ export class TrabajosService {
     return { trabajoId: nuevoId };
   }
 
-  /** La impresora actual de la estación del trabajo (o la de caja, en una pre-cuenta), si la original está inactiva. */
+  /**
+   * La impresora actual de la estación del trabajo (o la de caja, en una pre-cuenta), si la original no se puede
+   * usar (inactiva o Bluetooth). Solo una activa y de red: es la única que recibe trabajos en 3b.
+   */
   private async impresoraActual(
     sucursalId: string,
     original: { estacion_id: string | null; tipo: TipoTrabajo },
   ): Promise<string | null> {
-    if (original.tipo === 'PRECUENTA')
-      return (await this.cola.impresoraDeCaja(sucursalId))?.id ?? null;
+    if (original.tipo === 'PRECUENTA') {
+      const caja = await this.cola.impresoraDeCaja(sucursalId);
+      if (caja === null) return null;
+      const filas = await this.conexion.query<{ id: string }>(
+        `SELECT id FROM impresora WHERE id = $1 AND sucursal_id = $2 AND activa AND conexion_tipo = 'RED'`,
+        { bind: [caja.id, sucursalId], type: QueryTypes.SELECT },
+      );
+      return filas[0]?.id ?? null;
+    }
     if (original.estacion_id === null) return null;
     const filas = await this.conexion.query<{ impresora_id: string }>(
       `SELECT d.impresora_id FROM estacion_destino d
          JOIN impresora i ON i.id = d.impresora_id AND i.empresa_id = d.empresa_id
-        WHERE d.sucursal_id = $1 AND d.estacion_id = $2 AND d.destino = 'IMPRESORA' AND i.activa`,
+        WHERE d.sucursal_id = $1 AND d.estacion_id = $2 AND d.destino = 'IMPRESORA'
+          AND i.activa AND i.conexion_tipo = 'RED'`,
       { bind: [sucursalId, original.estacion_id], type: QueryTypes.SELECT },
     );
     return filas[0]?.impresora_id ?? null;

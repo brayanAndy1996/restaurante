@@ -118,7 +118,12 @@ function escribirBloque(
       return;
     }
     case 'columnas':
-      for (const l of armarColumnas(adaptar(bloque.izquierda), adaptar(bloque.derecha), columnas)) {
+      for (const l of armarColumnas(
+        adaptar(bloque.izquierda),
+        adaptar(bloque.derecha),
+        columnas,
+        bloque.derechaAlFinal === true,
+      )) {
         escritor.linea(l, { negrita: bloque.negrita, dobleAlto: bloque.dobleAlto });
       }
       return;

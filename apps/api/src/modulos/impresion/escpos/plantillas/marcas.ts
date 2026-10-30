@@ -3,6 +3,7 @@ import {
   type BloqueTicket,
   type DocumentoTicket,
 } from '@restaurante/contratos';
+import { avisoDeCorte } from './presupuesto';
 import { limpiarTexto } from './texto';
 
 /** El texto de la marca de una reimpresión (criterio 128). */
@@ -38,7 +39,9 @@ export function conMarcas(documento: DocumentoTicket, marcas: MarcasDeTicket): D
   if (
     marcas.retraso !== undefined &&
     marcas.retraso !== null &&
-    !yaTiene((b) => b.tipo === 'linea' && b.texto.startsWith(TEXTO_RETRASO))
+    // Se reconoce por la marca estructural del bloque, nunca por su texto: un modificador o una observación que
+    // empiece con "Impreso con retraso" no debe anular el aviso (ronda 2 del ataque, F2).
+    !yaTiene((b) => b.tipo === 'linea' && b.aviso === 'RETRASO')
   ) {
     const hora = limpiarTexto(marcas.retraso.horaEnvio);
     nuevos.push({
@@ -48,6 +51,7 @@ export function conMarcas(documento: DocumentoTicket, marcas: MarcasDeTicket): D
       ),
       negrita: true,
       alinear: 'centro',
+      aviso: 'RETRASO',
     });
   }
   if (nuevos.length === 0) return { ...documento, bloques: [...documento.bloques] };
@@ -62,11 +66,7 @@ export function conMarcas(documento: DocumentoTicket, marcas: MarcasDeTicket): D
     bloques: [
       ...nuevos,
       ...conservados,
-      {
-        tipo: 'linea',
-        texto: `... Ticket incompleto: faltan ${exceso + 1} líneas. Mira la cuenta en la pantalla.`,
-        negrita: true,
-      },
+      avisoDeCorte(exceso + 1),
     ],
   };
 }

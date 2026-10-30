@@ -3,6 +3,7 @@ import {
   CODIGOS_ERROR,
   COLUMNAS_POR_ANCHO,
   JUEGOS_CARACTERES,
+  MAXIMO_BLOQUES_TICKET,
   TIPOS_TRABAJO,
   bloqueTicketSchema,
   documentoTicketSchema,
@@ -419,6 +420,10 @@ describe('estadoImpresionRespuestaSchema, trabajoResumenSchema y trabajosConsult
     ).toBe(true);
     expect(trabajoResumenSchema.safeParse({ ...base, ultimoError: null }).success).toBe(true);
     expect(trabajoResumenSchema.safeParse({ ...base, sinTicket: 'si' }).success).toBe(false);
+    // `incompleto` es opcional (los datos de la app que no lo traen siguen valiendo) y booleano.
+    expect(trabajoResumenSchema.safeParse({ ...base, incompleto: true }).success).toBe(true);
+    expect(trabajoResumenSchema.safeParse({ ...base, incompleto: false }).success).toBe(true);
+    expect(trabajoResumenSchema.safeParse({ ...base, incompleto: 'si' }).success).toBe(false);
   });
 });
 
@@ -477,18 +482,34 @@ describe('documentoTicketSchema (criterio 126)', () => {
     }
   });
 
+  it('el máximo es de 3000 bloques (ronda 2 del ataque, F1)', () => {
+    expect(MAXIMO_BLOQUES_TICKET).toBe(3000);
+  });
+
+  it('un aviso del sistema es una marca del bloque, con un valor conocido', () => {
+    for (const aviso of ['RETRASO', 'INCOMPLETO']) {
+      expect(bloqueTicketSchema.safeParse({ tipo: 'linea', texto: 'x', aviso }).success).toBe(true);
+    }
+    expect(bloqueTicketSchema.safeParse({ tipo: 'linea', texto: 'x', aviso: 'OTRO' }).success).toBe(
+      false,
+    );
+    expect(bloqueTicketSchema.safeParse({ tipo: 'marca', texto: 'x', aviso: 'RETRASO' }).success).toBe(
+      false,
+    );
+  });
+
   it('limita el número de bloques', () => {
     const bloque = { tipo: 'linea', texto: 'x' };
     expect(
       documentoTicketSchema.safeParse({
         ...documento,
-        bloques: Array.from({ length: 600 }, () => bloque),
+        bloques: Array.from({ length: MAXIMO_BLOQUES_TICKET }, () => bloque),
       }).success,
     ).toBe(true);
     expect(
       documentoTicketSchema.safeParse({
         ...documento,
-        bloques: Array.from({ length: 601 }, () => bloque),
+        bloques: Array.from({ length: MAXIMO_BLOQUES_TICKET + 1 }, () => bloque),
       }).success,
     ).toBe(false);
   });

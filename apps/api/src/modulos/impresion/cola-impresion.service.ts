@@ -12,7 +12,7 @@ import type {
   TrabajoParaEncolar,
 } from '../pedidos/impresion';
 import { SucursalesConsultaService } from '../plataforma';
-import { errorDeDocumento } from './escpos';
+import { errorDeDocumento, esIncompleto } from './escpos';
 import { EventosImpresion } from './eventos-impresion';
 
 /**
@@ -172,18 +172,20 @@ export class ColaImpresionService implements ImpresionPuerto {
     }>,
     ahora: Date,
   ): Promise<void> {
+    // `incompleto` sale del documento (el aviso estructural de corte), nunca de quien llama (ronda 2, F1).
+    const conIncompleto = filas.map((f) => ({ ...f, incompleto: documentoIncompleto(f.documento) }));
     await this.conexion.query(
       `INSERT INTO trabajo_impresion (id, empresa_id, sucursal_id, impresora_id, estacion_id, tipo, documento,
                                       comanda_id, precuenta_id, reimpresion_de_id, orden_id, envio_numero, mesa, estado, dia_operativo,
-                                      error_render, creado_en, actualizado_en)
+                                      error_render, incompleto, creado_en, actualizado_en)
        SELECT x.id, $2::uuid, x.sucursal_id, x.impresora_id, x.estacion_id, x.tipo, x.documento,
               x.comanda_id, x.precuenta_id, x.reimpresion_de_id, x.orden_id, x.envio_numero, x.mesa, 'PENDIENTE', x.dia_operativo,
-              x.error_render, $3::timestamptz, $3::timestamptz
+              x.error_render, x.incompleto, $3::timestamptz, $3::timestamptz
          FROM jsonb_to_recordset($1::jsonb) AS x(id uuid, sucursal_id uuid, impresora_id uuid,
               estacion_id uuid, tipo text, documento jsonb, comanda_id uuid, precuenta_id uuid,
               reimpresion_de_id uuid, orden_id uuid, envio_numero int, mesa text, dia_operativo date,
-              error_render text)`,
-      { bind: [JSON.stringify(filas), empresaId, ahora] },
+              error_render text, incompleto boolean)`,
+      { bind: [JSON.stringify(conIncompleto), empresaId, ahora] },
     );
   }
 
@@ -228,6 +230,15 @@ export class ColaImpresionService implements ImpresionPuerto {
     );
     return new Map(filas.map((f) => [f.precuenta_id, f.id]));
   }
+}
+
+/** `true` si el documento (de cualquier forma: puede estar mal armado) termina con el aviso de corte. */
+function documentoIncompleto(documento: unknown): boolean {
+  const bloques = (documento as { bloques?: unknown } | null)?.bloques;
+  if (!Array.isArray(bloques)) return false;
+  return esIncompleto({
+    bloques: bloques.filter((b) => typeof b === 'object' && b !== null),
+  });
 }
 
 /** Caracteres que admite la columna `trabajo_impresion.mesa`. */

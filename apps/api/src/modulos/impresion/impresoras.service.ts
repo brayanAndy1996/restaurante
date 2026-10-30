@@ -1,9 +1,10 @@
 import { Inject, Injectable } from '@nestjs/common';
-import type {
-  ConexionImpresora,
-  ImpresoraEntradaValidada,
-  ImpresoraModificarEntradaValidada,
-  ImpresoraRespuesta,
+import {
+  MAXIMO_IMPRESORAS_LATIDO,
+  type ConexionImpresora,
+  type ImpresoraEntradaValidada,
+  type ImpresoraModificarEntradaValidada,
+  type ImpresoraRespuesta,
 } from '@restaurante/contratos';
 import { QueryTypes, type Sequelize } from 'sequelize';
 import { CONEXION_API, SQLSTATE, restriccionDe, sqlstateDe } from '../../nucleo/base-de-datos';
@@ -14,7 +15,12 @@ import { AuditoriaService } from '../auditoria';
 import { CartaConsultaService } from '../carta';
 import { SucursalesConsultaService } from '../plataforma';
 import { EventosImpresion } from './eventos-impresion';
-import { impresoraEnUso, noEncontrado, nombreRepetido } from './errores-impresion';
+import {
+  impresoraEnUso,
+  limiteDeImpresoras,
+  noEncontrado,
+  nombreRepetido,
+} from './errores-impresion';
 import {
   COLUMNAS_IMPRESORA,
   aConexion,
@@ -75,9 +81,13 @@ export class ImpresorasService {
     return leerImpresoras(this.conexion, sucursalId, await this.momento(sucursalId));
   }
 
-  /** Criterio 103: el nombre es único en la sucursal sin distinguir mayúsculas (409). Nace activa. */
+  /**
+   * Criterio 103: el nombre es único en la sucursal sin distinguir mayúsculas (409). Nace activa. Una sucursal tiene
+   * hasta `MAXIMO_IMPRESORAS_LATIDO` impresoras activas (409 `CONFLICTO` al pasarse).
+   */
   async crear(sucursalId: string, entrada: ImpresoraEntradaValidada): Promise<ImpresoraRespuesta> {
     await this.exigirSucursal(sucursalId);
+    await this.exigirCupo(sucursalId);
     const c = columnasDeConexion(entrada.conexion);
     const ahora = this.reloj.ahora();
     let id: string;
@@ -172,6 +182,7 @@ export class ImpresorasService {
     if (Object.keys(diff).length === 0) return this.obtener(sucursalId, id);
 
     if (antes.activa && !despues.activa) await this.exigirSinUso(sucursalId, id);
+    if (!antes.activa && despues.activa) await this.exigirCupo(sucursalId);
 
     const c = columnasDeConexion(despues.conexion);
     try {
@@ -226,6 +237,25 @@ export class ImpresorasService {
       { bind: [sucursalId, impresoraId, this.reloj.ahora()], type: QueryTypes.SELECT },
     );
     if (cambiados.length > 0) this.eventos.impresionEstado(sucursalId);
+  }
+
+  /**
+   * 409 si la sucursal ya tiene `MAXIMO_IMPRESORAS_LATIDO` impresoras activas: el latido del puente reporta hasta
+   * esa cantidad y la entrega de trabajos se reparte entre ellas (ronda 2 del ataque, F5). Las altas y las
+   * reactivaciones de una sucursal se turnan con un cerrojo de la transacción para que dos a la vez no pasen del tope.
+   */
+  private async exigirCupo(sucursalId: string): Promise<void> {
+    await this.conexion.query('SELECT pg_advisory_xact_lock(hashtextextended($1::text, 0))', {
+      bind: [`impresoras:${sucursalId}`],
+      type: QueryTypes.SELECT,
+    });
+    const filas = await this.conexion.query<{ n: number }>(
+      'SELECT count(*)::int AS n FROM impresora WHERE sucursal_id = $1 AND activa',
+      { bind: [sucursalId], type: QueryTypes.SELECT },
+    );
+    if ((filas[0]?.n ?? 0) >= MAXIMO_IMPRESORAS_LATIDO) {
+      throw limiteDeImpresoras(MAXIMO_IMPRESORAS_LATIDO);
+    }
   }
 
   /** 409 `EN_USO` si la impresora es destino de alguna estación o la impresora de caja de la sucursal. */

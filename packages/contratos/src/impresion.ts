@@ -282,6 +282,11 @@ export const trabajoResumenSchema = z.object({
   ultimoError: z.string().nullable().optional(),
   /** `true` si el ticket no se pudo armar: no se entrega nunca y solo se puede reimprimir con otro documento. */
   sinTicket: z.boolean().optional(),
+  /**
+   * `true` si al ticket no le cupo todo (un caso extremo fuera de lo normal): en el papel termina con "Ticket
+   * incompleto: faltan N líneas. Revisa la cuenta en la app." La cuenta de la app tiene todo el detalle.
+   */
+  incompleto: z.boolean().optional(),
 });
 
 /** Respuesta de la página de prueba y de la reimpresión (criterios 127 y 128). */
@@ -294,8 +299,12 @@ export const trabajoCreadoRespuestaSchema = z.object({ trabajoId: uuidSchema });
 /** Versión del formato del documento; el renderizador rechaza una que no conozca. */
 export const VERSION_DOCUMENTO_TICKET = 1;
 
-/** Bloques que puede llevar un documento y largo de cada texto. */
-export const MAXIMO_BLOQUES_TICKET = 600;
+/**
+ * Bloques que puede llevar un documento y largo de cada texto. 3000 bloques cubren los límites de entrada de un
+ * envío (50 líneas de un combo de 20 componentes, o de un plato con 30 modificadores y observación) y una
+ * pre-cuenta de 600 ítems; un ticket de 3000 bloques de 200 caracteres son unos 650 KB de ESC/POS.
+ */
+export const MAXIMO_BLOQUES_TICKET = 3000;
 export const LARGO_TEXTO_TICKET = 200;
 export const SANGRIA_MAXIMA_TICKET = 8;
 export const LINEAS_MAXIMAS_ESPACIO_TICKET = 10;
@@ -311,11 +320,23 @@ const textoDeTicketSchema = z
 const alineacionTicketSchema = z.enum(['izquierda', 'centro', 'derecha']);
 
 /**
+ * Los avisos que agrega el sistema a un ticket. Son una marca estructural del bloque `linea`, no un texto: nada de
+ * lo que escribe una persona (un modificador, una observación, un nombre) puede tenerla, así que un texto que se
+ * parezca al aviso nunca se confunde con él.
+ * - `RETRASO`: "Impreso con retraso · enviado a las 20:15" (criterio 118).
+ * - `INCOMPLETO`: "Ticket incompleto: faltan N líneas. Revisa la cuenta en la app." (criterio 126).
+ */
+export const AVISOS_TICKET = ['RETRASO', 'INCOMPLETO'] as const;
+export type AvisoTicket = (typeof AVISOS_TICKET)[number];
+
+/**
  * Un bloque del documento:
  * - `titulo`: texto en negrita y doble alto (por defecto centrado).
- * - `linea`: un texto que se ajusta al ancho sin partir palabras, con `sangria` columnas a la izquierda.
+ * - `linea`: un texto que se ajusta al ancho sin partir palabras, con `sangria` columnas a la izquierda. `aviso`
+ *   la marca como un aviso del sistema (`AVISOS_TICKET`); solo lo ponen el sistema, nunca el texto de una persona.
  * - `columnas`: `izquierda` y `derecha` en la misma línea (la derecha alineada al borde; si no caben, la
- *   izquierda continúa en las líneas siguientes).
+ *   izquierda continúa en las líneas siguientes; con `derechaAlFinal`, la izquierda sale completa y seguida, y la
+ *   derecha queda al final, para que un nombre largo no se parta con el monto en medio).
  * - `marca`: un aviso destacado y centrado entre guiones ("PARA LLEVAR", "ESPERAR", "REIMPRESIÓN").
  * - `regla`: una línea de `-` o `=` de todo el ancho.
  * - `espacio`: líneas en blanco.
@@ -333,6 +354,7 @@ export const bloqueTicketSchema = z.discriminatedUnion('tipo', [
     dobleAlto: z.boolean().optional(),
     alinear: alineacionTicketSchema.optional(),
     sangria: z.number().int().min(0).max(SANGRIA_MAXIMA_TICKET).optional(),
+    aviso: z.enum(AVISOS_TICKET).optional(),
   }),
   z.strictObject({
     tipo: z.literal('columnas'),
@@ -340,6 +362,7 @@ export const bloqueTicketSchema = z.discriminatedUnion('tipo', [
     derecha: textoDeTicketSchema,
     negrita: z.boolean().optional(),
     dobleAlto: z.boolean().optional(),
+    derechaAlFinal: z.boolean().optional(),
   }),
   z.strictObject({ tipo: z.literal('marca'), texto: textoDeTicketSchema }),
   z.strictObject({ tipo: z.literal('regla'), caracter: z.enum(['-', '=']).optional() }),

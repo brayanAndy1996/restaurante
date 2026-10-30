@@ -87,6 +87,8 @@ function cuerpoDe(
       tipo: 'columnas',
       izquierda: limpiarTexto(`${l.cantidad} × ${l.nombre}`),
       derecha: formatoMonto(l.total),
+      // Un nombre largo sale de corrido y el monto cierra el renglón (no se parte con el monto en medio).
+      derechaAlFinal: true,
     });
     for (const texto of nivel === 'completo'
       ? modificadores

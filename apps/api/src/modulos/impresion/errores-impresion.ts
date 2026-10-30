@@ -41,3 +41,14 @@ export const sinImpresora = (): ErrorAplicacion =>
     'SIN_IMPRESORA',
     'No hay una impresora activa donde reimprimir este ticket',
   );
+
+/**
+ * 409 `CONFLICTO` por pasar del máximo de impresoras activas de una sucursal (`MAXIMO_IMPRESORAS_LATIDO`, el que
+ * acepta el latido del puente). Desactiva una que ya no uses para crear otra.
+ */
+export const limiteDeImpresoras = (maximo: number): ErrorAplicacion =>
+  new ErrorAplicacion(
+    409,
+    'CONFLICTO',
+    `La sucursal ya tiene ${maximo} impresoras activas, que es el máximo. Desactiva una que no uses antes de agregar otra`,
+  );

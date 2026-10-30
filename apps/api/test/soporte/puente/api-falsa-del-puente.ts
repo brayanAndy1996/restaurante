@@ -9,6 +9,8 @@ import type { AddressInfo } from 'node:net';
 import {
   CABECERA_PROTOCOLO_PUENTE,
   ESPACIO_PUENTE,
+  CABECERA_HAY_MAS_TRABAJOS,
+  MAXIMO_BYTES_RESPUESTA_TRABAJOS,
   MAXIMO_TRABAJOS_POR_IMPRESORA,
   VERSION_PROTOCOLO_PUENTE,
   armarQrPuente,
@@ -60,6 +62,8 @@ export class ApiFalsaDelPuente {
   fallosDeResultado = 0;
   /** Los ids de trabajo a los que `POST …/resultado` responde 409 (vencidos). */
   vencidos = new Set<string>();
+  /** Tope de bytes ESC/POS de una respuesta de `GET …/trabajos` (como la API; las pruebas lo bajan). */
+  topeDeBytes = MAXIMO_BYTES_RESPUESTA_TRABAJOS;
 
   private servidorHttp: ServidorHttp | null = null;
   private io: Server | null = null;
@@ -212,12 +216,19 @@ export class ApiFalsaDelPuente {
 
   // ---------------------------------------------------------------------------------------------------
 
-  private responder(res: ServerResponse, estado: number, cuerpo?: unknown): void {
+  private responder(
+    res: ServerResponse,
+    estado: number,
+    cuerpo?: unknown,
+    cabeceras: Record<string, string> = {},
+  ): void {
     if (cuerpo === undefined) {
-      res.writeHead(estado).end();
+      res.writeHead(estado, cabeceras).end();
       return;
     }
-    res.writeHead(estado, { 'Content-Type': 'application/json' }).end(JSON.stringify(cuerpo));
+    res
+      .writeHead(estado, { 'Content-Type': 'application/json', ...cabeceras })
+      .end(JSON.stringify(cuerpo));
   }
 
   private async atender(req: IncomingMessage, res: ServerResponse): Promise<void> {
@@ -266,23 +277,35 @@ export class ApiFalsaDelPuente {
       return;
     }
     if (metodo === 'GET' && ruta === '/puente/trabajos') {
-      // Como la API: hasta MAXIMO_TRABAJOS_POR_IMPRESORA por impresora, en orden de creación.
+      // Como la API: hasta MAXIMO_TRABAJOS_POR_IMPRESORA por impresora, en orden de creación, y hasta `topeDeBytes`
+      // en total (al menos uno por impresora; si el siguiente de una impresora no cabe, esa impresora espera).
       const porImpresora = new Map<string, number>();
-      const lote = this.trabajos
-        .filter((t) => {
-          if (t.estado !== 'PENDIENTE') return false;
-          const cuenta = (porImpresora.get(t.impresoraId) ?? 0) + 1;
-          porImpresora.set(t.impresoraId, cuenta);
-          return cuenta <= MAXIMO_TRABAJOS_POR_IMPRESORA;
-        })
-        .map(({ id, impresoraId, tipo, creadoEn, bytes }) => ({
-          id,
-          impresoraId,
-          tipo,
-          creadoEn,
-          bytes,
-        }));
-      this.responder(res, 200, lote);
+      const cerradas = new Set<string>();
+      const lote: Array<Omit<TrabajoFalso, 'estado' | 'intentos' | 'ultimoError'>> = [];
+      let bytes = 0;
+      let hayMas = false;
+      for (const t of this.trabajos) {
+        if (t.estado !== 'PENDIENTE') continue;
+        const cuenta = (porImpresora.get(t.impresoraId) ?? 0) + 1;
+        porImpresora.set(t.impresoraId, cuenta);
+        if (cuenta > MAXIMO_TRABAJOS_POR_IMPRESORA) continue;
+        const largo = Buffer.from(t.bytes, 'base64').length;
+        const yaTiene = lote.some((l) => l.impresoraId === t.impresoraId);
+        if (cerradas.has(t.impresoraId) || (yaTiene && bytes + largo > this.topeDeBytes)) {
+          cerradas.add(t.impresoraId);
+          hayMas = true;
+          continue;
+        }
+        bytes += largo;
+        lote.push({
+          id: t.id,
+          impresoraId: t.impresoraId,
+          tipo: t.tipo,
+          creadoEn: t.creadoEn,
+          bytes: t.bytes,
+        });
+      }
+      this.responder(res, 200, lote, hayMas ? { [CABECERA_HAY_MAS_TRABAJOS]: '1' } : {});
       return;
     }
     const resultado = /^\/puente\/trabajos\/([^/]+)\/resultado$/.exec(ruta);

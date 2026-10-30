@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
+  CABECERA_HAY_MAS_TRABAJOS,
   CABECERA_PROTOCOLO_PUENTE,
   ESPACIO_PUENTE,
+  MAXIMO_BYTES_RESPUESTA_TRABAJOS,
+  MAXIMO_IMPRESORAS_LATIDO,
   VERSION_PROTOCOLO_PUENTE,
   armarQrPuente,
   configuracionPuenteSchema,
@@ -27,6 +30,13 @@ describe('constantes del protocolo', () => {
     expect(VERSION_PROTOCOLO_PUENTE).toBe(1);
     expect(CABECERA_PROTOCOLO_PUENTE).toBe('X-Puente-Protocolo');
     expect(ESPACIO_PUENTE).toBe('/puente');
+  });
+
+  it('una respuesta de trabajos pasa de poco más de 1 MB solo por el primer trabajo de una impresora (ronda 2, F5)', () => {
+    expect(MAXIMO_BYTES_RESPUESTA_TRABAJOS).toBe(1_000_000);
+    expect(CABECERA_HAY_MAS_TRABAJOS).toBe('X-Puente-Hay-Mas');
+    // El tope de impresoras de una sucursal es el que el latido acepta.
+    expect(MAXIMO_IMPRESORAS_LATIDO).toBe(50);
   });
 });
 

@@ -204,6 +204,21 @@ describe('SimuladorPuente', () => {
       expect((await barra.esperarTickets(2)).map((t) => t.texto)).toEqual(['b1', 'b2']);
     });
 
+    it('si la API dejó trabajos fuera por el tope de bytes (cabecera X-Puente-Hay-Mas), vuelve a pedir sin esperar al intervalo', async () => {
+      const iCocina = api.agregarImpresoraDeRed(cocina.host, cocina.puerto, 'Cocina');
+      // Cada ticket pesa más que la mitad del tope: la API entrega uno por respuesta.
+      api.topeDeBytes = ticket('uno').length + 5;
+      const orden = ['t1', 't2', 't3'].map((t) =>
+        api.encolar(iCocina.id, ticket(t), { avisar: false }),
+      );
+      const simulador = await vinculado();
+      await simulador.iniciar();
+      // El intervalo es de 60 s: solo la cabecera explica que lleguen los tres.
+      await simulador.esperarImpresos(3, 3000);
+      expect(simulador.impresos).toEqual(orden.map((t) => t.id));
+      expect(simulador.peticionesDeTrabajos).toBeGreaterThanOrEqual(3);
+    });
+
     it('detener para los temporizadores: ya no pide trabajos', async () => {
       const simulador = await vinculado({ intervaloTrabajosMs: 30 });
       await simulador.iniciar();

@@ -1,5 +1,7 @@
-import { Body, Controller, Get, HttpCode, Inject, Param, Post } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, Inject, Param, Post, Res } from '@nestjs/common';
+import type { Response } from 'express';
 import {
+  CABECERA_HAY_MAS_TRABAJOS,
   latidoEntradaSchema,
   resultadoTrabajoEntradaSchema,
   vincularPuenteEntradaSchema,
@@ -50,12 +52,18 @@ export class PuenteController {
 
   /**
    * 200 con hasta 20 trabajos pendientes por impresora de red activa de su sucursal, en orden de creación dentro de
-   * cada una (criterio 113).
+   * cada una, y hasta `MAXIMO_BYTES_RESPUESTA_TRABAJOS` de bytes en total (criterio 113). Si algo quedó fuera por ese
+   * tope, la respuesta lleva `X-Puente-Hay-Mas: 1`.
    */
   @Get('trabajos')
   @Puente()
-  entregar(@PuenteActual() puente: PuenteAutenticado): Promise<TrabajoParaImprimir[]> {
-    return this.trabajos.entregar(puente);
+  async entregar(
+    @PuenteActual() puente: PuenteAutenticado,
+    @Res({ passthrough: true }) respuesta: Response,
+  ): Promise<TrabajoParaImprimir[]> {
+    const { trabajos, hayMas } = await this.trabajos.entregar(puente);
+    if (hayMas) respuesta.setHeader(CABECERA_HAY_MAS_TRABAJOS, '1');
+    return trabajos;
   }
 
   /** 200; 400; 404 (de otra sucursal, de otra empresa o inexistente); 409 `TRANSICION_INVALIDA` (vencido). */
