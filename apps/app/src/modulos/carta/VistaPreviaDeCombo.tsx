@@ -3,7 +3,7 @@ import { calcularLinea, type ErrorLinea } from '@restaurante/dominio';
 import { Casilla, OpcionesConAyuda, type OpcionConAyuda } from '@restaurante/ui';
 import { useQuery } from '@tanstack/react-query';
 import { useId, useState } from 'react';
-import { montoComoTexto, montoEnSoles, montoEsCero } from '../../lib/formato';
+import { montoComoTexto, montoEnSoles, montoEsCero } from '../../lib/monto';
 import { CLAVES, listarGrupos } from './carta';
 import type { GrupoDeProducto } from './producto-form';
 

@@ -9,7 +9,7 @@ import {
 import { nombreAccesibleDeMesa, type MesaDeCuadricula } from '@restaurante/ui';
 import { api } from '../../lib/api';
 import type { ExtraDeEscritura } from '../../lib/envios';
-import { montoEnSoles } from '../../lib/formato';
+import { montoEnSoles } from '../../lib/monto';
 import { detalleDeMesa, grupoDeMesa } from './salon';
 
 /**

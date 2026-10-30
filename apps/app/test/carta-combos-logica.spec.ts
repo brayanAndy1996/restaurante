@@ -6,7 +6,8 @@ import {
   type SeQuita,
 } from '@restaurante/contratos';
 import { describe, expect, it } from 'vitest';
-import { diaConFecha, montoEsCero, sumarDiasAFecha } from '../src/lib/formato';
+import { diaConFecha, sumarDiasAFecha } from '../src/lib/formato';
+import { montoEsCero } from '../src/lib/monto';
 import {
   SECCIONES_DE_DISPONIBILIDAD,
   seccionDeDisponibilidadPedida,

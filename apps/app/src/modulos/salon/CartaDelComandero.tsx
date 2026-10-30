@@ -1,7 +1,7 @@
 import type { ProductoDeVenta } from '@restaurante/contratos';
 import { CampoTexto, EstadoVacio, IconoBuscar, Segmentos } from '@restaurante/ui';
 import { useId, useState } from 'react';
-import { montoEnSoles } from '../../lib/formato';
+import { montoEnSoles } from '../../lib/monto';
 import { buscarProductos, motivoCorto, type FamiliaDeVenta } from './comandero';
 import './comandero.css';
 

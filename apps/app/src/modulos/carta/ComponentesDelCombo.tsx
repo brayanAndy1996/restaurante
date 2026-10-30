@@ -13,7 +13,8 @@ import {
 import { useQuery } from '@tanstack/react-query';
 import { useId, useState } from 'react';
 import { ErrorApi, mensajeDeError } from '../../lib/errores';
-import { montoEnSoles, paraBuscar } from '../../lib/formato';
+import { paraBuscar } from '../../lib/formato';
+import { montoEnSoles } from '../../lib/monto';
 import { CLAVES, listarProductos } from './carta';
 import {
   CANTIDAD_MAXIMA_COMPONENTE,

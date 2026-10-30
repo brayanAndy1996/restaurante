@@ -13,7 +13,8 @@ import {
   tamanoReducido,
   type MotorDeImagen,
 } from '../src/lib/imagen';
-import { montoComoTexto, montoEnSoles, paraBuscar } from '../src/lib/formato';
+import { paraBuscar } from '../src/lib/formato';
+import { montoComoTexto, montoEnSoles } from '../src/lib/monto';
 import { seccionPedida, seccionesDeCarta } from '../src/modulos/carta/MarcoDeCarta';
 import {
   SIN_ESTACION,

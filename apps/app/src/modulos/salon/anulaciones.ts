@@ -9,7 +9,7 @@ import {
 import { totalVigenteLinea } from '@restaurante/dominio';
 import { api } from '../../lib/api';
 import type { ExtraDeEscritura } from '../../lib/envios';
-import { montoEnSoles } from '../../lib/formato';
+import { montoEnSoles } from '../../lib/monto';
 import { estaAbierta, textoDeItems, tituloDeMesas } from './ordenes';
 
 /**

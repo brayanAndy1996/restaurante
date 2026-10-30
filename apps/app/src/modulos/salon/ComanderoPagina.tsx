@@ -17,7 +17,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Navigate, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { Pagina } from '../../componentes/Pagina';
 import { ErrorApi } from '../../lib/errores';
-import { montoEnSoles } from '../../lib/formato';
+import { montoEnSoles } from '../../lib/monto';
 import { useSesionActiva } from '../acceso/sesion';
 import { useVistaDeSucursal } from '../disponibilidad/useVistaDeSucursal';
 import {

@@ -9,7 +9,8 @@ import {
   IconoPendiente,
 } from '@restaurante/ui';
 import { AvisoPendiente } from '../../componentes/PendienteDeEnvio';
-import { horaDeLima, montoEnSoles } from '../../lib/formato';
+import { horaDeLima } from '../../lib/formato';
+import { montoEnSoles } from '../../lib/monto';
 import { useReimpresion } from '../impresion/trabajos';
 import { tituloDeMesas } from './ordenes';
 import { TEXTO_DE_IMPRESION, esFraseDeIcbper, frasesDeLaNota } from './precuenta';

@@ -26,7 +26,8 @@ import { Link } from 'react-router-dom';
 import { AvisoPendiente } from '../../componentes/PendienteDeEnvio';
 import { useEnvioPendiente } from '../../lib/envios';
 import { ErrorApi, mensajeDeError } from '../../lib/errores';
-import { montoEnSoles, paraBuscar } from '../../lib/formato';
+import { paraBuscar } from '../../lib/formato';
+import { montoEnSoles } from '../../lib/monto';
 import {
   CLAVES,
   ETIQUETA_DE_CONTROL,

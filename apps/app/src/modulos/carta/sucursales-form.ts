@@ -1,6 +1,6 @@
 import type { AjusteSucursalEntrada, AjusteSucursalRespuesta } from '@restaurante/contratos';
 import { ErrorApi, erroresPorCampo, mensajeDeError } from '../../lib/errores';
-import { comoDecimal, montoComoTexto } from '../../lib/formato';
+import { comoDecimal, montoComoTexto } from '../../lib/monto';
 
 /** Lo que se está escribiendo en una fila de sucursal. */
 export interface BorradorDeSucursal {
