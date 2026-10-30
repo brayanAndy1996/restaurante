@@ -204,7 +204,8 @@ Commit propio.
 - [x] T45 · frontend · Banner de impresión en todas las pantallas de la sucursal (puente desconectado, impresora que no responde, con los pendientes), reevaluado cada 15 s y con el evento; estados en Ajustes y en el KDS. (criterios 122, 138, 140)
 - [x] T46 · backend · `pnpm puente:simular --qr "<texto>"` (`apps/api/scripts/puente-simular.ts`) con el simulador y, opcional, un emulador local; README con cómo probar la impresión sin Android.
 - [x] T47 · frontend · E2E con Playwright, la API, el emulador y el simulador: el Administrador crea una impresora de red (el emulador) y pone Cocina en ella, vincula el puente copiando el texto del QR al simulador, imprime la página de prueba; el Mozo comanda y el emulador recibe el ticket de Cocina en menos de 5 s mientras Barra sigue en el KDS; se apaga el emulador, aparece el banner "no responde" y la comanda siguiente queda en cola; al prenderlo, sale y el banner se va; se detiene el simulador y aparece "puente desconectado"; la pre-cuenta sale por la impresora de caja; un Mozo reimprime una comanda con la marca "REIMPRESIÓN". (criterios 116, 119, 122, 127, 128, 136 a 140 en el flujo)
-- [ ] T48 · tester · Suite completa, lint, tipos, build y E2E.
+- [x] T48 · tester · Suite completa, lint, tipos, build y E2E.
+  - Cubierta por T51 (2026-10-30), que corrió lo mismo sobre el código final de 3b.
 
 ### Fase D · Ataque, revisión, verificación y cierre (3b)
 
@@ -255,8 +256,8 @@ Commit propio.
 ### Solo ruta crítica (3b)
 
 - [x] Pruebas escritas por test-writer y confirmadas en rojo (P5, P6, R2)
-- [ ] Pruebas en verde tras la implementación (T43, T48)
-  - T48 no tiene registro de su corrida en el repositorio: lo único que consta es el E2E 34/34 de la C9 (`43ec4b7`). La verificación de cierre de 3b es T51.
+- [x] Pruebas en verde tras la implementación (T43, T48)
+  - T48 queda cubierta por T51: suites, lint, tipos, build y E2E 34/34 sobre el código final.
 - [x] Ataque adversarial sin fallas abiertas (T49)
   - Rondas 1 a 4 corregidas (ver T49); ninguna falla abierta.
 - [x] El orquestador verifica con `git diff` que la fase C no tocó los archivos de la fase B
