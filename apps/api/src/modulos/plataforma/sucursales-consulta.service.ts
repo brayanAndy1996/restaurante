@@ -1,4 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
+import type { TramoHorario } from '@restaurante/dominio';
 import { QueryTypes, type Sequelize, type Transaction } from 'sequelize';
 import { CONEXION_API } from '../../nucleo/base-de-datos';
 
@@ -6,6 +7,15 @@ import { CONEXION_API } from '../../nucleo/base-de-datos';
 export interface SucursalVisible {
   id: string;
   nombre: string;
+}
+
+/** Lo que la carta web y la mesa pública muestran de una sucursal (historia 005, criterios 19 y 35). */
+export interface DatosPublicosSucursal {
+  id: string;
+  nombre: string;
+  direccion: string;
+  /** Vacío si la sucursal no tiene horario cargado. */
+  horario: TramoHorario[];
 }
 
 /**
@@ -65,5 +75,38 @@ export class SucursalesConsultaService {
       { bind: [sucursalId], type: QueryTypes.SELECT, transaction: transaccion },
     );
     return filas[0]?.hora ?? null;
+  }
+
+  /**
+   * Nombre, dirección y horario de las sucursales pedidas (de la empresa del contexto; las que no existen no
+   * aparecen), con una sola consulta fija (historia 005, criterios 19, 22 y 35). Nunca devuelve el establecimiento,
+   * el RUC, el emisor ni el WhatsApp.
+   */
+  async datosPublicos(
+    sucursalIds: readonly string[],
+    transaccion?: Transaction,
+  ): Promise<Map<string, DatosPublicosSucursal>> {
+    const unicas = [...new Set(sucursalIds)];
+    const datos = new Map<string, DatosPublicosSucursal>();
+    if (unicas.length === 0) return datos;
+    const filas = await this.conexion.query<{
+      id: string;
+      nombre: string;
+      direccion: string;
+      horario: TramoHorario[];
+    }>('SELECT id, nombre, direccion, horario FROM sucursal WHERE id = ANY($1::uuid[])', {
+      bind: [unicas],
+      type: QueryTypes.SELECT,
+      transaction: transaccion,
+    });
+    for (const f of filas) {
+      datos.set(f.id, {
+        id: f.id,
+        nombre: f.nombre,
+        direccion: f.direccion,
+        horario: Array.isArray(f.horario) ? f.horario : [],
+      });
+    }
+    return datos;
   }
 }

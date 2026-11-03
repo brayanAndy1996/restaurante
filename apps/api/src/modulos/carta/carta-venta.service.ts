@@ -22,6 +22,16 @@ export interface PrepararLineaEntrada {
   instante: Date;
 }
 
+/** Una línea para `CartaVentaService.prepararLineas`: lo mismo que `prepararLinea` sin la sucursal ni el instante. */
+export type LineaParaPreparar = Pick<
+  PrepararLineaEntrada,
+  'productoId' | 'modificadorIds' | 'cantidad'
+>;
+
+/** El resultado de preparar una línea: la línea preparada o el error que `prepararLinea` habría lanzado. */
+export type ResultadoPrepararLinea =
+  { ok: true; linea: LineaPreparada } | { ok: false; error: unknown };
+
 /**
  * Contrato de la carta para el comandero (sección 3) y la carta web (sección 5): la vista de una sucursal y el
  * armado de una línea de venta (criterios 47 a 52 y 58). Corre dentro de un contexto de empresa
@@ -62,6 +72,37 @@ export class CartaVentaService {
   }
 
   /**
+   * El resultado de `prepararLinea` para cada línea, en el mismo orden, con **un solo cargador** (las consultas de
+   * la carta restringidas a los productos de las líneas) en lugar de uno por línea (historia 005, plan "Costo de
+   * `prepararLineas`"). Cada elemento es la línea preparada o el error que `prepararLinea` habría lanzado con esa
+   * línea (`ErrorProductoNoVendible`, `ErrorSeleccionInvalida`, 404 o `RangeError` por la cantidad): quien llama
+   * decide si es todo o nada. Una sucursal que no existe en la empresa lanza 404 para todo el lote. No escribe nada.
+   */
+  async prepararLineas(
+    sucursalId: string,
+    lineas: readonly LineaParaPreparar[],
+    instante: Date,
+  ): Promise<ResultadoPrepararLinea[]> {
+    const dia = await this.diaDe(sucursalId, instante);
+    if (lineas.length === 0) return [];
+    const ids = [
+      ...new Set(lineas.map((l) => l.productoId.toLowerCase()).filter((id) => esUuid(id))),
+    ];
+    const carta = await cargarCarta(this.conexion, {
+      sucursalId: sucursalId.toLowerCase(),
+      diaOperativo: dia,
+      productoIds: ids,
+    });
+    return lineas.map((linea): ResultadoPrepararLinea => {
+      try {
+        return { ok: true, linea: this.armarLinea(carta, linea) };
+      } catch (error) {
+        return { ok: false, error };
+      }
+    });
+  }
+
+  /**
    * Valida la selección y calcula el precio de una línea con `calcularLinea` de `packages/dominio`
    * (criterios 52 y 58). Orden de los rechazos: 404 (sucursal o producto que no existe en la empresa; uno de otra
    * empresa es igual), 422 `PRODUCTO_NO_VENDIBLE` (no se vende solo o con el motivo de `vendibilidad`) y 422
@@ -78,6 +119,13 @@ export class CartaVentaService {
       diaOperativo: dia,
       productoId,
     });
+    return this.armarLinea(carta, entrada);
+  }
+
+  /** La parte pura de `prepararLinea`: arma la línea con la carta ya cargada (compartida con `prepararLineas`). */
+  private armarLinea(carta: CartaCargada, entrada: LineaParaPreparar): LineaPreparada {
+    const productoId = entrada.productoId.toLowerCase();
+    if (!esUuid(productoId)) throw noEncontrado('El producto');
     const producto = carta.porId.get(productoId);
     if (producto === undefined) throw noEncontrado('El producto');
 

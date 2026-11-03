@@ -1,0 +1,272 @@
+/*
+ * Llamados desde la mesa (005, criterios 70 y 71): la lista del salón y el detalle para revisar el pedido con
+ * el cliente. Se carga con la lista y el detalle (bloques aparte), no con el paquete inicial. Todo color y
+ * medida sale de los tokens de `packages/ui`.
+ */
+
+.llamados {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espacio-lg);
+  min-width: 0;
+}
+
+.llamados__sonido {
+  max-width: 22rem;
+}
+
+.llamados__seccion {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espacio-sm);
+}
+
+.llamados__titulo {
+  margin: 0;
+  font-size: 1.125rem;
+  line-height: 1.5rem;
+  font-weight: 700;
+}
+
+.llamados__lista {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  background: var(--color-baldosa);
+  border-block: 1px solid var(--color-junta);
+}
+.llamados__lista > li + li {
+  border-top: 1px solid var(--color-junta);
+}
+
+/* Fila de 72 px o más: la mesa y el tipo, cuánto lleva y cuánto falta, y «Atender» al alcance del pulgar */
+.llamado {
+  display: flex;
+  align-items: center;
+  gap: var(--espacio-md);
+  min-height: var(--alto-baldosa-persona);
+  padding: var(--espacio-md) var(--espacio-lg);
+  color: inherit;
+  text-decoration: none;
+}
+a.llamado--enlace:active {
+  background: var(--color-accion-suave);
+}
+.llamado__cuerpo {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  color: inherit;
+  text-decoration: none;
+}
+a.llamado__cuerpo:active {
+  background: var(--color-accion-suave);
+}
+.llamado__titulo {
+  display: flex;
+  align-items: center;
+  gap: var(--espacio-sm);
+  font-size: 1.0625rem;
+  line-height: 1.5rem;
+  font-weight: 700;
+}
+.llamado__titulo > .ui-icono {
+  flex: none;
+}
+.llamado__ayuda {
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+  color: var(--color-tinta-suave);
+  font-variant-numeric: tabular-nums;
+}
+.llamado__vence--pronto {
+  color: var(--color-aviso-texto);
+  font-weight: 700;
+}
+.llamado__etiquetas {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--espacio-sm);
+  margin-top: var(--espacio-xs);
+}
+.llamado__boton {
+  flex: none;
+  min-width: 6rem;
+}
+
+/* ---------- Detalle: revisar con el cliente ---------- */
+.llamado-detalle {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espacio-lg);
+  min-width: 0;
+}
+.llamado-detalle__cabecera {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--espacio-sm);
+}
+.llamado-detalle__datos {
+  margin: 0;
+  font-size: 0.9375rem;
+  line-height: 1.375rem;
+  color: var(--color-tinta-suave);
+  font-variant-numeric: tabular-nums;
+}
+.llamado-detalle__lineas {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espacio-md);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.linea-llamado {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espacio-sm);
+  padding: var(--espacio-md);
+  border: 1px solid var(--color-borde-control);
+  border-radius: var(--radio-baldosa);
+  background: var(--color-baldosa);
+}
+.linea-llamado--no-disponible {
+  border-color: var(--color-peligro);
+  background: var(--color-peligro-suave);
+}
+.linea-llamado__fila {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--espacio-md);
+}
+.linea-llamado__texto {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+.linea-llamado__nombre {
+  font-size: 1.0625rem;
+  line-height: 1.5rem;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+.linea-llamado__detalle {
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+  color: var(--color-tinta-suave);
+  overflow-wrap: anywhere;
+}
+.linea-llamado__total {
+  flex: none;
+  font-size: 1.0625rem;
+  line-height: 1.5rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.linea-llamado__precio {
+  margin: 0;
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+  color: var(--color-tinta-suave);
+  font-variant-numeric: tabular-nums;
+}
+/* Lo que el cliente vio y ya no es lo que cobra el sistema: ají con palabras, nunca solo color */
+.linea-llamado__cliente {
+  color: var(--color-aviso-texto);
+  font-weight: 700;
+}
+.linea-llamado__motivo {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--espacio-sm);
+  margin: 0;
+  font-size: 0.9375rem;
+  line-height: 1.375rem;
+  color: var(--color-peligro-oscuro);
+}
+.linea-llamado__motivo > .ui-icono {
+  flex: none;
+}
+.linea-llamado__controles {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--espacio-md);
+}
+
+.llamado-detalle__quitadas {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espacio-xs);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.llamado-detalle__quitada {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--espacio-md);
+  min-height: var(--alto-control);
+  color: var(--color-tinta-suave);
+  font-size: 0.9375rem;
+  line-height: 1.375rem;
+}
+
+.llamado-detalle__accion {
+  margin-top: var(--espacio-sm);
+}
+
+.llamado-detalle__total {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--espacio-md);
+  padding: var(--espacio-md) 0;
+  border-top: 1px solid var(--color-junta);
+  font-size: 1.125rem;
+  line-height: 1.5rem;
+}
+.llamado-detalle__total b {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Descartar queda lejos de la acción principal: una junta y 24 px de aire */
+.llamado-detalle__aparte {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espacio-md);
+  margin-top: var(--espacio-sm);
+  padding-top: var(--espacio-xl);
+  border-top: 1px solid var(--color-junta);
+}
+
+.llamado-detalle__pie {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espacio-sm);
+}
+.llamado-detalle__pie-motivo {
+  margin: 0;
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+  color: var(--color-tinta-suave);
+}
+
+.llamado-hoja__texto {
+  margin: 0;
+  font-size: 1rem;
+  line-height: 1.5rem;
+}
+.llamado-hoja__motivos {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espacio-sm);
+}

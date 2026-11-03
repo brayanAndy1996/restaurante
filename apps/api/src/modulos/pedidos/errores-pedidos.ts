@@ -52,6 +52,16 @@ export const idDeClienteReutilizado = (): ErrorAplicacion =>
     'El identificador ya se usó con otra petición',
   );
 
+/**
+ * 422 `DATOS_INVALIDOS` con `campos.ordenId` (historia 005, criterio 42): el `ordenId` con el que se quiere abrir la mesa
+ * al atender un llamado ya es de una orden que no es la vigente de esa mesa (liberada, unida, de otra mesa o de otra
+ * sucursal). El cuerpo es el mismo en todos esos casos.
+ */
+export const ordenIdYaUsado = (): ErrorAplicacion =>
+  new ErrorAplicacion(422, 'DATOS_INVALIDOS', 'Los datos enviados no son válidos', [
+    { campo: 'ordenId', mensaje: 'Ese identificador ya se usó. Genera otro para abrir la mesa' },
+  ]);
+
 /** 422 `REFERENCIA_INVALIDA` por una persona que no atiende mesas; igual para una de B y una inexistente. */
 export const mozoInvalido = (mensaje: string): ErrorAplicacion => {
   const campos: CampoError[] = [{ campo: 'mozoId', mensaje }];

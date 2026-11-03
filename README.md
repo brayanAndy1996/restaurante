@@ -2,8 +2,8 @@
 
 Sistema en la nube para restaurantes pequeños del Perú, alquilado por sucursal. Monorepo con pnpm y
 Turborepo: `apps/api` (NestJS + Sequelize + PostgreSQL), `packages/dominio` (reglas puras),
-`packages/contratos` (esquemas zod) y `packages/config`. La PWA del personal ya existe (`apps/app`); la carta web y el puente Android
-llegan en historias posteriores. El diseño y los requerimientos viven en los documentos compartidos
+`packages/contratos` (esquemas zod) y `packages/config`. La PWA del personal ya existe (`apps/app`); la carta web para los clientes (`apps/web`) y el puente Android
+llegan en historias posteriores. En `apps/api/src/modulos/` están además los módulos `carta-web` (configuración de la carta y carta pública) y `llamados` (llamados desde la mesa, dueño de la tabla `llamado`); los QR de las mesas viven en `salon`. El diseño y los requerimientos viven en los documentos compartidos
 que enlaza `CLAUDE.md`; las historias, en `specs/NNN-nombre/`.
 
 ## Estado
@@ -55,6 +55,14 @@ La sección 3b de los requerimientos, «Impresión básica» (especificación 00
 - **Simulador del puente:** `pnpm puente:simular` implementa el protocolo que usará la app Android y puede levantar una impresora falsa, para probar la impresión sin Android (ver «Impresión (3b)» más abajo).
 
 La siguiente es la 3c: la app Android del puente (Kotlin), que se especifica aparte.
+
+La entrega 5a de la especificación 005, «Carta web y pedido desde la mesa con QR» (HU-40 a HU-42 completas; HU-09, RF-40 y RF-41 en su parte de API), está terminada en la misma rama de trabajo; todavía no está en `main`. Su especificación, plan y tareas están en [`specs/005-carta-web-mesa/`](specs/005-carta-web-mesa/). La 5b, la carta para los clientes en `apps/web`, está en curso. Incluye la revisión y una ronda de ataque adversarial sobre las rutas públicas y los llamados. Lo construido:
+
+- **Carta web por sucursal** (RF-40): nombre, dirección, color, logo y publicación de cada sucursal, en Ajustes › Carta web. La carta pública solo muestra lo que se puede pedir en ese momento (RF-41).
+- **QR de las mesas** (RF-84, HU-42): cada mesa tiene su código, que abre `CARTA_WEB_URL/m/<código>`. La hoja se imprime desde Ajustes › Mapa de mesas, y cambiar el QR de una mesa deja sin efecto el anterior.
+- **Llamados desde la mesa** (RF-85 a RF-88, HU-40 y HU-41): la API recibe el pedido de la mesa, «Llamar al mozo» y «Pedir la cuenta», y los muestra en Salón › Llamados con aviso en vivo. El mozo atiende (si la mesa está libre, la abre), revisa el pedido con el cliente, lo pasa a la cuenta o lo descarta. Nada llega a cocina hasta que alguien pulsa «Enviar». Un llamado pendiente vence a los 15 minutos, cada mesa tiene uno pendiente a la vez y hay límites por mesa y por conexión.
+
+Hasta la 5b, el cliente no tiene pantalla: el modo mesa no se usa con clientes reales. Ver «Carta web y llamados (5a)» más abajo.
 
 ## Requisitos
 
@@ -304,6 +312,85 @@ Para ver los estados: detén el simulador (Ctrl+C) y espera hasta un minuto y me
 - **1 MB por respuesta** (`MAXIMO_BYTES_RESPUESTA_TRABAJOS`, 1 000 000 bytes). `GET /puente/trabajos` trae hasta 20 trabajos por impresora y, como mínimo, uno de cada impresora que tenga pendientes, aunque por sí solo pase el tope. Lo que no entra sale en la siguiente llamada, y la respuesta lo avisa con la cabecera `X-Puente-Hay-Mas: 1`. Por eso, con muchas impresoras (hasta 50 activas por sucursal), una respuesta puede pasar de 1 MB.
 - **La regla de «Hay más».** El puente vuelve a pedir enseguida cuando la respuesta trae `X-Puente-Hay-Mas: 1` (o una impresora llenó sus 20 trabajos), pero solo si el lote anterior avanzó: si la API aceptó (2xx) el resultado `IMPRESO` de al menos un trabajo. Si no, espera el intervalo de 30 segundos o el aviso `trabajo.nuevo`. Así, una API que rechaza los resultados no hace que el puente entre en bucle.
 
+## Carta web y llamados desde la mesa (5a)
+
+La 5a incluye la API, la PWA del personal y los QR. La pantalla del cliente (la carta pública y el modo mesa) es la 5b, en `apps/web`: hasta entonces el enlace de un QR no abre nada y el modo mesa no se usa con clientes reales. Los llamados sí se pueden probar desde ya con `curl` contra la API pública (abajo).
+
+### Variables `CARTA_WEB_URL` y `CABECERA_IP_CLIENTE`
+
+- **`CARTA_WEB_URL`**: URL base pública de la carta, sin barra final (por ejemplo `https://carta.ejemplo.pe`). Es la que llevan los QR (`CARTA_WEB_URL/m/<código>`) y la de los enlaces de Ajustes › Carta web. CORS acepta además su origen en `/publico/*`, junto con los de `ORIGENES_PERMITIDOS`. Si no es una URL `http` o `https` válida, la API no arranca. Con `development` y `test`, si falta, vale `http://localhost:3001`. En producción hay que definirla: sin ella, la API avisa al arrancar y las rutas de QR responden 503 `CONFIGURACION_INCOMPLETA`.
+- **`CABECERA_IP_CLIENTE`**: nombre de la cabecera que trae la IP real del cliente, sin distinguir mayúsculas. La API la usa para el límite de llamados por conexión; la IP nunca se guarda, solo su huella. Detrás de Cloudflare, `cf-connecting-ip`. Si la cabecera falta o no trae una IP válida, la API usa la IP de la conexión, que detrás de un proxy es la del proxy: todos los clientes compartirían un solo límite.
+- **Cuándo configurarla:** solo con un proxy de confianza delante que reemplace esa cabecera. Sin ese proxy no la definas: cualquiera podría escribirla y elegir la IP que quisiera. En producción, la API debe ser alcanzable solo a través del proxy. En `.env.example` viene comentada.
+- **Cloudflare:** en producción conviene un límite de peticiones para `/publico/*`, como el que ya cubre el ingreso (002), para cortar las ráfagas antes de que lleguen a la API.
+
+### Imprimir la hoja de QR de las mesas
+
+Como Administrador, en la PWA:
+
+1. En **Ajustes › Carta web**, pon el nombre y la dirección de la empresa, y en cada sucursal su dirección y marca **Publicada**. Si la carta no está publicada, la hoja avisa de que el QR mostrará «La carta no está disponible».
+2. Ve a **Ajustes › Mapa de mesas** y pulsa **QR de las mesas**. Cada mesa muestra su QR y su enlace. Si hay mesas sin código (las creadas antes de la 5a), un aviso ofrece **Crear los QR que faltan**: pulsa ese botón antes de imprimir.
+3. Pulsa **Imprimir la hoja** cuando terminen de dibujarse los QR. Se abre el diálogo de impresión del navegador: la hoja A4 trae seis tarjetas de 9 × 9 cm. Para guardarla como PDF, elige «Guardar como PDF».
+4. **Cambiar QR**, en una mesa, pide confirmación: el impreso de esa mesa deja de funcionar, así que hay que imprimir y pegar el nuevo. Los llamados que ya llegaron con el código anterior siguen para el mozo.
+
+### Probar un llamado con `curl`
+
+Hace falta una sucursal con la carta publicada y una mesa con su código. El código es lo que va después de `/m/` en el enlace de la mesa, que se ve en la hoja de QR de la PWA (o el campo `codigo` de `GET /sucursales/<sucursalId>/qr-mesas`, con sesión de Administrador). Los ejemplos usan `jq`.
+
+```bash
+API=http://localhost:3000
+CODIGO=<código de la mesa>
+
+# La mesa: su nombre, su carta (empresaSlug y sucursalSlug) y si acepta llamados ahora
+curl -s "$API/publico/mesas/$CODIGO" | jq
+
+# Un llamado para el mozo, sin líneas: responde 201 con estado PENDIENTE
+ID=$(node -e 'console.log(require("node:crypto").randomUUID())')
+curl -s -w '\n%{http_code}\n' -X POST "$API/publico/mesas/$CODIGO/llamados" \
+  -H 'content-type: application/json' \
+  -d "{\"id\":\"$ID\",\"tipo\":\"LLAMAR_MOZO\"}"
+
+# Repetir el mismo id devuelve la misma respuesta (201) y no crea otro llamado
+curl -s -w '\n%{http_code}\n' -X POST "$API/publico/mesas/$CODIGO/llamados" \
+  -H 'content-type: application/json' \
+  -d "{\"id\":\"$ID\",\"tipo\":\"LLAMAR_MOZO\"}"
+
+# Estado del llamado para el cliente
+curl -s "$API/publico/mesas/$CODIGO/llamados/$ID" | jq
+```
+
+Un pedido lleva líneas. Los `id` de los productos están en la carta pública, en `familias[].productos[]`:
+
+```bash
+curl -s "$API/publico/cartas/<empresaSlug>/<sucursalSlug>" | jq '.familias[].productos[] | {id, nombre}'
+```
+
+`modificadorIds` es obligatorio: usa `[]` si el producto no tiene grupos obligatorios. Si los tiene, elige modificadores de sus grupos (`grupos[].modificadores[].id`); si no cumples la selección, la respuesta es 422 `SELECCION_INVALIDA`. Con la mesa sin un llamado pendiente:
+
+```bash
+PRODUCTO=<id de un producto de la carta>
+ID2=$(node -e 'console.log(require("node:crypto").randomUUID())')
+curl -s -w '\n%{http_code}\n' -X POST "$API/publico/mesas/$CODIGO/llamados" \
+  -H 'content-type: application/json' \
+  -d "{\"id\":\"$ID2\",\"tipo\":\"PEDIDO\",\"lineas\":[{\"productoId\":\"$PRODUCTO\",\"modificadorIds\":[],\"cantidad\":2,\"observacion\":\"sin cebolla\"}],\"nota\":\"Pedido de prueba\"}"
+```
+
+Un llamado pendiente bloquea el siguiente de la mesa hasta que el mozo lo atienda o lo descarte, o hasta que venza a los 15 minutos. Para seguir probando, atiéndelo o descártalo en **Salón › Llamados** de la PWA, con un usuario que tenga `ATENDER_MESA` (por ejemplo `fogon.mozo`). El estado que ve el cliente puede ser `PENDIENTE`, `ATENDIDO`, `PASADO_A_CUENTA`, `DESCARTADO` o `VENCIDO`.
+
+Respuestas de error que vas a ver:
+
+- `404 NO_ENCONTRADO`: código desconocido, de una mesa inactiva o reemplazado por un cambio de QR; también si la sucursal no está publicada o su plan no incluye `PEDIDOS_WEB`.
+- `409 FUERA_DE_HORARIO`: la sucursal tiene horario cargado y es hora de cerrar (hora de Lima), salvo que la mesa tenga una cuenta abierta. Sin horario cargado, acepta a cualquier hora.
+- `409 LLAMADO_PENDIENTE`: la mesa ya tiene un llamado pendiente.
+- `422 PRODUCTO_NO_VENDIBLE` o `SELECCION_INVALIDA`: alguna línea no se puede pedir ahora. `campos` trae `lineas.<i>` con cada línea rechazada, y nada se guarda.
+- `429 DEMASIADOS_LLAMADOS`: la mesa tiene 6 llamados en 30 minutos, o la conexión 20 en 10 minutos en la misma sucursal. La cabecera `Retry-After` dice cuánto esperar.
+- `413 CUERPO_DEMASIADO_GRANDE`: el cuerpo pasa de 16 KB.
+
+En local, sin `CABECERA_IP_CLIENTE`, todos los `curl` cuentan como una sola conexión, y los límites se aplican igual en las pruebas. Para simular otros clientes, pon `CABECERA_IP_CLIENTE=cf-connecting-ip` en `.env`, reinicia `pnpm dev` y añade `-H 'cf-connecting-ip: 203.0.113.10'` (o cualquier otra IP). Es solo para pruebas en tu máquina.
+
+### El aviso solo llega con la app abierta
+
+El aviso de un llamado (banner, sonido y vibración) llega solo mientras la PWA está abierta en el equipo del mozo. No hay notificaciones push: con la pantalla apagada, la app en segundo plano o cerrada, el mozo se entera al volver a abrirla, cuando la lista de **Salón › Llamados** muestra los pendientes. Las notificaciones push quedan fuera de alcance, como en 004. Sin conexión en tiempo real, la lista se refresca cada 30 segundos. El sonido necesita un toque en la app (lo exigen los navegadores) y se silencia en el equipo con **Sonido de avisos**, en esa misma lista.
+
 ## Pruebas
 
 Las pruebas de la API son de integración contra PostgreSQL real, sin mocks de la base. Necesitan
@@ -338,6 +425,8 @@ utilidades están en `apps/api/test/README.md`. Las pruebas de `packages/*` no u
 | `DB_POOL_MAX`                                                            | Tamaño del pool de la API (por defecto 10)                                                                                                                                                                                                                                                                                                                        |
 | `TIEMPO_REAL`                                                            | `habilitado` o `deshabilitado`: enciende o apaga el servidor de Socket.IO (`/tiempo-real`). Por defecto `habilitado`, salvo con `NODE_ENV=test`                                                                                                                                                                                                                   |
 | `API_URL_PUBLICA`                                                        | URL pública de la API, sin barra final: va en el QR de vinculación del puente de impresión (`restaurante-puente://vincular?api=<URL>&t=<código>`). Con `development` y `test` vale `http://localhost:<PORT>` si falta; en producción hay que definirla; sin ella, crear un código de vinculación responde 503 `CONFIGURACION_INCOMPLETA`                          |
+| `CARTA_WEB_URL`                                                          | URL base de la carta web (`apps/web`), sin barra final: la de los QR (`<CARTA_WEB_URL>/m/<código>`). Con `development` y `test` vale `http://localhost:3001`; en producción hay que definirla (ver «Carta web y llamados (5a)»)                                                                                                                                   |
+| `CABECERA_IP_CLIENTE`                                                    | Cabecera con la IP real del cliente para el límite de llamados por conexión (la IP nunca se guarda). Detrás de Cloudflare, `cf-connecting-ip`; sin un proxy de confianza delante, no la definas (ver «Carta web y llamados (5a)»)                                                                                                                                 |
 | `EMPRESA_POR_HEADER`                                                     | **Solo pruebas.** `habilitado` con `NODE_ENV=test` da un principal de prueba (Administrador, actor `prueba`) a las peticiones sin `Authorization` con `x-empresa-id`; la API se niega a arrancar con él en `development` y en `production`. No lo pongas en tu `.env`                                                                                             |
 | `PIN_PEPPER`                                                             | Secreto (base64, 32 bytes o más) con el que se calcula la huella de los PIN. Obligatoria en producción; con `development` o `test` hay un valor local. **Cambiarla invalida todos los PIN** (y las claves de idempotencia de las últimas 24 horas, cuya huella también se calcula con HMAC y una clave derivada de ella); nunca va en la base ni en los respaldos |
 | `ORIGENES_PERMITIDOS`                                                    | Orígenes de la PWA permitidos por CORS, separados por coma, sin ruta ni barra final. Obligatoria en producción (por defecto local: `http://localhost:5173`)                                                                                                                                                                                                       |

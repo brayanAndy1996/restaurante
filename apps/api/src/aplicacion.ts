@@ -1,5 +1,7 @@
+import { Logger } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import type { INestApplication, LogLevel, Type } from '@nestjs/common';
+import type { CorsOptions } from '@nestjs/common/interfaces/external/cors-options.interface';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import { AppModule } from './app.module';
 import {
@@ -16,6 +18,12 @@ import type { InventarioPuerto } from './modulos/pedidos';
 import type { PublicadorEventos } from './nucleo/eventos';
 import type { Reloj } from './nucleo/reloj';
 import { LIMITE_CUERPO_BYTES, traducirErrorDeCuerpo } from './nucleo/errores/filtro-global-errores';
+import {
+  esRutaPublica,
+  limitarCuerpoPublico,
+  verificarCuerpoPublico,
+  origenDe,
+} from './nucleo/http/rutas-publicas';
 
 export interface OpcionesAplicacion {
   /**
@@ -88,10 +96,32 @@ export async function crearAplicacion(
       bodyParser: false,
     },
   );
-  // CORS solo para los orígenes de la PWA (`ORIGENES_PERMITIDOS`), sin cookies: la autenticación va en
-  // `Authorization` y en `X-Equipo` (historia 002). Con la lista vacía (solo en pruebas) no se permite
-  // ningún origen de navegador.
-  app.enableCors({
+  // Sin la URL de la carta web no hay QR de mesas ni enlaces de la carta (005): la API arranca igual y las rutas de
+  // QR responden 503 `CONFIGURACION_INCOMPLETA`.
+  if (entorno.NODE_ENV === 'production' && entorno.CARTA_WEB_URL === undefined) {
+    new Logger('Aplicacion').warn(
+      'CARTA_WEB_URL no está configurada: los QR de las mesas y los enlaces de la carta web no están disponibles',
+    );
+  }
+  // CORS por ruta (historia 005, criterio 16). Las rutas con sesión aceptan solo los orígenes de la PWA
+  // (`ORIGENES_PERMITIDOS`), sin cookies: la autenticación va en `Authorization` y en `X-Equipo` (historia 002). Con
+  // la lista vacía (solo en pruebas) no se permite ningún origen de navegador. Las rutas públicas `/publico/*`
+  // aceptan además el origen de la carta web (`CARTA_WEB_URL`), solo con `GET`, `POST` y `OPTIONS` y las cabeceras
+  // `Content-Type` e `If-None-Match`, también sin credenciales: el origen de la carta no recibe permiso en ninguna
+  // otra ruta.
+  const origenCartaWeb = origenDe(entorno.CARTA_WEB_URL);
+  const opcionesCorsPublicas: CorsOptions = {
+    origin:
+      origenCartaWeb === undefined
+        ? entorno.ORIGENES_PERMITIDOS
+        : [...entorno.ORIGENES_PERMITIDOS, origenCartaWeb],
+    credentials: false,
+    methods: ['GET', 'POST', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'If-None-Match'],
+    exposedHeaders: ['ETag', 'Retry-After'],
+    maxAge: 600,
+  };
+  const opcionesCorsConSesion: CorsOptions = {
     origin: entorno.ORIGENES_PERMITIDOS,
     credentials: false,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
@@ -106,14 +136,28 @@ export async function crearAplicacion(
     ],
     exposedHeaders: ['Retry-After', 'Date', 'ETag'],
     maxAge: 600,
-  });
-  // La foto de un producto es la única ruta con cuerpo binario, con su propio límite de 1 MB (historia 003). El
+  };
+  app.enableCors(
+    (peticion: { url?: string }, devolver: (e: Error | null, o: CorsOptions) => void) => {
+      devolver(null, esRutaPublica(peticion.url) ? opcionesCorsPublicas : opcionesCorsConSesion);
+    },
+  );
+  // Un `POST` público de más de 16 KB responde 413 sin leer el cuerpo ni consultar la base (criterio 17).
+  app.use(limitarCuerpoPublico());
+  // La foto de un producto y el logo de la carta web (005) son las únicas rutas con cuerpo binario, con su propio
+  // límite de 1 MB (historia 003). El
   // controlador lee ese cuerpo después del guard y del permiso (401 y 403 van antes que el 413); aquí solo se
   // asegura que, si se responde sin leerlo, lo que falte por llegar se descarte.
   app.use(descartarCuerpoDeFotoAlResponder());
   // Un cuerpo mayor a 100 KB responde 413 CUERPO_DEMASIADO_GRANDE (lo traduce el filtro global).
-  app.useBodyParser('json', { limit: LIMITE_CUERPO_BYTES });
-  app.useBodyParser('urlencoded', { limit: LIMITE_CUERPO_BYTES, extended: true });
+  // Los `POST` públicos se miden además con los bytes recibidos (`verify`, también con cuerpo por partes): más de
+  // 16 KB responde 413 (criterio 17).
+  app.useBodyParser('json', { limit: LIMITE_CUERPO_BYTES, verify: verificarCuerpoPublico });
+  app.useBodyParser('urlencoded', {
+    limit: LIMITE_CUERPO_BYTES,
+    extended: true,
+    verify: verificarCuerpoPublico,
+  });
   // Un JSON mal formado responde 400 DATOS_INVALIDOS con un mensaje fijo, no el del analizador (40c).
   app.use(
     (error: unknown, _peticion: unknown, _respuesta: unknown, siguiente: (e?: unknown) => void) =>

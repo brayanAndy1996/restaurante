@@ -13,6 +13,11 @@
   color: var(--color-tinta-suave);
 }
 
+/* El botón dentro de un aviso de llegada («Revisar y enviar») */
+.cuenta__accion-aviso {
+  margin-top: var(--espacio-sm);
+}
+
 /* Lo que falta enviar: un solo vistazo y un toque para seguir */
 .cuenta__borrador {
   display: flex;

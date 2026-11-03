@@ -1,3 +1,4 @@
+import { ESTADOS_LLAMADO } from '@restaurante/dominio';
 import { z } from 'zod';
 import { seQuitaSchema, usadoEnSchema } from './carta';
 import { uuidSchema } from './comunes';
@@ -56,6 +57,16 @@ export const CODIGOS_ERROR = [
   'SIN_IMPRESORA',
   // Falta una configuración del servidor (por ejemplo la URL pública de la API para el QR del puente): 503.
   'CONFIGURACION_INCOMPLETA',
+  // Sección "Carta web y pedido desde la mesa" (historia 005). `FUERA_DE_HORARIO` ya existe (002): la mesa también
+  // lo usa cuando el local está cerrado (criterio 35).
+  'LLAMADO_PENDIENTE',
+  'DEMASIADOS_LLAMADOS',
+  'LLAMADO_TOMADO',
+  'LLAMADO_VENCIDO',
+  'LLAMADO_CERRADO',
+  'MESA_LIBRE',
+  'MESA_SIN_CUENTA',
+  'CARTA_WEB_SIN_CONFIGURAR',
 ] as const;
 
 export const codigoErrorSchema = z.enum(CODIGOS_ERROR);
@@ -81,6 +92,10 @@ export const errorRespuestaSchema = z.object({
    * (la orden a la que se unió): para que la PWA lleve a la persona ahí (criterios 11 y 29 de 004).
    */
   ordenId: uuidSchema.optional(),
+  /** Solo en `LLAMADO_TOMADO` (criterio 43 de 005): quién ya está atendiendo el llamado. */
+  atendidoPor: z.object({ id: uuidSchema, nombre: z.string() }).optional(),
+  /** Solo en `LLAMADO_CERRADO` (criterios 44 y 53 de 005): el estado en que quedó el llamado. */
+  estado: z.enum(ESTADOS_LLAMADO).optional(),
 });
 
 export type CodigoError = z.infer<typeof codigoErrorSchema>;

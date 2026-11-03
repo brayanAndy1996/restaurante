@@ -32,6 +32,9 @@ jobs:
       # Valores solo para CI (no son secretos de producción).
       PIN_PEPPER: Y2ktcGluLXBlcHBlci1zb2xvLXBhcmEtcHJ1ZWJhcyEh
       ORIGENES_PERMITIDOS: http://localhost:5173
+      # Carta web (historia 005): las pruebas fijan la URL y la cabecera de la IP del cliente por su cuenta.
+      CARTA_WEB_URL: http://localhost:3001
+      CABECERA_IP_CLIENTE: cf-connecting-ip
       # Las fotos de la carta (historia 003) se guardan en memoria en las pruebas.
       ARCHIVOS_DRIVER: memoria
 
@@ -90,6 +93,8 @@ jobs:
       # Valores solo para CI (no son secretos de producción).
       PIN_PEPPER: Y2ktcGluLXBlcHBlci1zb2xvLXBhcmEtcHJ1ZWJhcyEh
       ORIGENES_PERMITIDOS: http://localhost:5173
+      # Carta web (historia 005).
+      CARTA_WEB_URL: http://localhost:3001
       # Las fotos de la carta (historia 003) se guardan en disco en desarrollo.
       ARCHIVOS_DRIVER: disco
       ARCHIVOS_DIRECTORIO: ./archivos

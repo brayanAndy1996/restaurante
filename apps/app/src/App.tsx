@@ -48,6 +48,17 @@ const MapaDeMesasPagina = lazy(() =>
     default: m.MapaDeMesasPagina,
   })),
 );
+const CartaWebPagina = lazy(() =>
+  import('./modulos/administracion/carta-web/CartaWebPagina').then((m) => ({
+    default: m.CartaWebPagina,
+  })),
+);
+// La hoja de QR de las mesas (con su `@media print`) también va aparte: solo se baja al abrirla.
+const QrDeMesasPagina = lazy(() =>
+  import('./modulos/administracion/mesas/qr/QrDeMesasPagina').then((m) => ({
+    default: m.QrDeMesasPagina,
+  })),
+);
 const CartaPagina = lazy(() =>
   import('./modulos/carta/CartaPagina').then((m) => ({ default: m.CartaPagina })),
 );
@@ -74,6 +85,12 @@ const DisponibilidadPagina = lazy(() =>
 );
 const SalonPagina = lazy(() =>
   import('./modulos/salon/SalonPagina').then((m) => ({ default: m.SalonPagina })),
+);
+// El detalle de un llamado (revisar con el cliente, pasar a la cuenta o descartar) es otro bloque: solo se baja al abrirlo.
+const LlamadoDetallePagina = lazy(() =>
+  import('./modulos/llamados/LlamadoDetallePagina').then((m) => ({
+    default: m.LlamadoDetallePagina,
+  })),
 );
 const OrdenPagina = lazy(() =>
   import('./modulos/salon/OrdenPagina').then((m) => ({ default: m.OrdenPagina })),
@@ -273,6 +290,7 @@ export function App() {
               ) : null}
               <Route element={<RutaDeSalon />}>
                 <Route path="/salon" element={<SalonPagina />} />
+                <Route path="/salon/llamados/:id" element={<LlamadoDetallePagina />} />
                 <Route path="/salon/ordenes/:id" element={<OrdenPagina />} />
                 <Route path="/salon/ordenes/:id/agregar" element={<ComanderoPagina />} />
                 <Route path="/salon/ordenes/:id/mover" element={<MoverCuentaPagina />} />
@@ -301,7 +319,9 @@ export function App() {
                 <Route path="/administracion/usuarios/:id" element={<UsuarioEditarPagina />} />
                 <Route path="/administracion/acceso" element={<AccesoSucursalPagina />} />
                 <Route path="/administracion/mesas" element={<MapaDeMesasPagina />} />
+                <Route path="/administracion/mesas/qr" element={<QrDeMesasPagina />} />
                 <Route path="/administracion/impresion" element={<ImpresionPagina />} />
+                <Route path="/administracion/carta-web" element={<CartaWebPagina />} />
               </Route>
             </Route>
           </Route>

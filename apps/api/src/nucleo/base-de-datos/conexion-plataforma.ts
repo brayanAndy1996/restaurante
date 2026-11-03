@@ -203,8 +203,8 @@ export class ConexionPlataforma {
       }
       // Criterio 38e: la misma lista de nombres que la guarda de la API (set_config, pg_settings,
       // ts_*, *_to_xml*, app.empresa_id, fijar_contexto_empresa y fijar_contexto_actor sin excepción
-      // (el actor lo fija `fijarActor`, que no pasa por aquí), empresa_de_usuario, pg_stat_activity,
-      // señales, objetos grandes…) y el rechazo de `U&"…"`. Aquí no hay lista blanca de sentencias,
+      // (el actor lo fija `fijarActor`, que no pasa por aquí), empresa_de_usuario, empresa_de_carta,
+      // empresa_de_codigo_mesa, pg_stat_activity, señales, objetos grandes…) y el rechazo de `U&"…"`. Aquí no hay lista blanca de sentencias,
       // pero `DO`, `PREPARE` y `SET` (las vías para ejecutar SQL dinámico sin nombrarlo) ya se
       // rechazaron arriba. Es un `ConsultaProhibidaError`, no un error de la base.
       if (mencionaContextoDeEmpresa(texto)) throw new ConsultaProhibidaError(PROHIBIDO_NOMBRE);

@@ -1,10 +1,19 @@
 import { Aviso, Esqueleto } from '@restaurante/ui';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 interface Props {
   texto: string;
   /** Lo que oyen los lectores de pantalla en lugar del dibujo. */
   etiqueta: string;
+  /**
+   * Módulos en blanco alrededor del código (4 por defecto). La hoja de QR de las mesas pone menos dentro del
+   * dibujo porque la tarjeta impresa ya deja blanco alrededor.
+   */
+  margen?: number;
+  /** Se llama cuando el dibujo terminó (`true`) o falló (`false`): la hoja de QR espera a todos antes de imprimir. */
+  alTerminar?: (dibujado: boolean) => void;
+  /** Qué hacer si no se pudo dibujar (por defecto, lo de la app puente). */
+  textoDeFallo?: string;
 }
 
 type Dibujo =
@@ -26,8 +35,18 @@ const MARGEN_EN_MODULOS = 4;
  * "Vincular puente": no cuenta en el paquete inicial. Nivel de corrección M: aguanta una pantalla con brillo
  * bajo o un reflejo sin volver el código demasiado denso.
  */
-export function CodigoQr({ texto, etiqueta }: Props) {
+export function CodigoQr({
+  texto,
+  etiqueta,
+  margen = MARGEN_EN_MODULOS,
+  alTerminar,
+  textoDeFallo = 'Copia el texto de abajo y pégalo en la app puente.',
+}: Props) {
   const [dibujo, setDibujo] = useState<Dibujo>({ estado: 'cargando' });
+  const aviso = useRef(alTerminar);
+  useEffect(() => {
+    aviso.current = alTerminar;
+  });
 
   useEffect(() => {
     let vigente = true;
@@ -50,23 +69,26 @@ export function CodigoQr({ texto, etiqueta }: Props) {
             }
             const inicio = columna;
             while (columna < modulos && qr.isDark(fila, columna)) columna++;
-            ruta += `M${inicio + MARGEN_EN_MODULOS} ${fila + MARGEN_EN_MODULOS}h${columna - inicio}v1h-${columna - inicio}z`;
+            ruta += `M${inicio + margen} ${fila + margen}h${columna - inicio}v1h-${columna - inicio}z`;
           }
         }
-        setDibujo({ estado: 'listo', lado: modulos + MARGEN_EN_MODULOS * 2, ruta });
+        setDibujo({ estado: 'listo', lado: modulos + margen * 2, ruta });
+        aviso.current?.(true);
       })
       .catch(() => {
-        if (vigente) setDibujo({ estado: 'fallo' });
+        if (!vigente) return;
+        setDibujo({ estado: 'fallo' });
+        aviso.current?.(false);
       });
     return () => {
       vigente = false;
     };
-  }, [texto]);
+  }, [texto, margen]);
 
   if (dibujo.estado === 'fallo') {
     return (
       <Aviso tipo="alerta" titulo="No pudimos dibujar el código">
-        Copia el texto de abajo y pégalo en la app puente.
+        {textoDeFallo}
       </Aviso>
     );
   }

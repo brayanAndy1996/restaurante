@@ -171,6 +171,8 @@ export class FiltroGlobalErrores implements ExceptionFilter {
       if (excepcion.detalle?.usadoEn) cuerpo.usadoEn = excepcion.detalle.usadoEn;
       if (excepcion.detalle?.seQuita) cuerpo.seQuita = excepcion.detalle.seQuita;
       if (excepcion.detalle?.ordenId) cuerpo.ordenId = excepcion.detalle.ordenId;
+      if (excepcion.detalle?.atendidoPor) cuerpo.atendidoPor = excepcion.detalle.atendidoPor;
+      if (excepcion.detalle?.estado) cuerpo.estado = excepcion.detalle.estado;
       return { estado: excepcion.getStatus(), cuerpo };
     }
     const estado = estado4xxDe(excepcion);

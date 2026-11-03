@@ -8,7 +8,10 @@ import {
   EstadoVacio,
   EtiquetaDeEstado,
   Icono,
+  IconoCuenta,
+  IconoLlamarMozo,
   IconoMapa,
+  IconoPedido,
   IconoUnidas,
   Interruptor,
   ListaDeFilas,
@@ -17,8 +20,8 @@ import {
   claseFila,
   nombreAccesibleDeMesa,
 } from '@restaurante/ui';
-import { useRef, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { lazy, Suspense, useRef, useState } from 'react';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { Pagina } from '../../componentes/Pagina';
 import {
   guardarPreferenciaDelSalon,
@@ -28,6 +31,8 @@ import {
 import { useAnchoDe } from '../../lib/medidas';
 import { useEstadoTiempoReal } from '../../lib/tiempo-real';
 import { useSesionActiva } from '../acceso/sesion';
+import { TEXTO_DE_TIPO, clasificarLlamados } from '../llamados/llamados';
+import { useAhoraDeLlamados, useLlamados } from '../llamados/useLlamados';
 import { AbrirMesaHoja, type MesaPorAbrir } from './AbrirMesaHoja';
 import { ListaDeAvisos } from './ListaDeAvisos';
 import {
@@ -39,6 +44,7 @@ import {
   gruposDeZona,
   ladoDeCelda,
   mesasDeCuadricula,
+  type LlamadoDeMesa,
   mesasEnOrdenDeLectura,
   rutaDeOrden,
   textoDeConteo,
@@ -47,6 +53,17 @@ import {
 import { useAhoraDelSalon, useSalon } from './useSalon';
 
 type ZonaDelSalon = SalonRespuesta['zonas'][number];
+
+// La lista de llamados, su hoja de atención y el detalle se bajan al tocar «Llamados» (presupuesto del paquete).
+const ICONO_DE_LLAMADO = {
+  PEDIDO: IconoPedido,
+  LLAMAR_MOZO: IconoLlamarMozo,
+  PEDIR_CUENTA: IconoCuenta,
+} as const;
+
+const ListaDeLlamados = lazy(() =>
+  import('../llamados/ListaDeLlamados').then((m) => ({ default: m.ListaDeLlamados })),
+);
 
 /** `/salon`: el mapa de la sucursal por zona, o la lista, con el estado de cada mesa (criterios 7, 8 y 88). */
 export function SalonPagina() {
@@ -85,6 +102,19 @@ function SalonDeSucursal({
   const ahora = useAhoraDelSalon(datos);
   const tiempoReal = useEstadoTiempoReal();
 
+  // «Mesas» y «Llamados (n)» (005, criterio 68). Los pendientes también ponen su etiqueta en la baldosa de la mesa.
+  const [parametros, ponerParametros] = useSearchParams();
+  const verLlamados = parametros.get('vista') === 'llamados';
+  const consultaDeLlamados = useLlamados(sucursalId);
+  const ahoraDeLlamados = useAhoraDeLlamados(consultaDeLlamados.data);
+  const { pendientes } = clasificarLlamados(
+    consultaDeLlamados.data?.respuesta.llamados ?? [],
+    ahoraDeLlamados,
+  );
+  const llamadosPorMesa = new Map<string, LlamadoDeMesa>(
+    pendientes.map((l) => [l.mesa.id, { tipo: l.tipo, texto: TEXTO_DE_TIPO[l.tipo] }]),
+  );
+
   const marco = useRef<HTMLDivElement>(null);
   const ancho = useAnchoDe(marco);
   const [preferencia, setPreferencia] = useState(() => preferenciaDelSalon(empresaId, sucursalId));
@@ -113,11 +143,37 @@ function SalonDeSucursal({
   return (
     <Pagina titulo="Salón" ancho="ancho">
       <div className="salon" ref={marco}>
+        <Segmentos
+          etiqueta="Qué ver en el salón"
+          opciones={[
+            { valor: 'mesas', etiqueta: 'Mesas' },
+            {
+              valor: 'llamados',
+              etiqueta:
+                consultaDeLlamados.data === undefined
+                  ? 'Llamados'
+                  : `Llamados (${pendientes.length})`,
+            },
+          ]}
+          valor={verLlamados ? 'llamados' : 'mesas'}
+          onCambio={(valor) =>
+            ponerParametros(valor === 'llamados' ? { vista: 'llamados' } : {}, { replace: true })
+          }
+        />
         <ListaDeAvisos />
-        {datos === undefined && consulta.isPending ? (
+        {verLlamados ? (
+          <Suspense
+            fallback={
+              <EsqueletoDeLista filas={3} conInicial={false} etiqueta="Cargando los llamados" />
+            }
+          >
+            <ListaDeLlamados sucursalId={sucursalId} />
+          </Suspense>
+        ) : null}
+        {datos === undefined && consulta.isPending && !verLlamados ? (
           <EsqueletoDeLista filas={5} conInicial={false} etiqueta="Cargando el salón" />
         ) : null}
-        {datos === undefined && consulta.isError ? (
+        {datos === undefined && consulta.isError && !verLlamados ? (
           <ErrorDeCarga
             titulo="No pudimos cargar el salón"
             onReintentar={() => void consulta.refetch()}
@@ -126,17 +182,17 @@ function SalonDeSucursal({
             Revisa tu conexión e inténtalo de nuevo.
           </ErrorDeCarga>
         ) : null}
-        {datos !== undefined && consulta.isError ? (
+        {datos !== undefined && consulta.isError && !verLlamados ? (
           <Aviso tipo="alerta" titulo="No pudimos actualizar el salón">
             Lo que ves puede estar desactualizado. Seguimos intentando.
           </Aviso>
         ) : null}
 
-        {datos !== undefined && (zonas.length === 0 || sinMesas) ? (
+        {!verLlamados && datos !== undefined && (zonas.length === 0 || sinMesas) ? (
           <SalonSinMesas esAdministrador={esAdministrador} />
         ) : null}
 
-        {datos !== undefined && zona && !sinMesas ? (
+        {!verLlamados && datos !== undefined && zona && !sinMesas ? (
           <>
             {zonas.length > 1 ? (
               <Segmentos
@@ -171,6 +227,7 @@ function SalonDeSucursal({
               <MapaDeZona
                 zona={zona}
                 ahora={ahora}
+                llamados={llamadosPorMesa}
                 lado={ladoDeCelda(ancho, zona.columnas)}
                 onTocar={(id) => {
                   const mesa = zona.mesas.find((m) => m.id === id);
@@ -178,7 +235,12 @@ function SalonDeSucursal({
                 }}
               />
             ) : (
-              <ListaDeZona zona={zona} ahora={ahora} onTocar={tocarMesa} />
+              <ListaDeZona
+                zona={zona}
+                ahora={ahora}
+                llamados={llamadosPorMesa}
+                onTocar={tocarMesa}
+              />
             )}
           </>
         ) : null}
@@ -230,11 +292,13 @@ function ResumenDeZona({ zona }: { zona: ZonaDelSalon }) {
 function MapaDeZona({
   zona,
   ahora,
+  llamados,
   lado,
   onTocar,
 }: {
   zona: ZonaDelSalon;
   ahora: number;
+  llamados: ReadonlyMap<string, LlamadoDeMesa>;
   lado: number;
   onTocar: (mesaId: string) => void;
 }) {
@@ -245,7 +309,7 @@ function MapaDeZona({
         etiqueta={`Mesas de ${zona.nombre}`}
         columnas={zona.columnas}
         filas={zona.filas}
-        mesas={mesasDeCuadricula(zona, ahora)}
+        mesas={mesasDeCuadricula(zona, ahora, llamados)}
         tamanoCelda={lado}
         onElegirMesa={onTocar}
       />
@@ -266,16 +330,19 @@ function MapaDeZona({
 function ListaDeZona({
   zona,
   ahora,
+  llamados,
   onTocar,
 }: {
   zona: ZonaDelSalon;
   ahora: number;
+  llamados: ReadonlyMap<string, LlamadoDeMesa>;
   onTocar: (mesa: MesaDelSalon) => void;
 }) {
   return (
     <ListaDeFilas etiqueta={`Mesas de ${zona.nombre}`}>
       {mesasEnOrdenDeLectura(zona).map((mesa) => {
         const total = totalDeMesa(mesa);
+        const llamado = llamados.get(mesa.id);
         return (
           <li key={mesa.id}>
             <button
@@ -286,6 +353,7 @@ function ListaDeZona({
                 ayudaDeFila(mesa, ahora),
                 TEXTO_DE_ESTADO[mesa.estado],
                 total,
+                llamado?.texto,
               ]
                 .filter(Boolean)
                 .join(', ')}
@@ -294,6 +362,15 @@ function ListaDeZona({
               <ContenidoDeFila
                 titulo={nombreAccesibleDeMesa(mesa.nombre)}
                 ayuda={ayudaDeFila(mesa, ahora)}
+                {...(llamado
+                  ? {
+                      extra: (
+                        <EtiquetaDeEstado tono="alerta" icono={ICONO_DE_LLAMADO[llamado.tipo]}>
+                          {llamado.texto}
+                        </EtiquetaDeEstado>
+                      ),
+                    }
+                  : {})}
                 derecha={
                   <span className="salon__fila-estado">
                     <EtiquetaDeEstado tono={TONO_DE_ESTADO[mesa.estado]}>

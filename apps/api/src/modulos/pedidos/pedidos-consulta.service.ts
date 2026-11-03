@@ -15,6 +15,15 @@ export interface OrdenAbiertaResumen {
   abiertaEn: Date;
 }
 
+/** La orden abierta vigente de una mesa, con su mozo responsable (historia 005, criterios 35, 36 y 48). */
+export interface OrdenVigenteDeMesa {
+  mesaId: string;
+  /** La orden en la que está la mesa: la principal si la mesa se unió a otra. */
+  ordenId: string;
+  estado: OrdenAbiertaResumen['estado'];
+  mozoId: string | null;
+}
+
 interface FilaOrdenAbierta {
   id: string;
   estado: OrdenAbiertaResumen['estado'];
@@ -82,6 +91,42 @@ export class PedidosConsultaService implements OnModuleInit {
       { bind: [ordenId], type: QueryTypes.SELECT },
     );
     return filas.map((f) => f.id);
+  }
+
+  /**
+   * De cada mesa pedida que tenga una orden abierta (`ABIERTA` o `EN_PRECUENTA`), esa orden con su mozo
+   * responsable; la principal si la mesa se unió a otra (al unir, las mesas pasan a la principal en `orden_mesa`).
+   * Las mesas libres no aparecen. Es la lectura que usa el módulo de llamados (historia 005); solo lee.
+   */
+  async ordenesVigentesDeMesas(
+    mesaIds: readonly string[],
+    transaccion?: Transaction,
+  ): Promise<Map<string, OrdenVigenteDeMesa>> {
+    const resultado = new Map<string, OrdenVigenteDeMesa>();
+    if (mesaIds.length === 0) return resultado;
+    const filas = await this.conexion.query<{
+      mesa_id: string;
+      orden_id: string;
+      estado: OrdenAbiertaResumen['estado'];
+      mozo_id: string | null;
+    }>(
+      `SELECT om.mesa_id, o.id AS orden_id, o.estado, o.mozo_id
+         FROM orden_mesa om
+         JOIN orden o ON o.id = om.orden_id AND o.empresa_id = om.empresa_id
+        WHERE om.mesa_id = ANY($1::uuid[]) AND om.hasta IS NULL
+          AND o.estado IN ('ABIERTA', 'EN_PRECUENTA')
+        ORDER BY om.desde, om.id`,
+      { bind: [[...new Set(mesaIds)]], type: QueryTypes.SELECT, transaction: transaccion },
+    );
+    for (const f of filas) {
+      resultado.set(f.mesa_id, {
+        mesaId: f.mesa_id,
+        ordenId: f.orden_id,
+        estado: f.estado,
+        mozoId: f.mozo_id,
+      });
+    }
+    return resultado;
   }
 
   /** `true` si la sucursal tiene alguna orden `ABIERTA` o `EN_PRECUENTA`. */

@@ -109,9 +109,10 @@ describe('la conexión de la sesión', () => {
       [...CLAVES_TIEMPO_REAL.cocina],
       [...CLAVES_TIEMPO_REAL.disponibilidad],
       [...CLAVES_TIEMPO_REAL.impresionEstado],
+      [...CLAVES_TIEMPO_REAL.llamados],
     ]);
     // Si ya hay una lectura en camino, esa sirve: no se cancela para bajar lo mismo dos veces.
-    expect(opcionesDeInvalidacion).toEqual(Array(5).fill({ cancelRefetch: false }));
+    expect(opcionesDeInvalidacion).toEqual(Array(6).fill({ cancelRefetch: false }));
   });
 
   it('un aviso de cambio sí cancela la lectura en curso, que pudo salir antes del cambio', async () => {
@@ -284,6 +285,31 @@ describe('el estado de la impresión', () => {
       [...CLAVES_TIEMPO_REAL.impresionEstado],
       [...CLAVES_TIEMPO_REAL.impresoras],
     ]);
+  });
+});
+
+describe('los llamados desde la mesa (005)', () => {
+  it('llamado.nuevo y llamado.cambio vuelven a pedir la lista y el detalle de los llamados', async () => {
+    const socket = await abrir();
+    socket.conectar();
+    invalidadas.length = 0;
+    socket.desdeElServidor('llamado.nuevo', { llamadoId: ORDEN, tipo: 'PEDIDO' });
+    socket.desdeElServidor('llamado.cambio', { llamadoId: ORDEN, estado: 'ATENDIDO' });
+    expect(invalidadas).toEqual([
+      [...CLAVES_TIEMPO_REAL.llamados],
+      [...CLAVES_TIEMPO_REAL.llamados],
+    ]);
+  });
+
+  it('se reparten a quien los oiga, tal como llegan', async () => {
+    const socket = await abrir();
+    socket.conectar();
+    const oyente = vi.fn();
+    const dejar = alRecibirEvento(oyente);
+    const datos = { llamadoId: ORDEN, tipo: 'LLAMAR_MOZO', destinatarios: null };
+    socket.desdeElServidor('llamado.nuevo', datos);
+    expect(oyente).toHaveBeenCalledWith('llamado.nuevo', datos);
+    dejar();
   });
 });
 

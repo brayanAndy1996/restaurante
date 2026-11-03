@@ -1,5 +1,6 @@
 import { HttpException } from '@nestjs/common';
 import type { CampoError, CodigoError, SeQuita, UsadoEn } from '@restaurante/contratos';
+import type { EstadoLlamado } from '@restaurante/dominio';
 import type { ZodError } from 'zod';
 
 /**
@@ -11,10 +12,30 @@ export interface DetalleDeError {
   usadoEn?: UsadoEn;
   seQuita?: SeQuita;
   ordenId?: string;
+  /** Solo en `LLAMADO_TOMADO` (historia 005, criterio 43): quién ya está atendiendo el llamado. */
+  atendidoPor?: { id: string; nombre: string };
+  /** Solo en `LLAMADO_CERRADO` (historia 005, criterios 44 y 53): el estado en que quedó el llamado. */
+  estado?: EstadoLlamado;
+}
+
+/** Opciones de un `ErrorAplicacion` que no son parte de su respuesta HTTP. */
+export interface OpcionesDeError {
+  /** Ver `ErrorAplicacion.conservarCambios`. */
+  conservarCambios?: boolean;
 }
 
 /** Error de negocio con código estable; el filtro global lo responde como `{ codigo, mensaje, campos? }`. */
 export class ErrorAplicacion extends HttpException {
+  /**
+   * Solo de lectura y fijado al construir el error (opción `conservarCambios`), nunca después. Si es `true`, la
+   * petición responde este error **pero confirma** lo que ya escribió (en lugar de revertirlo):
+   * `ContextoEmpresa.ejecutar` hace `COMMIT` y la idempotencia libera la clave. Solo para el caso de que el rechazo
+   * deba dejar constancia en la base, como guardar un llamado vencido al intentar atenderlo (historia 005, criterio
+   * 44). Quien lo usa escribe únicamente lo que quiere conservar antes de lanzarlo: cualquier otro cambio de la
+   * petición también se confirmaría. Los eventos registrados con `alConfirmar` no se publican.
+   */
+  readonly conservarCambios: boolean;
+
   constructor(
     estado: number,
     readonly codigo: CodigoError,
@@ -24,8 +45,10 @@ export class ErrorAplicacion extends HttpException {
     readonly reintentarEnSegundos?: number,
     /** Solo en los 409 del cambio de tipo de un producto (criterios 10b y 10c de 003). */
     readonly detalle?: DetalleDeError,
+    opciones: OpcionesDeError = {},
   ) {
     super(mensaje, estado);
+    this.conservarCambios = opciones.conservarCambios === true;
   }
 }
 

@@ -38,6 +38,8 @@ export const CLAVES_TIEMPO_REAL = {
   impresionEstado: ['impresion', 'estado'] as const,
   /** La lista de impresoras de Ajustes, con su estado y sus pendientes (`['impresion', 'impresoras', sucursalId]`). */
   impresoras: ['impresion', 'impresoras'] as const,
+  /** Los llamados desde la mesa (005): la lista (`['llamados', 'lista', sucursalId]`) y el detalle abierto (`['llamados', 'detalle', id]`). */
+  llamados: ['llamados'] as const,
 } as const;
 
 /** Cada cuánto se refrescan las pantallas en vivo cuando no hay conexión de Socket.IO (criterio 97). */
@@ -127,7 +129,9 @@ export type NombreDeEvento =
   | 'cocina.listo'
   | 'carta.disponibilidad'
   | 'carta.actualizada'
-  | 'impresion.estado';
+  | 'impresion.estado'
+  | 'llamado.nuevo'
+  | 'llamado.cambio';
 
 const EVENTOS: readonly NombreDeEvento[] = [
   'salon.cambio',
@@ -139,6 +143,8 @@ const EVENTOS: readonly NombreDeEvento[] = [
   'carta.disponibilidad',
   'carta.actualizada',
   'impresion.estado',
+  'llamado.nuevo',
+  'llamado.cambio',
 ];
 
 type OyenteDeEvento = (nombre: NombreDeEvento, datos: unknown) => void;
@@ -221,6 +227,12 @@ function alLlegarEvento(cliente: QueryClient, nombre: NombreDeEvento, datos: unk
       invalidar(cliente, CLAVES_TIEMPO_REAL.impresionEstado);
       invalidar(cliente, CLAVES_TIEMPO_REAL.impresoras);
       break;
+    case 'llamado.nuevo':
+    case 'llamado.cambio':
+      // Llegó o cambió un llamado (005): la lista, el detalle abierto y las etiquetas del mapa lo vuelven a pedir.
+      // `llamado.cambio` con atender también abre la mesa: los eventos del salón llegan aparte (`salon.cambio`).
+      invalidar(cliente, CLAVES_TIEMPO_REAL.llamados);
+      break;
   }
   oyentesDeEvento.forEach((oyente) => oyente(nombre, datos));
 }
@@ -233,6 +245,7 @@ function invalidarTodo(cliente: QueryClient): void {
   invalidar(cliente, CLAVES_TIEMPO_REAL.cocina, opciones);
   invalidar(cliente, CLAVES_TIEMPO_REAL.disponibilidad, opciones);
   invalidar(cliente, CLAVES_TIEMPO_REAL.impresionEstado, opciones);
+  invalidar(cliente, CLAVES_TIEMPO_REAL.llamados, opciones);
 }
 
 // --- La conexión de la sesión ----------------------------------------------------------------

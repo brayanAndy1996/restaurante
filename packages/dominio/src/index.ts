@@ -33,3 +33,5 @@ export type {
 } from './suscripcion';
 export * from './carta';
 export * from './salon';
+export * from './llamados';
+export * from './carta-web';

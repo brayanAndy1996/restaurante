@@ -1,4 +1,4 @@
-import type { LineaEnvioEntrada } from '@restaurante/contratos';
+import type { LineaEnvioEntrada, LineaParaBorrador } from '@restaurante/contratos';
 import { totalOrden } from '@restaurante/dominio';
 import { useCallback, useSyncExternalStore } from 'react';
 
@@ -32,6 +32,11 @@ export interface LineaBorrador {
   precioUnitario: string;
   /** Por qué la API rechazó esta línea en el último envío ("Agotado"); desaparece al editarla. */
   rechazo?: string;
+  /**
+   * El llamado de la mesa del que viene la línea (005, criterio 72). Sirve para no agregar dos veces un mismo
+   * llamado al borrador; no viaja a la API.
+   */
+  llamadoId?: string;
 }
 
 export interface BorradorGuardado {
@@ -130,6 +135,47 @@ export function cambiarBorrador(
 
 export function borrarBorrador(clave: string): void {
   guardarBorrador(clave, VACIO);
+}
+
+/** Qué pasó al pasar un llamado a un borrador. */
+export type ResultadoDeAgregadoDeLlamado = 'agregado' | 'repetido' | 'bloqueado';
+
+/**
+ * Agrega al borrador `clave` las líneas de un llamado que el mozo pasó a la cuenta (005, criterios 46 y 72).
+ * Las líneas ya traen los precios del sistema. Nada llega a cocina: el mozo revisa el pedido con el cliente y
+ * pulsa "Enviar" como siempre.
+ *
+ * - `repetido`: el borrador ya tiene líneas de ese llamado (una réplica del paso, o un segundo toque), así que
+ *   no se agrega nada y no se duplica el pedido.
+ * - `bloqueado`: hay un envío en curso o sin terminar; cambiar las líneas ahora lo contradiría (criterio 91 de
+ *   004). Quien llama avisa a la persona y reintenta cuando el envío termine.
+ */
+export function agregarLineasDeLlamado(
+  clave: string,
+  llamadoId: string,
+  lineas: readonly LineaParaBorrador[],
+): ResultadoDeAgregadoDeLlamado {
+  const actual = leerBorrador(clave);
+  if (actual.envioId !== null || leerEstadoDeEnvio(clave).fase !== null) return 'bloqueado';
+  if (actual.lineas.some((l) => l.llamadoId === llamadoId)) return 'repetido';
+  const nuevas: LineaBorrador[] = lineas.map((l) => ({
+    clave: `llamado.${llamadoId}.${l.posicion}`,
+    productoId: l.productoId,
+    nombre: l.nombre,
+    modificadores: l.modificadores.map((m) => ({
+      id: m.id,
+      nombre: m.nombre,
+      precioExtra: m.precioExtra,
+    })),
+    cantidad: l.cantidad,
+    observacion: l.observacion ?? '',
+    tiempo: 1,
+    paraLlevar: false,
+    precioUnitario: l.precioUnitario,
+    llamadoId,
+  }));
+  guardarBorrador(clave, { ...actual, lineas: [...actual.lineas, ...nuevas] });
+  return 'agregado';
 }
 
 /**
@@ -237,7 +283,18 @@ export function useBorrador(clave: string): BorradorEnPantalla {
       cambiarBorrador(clave, (b) =>
         b.envioId
           ? b
-          : { ...b, lineas: b.lineas.map((l) => (l.clave === claveDeLinea ? linea : l)) },
+          : {
+              ...b,
+              // Editar una línea que vino de un llamado no la desliga de él: una réplica no la duplicaría.
+              lineas: b.lineas.map((l) =>
+                l.clave === claveDeLinea
+                  ? {
+                      ...linea,
+                      ...(l.llamadoId && !linea.llamadoId ? { llamadoId: l.llamadoId } : {}),
+                    }
+                  : l,
+              ),
+            },
       ),
     [clave],
   );

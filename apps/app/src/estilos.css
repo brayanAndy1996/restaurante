@@ -1196,6 +1196,10 @@ body,
 }
 
 /* Mapa de mesas (004): zonas, cuadrícula y el formulario que se abre debajo */
+.mapa__enlaces {
+  display: flex;
+}
+
 .mapa__herramientas {
   display: flex;
   flex-wrap: wrap;
