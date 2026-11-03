@@ -11,3 +11,5 @@ export * from './carta';
 export * from './salon';
 export * from './impresion';
 export * from './puente';
+export * from './carta-web';
+export * from './llamados';

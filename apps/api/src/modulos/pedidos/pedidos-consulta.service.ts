@@ -15,6 +15,15 @@ export interface OrdenAbiertaResumen {
   abiertaEn: Date;
 }
 
+/** La orden abierta vigente de una mesa, con su mozo responsable (historia 005, criterios 35, 36 y 48). */
+export interface OrdenVigenteDeMesa {
+  mesaId: string;
+  /** La orden en la que está la mesa: la principal si la mesa se unió a otra. */
+  ordenId: string;
+  estado: OrdenAbiertaResumen['estado'];
+  mozoId: string | null;
+}
+
 interface FilaOrdenAbierta {
   id: string;
   estado: OrdenAbiertaResumen['estado'];
@@ -82,6 +91,20 @@ export class PedidosConsultaService implements OnModuleInit {
       { bind: [ordenId], type: QueryTypes.SELECT },
     );
     return filas.map((f) => f.id);
+  }
+
+  /**
+   * De cada mesa pedida que tenga una orden abierta (`ABIERTA` o `EN_PRECUENTA`), esa orden con su mozo
+   * responsable; la principal si la mesa se unió a otra. Las mesas libres no aparecen. Es la lectura que usa el
+   * módulo de llamados (historia 005); solo lee. FIRMA: la implementación llega en la fase C (T10).
+   */
+  async ordenesVigentesDeMesas(
+    mesaIds: readonly string[],
+    transaccion?: Transaction,
+  ): Promise<Map<string, OrdenVigenteDeMesa>> {
+    void mesaIds;
+    void transaccion;
+    throw new Error('No implementado');
   }
 
   /** `true` si la sucursal tiene alguna orden `ABIERTA` o `EN_PRECUENTA`. */

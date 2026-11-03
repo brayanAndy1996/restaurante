@@ -156,3 +156,32 @@ export async function buscarEmpresaDeUsuario(
   } as OpcionesSinEmpresa & { type: QueryTypes.SELECT });
   return filas[0]?.empresa_id ?? null;
 }
+
+/**
+ * Empresa de la carta web con esa dirección (en minúsculas), o `null` si no existe (historia 005, criterios 12 y
+ * 13). Corre fuera de todo contexto de empresa, con la consulta fija del motivo `carta-publica`; la API no puede
+ * enumerar direcciones: solo la función de la base responde, y solo por una dirección exacta.
+ * FIRMA: la implementación (motivo, consulta fija y función de la base) llega en la fase C (T5).
+ */
+export async function buscarEmpresaDeCarta(
+  conexion: Sequelize,
+  slug: string,
+): Promise<string | null> {
+  void conexion;
+  void slug;
+  throw new Error('No implementado');
+}
+
+/**
+ * Empresa de la mesa con ese código (distingue mayúsculas), o `null` si no existe (historia 005, criterios 12 y
+ * 13). Corre fuera de todo contexto de empresa, con la consulta fija del motivo `codigo-mesa`.
+ * FIRMA: la implementación llega en la fase C (T5).
+ */
+export async function buscarEmpresaDeCodigoMesa(
+  conexion: Sequelize,
+  codigo: string,
+): Promise<string | null> {
+  void conexion;
+  void codigo;
+  throw new Error('No implementado');
+}

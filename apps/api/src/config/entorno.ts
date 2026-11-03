@@ -16,6 +16,9 @@ export const ORIGENES_PERMITIDOS_LOCAL = 'http://localhost:5173';
 
 const MINIMO_BYTES_PIN_PEPPER = 32;
 
+/** Valor de `CARTA_WEB_URL` con `NODE_ENV` `development` o `test` si no se define (`apps/web` en su puerto local). */
+export const CARTA_WEB_URL_LOCAL = 'http://localhost:3001';
+
 /** Valores de `ARCHIVOS_DRIVER`: dónde se guardan las fotos de la carta. */
 export const DRIVERS_DE_ARCHIVOS = ['memoria', 'disco', 'r2'] as const;
 export type DriverDeArchivos = (typeof DRIVERS_DE_ARCHIVOS)[number];
@@ -52,6 +55,9 @@ const entornoSchema = z.object({
   DATABASE_TIEMPO_REAL_URL: urlPostgres.optional(),
   // URL pública de la API que va en el QR de vinculación del puente de impresión (historia 004, 3b, criterio 106).
   API_URL_PUBLICA: z.string().optional(),
+  // Carta web y pedido desde la mesa (historia 005): la URL base de `apps/web` y la cabecera con la IP real del cliente.
+  CARTA_WEB_URL: z.string().optional(),
+  CABECERA_IP_CLIENTE: z.string().optional(),
 });
 
 type EntornoLeido = z.infer<typeof entornoSchema>;
@@ -98,6 +104,20 @@ export interface Entorno extends Omit<
    * `CONFIGURACION_INCOMPLETA`.
    */
   API_URL_PUBLICA: string | undefined;
+  /**
+   * URL base pública de la carta web (`apps/web`), sin barra final: la de los QR de las mesas
+   * (`<CARTA_WEB_URL>/m/<código>`), la de `cartaWebRespuesta`, el origen que CORS acepta además en `/publico/*` y
+   * la URL canónica de la carta (historia 005). Con `NODE_ENV` `development` o `test` y sin definir,
+   * `http://localhost:3001`; en producción puede faltar (`undefined`): la API avisa con un `warn` al arrancar y las
+   * rutas de QR responden 503 `CONFIGURACION_INCOMPLETA`.
+   */
+  CARTA_WEB_URL: string | undefined;
+  /**
+   * Nombre de la cabecera HTTP con la IP real del cliente (en producción, `cf-connecting-ip` detrás de
+   * Cloudflare), en minúsculas. Sin definir, la IP de la conexión. Solo sirve para calcular la huella de la IP
+   * del límite de llamados (criterio 33 de 005): la IP nunca se guarda.
+   */
+  CABECERA_IP_CLIENTE: string | undefined;
 }
 
 /** Carpeta del almacén en disco si no se define `ARCHIVOS_DIRECTORIO`. */
@@ -189,6 +209,8 @@ export function cargarEntorno(env: NodeJS.ProcessEnv = process.env): Entorno {
       : undefined;
   validarArchivos(limpio, driver, problemas);
   validarApiUrlPublica(limpio.API_URL_PUBLICA, problemas);
+  validarCartaWebUrl(limpio.CARTA_WEB_URL, problemas);
+  validarCabeceraIpCliente(limpio.CABECERA_IP_CLIENTE, problemas);
 
   if (problemas.length > 0 || !resultado.success) throw new EntornoInvalidoError(problemas);
   const driverPorDefecto: DriverDeArchivos | undefined =
@@ -201,6 +223,8 @@ export function cargarEntorno(env: NodeJS.ProcessEnv = process.env): Entorno {
   const apiUrlPublica =
     resultado.data.API_URL_PUBLICA ??
     (conDefectos ? `http://localhost:${resultado.data.PORT}` : undefined);
+  const cartaWebUrl =
+    resultado.data.CARTA_WEB_URL ?? (conDefectos ? CARTA_WEB_URL_LOCAL : undefined);
   const urlPublica =
     resultado.data.ARCHIVOS_URL_PUBLICA ??
     (driverFinal === 'disco' ? `http://localhost:${resultado.data.PORT}/archivos` : undefined);
@@ -214,6 +238,8 @@ export function cargarEntorno(env: NodeJS.ProcessEnv = process.env): Entorno {
     TIEMPO_REAL:
       resultado.data.TIEMPO_REAL ?? (limpio.NODE_ENV === 'test' ? 'deshabilitado' : 'habilitado'),
     API_URL_PUBLICA: apiUrlPublica?.replace(/\/+$/, ''),
+    CARTA_WEB_URL: cartaWebUrl?.replace(/\/+$/, ''),
+    CABECERA_IP_CLIENTE: resultado.data.CABECERA_IP_CLIENTE?.toLowerCase(),
   };
 }
 
@@ -279,6 +305,33 @@ function validarApiUrlPublica(valor: string | undefined, problemas: string[]): v
   if (!valida) {
     problemas.push(
       'API_URL_PUBLICA no es una URL http(s) válida (por ejemplo https://api.ejemplo.pe)',
+    );
+  }
+}
+
+/** `CARTA_WEB_URL`, si se define, debe ser una URL http(s): es el origen de la carta web y la base de los QR. */
+function validarCartaWebUrl(valor: string | undefined, problemas: string[]): void {
+  if (valor === undefined) return;
+  let valida = false;
+  try {
+    const url = new URL(valor);
+    valida = url.protocol === 'http:' || url.protocol === 'https:';
+  } catch {
+    valida = false;
+  }
+  if (!valida) {
+    problemas.push(
+      'CARTA_WEB_URL no es una URL http(s) válida (por ejemplo https://carta.ejemplo.pe)',
+    );
+  }
+}
+
+/** `CABECERA_IP_CLIENTE`, si se define, debe ser el nombre de una cabecera HTTP (por ejemplo `cf-connecting-ip`). */
+function validarCabeceraIpCliente(valor: string | undefined, problemas: string[]): void {
+  if (valor === undefined) return;
+  if (!/^[A-Za-z0-9][A-Za-z0-9-]{0,63}$/.test(valor)) {
+    problemas.push(
+      'CABECERA_IP_CLIENTE no es un nombre de cabecera válido (por ejemplo cf-connecting-ip)',
     );
   }
 }

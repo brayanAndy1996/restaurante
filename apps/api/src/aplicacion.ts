@@ -1,3 +1,4 @@
+import { Logger } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import type { INestApplication, LogLevel, Type } from '@nestjs/common';
 import type { NestExpressApplication } from '@nestjs/platform-express';
@@ -88,6 +89,13 @@ export async function crearAplicacion(
       bodyParser: false,
     },
   );
+  // Sin la URL de la carta web no hay QR de mesas ni enlaces de la carta (005): la API arranca igual y las rutas de
+  // QR responden 503 `CONFIGURACION_INCOMPLETA`.
+  if (entorno.NODE_ENV === 'production' && entorno.CARTA_WEB_URL === undefined) {
+    new Logger('Aplicacion').warn(
+      'CARTA_WEB_URL no está configurada: los QR de las mesas y los enlaces de la carta web no están disponibles',
+    );
+  }
   // CORS solo para los orígenes de la PWA (`ORIGENES_PERMITIDOS`), sin cookies: la autenticación va en
   // `Authorization` y en `X-Equipo` (historia 002). Con la lista vacía (solo en pruebas) no se permite
   // ningún origen de navegador.

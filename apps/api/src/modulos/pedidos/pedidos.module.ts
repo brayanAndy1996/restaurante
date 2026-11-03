@@ -4,6 +4,7 @@ import { CartaModule } from '../carta';
 import { ImpresionModule } from '../impresion';
 import { SalonModule } from '../salon';
 import { SeguridadModule } from '../seguridad';
+import { AperturaDeMesasService } from './apertura-de-mesas.service';
 import { AnulacionesController } from './anulaciones.controller';
 import { AnulacionesService } from './anulaciones.service';
 import { CocinaController } from './cocina.controller';
@@ -28,7 +29,8 @@ import { VistaOrdenService } from './vista-orden';
  * `MesasConsultaService` (salón), `CartaVentaService` y `CartaConsultaService` (carta) y `UsuariosConsultaService`
  * (seguridad); nunca consulta tablas ajenas. `INVENTARIO` lo provee `InventarioModule` (global) e `IMPRESION`,
  * `ImpresionModule` (3b). Exporta solo
- * `PedidosConsultaService`, que usará la sección 4.
+ * `PedidosConsultaService` (la sección 4 y los llamados de la 005) y `AperturaDeMesasService` (los llamados);
+ * nada del envío de comandas.
  */
 @Module({
   imports: [AuditoriaModule, SalonModule, CartaModule, SeguridadModule, ImpresionModule],
@@ -42,6 +44,7 @@ import { VistaOrdenService } from './vista-orden';
   ],
   providers: [
     PedidosConsultaService,
+    AperturaDeMesasService,
     OrdenesService,
     EnviosService,
     AnulacionesService,
@@ -53,6 +56,6 @@ import { VistaOrdenService } from './vista-orden';
     EventosPedidos,
     TicketsDePedidos,
   ],
-  exports: [PedidosConsultaService],
+  exports: [PedidosConsultaService, AperturaDeMesasService],
 })
 export class PedidosModule {}

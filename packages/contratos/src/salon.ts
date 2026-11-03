@@ -535,7 +535,8 @@ const salaDeSucursalDeEventoSchema = z.object({
   sucursalId: uuidSchema,
 });
 
-function eventoDeSucursal<N extends string, D extends z.ZodType>(nombre: N, datos: D) {
+/** Evento en la sala de una sucursal: `empresaId`, la sala, el nombre y sus datos (lo usan también 005). */
+export function eventoDeSucursal<N extends string, D extends z.ZodType>(nombre: N, datos: D) {
   return z.object({
     empresaId: uuidSchema,
     sala: salaDeSucursalDeEventoSchema,

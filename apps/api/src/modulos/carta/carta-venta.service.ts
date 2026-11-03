@@ -22,6 +22,16 @@ export interface PrepararLineaEntrada {
   instante: Date;
 }
 
+/** Una línea para `CartaVentaService.prepararLineas`: lo mismo que `prepararLinea` sin la sucursal ni el instante. */
+export type LineaParaPreparar = Pick<
+  PrepararLineaEntrada,
+  'productoId' | 'modificadorIds' | 'cantidad'
+>;
+
+/** El resultado de preparar una línea: la línea preparada o el error que `prepararLinea` habría lanzado. */
+export type ResultadoPrepararLinea =
+  { ok: true; linea: LineaPreparada } | { ok: false; error: unknown };
+
 /**
  * Contrato de la carta para el comandero (sección 3) y la carta web (sección 5): la vista de una sucursal y el
  * armado de una línea de venta (criterios 47 a 52 y 58). Corre dentro de un contexto de empresa
@@ -59,6 +69,24 @@ export class CartaVentaService {
       diaOperativo: dia,
     });
     return armarVista(carta, this.urlFoto);
+  }
+
+  /**
+   * El resultado de `prepararLinea` para cada línea, en el mismo orden, con **un solo cargador** (las consultas de
+   * la carta restringidas a los productos de las líneas) en lugar de uno por línea (historia 005, plan "Costo de
+   * `prepararLineas`"). Cada elemento es la línea preparada o el error que `prepararLinea` habría lanzado con esa
+   * línea (`ErrorProductoNoVendible`, `ErrorSeleccionInvalida` o 404): quien llama decide si es todo o nada. No
+   * escribe nada. FIRMA: la implementación llega en la fase C (T9).
+   */
+  async prepararLineas(
+    sucursalId: string,
+    lineas: readonly LineaParaPreparar[],
+    instante: Date,
+  ): Promise<ResultadoPrepararLinea[]> {
+    void sucursalId;
+    void lineas;
+    void instante;
+    throw new Error('No implementado');
   }
 
   /**

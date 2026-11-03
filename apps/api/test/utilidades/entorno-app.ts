@@ -22,7 +22,7 @@ export interface OpcionesEntornoDePrueba {
 /**
  * Fija en `process.env` las variables de la app de prueba (DATABASE_URL como `restaurante_api`,
  * DATABASE_PLATAFORMA_URL como `restaurante_plataforma`, DATABASE_TIEMPO_REAL_URL como `restaurante_tiempo_real`, NODE_ENV, EMPRESA_POR_HEADER, DB_POOL_MAX,
- * PIN_PEPPER, ORIGENES_PERMITIDOS y ARCHIVOS_DRIVER) y devuelve lo aplicado. Llámala antes de `crearAplicacion()`; se puede llamar varias veces en
+ * PIN_PEPPER, ORIGENES_PERMITIDOS, CABECERA_IP_CLIENTE, CARTA_WEB_URL y ARCHIVOS_DRIVER) y devuelve lo aplicado. Llámala antes de `crearAplicacion()`; se puede llamar varias veces en
  * el mismo proceso para crear apps con configuraciones distintas.
  */
 export function fijarEntornoDePrueba(
@@ -38,6 +38,10 @@ export function fijarEntornoDePrueba(
     DB_POOL_MAX: String(opciones.poolMax ?? 2),
     PIN_PEPPER: PIN_PEPPER_DE_PRUEBA,
     ORIGENES_PERMITIDOS: ORIGENES_PERMITIDOS_DE_PRUEBA,
+    // Carta web y pedido desde la mesa (005): la IP del cliente sale de esta cabecera (las pruebas eligen una con
+    // `ClientePublico`) y los QR y los enlaces usan esta URL base.
+    CABECERA_IP_CLIENTE: 'cf-connecting-ip',
+    CARTA_WEB_URL: 'http://localhost:3001',
     // Las pruebas guardan los archivos en memoria (`AlmacenEnMemoria`), nunca en disco ni en R2. Solo con
     // `NODE_ENV=production`, que exige `r2` para arrancar, se dan credenciales falsas: ninguna prueba las
     // usa (el `AlmacenR2` no sale a la red hasta que se guarda o se borra un archivo).
