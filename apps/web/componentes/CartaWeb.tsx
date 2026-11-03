@@ -5,6 +5,7 @@ import { Cabecera } from './Cabecera';
 import { Disponibilidad } from './Disponibilidad';
 import { FamiliaActual } from './FamiliaActual';
 import { Familias } from './Familias';
+import { Icono } from './Iconos';
 import { Producto } from './Producto';
 
 /** El color de la marca como variables de CSS: el fondo, el texto encima y el indicador sobre blanco. */
@@ -30,8 +31,8 @@ interface Props {
   /** Nombre de la mesa: solo en el modo mesa (`/m/<código>`). */
   mesa?: string;
   /**
-   * La barra fija de abajo del modo mesa (llamar al mozo, pedir la cuenta, ver el pedido). Es el lugar que deja
-   * preparado la tarea T22 y que llena la T24; en la carta pública no hay nada.
+   * La barra fija de abajo del modo mesa (llamar al mozo, pedir la cuenta, ver el pedido): la isla `Mesa`. En la
+   * carta pública no hay nada.
    */
   barra?: ReactNode;
 }
@@ -65,6 +66,12 @@ export function CartaWeb({ carta, empresaSlug, sucursalSlug, mesa, barra }: Prop
         {carta.familias.length > 0 ? <Familias familias={carta.familias} /> : null}
         <main id="carta">
           <div className="columna">
+            {mesa !== undefined && carta.familias.length > 0 ? (
+              <p className="guia" data-guia>
+                <Icono nombre="info" pequeno />
+                Toca un plato para agregarlo a tu pedido.
+              </p>
+            ) : null}
             {carta.familias.length === 0 ? (
               <p className="vacia">Por ahora no hay platos disponibles.</p>
             ) : null}
@@ -79,7 +86,12 @@ export function CartaWeb({ carta, empresaSlug, sucursalSlug, mesa, barra }: Prop
                 <h2 id={`h-${familia.id}`}>{familia.nombre}</h2>
                 <ul>
                   {familia.productos.map((producto) => (
-                    <Producto key={producto.id} producto={producto} indice={indice++} />
+                    <Producto
+                      key={producto.id}
+                      producto={producto}
+                      indice={indice++}
+                      modoMesa={mesa !== undefined}
+                    />
                   ))}
                 </ul>
               </section>

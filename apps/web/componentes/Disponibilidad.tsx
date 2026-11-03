@@ -4,6 +4,7 @@ import { useEffect } from 'react';
 import { rutaCarta, urlApiPublica } from '@/lib/api';
 import {
   INTERVALO_DISPONIBILIDAD_MS,
+  EVENTO_DISPONIBILIDAD,
   aplicarDisponibilidad,
   esDisponibilidad,
 } from '@/lib/disponibilidad';
@@ -36,6 +37,7 @@ export function Disponibilidad({ empresa, sucursal }: { empresa: string; sucursa
         if (!esDisponibilidad(cuerpo)) return;
         etag = respuesta.headers.get('ETag');
         aplicarDisponibilidad(document, cuerpo);
+        document.dispatchEvent(new CustomEvent(EVENTO_DISPONIBILIDAD, { detail: cuerpo }));
       } catch {
         // Sin red, una respuesta rota o una consulta reemplazada: se queda lo último y se reintenta después.
       }

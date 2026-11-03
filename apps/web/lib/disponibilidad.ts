@@ -3,6 +3,13 @@ import type { DisponibilidadPublica } from '@restaurante/contratos';
 /** Cada cuánto se consulta la disponibilidad con la página visible (criterio 82). */
 export const INTERVALO_DISPONIBILIDAD_MS = 15_000;
 
+/**
+ * Aviso que da la isla de disponibilidad cada vez que baja una disponibilidad nueva (`detail` es la respuesta), para
+ * quien necesite saberlo además de la carta pintada: el modo mesa marca como "Se agotó" las líneas del pedido que ya
+ * no están (criterio 82). Es un evento del documento y no un módulo compartido para no sumar peso a la carta.
+ */
+export const EVENTO_DISPONIBILIDAD = 'carta:disponibilidad';
+
 /** `true` si lo que llegó parece una respuesta de disponibilidad (no hay `zod` en el navegador). */
 export function esDisponibilidad(dato: unknown): dato is DisponibilidadPublica {
   if (typeof dato !== 'object' || dato === null) return false;

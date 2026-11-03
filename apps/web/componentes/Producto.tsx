@@ -2,6 +2,7 @@ import Image from 'next/image';
 import type { ProductoPublico } from '@restaurante/contratos';
 import { precioEnSoles, precioEsCero, precioLeido } from '@restaurante/dominio';
 import { esImagenOptimizable } from '@/lib/imagenes';
+import { Icono } from './Iconos';
 
 /** Una opción de un combo o del menú del día, con su extra si cuesta algo. */
 function textoDeOpcion(nombre: string, precioExtra: string): string {
@@ -37,10 +38,23 @@ function Incluye({ producto }: { producto: ProductoPublico }) {
   );
 }
 
+function MasSobreLaFoto() {
+  return (
+    <span className="foto__mas" aria-hidden="true">
+      <Icono nombre="mas" />
+    </span>
+  );
+}
+
 interface Props {
   producto: ProductoPublico;
   /** Posición del producto en toda la carta: las cuatro primeras fotos se cargan de una vez y las demás, al llegar. */
   indice: number;
+  /**
+   * Modo mesa: toda la fila es un botón que abre la hoja del producto (sin controles anidados), con el "+" sobre la
+   * foto y el lugar de "N en tu pedido". La isla `Mesa` escucha el toque y rellena la etiqueta.
+   */
+  modoMesa?: boolean;
 }
 
 /**
@@ -48,12 +62,15 @@ interface Props {
  * del día, precio y foto de 96 px (solo si el producto tiene). Los atributos `data-*` son los ganchos de la isla
  * de disponibilidad (oculta lo que se agotó) y de la hoja de producto del modo mesa (tarea T24).
  */
-export function Producto({ producto, indice }: Props) {
+export function Producto({ producto, indice, modoMesa = false }: Props) {
   const idNombre = `p-${producto.id}`;
   const conFoto = esImagenOptimizable(producto.fotoUrl);
   return (
     <li className="fila" data-producto-id={producto.id}>
-      <article className="producto" aria-labelledby={idNombre}>
+      <article
+        className={conFoto || !modoMesa ? 'producto' : 'producto producto--sin-foto'}
+        aria-labelledby={idNombre}
+      >
         <div>
           <h3 className="producto__nombre" id={idNombre}>
             {producto.nombre}
@@ -65,6 +82,12 @@ export function Producto({ producto, indice }: Props) {
               <span aria-hidden="true">{precioEnSoles(producto.precio)}</span>
               <span className="sr">{precioLeido(producto.precio)}</span>
             </p>
+            {modoMesa ? (
+              <span className="etiqueta" data-en-pedido hidden>
+                <Icono nombre="check" />
+                <span data-cuenta />
+              </span>
+            ) : null}
           </div>
         </div>
         {conFoto ? (
@@ -76,7 +99,18 @@ export function Producto({ producto, indice }: Props) {
               height={96}
               loading={indice < 4 ? 'eager' : 'lazy'}
             />
+            {modoMesa ? <MasSobreLaFoto /> : null}
           </div>
+        ) : modoMesa ? (
+          <MasSobreLaFoto />
+        ) : null}
+        {modoMesa ? (
+          <button
+            type="button"
+            className="producto__boton"
+            data-abrir
+            aria-label={`${producto.nombre}, ${precioLeido(producto.precio)}. Agregar al pedido`}
+          />
         ) : null}
       </article>
     </li>
