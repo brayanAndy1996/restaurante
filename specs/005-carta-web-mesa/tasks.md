@@ -1,6 +1,6 @@
 # 005 · Tareas
 
-Cada tarea indica su rol y los criterios de `spec.md` que cubre. Borrador del 2026-11-02, pendiente de la aprobación del usuario (nueve preguntas abiertas) y de la clasificación de ruta crítica que confirma el orquestador.
+Cada tarea indica su rol y los criterios de `spec.md` que cubre. Aprobado por el usuario el 2026-11-03, con la ruta crítica P1 a P4 confirmada por el orquestador.
 
 **Orden de ejecución.** Primero **5a · API, llamados en la PWA y QR** completa (fases A, B, C y D, y su commit de cierre en T19); después **5b · Carta web** (fases A, C y D, y su commit de cierre en T29). La fase C se agrupa por historia: cada grupo termina con un commit propio (lo hace el documentador), en el orden indicado, porque cada uno usa lo anterior. Cada grupo cierra con la suite en verde, salvo las pruebas protegidas de 005 que se ponen en verde en un grupo posterior (cada tarea del tester dice cuáles pueden seguir en rojo). Las pruebas protegidas de 001 a 004 nunca quedan en rojo en un commit, salvo el ajuste de `RUTAS_PUBLICAS` de P4, que queda en rojo solo entre el commit de la fase B y el de C2 (ver R1).
 
@@ -107,7 +107,7 @@ Commit propio.
 - [x] Pruebas escritas por test-writer y confirmadas en rojo (P1 a P4, R1)
 - [x] Pruebas en verde tras la implementación (T7, T11, T15); `sesion-rutas.spec.ts` de 002 en verde desde T9
 - [x] Ataque adversarial sin fallas abiertas (T16)
-- [ ] El orquestador verifica con `git diff` que la fase C no tocó los archivos de la fase B ni el ajuste de `fabrica-sesiones.ts`
+- [x] El orquestador verifica con `git diff` que la fase C no tocó los archivos de la fase B ni el ajuste de `fabrica-sesiones.ts`
 
 ---
 
