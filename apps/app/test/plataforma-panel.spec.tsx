@@ -176,17 +176,25 @@ describe('navegación del panel', () => {
 });
 
 describe('alta de empresa (criterio 101)', () => {
+  // El alta lleva ~125 caracteres y cada tecla redibuja el formulario entero en jsdom: tecla a tecla se pasaba
+  // de los 5 s de la prueba con la máquina cargada (CI con todas las suites a la vez). Se pega el texto: el
+  // formulario recibe el mismo valor y la prueba sigue comprobando lo que se envía, no el tecleo.
+  async function pegar(campo: HTMLElement, texto: string) {
+    await userEvent.click(campo);
+    await userEvent.paste(texto);
+  }
+
   async function llenarAlta(extra: { usuario?: string } = {}) {
-    await userEvent.type(screen.getByLabelText('Nombre de la empresa'), 'Cevichería El Faro');
-    await userEvent.type(screen.getByLabelText('RUC'), '20600000005');
-    await userEvent.type(screen.getByLabelText('Razón social'), 'El Faro E.I.R.L.');
+    await pegar(screen.getByLabelText('Nombre de la empresa'), 'Cevichería El Faro');
+    await pegar(screen.getByLabelText('RUC'), '20600000005');
+    await pegar(screen.getByLabelText('Razón social'), 'El Faro E.I.R.L.');
     await userEvent.selectOptions(screen.getByLabelText('Régimen tributario'), 'MYPE_TRIBUTARIO');
-    await userEvent.type(screen.getByLabelText('Nombre de la sucursal'), 'El Faro · Barranco');
-    await userEvent.type(screen.getByLabelText('Dirección'), 'Av. Grau 340');
-    await userEvent.type(screen.getByLabelText('Nombre', { exact: true }), 'Carmen Rojas');
-    await userEvent.type(screen.getByLabelText('Nombre de usuario'), extra.usuario ?? 'faro.admin');
-    await userEvent.type(screen.getByLabelText('Contraseña temporal'), 'Temporal-1234');
-    await userEvent.type(screen.getByLabelText('Motivo del alta'), 'Cliente nuevo');
+    await pegar(screen.getByLabelText('Nombre de la sucursal'), 'El Faro · Barranco');
+    await pegar(screen.getByLabelText('Dirección'), 'Av. Grau 340');
+    await pegar(screen.getByLabelText('Nombre', { exact: true }), 'Carmen Rojas');
+    await pegar(screen.getByLabelText('Nombre de usuario'), extra.usuario ?? 'faro.admin');
+    await pegar(screen.getByLabelText('Contraseña temporal'), 'Temporal-1234');
+    await pegar(screen.getByLabelText('Motivo del alta'), 'Cliente nuevo');
   }
 
   const altaOk = {

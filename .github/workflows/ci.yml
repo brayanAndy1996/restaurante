@@ -7,7 +7,8 @@ on:
 jobs:
   verificar:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    # La suite combinada (app, API con PostgreSQL, web y ui) tarda ~20 min en 4 vCPU: 15 min no alcanzaban.
+    timeout-minutes: 35
 
     services:
       postgres:
@@ -57,7 +58,8 @@ jobs:
       - run: pnpm --filter @restaurante/app presupuesto
       # Peso del JavaScript y el CSS de la carta web (apps/web), criterio 88 de la historia 005.
       - run: pnpm --filter @restaurante/web presupuesto
-      - run: pnpm test
+      # --continue: si falla una suite, las demás terminan y se ven todas las fallas de una vez (el paso sigue fallando).
+      - run: pnpm test --continue
         env:
           NODE_ENV: test # obligatoria (criterio 29b); las contraseñas de los roles las da el job
 
