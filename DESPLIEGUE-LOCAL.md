@@ -76,11 +76,14 @@ Puedes repetir el comando cuando quieras: no duplica nada.
 pnpm dev
 ```
 
-Arranca dos cosas:
+Arranca tres cosas:
 
 - La **API** en http://localhost:3000. Para comprobarla, abre http://localhost:3000/health en el
   navegador; debe responder `ok`.
 - La **app del personal** en http://localhost:5173.
+- La **carta web** (la que ve el cliente al escanear el QR de su mesa) en http://localhost:3001. Lee la
+  API de `apps/web/.env.local`, que `pnpm local:preparar` crea a partir de `apps/web/.env.example`
+  (ver «Carta web y pedido desde la mesa» más abajo).
 
 Para detener todo, `Ctrl + C` en esa terminal. La base de datos sigue en Docker y conserva los datos.
 
@@ -170,6 +173,46 @@ La app del puente (Android) llega en la entrega 3c. Mientras tanto puedes probar
 
 Si el texto del QR trae una dirección que tu computadora no alcanza, agrega `--api http://localhost:3000`. Más opciones: `pnpm puente:simular --ayuda`.
 
+#### Carta web y pedido desde la mesa (sección 5)
+
+La carta web es otra aplicación (`apps/web`, Next.js) que corre en el **puerto 3001**. La ve el cliente del
+restaurante en su propio celular, sin cuenta y sin instalar nada. Hazlo después del paso 4 de la carta, porque
+necesita platos disponibles.
+
+1. **Publica la carta.** Como `fogon.admin`, en _Ajustes › Carta web_, escribe el nombre que verán tus
+   clientes, la dirección de tu carta (por ejemplo `el-fogon`) y la de la sucursal (por ejemplo
+   `miraflores`), activa _Publicada_ y guarda. La carta queda en http://localhost:3001/el-fogon/miraflores.
+2. **Crea las mesas y sus QR.** En _Ajustes › Mapa de mesas_ crea una zona y unas mesas, y abre _QR de las
+   mesas_. Cada mesa tiene un código (22 caracteres): el QR lleva a `http://localhost:3001/m/<código>`.
+   En la pantalla puedes copiar la dirección en vez de escanear el QR.
+3. **Haz de cliente.** Abre esa dirección de la mesa en el celular (o en la vista de celular del navegador).
+   Toca un plato, elige sus opciones, mira _Tu pedido_ y pulsa _Enviar al mozo_. También puedes pulsar
+   _Llamar al mozo_ o _Pedir la cuenta_. La pantalla dice con palabras qué pasó con tu llamado:
+   _Avisamos al mozo_, _El mozo viene a tu mesa_, _El mozo tomó tu pedido_…
+4. **Haz de mozo.** En otra ventana, entra como `fogon.mozo`: te llega el aviso al instante. Ábrelo, _Atender_
+   (si la mesa está libre, la abre con los comensales), ajusta lo que haga falta y _Pasar a la cuenta_. El
+   cliente ve el cambio en su pantalla en unos 10 segundos. **Nada llega a cocina hasta que el mozo pulsa
+   _Enviar_ en la cuenta.**
+
+Para ver las fotos de los platos con `pnpm dev`, deja `IMAGENES_PERMITIR_IP_LOCAL=1` en
+`apps/web/.env.local` (es lo que trae `apps/web/.env.example`). Esa variable es **solo para desarrollo y
+pruebas**: en producción no se define.
+
+##### Con Docker (la imagen de la carta web)
+
+Si quieres probar la imagen de Docker en vez del servidor de desarrollo, deja la API corriendo con `pnpm dev`
+(o solo con `pnpm --filter @restaurante/api dev`) y, en otra terminal, desde la raíz del proyecto:
+
+```bash
+docker compose --profile web up -d --build web
+```
+
+La carta web queda en http://localhost:3001 (si el 3001 está ocupado, cambia `WEB_PUERTO_LOCAL` en `.env`).
+El contenedor llega a la API de tu computadora por `host.docker.internal`; en Linux, Docker Compose ya lo
+configura. Construir la imagen tarda unos minutos la primera vez. Para detenerla: `docker compose --profile web stop web`.
+Con Docker, las fotos pueden no verse en la carta: el optimizador de imágenes corre dentro del contenedor y
+`localhost:3000` no es tu computadora desde ahí. Para revisar las fotos usa el servidor de desarrollo.
+
 ### Probar desde tu celular (opcional)
 
 Tu celular tiene que estar en la misma red Wi-Fi que la computadora.
@@ -183,7 +226,11 @@ Tu celular tiene que estar en la misma red Wi-Fi que la computadora.
    VITE_API_URL=http://192.168.1.20:3000
    ```
 
-3. Vuelve a arrancar con `pnpm dev` y abre `http://192.168.1.20:5173` en el celular.
+3. Para probar también la carta web desde el celular, en `apps/web/.env.local` pon tu IP en
+   `NEXT_PUBLIC_API_URL=http://192.168.1.20:3000` y `CARTA_WEB_URL=http://192.168.1.20:3001`, y en `.env`
+   la misma `CARTA_WEB_URL` (es la que llevan los QR).
+4. Vuelve a arrancar con `pnpm dev` y abre `http://192.168.1.20:5173` (el personal) o
+   `http://192.168.1.20:3001/m/<código>` (la carta de una mesa) en el celular.
 
 Si el firewall de la computadora pregunta, permite las conexiones de Node en la red privada. Sin
 HTTPS, el celular no instala la app como aplicación, pero sí la puedes usar desde el navegador.
@@ -210,8 +257,11 @@ usuario `postgres`).
 | Problema                                                                                | Qué hacer                                                                                                                                                                                                                        |
 | --------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `docker: command not found`, o `local:preparar` no conecta con Docker                   | Abre Docker Desktop y espera a que diga que está en marcha. Luego repite el comando                                                                                                                                              |
-| El puerto 5433, 3000 o 5173 ya está en uso                                              | Cierra el programa que lo usa, o cambia el puerto en `.env`: para la base, `DB_PUERTO_LOCAL` y las URL (ver `.env.example`)                                                                                                      |
+| El puerto 5433, 3000, 3001 o 5173 ya está en uso                                        | Cierra el programa que lo usa, o cambia el puerto en `.env`: para la base, `DB_PUERTO_LOCAL` y las URL (ver `.env.example`)                                                                                                      |
 | `node --version` muestra una versión menor que 22                                       | Instala Node 22 o superior                                                                                                                                                                                                       |
+| La carta web dice «Esta carta no está disponible»                                       | Revisa que la carta esté _Publicada_ en Ajustes › Carta web, que la dirección sea la misma de la URL (en minúsculas) y que, en el modo mesa, el QR sea el vigente: _Cambiar QR_ deja de servir el anterior                       |
+| La carta web falla con «Falta la variable API_URL_INTERNA»                              | No existe `apps/web/.env.local`: corre `pnpm local:preparar` o copia `apps/web/.env.example` a `apps/web/.env.local`                                                                                                             |
+| Las fotos de la carta web no se ven                                                     | Deja `IMAGENES_PERMITIR_IP_LOCAL=1` en `apps/web/.env.local` y reinicia (solo desarrollo)                                                                                                                                        |
 | La app dice "No hay conexión con el servidor"                                           | Revisa que `pnpm dev` siga corriendo y que http://localhost:3000/health responda                                                                                                                                                 |
 | Perdiste los PIN de demostración                                                        | Borra la base y vuelve a crearla: `docker compose down -v` y luego `pnpm local:preparar`                                                                                                                                         |
 | La app muestra "useSesion debe usarse dentro de SesionProvider"                         | Pasa a veces tras recompilar los paquetes: detén `pnpm dev` y vuelve a arrancarlo                                                                                                                                                |
@@ -233,15 +283,17 @@ pnpm local:preparar
 
 ## 9. Comandos útiles
 
-| Comando                              | Qué hace                                                                                                                     |
-| ------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------- |
-| `pnpm dev`                           | Arranca la API y la app                                                                                                      |
-| `pnpm local:preparar`                | Prepara la base en Docker con los datos de demostración                                                                      |
-| `pnpm puente:simular --qr "…"`       | Puente de impresión de mentira para probar la impresión sin Android (ver «Impresión sin un Android»)                         |
-| `pnpm test`                          | Corre todas las pruebas automáticas; tarda varios minutos (ver la sección "Pruebas" del `README.md`)                         |
-| `pnpm --filter @restaurante/app e2e` | Pruebas de punta a punta en el navegador (la primera vez: `pnpm --filter @restaurante/app exec playwright install chromium`) |
-| `docker compose stop`                | Detiene PostgreSQL sin borrar los datos                                                                                      |
-| `docker compose down -v`             | Detiene PostgreSQL y borra la base                                                                                           |
+| Comando                                          | Qué hace                                                                                                                     |
+| ------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------- |
+| `pnpm dev`                                       | Arranca la API y la app                                                                                                      |
+| `pnpm local:preparar`                            | Prepara la base en Docker con los datos de demostración                                                                      |
+| `pnpm puente:simular --qr "…"`                   | Puente de impresión de mentira para probar la impresión sin Android (ver «Impresión sin un Android»)                         |
+| `pnpm test`                                      | Corre todas las pruebas automáticas; tarda varios minutos (ver la sección "Pruebas" del `README.md`)                         |
+| `pnpm --filter @restaurante/app e2e`             | Pruebas de punta a punta en el navegador (la primera vez: `pnpm --filter @restaurante/app exec playwright install chromium`) |
+| `pnpm --filter @restaurante/web e2e`             | Pruebas de la carta web en el navegador, con una API falsa (carta, modo mesa, peso, accesibilidad y compatibilidad)          |
+| `docker compose --profile web up -d --build web` | La carta web en Docker, en el puerto 3001                                                                                    |
+| `docker compose stop`                            | Detiene PostgreSQL sin borrar los datos                                                                                      |
+| `docker compose down -v`                         | Detiene PostgreSQL y borra la base                                                                                           |
 
 El `README.md` tiene los detalles técnicos: variables de entorno, producción, PostgreSQL
 administrado y la arquitectura.

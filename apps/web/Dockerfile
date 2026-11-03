@@ -28,9 +28,13 @@ FROM dependencias AS construccion
 ARG NEXT_PUBLIC_API_URL
 ARG ARCHIVOS_URL_PUBLICA
 ARG CARTA_WEB_URL
+# Solo para desarrollo y pruebas (docker-compose.yml): optimizar fotos que salen de una dirección local. En producción
+# no se define.
+ARG IMAGENES_PERMITIR_IP_LOCAL
 ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL \
     ARCHIVOS_URL_PUBLICA=$ARCHIVOS_URL_PUBLICA \
-    CARTA_WEB_URL=$CARTA_WEB_URL
+    CARTA_WEB_URL=$CARTA_WEB_URL \
+    IMAGENES_PERMITIR_IP_LOCAL=$IMAGENES_PERMITIR_IP_LOCAL
 COPY packages ./packages
 COPY apps/web ./apps/web
 RUN pnpm --filter "@restaurante/web^..." build && pnpm --filter "@restaurante/web" build

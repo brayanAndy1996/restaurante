@@ -12,6 +12,12 @@ if (!existsSync(join(raiz, '.env'))) {
   console.log('Se creó .env a partir de .env.example');
 }
 
+// La carta web (apps/web) lee su propio archivo: Next solo carga los `.env*` de su carpeta, no el de la raíz.
+if (!existsSync(join(raiz, 'apps/web/.env.local'))) {
+  copyFileSync(join(raiz, 'apps/web/.env.example'), join(raiz, 'apps/web/.env.local'));
+  console.log('Se creó apps/web/.env.local a partir de apps/web/.env.example');
+}
+
 ejecutar('docker compose up -d --wait');
 ejecutar('pnpm db:preparar');
 ejecutar('pnpm db:migrar');
