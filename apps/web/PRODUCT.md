@@ -2,7 +2,7 @@
 
 <!-- impeccable:product-schema 1 -->
 
-> Estado: propuesto por el frontend para la historia 005 (entrega 5b), pendiente de la aprobación del usuario. Hereda del `PRODUCT.md` de la raíz lo que no se repite aquí (español de Perú, soles, WCAG 2.2 AA, datos del negocio). Esta superficie es **otra** que la PWA del personal: la ve el cliente del restaurante, no quien lo atiende.
+> Estado: aprobado por el usuario el 2026-11-03 (historia 005, entrega 5b), con tres ajustes: presupuesto de 140 kB, color de la marca conservado con texto blanco o casi negro y familias en una fila fija. Hereda del `PRODUCT.md` de la raíz lo que no se repite aquí (español de Perú, soles, WCAG 2.2 AA, datos del negocio). Esta superficie es **otra** que la PWA del personal: la ve el cliente del restaurante, no quien lo atiende.
 
 ## Platform
 
@@ -46,7 +46,7 @@ Español de Perú, **trato de tú**, frases cortas y directas, sin jerga técnic
 
 ## Brand Commitments
 
-La marca que se ve es la **del restaurante**: su logo, su nombre y su color principal (un `#RRGGBB` que elige el Administrador). El color pasa siempre por `colorDeMarcaAccesible` para llegar a 4.5:1 con el blanco. No hay marca de nuestro producto en la pantalla del cliente.
+La marca que se ve es la **del restaurante**: su logo, su nombre y su color principal (un `#RRGGBB` que elige el Administrador). El color se usa tal como lo eligió: pasa por `colorDeMarcaAccesible`, que no lo cambia y decide si el texto encima es blanco o casi negro (4.5:1), y por `colorDeMarcaSobreBlanco` para lo que va sobre fondo blanco (3:1). No hay marca de nuestro producto en la pantalla del cliente.
 
 ## Evidence on Hand
 
@@ -63,11 +63,10 @@ No hay logos, fotos ni textos reales de ningún restaurante. La muestra de dise�
 ## Accessibility & Inclusion
 
 - WCAG 2.2 AA: contraste 4.5:1 en texto y 3:1 en controles; foco visible de 3 px; controles de 48 px o más; `lang="es-PE"`.
-- El color de la marca solo se usa **de relleno** (cabecera, botón principal, selección) con texto blanco encima; nunca como texto sobre fondo claro, para que cualquier color de restaurante cumpla el contraste.
+- El color de la marca se usa **de relleno** (cabecera, botón principal, "+") con texto blanco o casi negro encima, el que alcance 4.5:1; sobre fondo blanco solo como indicador (casilla, radio) si contrasta 3:1, y nunca como texto, para que cualquier color de restaurante cumpla el contraste sin cambiarlo.
 - Los precios se leen completos ("28 soles"); los avisos y errores van en `aria-live`; las hojas son diálogos con el foco atrapado y devuelto.
 - Texto al 200 % sin cortes; `prefers-reduced-motion` sin animaciones.
 
 ## Decisiones abiertas
 
-- Si un color de marca muy claro (ají amarillo, `#F2A900`) debe oscurecerse hasta quedar marrón (lo que hoy hace `colorDeMarcaAccesible`) o conservar su color con texto oscuro encima. Ver "Preguntas" en la entrega 5b.
 - Si los llamados se seguirán consultando cada 10 s o si algún día convendrá un canal en vivo (decisión de 005: consulta cada 10 s).

@@ -15,16 +15,21 @@
         estados     ?pantalla=estados         (avisos del llamado, errores y confirmaciones)
 
       Otras opciones: &llamado=pendiente|atendido|pasado|descartado|vencido, &pedido=vacio, &hoja=llamar|cuenta
-      y &marca=2|3|4 para ver la misma carta con otro color de restaurante.
+      y &marca=2|3|4 para ver la misma carta con otro color de restaurante (2 azul con letras blancas; 3 ají
+      amarillo, conservado, con letras casi negras; 4 verde con letras negras).
 
       Los colores de la marca son los que devuelve colorDeMarcaAccesible (packages/dominio) y los montos los que
       devuelven calcularLinea y totalOrden; aquí solo se copian. La aplicación real nunca los escribe a mano.
     -->
     <style>
       :root {
-        /* Marca del restaurante: colorDeMarcaAccesible('#E4572E').fondo; el texto encima siempre es blanco. */
+        /* Marca del restaurante: colorDeMarcaAccesible('#CB4D29'). El fondo es siempre el color elegido, sin
+           oscurecerlo; el texto encima es blanco o casi negro (#111111), y negro puro como último recurso, el que
+           alcance 4.5:1. --indicador es colorDeMarcaSobreBlanco: la marca para lo que va sobre fondo blanco (casilla,
+           radio, icono) si contrasta 3:1 con el blanco y, si no, el color del texto. */
         --marca: #cb4d29;
         --sobre-marca: #ffffff;
+        --indicador: var(--marca);
         --marca-suave: color-mix(in oklab, var(--marca) 8%, #ffffff);
         --marca-borde: color-mix(in oklab, var(--marca) 30%, #ffffff);
         --marca-hundida: color-mix(in oklab, var(--marca) 80%, #000000);
@@ -59,15 +64,18 @@
         --ancho-columna: 640px;
         --altura-barra: 0px;
       }
-      /* Otros colores de restaurante, ya pasados por colorDeMarcaAccesible (el original va al lado). */
+      /* Otros colores de restaurante, tal como los devuelven colorDeMarcaAccesible y colorDeMarcaSobreBlanco. */
       [data-marca='2'] {
-        --marca: #1d4a9e; /* #1D4A9E, sin cambio */
+        --marca: #1d4a9e; /* blanco encima: 8.3:1 */
       }
       [data-marca='3'] {
-        --marca: #9d6e00; /* #F2A900 oscurecido para llegar a 4.5:1 con el blanco */
+        --marca: #f2a900; /* ají amarillo: el blanco da 2.0:1, así que va #111111 encima (9.4:1) */
+        --sobre-marca: #111111;
+        --indicador: #111111; /* la marca sobre blanco da 2.0:1 (menos de 3:1): se usa el texto */
       }
       [data-marca='4'] {
-        --marca: #2c8654; /* #2E8B57 oscurecido */
+        --marca: #2e8b57; /* ni el blanco (4.25:1) ni #111111 (4.4:1) llegan: va negro puro encima (4.95:1) */
+        --sobre-marca: #000000;
       }
 
       *,
@@ -86,7 +94,7 @@
         color: var(--tinta);
         background: var(--fondo);
         font-variant-numeric: tabular-nums;
-        accent-color: var(--marca);
+        accent-color: var(--indicador);
       }
       h1,
       h2,
@@ -113,7 +121,7 @@
         color: var(--tinta);
       }
       textarea {
-        caret-color: var(--marca);
+        caret-color: var(--indicador);
       }
       :focus-visible {
         outline: 3px solid var(--tinta);
@@ -121,7 +129,7 @@
       }
       .cabecera :focus-visible,
       .boton-principal:focus-visible {
-        outline-color: #ffffff;
+        outline-color: var(--sobre-marca);
       }
       .boton-principal:focus-visible {
         outline-offset: -5px;
@@ -259,13 +267,56 @@
       body[data-pantalla='mesa'] {
         --altura-barra: 128px;
       }
+      /* Familias: una fila que se desliza de lado y queda fija arriba. Funciona sin JavaScript (son enlaces a
+         #id); con JavaScript, la familia en pantalla queda marcada y centrada. */
+      html {
+        scroll-padding-top: 72px;
+      }
+      @media (prefers-reduced-motion: no-preference) {
+        html {
+          scroll-behavior: smooth;
+        }
+      }
       .familias {
-        padding: 16px 16px 0;
+        position: sticky;
+        top: 0;
+        z-index: 4;
+        background: var(--fondo);
+        border-bottom: 1px solid var(--junta-fuerte);
+      }
+      .familias__interior {
+        position: relative;
+        max-width: var(--ancho-columna);
+        margin: 0 auto;
       }
       .familias ul {
         display: flex;
-        flex-wrap: wrap;
         gap: 8px;
+        padding: 8px 40px 8px 16px;
+        overflow-x: auto;
+        overscroll-behavior-x: contain;
+        scrollbar-width: none;
+        scroll-snap-type: x proximity;
+      }
+      .familias ul::-webkit-scrollbar {
+        display: none;
+      }
+      .familias li {
+        flex: none;
+        scroll-snap-align: start;
+        scroll-margin-left: 16px;
+      }
+      /* Indicio de que hay más a la derecha: el borde se desvanece. El relleno final de la fila (40 px) deja la
+         última familia libre del desvanecido cuando se llega al final. */
+      .familias__interior::after {
+        content: '';
+        position: absolute;
+        top: 0;
+        right: 0;
+        bottom: 0;
+        width: 32px;
+        background: linear-gradient(to right, rgba(255, 255, 255, 0), var(--fondo));
+        pointer-events: none;
       }
       .familias a {
         display: inline-flex;
@@ -279,10 +330,17 @@
         font-size: 0.9375rem;
         font-weight: 600;
         text-decoration: none;
+        white-space: nowrap;
       }
       .familias a:active {
         background: var(--marca-suave);
-        border-color: var(--marca);
+        border-color: var(--indicador);
+      }
+      /* La familia en pantalla (solo con JavaScript): tinta llena con letras blancas, no depende de la marca. */
+      .familias a[aria-current='true'] {
+        background: var(--tinta);
+        border-color: var(--tinta);
+        color: #ffffff;
       }
       .guia {
         margin: 16px 16px 0;
@@ -296,7 +354,7 @@
       .guia .icono {
         width: 20px;
         height: 20px;
-        color: var(--marca);
+        color: var(--indicador);
       }
 
       .seccion h2 {
@@ -304,7 +362,6 @@
         font-size: 1.1875rem;
         line-height: 1.5rem;
         font-weight: 700;
-        scroll-margin-top: 8px;
       }
       .fila {
         position: relative;
@@ -416,7 +473,7 @@
         width: 16px;
         height: 16px;
         stroke-width: 2.25;
-        color: var(--marca);
+        color: var(--indicador);
       }
       .etiqueta--aviso {
         background: var(--aviso-suave);
@@ -491,7 +548,7 @@
       }
       .boton-secundario:active {
         background: var(--marca-suave);
-        border-color: var(--marca);
+        border-color: var(--indicador);
       }
       .boton-texto {
         min-height: 48px;
@@ -519,7 +576,7 @@
       }
       .boton-icono:active {
         background: var(--marca-suave);
-        border-color: var(--marca);
+        border-color: var(--indicador);
       }
       .boton-icono[aria-disabled='true'] {
         background: var(--inactivo);
@@ -570,7 +627,7 @@
       }
       .aviso .icono {
         margin-top: 0;
-        color: var(--marca);
+        color: var(--indicador);
       }
       .aviso__titulo {
         font-size: 1rem;
@@ -978,7 +1035,12 @@
         .producto {
           padding: 16px 24px;
         }
-        .familias,
+        .familias ul {
+          padding-left: 24px;
+        }
+        .familias li {
+          scroll-margin-left: 24px;
+        }
         .guia {
           padding-left: 24px;
           padding-right: 24px;
@@ -1196,8 +1258,8 @@
       </header>
 
       <main id="carta">
-        <div class="columna">
-          <nav class="familias" aria-label="Secciones de la carta">
+        <nav class="familias" aria-label="Secciones de la carta">
+          <div class="familias__interior">
             <ul>
               <li><a href="#entradas">Entradas</a></li>
               <li><a href="#ceviches">Ceviches</a></li>
@@ -1206,8 +1268,10 @@
               <li><a href="#postres">Postres</a></li>
               <li><a href="#menu">Menú del día</a></li>
             </ul>
-          </nav>
+          </div>
+        </nav>
 
+        <div class="columna">
           <p class="guia solo-mesa sin-pedido">
             <svg class="icono"><use href="#i-info" /></svg>
             Toca un plato para agregarlo a tu pedido.
@@ -2080,6 +2144,31 @@
             out.textContent = String(Math.min(20, Math.max(1, n)));
           }
         });
+        // Familia en pantalla: se marca y se centra en la fila. Sin JavaScript los enlaces siguen funcionando.
+        var enlaces = Array.prototype.slice.call(document.querySelectorAll('.familias a'));
+        var fila = document.querySelector('.familias ul');
+        var secciones = enlaces.map(function (a) {
+          return document.getElementById(a.getAttribute('href').slice(1));
+        });
+        var actual = null;
+        function marcar() {
+          var linea = 72 + 24;
+          var i = 0;
+          secciones.forEach(function (sec, n) {
+            if (sec && sec.getBoundingClientRect().top <= linea) i = n;
+          });
+          var a = enlaces[i];
+          if (a === actual) return;
+          if (actual) actual.removeAttribute('aria-current');
+          a.setAttribute('aria-current', 'true');
+          actual = a;
+          var centro = a.offsetLeft - (fila.clientWidth - a.offsetWidth) / 2;
+          fila.scrollTo({ left: Math.max(0, centro), behavior: 'auto' });
+        }
+        if (q.get('pantalla') !== 'estados') {
+          window.addEventListener('scroll', marcar, { passive: true });
+          marcar();
+        }
         var abrir = q.get('hoja');
         if (abrir) {
           var d = hoja(

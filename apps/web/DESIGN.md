@@ -4,6 +4,8 @@ description: Interfaz de operación sobria para el cliente sentado a la mesa. Ne
 colors:
   marca: '#CB4D29'
   sobre-marca: '#FFFFFF'
+  sobre-marca-clara: '#111111'
+  indicador: '#CB4D29'
   fondo: '#FFFFFF'
   hundido: '#F4F5F6'
   tinta: '#16191D'
@@ -109,9 +111,19 @@ components:
     textColor: '{colors.tinta-suave}'
     rounded: '{rounded.control}'
     height: '48px'
+  fila-de-familias:
+    backgroundColor: '{colors.fondo}'
+    padding: '8px 40px 8px 16px'
+    height: '65px'
   enlace-de-familia:
     backgroundColor: '{colors.fondo}'
     textColor: '{colors.tinta}'
+    rounded: '{rounded.control}'
+    padding: '0 14px'
+    height: '48px'
+  enlace-de-familia-actual:
+    backgroundColor: '{colors.tinta}'
+    textColor: '{colors.fondo}'
     rounded: '{rounded.control}'
     padding: '0 14px'
     height: '48px'
@@ -142,7 +154,7 @@ components:
     height: '72px'
 ---
 
-<!-- Dirección propuesta por el frontend (historia 005, T21); pendiente de la aprobación del usuario. La muestra visual es `diseno/carta-web.html` (se abre directo en el navegador; ver su comentario inicial). Los valores de color son los de la muestra con la marca de ejemplo `#E4572E` ya pasada por `colorDeMarcaAccesible`; en la aplicación real salen de `packages/dominio`, nunca escritos a mano. -->
+<!-- Dirección de diseño de la historia 005 (T21), aprobada por el usuario el 2026-11-03 con tres ajustes: presupuesto de 140 kB, color de la marca conservado con texto blanco o casi negro, y familias en una fila fija que se desliza de lado. La muestra visual es `diseno/carta-web.html` (se abre directo en el navegador; ver su comentario inicial). Los valores de color son los de la muestra con la marca de ejemplo `#CB4D29`; en la aplicación real salen de `packages/dominio` (`colorDeMarcaAccesible` y `colorDeMarcaSobreBlanco`), nunca escritos a mano. -->
 
 # Design System: Carta web del restaurante
 
@@ -152,13 +164,14 @@ components:
 
 La carta web es la carta del restaurante pasada al celular del cliente: el local pone su logo, su nombre y su color, y lo demás se aparta para que se lea. Es una superficie de tipo **Operate**: el cliente ya está sentado y viene a elegir y pedir rápido, con una mano y con señal débil, así que manda la claridad (lista, foto, precio, botón) y no la persuasión. No es la PWA del personal ("Azulejo", cobalto, Atkinson): esa es nuestra y esta es del restaurante, por eso no usa `packages/ui` ni sus tokens.
 
-La marca entra por **tres sitios y solo esos**: una cabecera a todo el ancho en el color del restaurante con su logo y su nombre, el botón principal de cada pantalla y la selección (la cantidad elegida, la opción marcada). Todo lo demás es neutro: papel blanco, juntas finas y tinta casi negra con un matiz de la marca. Como el color del restaurante lo elige un Administrador y puede ser cualquiera, el sistema se construye para que **cualquier** color funcione: el color solo se usa de relleno con texto blanco encima (después de `colorDeMarcaAccesible`), nunca como texto sobre fondo claro.
+La marca entra por **tres sitios y solo esos**: una cabecera a todo el ancho en el color del restaurante con su logo y su nombre, el botón principal de cada pantalla y la selección (la cantidad elegida, la opción marcada). Todo lo demás es neutro: papel blanco, juntas finas y tinta casi negra con un matiz de la marca. Como el color del restaurante lo elige un Administrador y puede ser cualquiera, el sistema se construye para que **cualquier** color funcione: el color **no se toca** (si es claro, como el ají amarillo `#F2A900`, se queda amarillo); lo que cambia es el texto encima, que es blanco o casi negro según cuál contraste mejor (`colorDeMarcaAccesible`), y nunca se usa como texto sobre fondo claro.
 
-Sobriedad: sin degradados, vidrio ni sombras decorativas (la única sombra es la de la hoja inferior), sin fuentes web (pila del sistema, para que la primera vista pese poco), un solo movimiento (la hoja sube en 220 ms). Hay **una sola cosa que se toca por fila**, y es toda la fila.
+Sobriedad: sin degradados, vidrio ni sombras decorativas (la única sombra es la de la hoja inferior), sin fuentes web (pila del sistema, para que la primera vista pese poco), un solo movimiento (la hoja sube en 220 ms). La única transparencia es el desvanecido del borde derecho de la fila de familias, que avisa que hay más para deslizar. Hay **una sola cosa que se toca por fila**, y es toda la fila.
 
 **Key Characteristics:**
 
 - Cabecera con el color, el logo y el nombre del restaurante; neutro todo lo demás.
+- Una fila de familias que se desliza de lado y queda fija arriba al bajar.
 - Lista de filas: nombre, descripción de hasta dos líneas y precio a la izquierda; foto de 96 px a la derecha.
 - Fuentes del sistema, cifras tabulares, precios siempre en negrita.
 - Dos hojas inferiores (producto y "Tu pedido") y una barra fija abajo en el modo mesa.
@@ -170,7 +183,7 @@ Paleta neutra y fría, casi blanca, con un único color de marca que cambia de r
 
 ### Primary
 
-- **Color del restaurante** (`#CB4D29` en la muestra; es el `fondo` que devuelve `colorDeMarcaAccesible`): la cabecera, el botón principal, el "+" de cada producto y las opciones marcadas. Texto blanco encima, siempre, con 4.5:1 o más (si el color elegido no llega, se oscurece hasta llegar). **Marca suave** (8 % de la marca sobre blanco): fondo de la opción elegida y del aviso informativo. **Borde de marca** (30 %): borde del aviso informativo y de la etiqueta "en tu pedido". **Marca hundida** (80 % + negro): botón principal presionado.
+- **Color del restaurante** (`#CB4D29` en la muestra; es el `fondo` que devuelve `colorDeMarcaAccesible`, igual al elegido): la cabecera, el botón principal y el "+" de cada producto. **Texto sobre la marca** (`sobre-marca`): blanco `#FFFFFF` si contrasta 4.5:1 o más con el color; si no, un casi negro fijo `#111111` (`sobre-marca-clara`; con el ají amarillo `#F2A900` da 9.4:1); y negro puro `#000000` en la franja estrecha donde tampoco llega (con `#2E8B57` da 4.95:1). El color nunca se oscurece. **Indicador** (`indicador`, de `colorDeMarcaSobreBlanco`): el color para lo que va sobre fondo blanco (el radio y la casilla marcados, los iconos de aviso, el borde de lo presionado); es la marca si contrasta 3:1 o más con el blanco y, si no, el color del texto (con `#F2A900`, `#111111`). **Marca suave** (8 % de la marca sobre blanco): fondo de la opción elegida y del aviso informativo. **Borde de marca** (30 %): borde del aviso informativo y de la etiqueta "en tu pedido". **Marca hundida** (80 % + negro): botón principal presionado.
 
 ### Secondary (estado)
 
@@ -189,7 +202,7 @@ Paleta neutra y fría, casi blanca, con un único color de marca que cambia de r
 
 ### Named Rules
 
-**The Fill-Only Rule.** El color del restaurante es siempre un relleno con texto blanco encima (cabecera, botón, "+", selección). Nunca es el color de un texto sobre blanco: así cualquier color, claro u oscuro, cumple el contraste.
+**The Fill-Only Rule.** El color del restaurante es un relleno con texto blanco o casi negro encima (cabecera, botón, "+"). Nunca es el color de un texto sobre blanco. Sobre blanco solo entra como indicador (radio, casilla, icono) y únicamente si contrasta 3:1; si no, ese indicador toma el color del texto. Así cualquier color, claro u oscuro, cumple el contraste sin cambiarlo.
 **The Not-Our-Brand Rule.** Ningún elemento lleva la marca de nuestro producto ni los colores de `apps/app`. El restaurante firma la pantalla.
 **The Words Beside Color Rule.** Ningún estado se dice solo con color: va con texto y un icono ("Se agotó", "Cerrado ahora", "Ya avisamos al mozo"). Quitar el color no debe quitar información.
 
@@ -220,7 +233,7 @@ Móvil primero, una sola columna desde 320 px; se diseña a 360 × 740. Escala d
 
 - **Orden:** cabecera de la marca, familias, lista, y en el modo mesa una barra fija abajo. El "Ir a la carta" salta a la lista.
 - **Cabecera:** logo de 56 px en una baldosa blanca (los logos con fondo transparente se leen igual), nombre y sucursal; debajo, la dirección y una etiqueta blanca con el horario ("Abierto ahora · hasta las 23:00"). En el modo mesa no se repite la dirección y se suma la etiqueta "Mesa 4".
-- **Familias:** enlaces de 48 px que pasan a otra línea (no se desplazan de lado). Con muchas familias ocupan tres filas; es el precio de no esconder nada ni exigir un gesto fino.
+- **Familias:** una sola fila de enlaces de 48 px (65 px con el relleno y la junta inferior) que se desliza de lado y queda fija arriba (`position: sticky`) al bajar por la carta; en el modo mesa gasta una fila, no media pantalla. Son enlaces a `#id`, así que funciona **sin JavaScript**; con JavaScript, la familia que está en pantalla queda marcada (`aria-current`, tinta llena con letras blancas, que no depende del color de la marca) y centrada en la fila. Para que el deslizamiento no esconda familias sin avisar: el borde derecho se desvanece a blanco (32 px; es lo único con degradado) y el relleno final de 40 px deja la última familia libre de él al llegar al final; además un enlace cortado por el borde izquierdo o derecho ya dice por sí mismo que hay más, y al soltar el dedo la fila se alinea al inicio de un enlace (`scroll-snap`, cercano). Los nombres no se parten en dos líneas. La barra de desplazamiento se oculta; los títulos de familia llevan `scroll-padding` para no quedar tapados al saltar.
 - **Fila de producto:** nombre, descripción de hasta dos líneas y precio a la izquierda; foto de 96 × 96 a la derecha (solo si el producto tiene); divisor de 1 px. Sin foto, el texto ocupa todo el ancho. Combos y menú del día suman una línea "Incluye…" o la lista de sus partes.
 - **Modo mesa:** cada fila entera es un botón (un `<button>` estirado sobre la fila, sin controles anidados) con un "+" de 44 px sobre la esquina de la foto; "N en tu pedido" aparece junto al precio.
 - **Barra fija (modo mesa):** de abajo hacia arriba, "Llamar al mozo" y "Pedir la cuenta" (48 px, lado a lado) y encima "Ver tu pedido · 4 platos · S/ 132.00" (56 px) cuando hay pedido, o el estado del llamado cuando lo hay. Es la zona del pulgar y respeta `env(safe-area-inset-bottom)`.
@@ -230,7 +243,7 @@ Móvil primero, una sola columna desde 320 px; se diseña a 360 × 740. Escala d
 
 ## Elevation & Depth
 
-Plano por defecto: la profundidad se dice con juntas y bordes. Hay tres capas: el papel, la barra fija (borde superior de 1 px, sin sombra) y la hoja.
+Plano por defecto: la profundidad se dice con juntas y bordes. Hay tres capas: el papel, las barras fijas (la de familias arriba y la del modo mesa abajo, con un borde de 1 px y sin sombra) y la hoja.
 
 ### Shadow Vocabulary
 
@@ -239,7 +252,7 @@ Plano por defecto: la profundidad se dice con juntas y bordes. Hay tres capas: e
 ### Named Rules
 
 **The Tres Capas Rule.** Papel, barra y hoja. Una cuarta capa es señal de que la pantalla está mal.
-**The Sin Vidrio Rule.** Nada de desenfoque, transparencias decorativas ni degradados.
+**The Sin Vidrio Rule.** Nada de desenfoque, transparencias decorativas ni degradados. Única excepción, funcional: el desvanecido del borde de la fila de familias.
 
 ## Shapes
 
@@ -249,7 +262,7 @@ Esquinas cortas: 8 px en botones, enlaces, campos, grupos de opciones y fotos; 4
 
 ### Botón principal
 
-Relleno del color del restaurante, texto blanco de 17 px peso 600, 56 px de alto, a todo el ancho de la columna. Dos zonas: la acción a la izquierda y el monto a la derecha ("Agregar al pedido · S/ 78.00"); "Enviar al mozo" va centrado. Presionado: marca hundida y 1 px hacia abajo. Apagado: relleno `inactivo`, texto de tinta suave y siempre una frase cerca que dice por qué ("Quita lo que se agotó para poder enviar"). Uno por pantalla u hoja.
+Relleno del color del restaurante, texto de 17 px peso 600 en blanco o casi negro según la marca, 56 px de alto, a todo el ancho de la columna. Dos zonas: la acción a la izquierda y el monto a la derecha ("Agregar al pedido · S/ 78.00"); "Enviar al mozo" va centrado. Presionado: marca hundida (80 % de la marca sobre negro) y 1 px hacia abajo. Apagado: relleno `inactivo`, texto de tinta suave y siempre una frase cerca que dice por qué ("Quita lo que se agotó para poder enviar"). Uno por pantalla u hoja.
 
 ### Botón secundario y de texto
 
@@ -279,13 +292,13 @@ Baldosa de fondo suave, borde de 1 px, icono, título de 16 px en negrita y una 
 
 ### Foco, selección y detalles del navegador
 
-Foco visible de 3 px en tinta (en blanco sobre la cabecera y el botón principal). Los controles de opción son nativos (`radio`, `checkbox`) con el color del restaurante (`accent-color`); la fila entera es la zona táctil y la elegida lleva marca suave.
+Foco visible de 3 px en tinta (en el color del texto de la marca, blanco o casi negro, sobre la cabecera y el botón principal). Los controles de opción son nativos (`radio`, `checkbox`) con el indicador (`accent-color`: la marca, o el color del texto si la marca es muy clara); la fila entera es la zona táctil y la elegida lleva marca suave.
 
 ## Do's and Don'ts
 
 ### Do:
 
-- **Do** pasar siempre el color del restaurante por `colorDeMarcaAccesible` y usarlo solo de relleno con texto blanco.
+- **Do** pasar siempre el color del restaurante por `colorDeMarcaAccesible` (texto encima) y `colorDeMarcaSobreBlanco` (indicadores sobre blanco), y usarlo solo de relleno con el texto que esas funciones devuelven.
 - **Do** dar a todo control táctil 48 px o más (el "+" de 44 px de la foto es decorativo: la zona táctil es la fila).
 - **Do** decir cada estado con palabras y un icono, y cada error con el problema y la salida.
 - **Do** mostrar montos como `S/ 28.00` con cifras tabulares, calculados por `packages/dominio`, y leerlos como "28 soles".
@@ -294,9 +307,10 @@ Foco visible de 3 px en tinta (en blanco sobre la cabecera y el botón principal
 
 ### Don't:
 
-- **Don't** usar el color del restaurante como color de texto sobre blanco ni para un estado (éxito, aviso, error).
+- **Don't** oscurecer ni aclarar el color del restaurante, ni usarlo como color de texto sobre blanco ni para un estado (éxito, aviso, error).
 - **Don't** usar `packages/ui`, Atkinson ni los colores y componentes de `apps/app`: esta superficie no es el sistema del personal.
-- **Don't** usar fuentes web, degradados, vidrio, sombras fuera de la hoja ni animaciones de adorno.
+- **Don't** usar fuentes web, degradados (salvo el desvanecido de la fila de familias), vidrio, sombras fuera de la hoja ni animaciones de adorno.
+- **Don't** dejar que las familias pasen a otra línea ni sacarlas de la fila fija, ni esconder familias al deslizar sin el desvanecido que lo avisa.
 - **Don't** anidar controles dentro de la fila de producto ni abrir una hoja para lo que cabe en la pantalla.
 - **Don't** dejar un botón apagado sin decir por qué, ni mostrar un código de error al cliente.
 - **Don't** usar mayúsculas sostenidas, texto menor de 13 px ni campos de menos de 16 px.
