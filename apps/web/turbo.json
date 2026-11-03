@@ -1,0 +1,13 @@
+{
+  "$schema": "https://turbo.build/schema.json",
+  "extends": ["//"],
+  "tasks": {
+    "build": {
+      "outputs": ["$TURBO_EXTENDS$", ".next/**", "!.next/cache/**"],
+      "env": ["NEXT_PUBLIC_*", "API_URL_INTERNA", "CARTA_WEB_URL", "ARCHIVOS_URL_PUBLICA"]
+    },
+    "dev": {
+      "env": ["NEXT_PUBLIC_*", "API_URL_INTERNA", "CARTA_WEB_URL", "ARCHIVOS_URL_PUBLICA"]
+    }
+  }
+}
