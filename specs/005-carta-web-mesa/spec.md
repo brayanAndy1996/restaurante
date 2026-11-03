@@ -5,8 +5,8 @@
   - **Entrega 5b (carta web, `apps/web`):** RF-40 en la parte visible (logo, colores, fotos, horario y vista previa al compartir), RF-41 y HU-09 del lado de la pantalla, y la interfaz del cliente de HU-40 (RF-85, RF-86). RNF: "Interfaz táctil para tablets y celulares, y carta web liviana para datos móviles" (en `fuentes.md`), RNF-11 (navegadores).
   - **Se dejan para la sección de delivery** (alcance propuesto por el orquestador): HU-21 salvo la carta base, RF-42 a RF-49 (pedido para llevar y delivery por WhatsApp, consentimiento, bandeja, pedidos telefónicos). Esta sección deja listos la carta pública, `apps/web`, la resolución pública de la empresa y la protección por mesa e IP para reutilizarlos ("Notas para otras secciones").
   - Fuente de negocio: `fuentes.md` de esta carpeta (requerimientos rev. 38, diseño rev. 27) con las seis "Decisiones del usuario (2026-11-02)", que los criterios citan como "decisión N", y las decisiones de 002, 003 y 004 que siguen vigentes.
-- **Ruta crítica:** sí, en parte. Propuesta del especificador, pendiente de confirmación del orquestador (paso 3): P1 aislamiento de las rutas públicas, P2 llamados (confirmación, vencimiento y protección contra pedidos falsos), P3 paso a la cuenta sin llegar a cocina y P4 permisos y trazabilidad, todos en 5a; 5b no es crítica. Ver "Clasificación de ruta crítica".
-- **Estado:** borrador (2026-11-02), con nueve preguntas abiertas para el usuario.
+- **Ruta crítica:** sí, en parte. Confirmada por el orquestador el 2026-11-03 (paso 3): P1 aislamiento de las rutas públicas, P2 llamados (confirmación, vencimiento y protección contra pedidos falsos), P3 paso a la cuenta sin llegar a cocina y P4 permisos y trazabilidad, todos en 5a; 5b no es crítica. Ver "Clasificación de ruta crítica".
+- **Estado:** aprobada por el usuario (2026-11-03), con las nueve recomendaciones de "Preguntas resueltas"; en curso 5a.
 
 ## Objetivo
 
@@ -37,7 +37,7 @@ Se ejecutan en ese orden: 5a completa (fases A a D y su commit de cierre) y desp
 
 ## Clasificación de ruta crítica
 
-**Propuesta del especificador; la confirma el orquestador en el paso 3.** `CLAUDE.md` pone en la ruta crítica el aislamiento entre empresas, los permisos con su trazabilidad de autor y auditoría, y "Pedidos web: confirmación, vencimiento y protección contra pedidos falsos"; el diseño dice que "el llamado es parte de la ruta crítica de pedidos web".
+**Confirmada por el orquestador el 2026-11-03 (paso 3), sin cambios a la propuesta del especificador.** `CLAUDE.md` pone en la ruta crítica el aislamiento entre empresas, los permisos con su trazabilidad de autor y auditoría, y "Pedidos web: confirmación, vencimiento y protección contra pedidos falsos"; el diseño dice que "el llamado es parte de la ruta crítica de pedidos web".
 
 | Parte | Entrega | Crítica | Motivo |
 | --- | --- | --- | --- |
@@ -419,15 +419,17 @@ Tablas de `public` con `id uuid`, `empresa_id`, `creado_en`, `actualizado_en`, �
 
 ## Riesgos aceptados propuestos
 
+El usuario los aceptó con la aprobación del 2026-11-03; se revisan después del ataque.
+
 Los decide el orquestador después del ataque; se anotan desde ahora porque el diseño los asume:
 
 - **Un llamado pasado a la cuenta cuyas líneas no llegaron a ningún borrador.** Si el equipo se apaga entre la confirmación y la escritura local, el llamado queda `PASADO_A_CUENTA` sin líneas en ningún borrador. El detalle sigue mostrándolas y ofrece "Agregar a mi borrador", solo en el equipo. Dos personas podrían agregarlas en dos equipos y enviarlas dos veces; lo frena ver "Comanda enviada por Ana" en la cuenta (004).
 - **Un límite por IP compartida.** Detrás del wifi del local o de un NAT del operador móvil, varias mesas comparten IP: el límite por conexión (20 en 10 minutos por sucursal) puede alcanzar a clientes reales en una noche muy llena. Mitigación: el límite por mesa es el que corta el abuso; los valores se ajustan con la pregunta 6.
 - **Códigos que se pueden compartir.** Quien fotografía un QR puede mandar llamados mientras el código siga vigente. Lo contienen el horario, los límites, la confirmación del mozo y el cambio de QR.
 
-## Preguntas abiertas
+## Preguntas resueltas
 
-Para el usuario. Cada una tiene la recomendación del especificador; los criterios ya están escritos con ella.
+El usuario aprobó las nueve recomendaciones el 2026-11-03 ("Si, todo bien"); los criterios ya estaban escritos con ellas.
 
 1. **¿Dividimos la sección en 5a (API, llamados en la PWA y QR) y 5b (carta web)?** **Recomiendo sí** ("Entregas"): 5a tiene toda la ruta crítica y se prueba sin la carta web; 5b es otra aplicación con un brief de diseño que tú apruebas. Hasta terminar 5b, el modo mesa no se puede usar con clientes reales.
 2. **¿Qué ve el cliente de su mesa?** **Recomiendo** el nombre de la mesa y de la sucursal, la carta con precios y si ya hay un llamado esperando; no el mozo, ni la cuenta, ni lo consumido, ni si la mesa está ocupada (criterio 25). Mostrar la cuenta en la mesa sería otra función (con la caja).
