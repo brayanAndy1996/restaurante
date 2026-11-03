@@ -33,12 +33,28 @@ const subidaCortada = () =>
 const logger = new Logger('FotoProducto');
 
 /**
+ * Plazo (ms) que la API espera, tras responder un rechazo con `Connection: close`, antes de destruir el socket. Es
+ * el margen para que el cliente reciba la respuesta completa; pasado el plazo se corta aunque siga enviando.
+ */
+export const PLAZO_CIERRE_RECHAZO_MS = 1_000;
+
+/**
  * Middleware global que no lee el cuerpo. Cuando la subida de una foto se rechaza (401, 403, 413, 415, 400 de la
  * ruta…) sin que el cuerpo haya llegado entero, la API **no** lo lee ni lo descarta: Node, al terminar la
  * respuesta, consumiría y tiraría todo lo que siga llegando (más de 1 GB en unos segundos) hasta el
  * `requestTimeout` de 300 s, y quien no tiene sesión ocuparía un socket y ancho de banda todo ese tiempo. En su
- * lugar la respuesta lleva `Connection: close` y el socket se cierra en cuanto la respuesta salió completa
- * (`finish`): el cliente recibe su 401/403/413/415 y la conexión se corta sin leer nada más.
+ * lugar la respuesta lleva `Connection: close` y la conexión se cierra **en dos tiempos**:
+ *
+ * 1. En cuanto la respuesta salió (`finish`) se hace `end()` del socket (FIN, medio cierre): la respuesta y el
+ *    FIN llegan al cliente en orden, y el cliente puede seguir enviando sin que nadie lo lea (el emisor se frena
+ *    solo cuando se llenan los buffers).
+ * 2. Pasado `PLAZO_CIERRE_RECHAZO_MS` (o antes, si el cliente cierra) se destruye el socket.
+ *
+ * Destruir el socket en el mismo instante en que sale la respuesta, con bytes del cliente aún sin leer en el
+ * buffer de recepción, hace que el sistema operativo envíe un RST en vez de un cierre ordenado: el RST puede
+ * descartar lo que aún no salió del buffer de envío y hace fallar la siguiente escritura del cliente con
+ * ECONNRESET/EPIPE, así que según el momento el cliente se quedaba sin la respuesta (intermitente, sobre todo con
+ * la máquina cargada). Nunca se leen más de unos pocos KB: la lectura queda pausada.
  *
  * Si el cuerpo ya llegó entero (`req.complete`) no hay nada que cortar y la conexión sigue como siempre.
  */
@@ -56,13 +72,25 @@ export function descartarCuerpoDeFotoAlResponder() {
       if (estado >= 400 && !req.complete && !res.headersSent) {
         cerrarAlTerminar = true;
         res.setHeader('Connection', 'close');
+        // Node, al terminar una respuesta `Connection: close`, llama a `socket.destroySoon()` (FIN y destruir en
+        // cuanto sale): eso es el RST de arriba. Se sustituye (solo en este socket) por un simple FIN; el socket
+        // se destruye pasado el plazo, en el `finish` de abajo.
+        const socket = req.socket;
+        socket.destroySoon = (): void => {
+          if (socket.writable) socket.end();
+        };
       }
       return escribirCabecera(...argumentos);
     }) as typeof res.writeHead;
     res.once('finish', () => {
       if (!cerrarAlTerminar) return;
-      // Ya no se lee nada de este socket: lo que el cliente siga enviando se pierde con la conexión.
-      req.socket.destroy();
+      const socket = req.socket;
+      socket.end();
+      // Si el rechazo no consumía el cuerpo, Node lo "vuelca" (`resume()`); se vuelve a pausar para que no se lea.
+      req.pause();
+      const cortar = setTimeout(() => socket.destroy(), PLAZO_CIERRE_RECHAZO_MS);
+      cortar.unref();
+      socket.once('close', () => clearTimeout(cortar));
     });
     siguiente();
   };
