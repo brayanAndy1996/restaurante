@@ -73,7 +73,8 @@ export class OrdenesService {
     const mesaId = entrada.mesaId.toLowerCase();
 
     const yaExiste = await this.buscarPorId(id);
-    if (yaExiste !== undefined) return this.replicaDeApertura(yaExiste, mesaId, sucursalId, opciones);
+    if (yaExiste !== undefined)
+      return this.replicaDeApertura(yaExiste, mesaId, sucursalId, opciones);
 
     const [mesa] = await this.mesas.bloquear([mesaId], sucursalId);
     // Si la misma apertura estaba en curso, ya terminó (el bloqueo de la mesa nos hizo esperar).

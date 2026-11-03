@@ -73,7 +73,7 @@ const esIpv4Mapeada = (g: readonly number[]): boolean =>
 function ipv6Canonica(g: readonly number[]): string {
   let mejorInicio = -1;
   let mejorLargo = 0;
-  for (let i = 0; i < 8; ) {
+  for (let i = 0; i < 8;) {
     if (g[i] !== 0) {
       i += 1;
       continue;
@@ -89,7 +89,10 @@ function ipv6Canonica(g: readonly number[]): string {
   const hex = (n: number) => n.toString(16);
   if (mejorLargo < 2) return g.map(hex).join(':');
   const antes = g.slice(0, mejorInicio).map(hex).join(':');
-  const despues = g.slice(mejorInicio + mejorLargo).map(hex).join(':');
+  const despues = g
+    .slice(mejorInicio + mejorLargo)
+    .map(hex)
+    .join(':');
   return `${antes}::${despues}`;
 }
 

@@ -56,17 +56,33 @@ describe('TopeDeCreaciones', () => {
     soltar.forEach((s) => s());
   });
 
-  it('el mismo id con otro cuerpo no es una réplica: cuenta para el tope', () => {
+  it('el mismo id con otro cuerpo no es una réplica: cada petición así cuenta para el tope', () => {
     const tope = new TopeDeCreaciones();
     const id = randomUUID();
     const soltar = [tope.entrar(CODIGO, id, CUERPO)];
-    // Cuatro cuerpos distintos con el mismo id ocupan cuatro lugares más.
-    for (let i = 0; i < 4; i += 1) soltar.push(tope.entrar(CODIGO, id, `${OTRO_CUERPO}-${i}`));
-    expect(() => tope.entrar(CODIGO, id, 'otro-mas')).toThrow(ErrorAplicacion);
+    // Cuatro peticiones con el mismo id y otro cuerpo (aunque sea el mismo entre ellas) ocupan cuatro lugares más.
+    for (let i = 0; i < 4; i += 1) soltar.push(tope.entrar(CODIGO, id, OTRO_CUERPO));
+    expect(() => tope.entrar(CODIGO, id, OTRO_CUERPO)).toThrow(ErrorAplicacion);
     expect(() => tope.entrar(CODIGO, randomUUID(), CUERPO)).toThrow(ErrorAplicacion);
-    // La réplica exacta (mismo id y mismo cuerpo) sigue pasando con el tope lleno.
-    expect(() => tope.entrar(CODIGO, id, CUERPO)).not.toThrow();
+    // La réplica exacta (mismo id y mismo cuerpo que la primera) sigue pasando con el tope lleno.
+    for (let i = 0; i < 10; i += 1) soltar.push(tope.entrar(CODIGO, id, CUERPO));
+    // Al soltar una ajena, vuelve a haber un lugar.
+    soltar[1]!();
+    expect(() => tope.entrar(CODIGO, randomUUID(), CUERPO)).not.toThrow();
     soltar.forEach((s) => s());
+  });
+
+  it('lo ajeno se libera sin dejar memoria y la duena se libera al soltar todas sus réplicas', () => {
+    const tope = new TopeDeCreaciones();
+    const id = randomUUID();
+    const duena = tope.entrar(CODIGO, id, CUERPO);
+    const replica = tope.entrar(CODIGO, id, CUERPO);
+    const ajena = tope.entrar(CODIGO, id, OTRO_CUERPO);
+    duena();
+    ajena();
+    expect((tope as unknown as { enCurso: Map<string, unknown> }).enCurso.size).toBe(1);
+    replica();
+    expect((tope as unknown as { enCurso: Map<string, unknown> }).enCurso.size).toBe(0);
   });
 
   it('soltar libera el lugar, solo una vez por reserva, y no deja memoria', () => {

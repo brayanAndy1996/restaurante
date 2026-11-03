@@ -205,6 +205,7 @@ Con fecha posterior a `202610310005`. Tablas de `public` con `sqlTablaDeEmpresaT
 - `202611020001-carta-web.ts` (C1): esquema `carta_publica` y `carta_publica.empresa_slug`; `carta_web` y `carta_web_sucursal`; trigger `carta_publica.mantener_slug()`; función `public.empresa_de_carta(text)` con sus `REVOKE` y `GRANT`.
 - `202611020002-qr-mesas.ts` (C1): `mesa_qr`; `carta_publica.codigo_mesa`; trigger `carta_publica.mantener_codigo_mesa()`; función `public.empresa_de_codigo_mesa(text)`.
 - `202611020003-llamados.ts` (C2): `llamado` con su clave primaria `(empresa_id, id)`, los `CHECK` de coherencia, el índice único parcial de pendientes y los índices de límites y de la lista.
+- `202611030001-llamados-ataque-ronda1.ts` (ronda 1 del ataque, F6): `llamado.atendido_por_sesion_id` y `llamado.cerrado_por_sesion_id`, con llaves compuestas hacia `sesion (id, empresa_id)`, para distinguir dos sesiones de soporte (criterios 43 y 51).
 
 Las mesas que ya existen no reciben código en la migración: lo crea `POST /sucursales/:sucursalId/qr-mesas` (8), porque el código lo genera la API.
 

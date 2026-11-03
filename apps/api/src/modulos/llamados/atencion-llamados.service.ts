@@ -116,7 +116,14 @@ export class AtencionLlamadosService {
               orden_id = coalesce($5::uuid, orden_id), atendido_por_sesion_id = $6, actualizado_en = $4
         WHERE id = $1`,
       {
-        bind: [fila.id, principal.usuarioId, principal.equipoId, ahora, ordenId, principal.sesionId],
+        bind: [
+          fila.id,
+          principal.usuarioId,
+          principal.equipoId,
+          ahora,
+          ordenId,
+          principal.sesionId,
+        ],
         type: QueryTypes.UPDATE,
       },
     );

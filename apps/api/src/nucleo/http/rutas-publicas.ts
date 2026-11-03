@@ -82,7 +82,11 @@ export function limitarCuerpoPublico() {
  * (6 bytes por carácter) pesa mucho más en el cable que su resultado. Las demás rutas no se miden aquí (su límite
  * es el de 100 KB del analizador).
  */
-export function verificarCuerpoPublico(peticion: Request, _respuesta: Response, cuerpo: Buffer): void {
+export function verificarCuerpoPublico(
+  peticion: Request,
+  _respuesta: Response,
+  cuerpo: Buffer,
+): void {
   if (esPostPublico(peticion) && cuerpo.length > LIMITE_CUERPO_PUBLICO_BYTES) {
     throw demasiadoGrande();
   }
