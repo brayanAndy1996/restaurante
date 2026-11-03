@@ -1,6 +1,6 @@
 import type { NextConfig } from 'next';
 import { resolve } from 'node:path';
-import { patronesDeImagenes } from './lib/imagenes';
+import { patronesDeImagenes, problemaConIpLocal } from './lib/imagenes';
 
 /**
  * Carta web y modo mesa (historia 005, entrega 5b). Se publica como servidor independiente
@@ -10,6 +10,10 @@ import { patronesDeImagenes } from './lib/imagenes';
 // Las fotos y el logo salen del almacén de archivos (R2 en producción, la API en desarrollo): el servidor de
 // Next las optimiza (WebP o AVIF, al tamaño que se ve) y así el celular descarga lo mínimo. El origen permitido
 // se arma en `lib/imagenes.ts`, que también usan las páginas para no pedir una foto de otro lado.
+
+// `IMAGENES_PERMITIR_IP_LOCAL=1` es solo para desarrollo y pruebas: con direcciones públicas, ni se construye ni arranca.
+const problemaIpLocal = problemaConIpLocal();
+if (problemaIpLocal) throw new Error(problemaIpLocal);
 
 /** `Cache-Control` de la carta (criterio 80). */
 export const CACHE_CONTROL_CARTA = 'public, s-maxage=30, stale-while-revalidate=60';
@@ -35,12 +39,12 @@ const config: NextConfig = {
   async headers() {
     return [
       {
-        // La carta (criterio 80): el CDN la guarda 30 s y la sirve hasta 60 s más mientras la renueva. Solo las
-        // direcciones `/<empresa>` y `/<empresa>/<sucursal>`: nunca `/m/…`, `/_next/…` ni los archivos con extensión.
-        source: '/:empresa((?!m$)[a-zA-Z0-9-]+)',
-        headers: [{ key: 'Cache-Control', value: CACHE_CONTROL_CARTA }],
-      },
-      {
+        // La carta (criterio 80): el CDN la guarda 30 s y la sirve hasta 60 s más mientras la renueva. Solo
+        // `/<empresa>/<sucursal>`: nunca `/m/…`, `/_next/…` ni los archivos con extensión. La página es de
+        // regeneración incremental (`generateStaticParams`), y por eso Next mantiene esta cabecera en el 200 y el 404
+        // y manda `no-store` en cualquier 5xx (la API caída no se guarda en el CDN). `/<empresa>` (la lista de
+        // sucursales, que con una sola redirige con 307) no lleva caché pública: como página de regeneración
+        // incremental, Next repite la cabecera `Location` del redirect.
         source: '/:empresa((?!m$)[a-zA-Z0-9-]+)/:sucursal([a-zA-Z0-9-]+)',
         headers: [{ key: 'Cache-Control', value: CACHE_CONTROL_CARTA }],
       },

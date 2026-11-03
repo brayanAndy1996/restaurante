@@ -144,6 +144,32 @@ test.describe('cabeceras y vista previa (criterio 80 y 83)', () => {
     expect(respuesta.headers()['referrer-policy']).toBeUndefined();
   });
 
+  test('el 404 de una carta se guarda como la carta, pero un error del servidor nunca (criterio 80)', async ({
+    request,
+  }) => {
+    test.skip(!CON_CONTROL, 'Usa la empresa "caida" de la API falsa, que responde 502');
+    const inexistente = await request.get('/sabor-norteno/no-existe');
+    expect(inexistente.status()).toBe(404);
+    expect(inexistente.headers()['cache-control']).toBe(
+      'public, s-maxage=30, stale-while-revalidate=60',
+    );
+    // La API responde 502: la carta responde 5xx y esa respuesta no se guarda en el CDN ni en el navegador.
+    for (const ruta of ['/caida/central', '/caida']) {
+      const respuesta = await request.get(ruta);
+      expect(respuesta.status(), ruta).toBeGreaterThanOrEqual(500);
+      const cabecera = respuesta.headers()['cache-control'] ?? '';
+      expect(cabecera, ruta).not.toContain('s-maxage');
+      expect(cabecera, ruta).not.toContain('public');
+      expect(cabecera, ruta).toContain('no-store');
+    }
+  });
+
+  test('una carta que no existe no tiene vista previa: la imagen responde 404', async ({
+    request,
+  }) => {
+    expect((await request.get('/sabor-norteno/no-existe/opengraph-image')).status()).toBe(404);
+  });
+
   test('el modo mesa nunca se guarda, no se indexa y no deja el código en el Referer', async ({
     request,
   }) => {

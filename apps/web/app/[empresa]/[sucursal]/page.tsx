@@ -8,6 +8,14 @@ import { resumenDeHorario } from '@/lib/horario';
 // `Cache-Control` de la respuesta lo fija `next.config.ts`.
 export const revalidate = 30;
 
+// Sin esta función Next trata la ruta como dinámica y, en un error del servidor (la API caída), dejaría pasar el
+// `Cache-Control` público de `next.config.ts`: un 500 guardado 30 s en el CDN. Con ella la carta es una página de
+// regeneración incremental (ISR): no se genera nada al construir (`[]`) y cada carta se arma en su primera visita.
+// Next conserva la cabecera de la configuración en el 200 y el 404, y manda `no-store` en cualquier 5xx.
+export function generateStaticParams() {
+  return [];
+}
+
 type Props = { params: Promise<{ empresa: string; sucursal: string }> };
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {

@@ -93,7 +93,12 @@ export default defineConfig({
         API_URL_INTERNA: API,
         NEXT_PUBLIC_API_URL: API,
         CARTA_WEB_URL: WEB,
-        ARCHIVOS_URL_PUBLICA: process.env.ARCHIVOS_URL_PUBLICA ?? `${API}/archivos`,
+        // Con la API falsa, siempre la suya (`${API_FALSA}/archivos`): la del entorno (en la CI,
+        // `http://localhost:3000/archivos`, la de la API real) no sirve fotos en el 3100. De punta a punta se
+        // respeta la del entorno, que es la que usa la API real.
+        ARCHIVOS_URL_PUBLICA: DE_PUNTA_A_PUNTA
+          ? (process.env.ARCHIVOS_URL_PUBLICA ?? `${API}/archivos`)
+          : `${API_FALSA}/archivos`,
         // Las fotos salen de `localhost`: Next no optimiza imágenes de una IP local sin este permiso (solo E2E y
         // desarrollo; en producción no se define).
         IMAGENES_PERMITIR_IP_LOCAL: '1',

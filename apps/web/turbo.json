@@ -4,10 +4,22 @@
   "tasks": {
     "build": {
       "outputs": ["$TURBO_EXTENDS$", ".next/**", "!.next/cache/**"],
-      "env": ["NEXT_PUBLIC_*", "API_URL_INTERNA", "CARTA_WEB_URL", "ARCHIVOS_URL_PUBLICA"]
+      "env": [
+        "NEXT_PUBLIC_*",
+        "API_URL_INTERNA",
+        "CARTA_WEB_URL",
+        "ARCHIVOS_URL_PUBLICA",
+        "IMAGENES_PERMITIR_IP_LOCAL"
+      ]
     },
     "dev": {
-      "env": ["NEXT_PUBLIC_*", "API_URL_INTERNA", "CARTA_WEB_URL", "ARCHIVOS_URL_PUBLICA"]
+      "env": [
+        "NEXT_PUBLIC_*",
+        "API_URL_INTERNA",
+        "CARTA_WEB_URL",
+        "ARCHIVOS_URL_PUBLICA",
+        "IMAGENES_PERMITIR_IP_LOCAL"
+      ]
     }
   }
 }

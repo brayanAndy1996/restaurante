@@ -5,7 +5,7 @@
   "description": "Carta web y modo mesa del cliente (Next.js), pensada para el celular propio y los datos móviles",
   "scripts": {
     "dev": "next dev -p 3001",
-    "build": "next build",
+    "build": "node scripts/construir.mjs",
     "start": "next start -p 3001",
     "lint": "eslint .",
     "typecheck": "next typegen && tsc --noEmit",

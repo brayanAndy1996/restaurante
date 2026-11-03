@@ -29,7 +29,8 @@ ARG NEXT_PUBLIC_API_URL
 ARG ARCHIVOS_URL_PUBLICA
 ARG CARTA_WEB_URL
 # Solo para desarrollo y pruebas (docker-compose.yml): optimizar fotos que salen de una dirección local. En producción
-# no se define.
+# no se define; si llega con valor 1 y `CARTA_WEB_URL` o `ARCHIVOS_URL_PUBLICA` no son localhost, `next build`
+# (`next.config.ts`) se detiene.
 ARG IMAGENES_PERMITIR_IP_LOCAL
 ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL \
     ARCHIVOS_URL_PUBLICA=$ARCHIVOS_URL_PUBLICA \

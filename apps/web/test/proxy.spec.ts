@@ -54,9 +54,9 @@ describe('cabeceras de la carta (criterio 80)', () => {
     expect(CACHE_CONTROL_CARTA).toBe('public, s-maxage=30, stale-while-revalidate=60');
     const reglas = (await config.headers?.()) ?? [];
     const deCarta = reglas.filter((regla) => !regla.source.startsWith('/m/'));
-    expect(deCarta).toHaveLength(2);
-    for (const regla of deCarta) {
-      expect(regla.headers).toEqual([{ key: 'Cache-Control', value: CACHE_CONTROL_CARTA }]);
-    }
+    // Solo `/<empresa>/<sucursal>`: la lista de sucursales de `/<empresa>` no se guarda.
+    expect(deCarta).toHaveLength(1);
+    expect(deCarta[0]?.source).toMatch(/:sucursal/);
+    expect(deCarta[0]?.headers).toEqual([{ key: 'Cache-Control', value: CACHE_CONTROL_CARTA }]);
   });
 });

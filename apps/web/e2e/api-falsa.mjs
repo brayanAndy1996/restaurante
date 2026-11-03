@@ -10,8 +10,9 @@
 // estado (`GET …/llamados/:id`), y las rutas de control dejan provocar cada respuesta que la carta web debe saber
 // decir en palabras: `/__control/llamado/<estado>` (cambia el estado del último llamado), `/__control/cerrado`,
 // `/__control/limite/<segundos>` (el siguiente envío recibe un 429), `/__control/caida/<n>` (los siguientes n envíos
-// se cortan sin respuesta, como una pérdida de señal) y `/__control/error/<estado>` (el siguiente envío recibe ese
-// error del servidor).
+// se cortan sin respuesta, como una pérdida de señal), `/__control/error/<estado>` (el siguiente envío recibe ese
+// error del servidor) y `/__control/conflicto/<n>` (los siguientes n envíos reciben 409 `CONFLICTO`, como cuando dos
+// peticiones del mismo `id` llegan a la vez). La empresa `caida` responde 502 a cualquier lectura de su carta.
 //
 // Para probar contra la API real (con PostgreSQL), arranca la API y la carta web con sus variables y usa
 // `E2E_API_URL`; las pruebas que usan las rutas de control (`/__control/…`) se saltan solas.
@@ -35,6 +36,8 @@ const BASE = `http://localhost:${PUERTO}`;
 /** Código de la mesa 4 de "Sabor Norteño": 22 caracteres en base64url, con mayúsculas y minúsculas. */
 export const CODIGO_MESA = 'Mesa4AbCdEfGhIjKlMnOpQ';
 export const CODIGO_MESA_DE_OTRA_EMPRESA = 'Zz9YyXxWwVvUuTtSsRrQqP';
+/** Mesa de "Gran Carta", la de los 150 productos. */
+export const CODIGO_MESA_GRANDE = 'GranMesa1AbCdEfGhIjKlM';
 
 // --- Datos de ejemplo ------------------------------------------------------------------------------
 
@@ -179,8 +182,112 @@ const FAMILIAS = [
   },
 ];
 
-function carta(empresa, sucursal) {
-  return cartaPublicaSchema.parse({ empresa, sucursal, familias: FAMILIAS });
+function carta(empresa, sucursal, familias = FAMILIAS) {
+  return cartaPublicaSchema.parse({ empresa, sucursal, familias });
+}
+
+// --- Carta grande (criterio 88: HTML de 60 kB o menos con 150 productos) ---------------------------------------
+// 10 familias × 15 productos, todos con foto y una descripción de unos 100 caracteres; un tercio con un grupo de 4
+// opciones y un quinto combos de 3 componentes. Es la empresa `gran-carta`, aparte de "Sabor Norteño" para que las
+// demás pruebas no la vean. Los textos varían de plato en plato (nada que el gzip aplaste por repetido).
+
+const NOMBRES_DE_FAMILIA = [
+  'Entradas frías',
+  'Entradas calientes',
+  'Ceviches y tiraditos',
+  'Sopas y chupes',
+  'Platos de fondo',
+  'Parrillas',
+  'Arroces y tallarines',
+  'Guarniciones',
+  'Postres y dulces',
+  'Bebidas',
+];
+const PLATOS = [
+  'Causa de pollo',
+  'Papa rellena',
+  'Choritos a la chalaca',
+  'Ocopa arequipeña',
+  'Tamal criollo',
+  'Anticucho de res',
+  'Rocoto relleno',
+  'Chicharrón de calamar',
+  'Ceviche de pescado',
+  'Leche de tigre',
+  'Tiradito ají amarillo',
+  'Aguadito de pollo',
+  'Parihuela',
+  'Chupe de camarones',
+  'Lomo saltado',
+  'Ají de gallina',
+  'Seco de cordero',
+  'Tacu tacu con lomo',
+  'Pollo a la brasa',
+  'Costillas BBQ',
+  'Arroz con mariscos',
+  'Tallarín verde',
+  'Arroz chaufa',
+  'Papas doradas',
+  'Yuca frita',
+  'Ensalada criolla',
+  'Mazamorra morada',
+  'Suspiro limeño',
+  'Picarones',
+  'Chicha morada',
+];
+const SABORES = [
+  'ají amarillo',
+  'limón sutil',
+  'culantro fresco',
+  'ají panca',
+  'huacatay',
+  'camote glaseado',
+  'choclo desgranado',
+  'cebolla morada',
+  'rocoto picante',
+  'salsa criolla',
+];
+const GUARNICIONES = ['arroz blanco', 'papas doradas', 'yuca sancochada', 'ensalada fresca'];
+
+function familiasGrandes() {
+  return Array.from({ length: 10 }, (_, f) => ({
+    id: id(1000 + f),
+    nombre: NOMBRES_DE_FAMILIA[f],
+    productos: Array.from({ length: 15 }, (_, p) => {
+      const n = f * 15 + p;
+      const nombre = `${PLATOS[(n * 7) % PLATOS.length]} ${['clásico', 'de la casa', 'especial'][n % 3]}`;
+      // Unos 100 caracteres, distintos en cada plato.
+      const descripcion =
+        `Preparado al momento con ${SABORES[n % SABORES.length]} y ${SABORES[(n * 3 + 1) % SABORES.length]}, ` +
+        `acompañado de ${GUARNICIONES[n % GUARNICIONES.length]}. Porción para una persona.`;
+      const extra = { descripcion, fotoUrl: foto(`plato-${n}`) };
+      if (n % 3 === 0) {
+        extra.grupos = [
+          {
+            id: id(5000 + n),
+            nombre: n % 2 === 0 ? 'Guarnición' : 'Tamaño',
+            seleccion: 'UNICA',
+            minimo: 1,
+            maximo: 1,
+            obligatorio: true,
+            modificadores: ['Primera', 'Segunda', 'Tercera', 'Cuarta'].map((opcion, k) => ({
+              id: id(10000 + n * 10 + k),
+              nombre: `${opcion} opción ${n}`,
+              precioExtra: k === 0 ? '0.00' : `${k * 2}.00`,
+            })),
+          },
+        ];
+      } else if (n % 5 === 1) {
+        extra.tipo = 'COMBO';
+        extra.componentes = [
+          { nombre: PLATOS[(n * 5) % PLATOS.length], cantidad: 1 },
+          { nombre: PLATOS[(n * 5 + 11) % PLATOS.length], cantidad: 2 },
+          { nombre: PLATOS[(n * 5 + 19) % PLATOS.length], cantidad: 1 },
+        ];
+      }
+      return producto(1000 + n, nombre, (12 + (n % 23) * 1.5).toFixed(2), extra);
+    }),
+  }));
 }
 
 const SUCURSAL_MIRAFLORES = {
@@ -205,8 +312,20 @@ const SUCURSAL_CENTRO = {
   abiertaAhora: true,
 };
 
+const FAMILIAS_GRANDES = familiasGrandes();
+
 const EMPRESAS = {
   'sabor-norteno': { datos: EMPRESA, sucursales: [SUCURSAL_MIRAFLORES, SUCURSAL_BARRANCO] },
+  // La carta de 150 productos del criterio 88 (peso del HTML).
+  'gran-carta': {
+    datos: {
+      nombre: 'Gran Carta',
+      logoUrl: `${BASE}/archivos/logo.png`,
+      colorPrincipal: '#1D4A9E',
+    },
+    sucursales: [SUCURSAL_CENTRO],
+    familias: FAMILIAS_GRANDES,
+  },
   // Una sola sucursal: `/<empresa>` redirige con 307 a su carta.
   'una-sede': {
     datos: { nombre: 'Una Sede', logoUrl: null, colorPrincipal: '#1D4A9E' },
@@ -222,6 +341,7 @@ const EMPRESAS = {
 const MESAS = {
   [CODIGO_MESA]: { empresa: 'sabor-norteno', sucursal: 'miraflores', nombre: 'Mesa 4' },
   [CODIGO_MESA_DE_OTRA_EMPRESA]: { empresa: 'aji-amarillo', sucursal: 'centro', nombre: '7' },
+  [CODIGO_MESA_GRANDE]: { empresa: 'gran-carta', sucursal: 'centro', nombre: 'Mesa 1' },
 };
 
 // --- Disponibilidad (cambia con /__control/agotar) -------------------------------------------------
@@ -233,14 +353,14 @@ const estadisticas = { total: 0, conIfNoneMatch: 0, respuestas304: 0 };
 
 /** id → { respuesta, estado, tipo, huella }: lo que la API real guarda del llamado. */
 const llamados = new Map();
-const simulacion = { cerrado: false, limite: 0, caidas: 0, error: 0, recibidos: 0 };
+const simulacion = { cerrado: false, limite: 0, caidas: 0, error: 0, conflictos: 0, recibidos: 0 };
 
 function pendienteDeLaMesa() {
   return [...llamados.values()].find((l) => l.estado === 'PENDIENTE') ?? null;
 }
 
-function lineasDelLlamado(entrada) {
-  const productos = new Map(FAMILIAS.flatMap((f) => f.productos).map((p) => [p.id, p]));
+function lineasDelLlamado(entrada, familias = FAMILIAS) {
+  const productos = new Map(familias.flatMap((f) => f.productos).map((p) => [p.id, p]));
   const rechazos = [];
   const lineas = [];
   entrada.lineas.forEach((linea, i) => {
@@ -285,8 +405,9 @@ function lineasDelLlamado(entrada) {
   return { lineas, rechazos };
 }
 
-function disponibilidad() {
-  const vendibles = FAMILIAS.flatMap((f) => f.productos)
+function disponibilidad(familias = FAMILIAS) {
+  const vendibles = familias
+    .flatMap((f) => f.productos)
     .filter((p) => !agotados.has(p.id))
     .map((p) => ({
       id: p.id,
@@ -429,9 +550,20 @@ const servidor = createServer((req, res) => {
       simulacion.error = Number(partes[2] ?? 500);
       return json(res, 200, { ok: true });
     }
+    if (partes[1] === 'conflicto') {
+      simulacion.conflictos = Number(partes[2] ?? 1);
+      return json(res, 200, { ok: true });
+    }
     if (partes[1] === 'reiniciar') {
       llamados.clear();
-      Object.assign(simulacion, { cerrado: false, limite: 0, caidas: 0, error: 0, recibidos: 0 });
+      Object.assign(simulacion, {
+        cerrado: false,
+        limite: 0,
+        caidas: 0,
+        error: 0,
+        conflictos: 0,
+        recibidos: 0,
+      });
       agotados.clear();
       Object.assign(estadisticas, { total: 0, conIfNoneMatch: 0, respuestas304: 0 });
       return json(res, 200, { ok: true });
@@ -448,7 +580,9 @@ const servidor = createServer((req, res) => {
   }
 
   if (partes[0] === 'archivos' && partes[1]) {
-    const imagen = IMAGENES[partes[1].replace(/\.png$/, '')];
+    const nombreDeImagen = partes[1].replace(/\.png$/, '');
+    // Las fotos de la carta grande (`plato-<n>`) son todas la misma imagen, con otra dirección cada una.
+    const imagen = IMAGENES[/^plato-\d+$/.test(nombreDeImagen) ? 'causa' : nombreDeImagen];
     if (!imagen) return noEncontrado(res);
     return enviar(res, 200, imagen, {
       'Content-Type': 'image/png',
@@ -457,6 +591,11 @@ const servidor = createServer((req, res) => {
   }
 
   if (partes[0] === 'publico' && partes[1] === 'cartas') {
+    // Una empresa cuya API "se cae": cualquier lectura responde 502 (como un proxy sin servidor detrás). Sirve para
+    // comprobar que un error del servidor nunca sale con la caché pública de la carta (criterio 80).
+    if ((partes[2] ?? '').toLowerCase() === 'caida') {
+      return json(res, 502, { codigo: 'ERROR_INTERNO', mensaje: 'Bad gateway' });
+    }
     const empresa = EMPRESAS[(partes[2] ?? '').toLowerCase()];
     if (!empresa) return noEncontrado(res);
     if (partes.length === 3) {
@@ -473,10 +612,21 @@ const servidor = createServer((req, res) => {
     const sucursal = empresa.sucursales.find((s) => s.slug === (partes[3] ?? '').toLowerCase());
     if (!sucursal) return noEncontrado(res);
     if (partes.length === 4) {
-      return conEtag(req, res, carta(empresa.datos, sucursal), CACHE_CONTROL_CARTA);
+      return conEtag(
+        req,
+        res,
+        carta(empresa.datos, sucursal, empresa.familias),
+        CACHE_CONTROL_CARTA,
+      );
     }
     if (partes.length === 5 && partes[4] === 'disponibilidad') {
-      return conEtag(req, res, disponibilidad(), CACHE_CONTROL_DISPONIBILIDAD, true);
+      return conEtag(
+        req,
+        res,
+        disponibilidad(empresa.familias),
+        CACHE_CONTROL_DISPONIBILIDAD,
+        true,
+      );
     }
     return noEncontrado(res);
   }
@@ -531,6 +681,12 @@ const servidor = createServer((req, res) => {
           simulacion.error = 0;
           return error(estado, 'ERROR_INTERNO', 'Error interno');
         }
+        // Dos peticiones del mismo `id` a la vez (criterio 29): la API real responde 409 `CONFLICTO` a una y,
+        // repetida, la réplica por `id` responde 201.
+        if (simulacion.conflictos > 0) {
+          simulacion.conflictos -= 1;
+          return error(409, 'CONFLICTO', 'La operación con esa clave sigue en curso');
+        }
         let entrada;
         try {
           entrada = llamadoEntradaSchema.parse(JSON.parse(texto));
@@ -553,7 +709,9 @@ const servidor = createServer((req, res) => {
           });
         }
         const { lineas, rechazos } =
-          entrada.tipo === 'PEDIDO' ? lineasDelLlamado(entrada) : { lineas: [], rechazos: [] };
+          entrada.tipo === 'PEDIDO'
+            ? lineasDelLlamado(entrada, EMPRESAS[datosMesa.empresa].familias)
+            : { lineas: [], rechazos: [] };
         if (rechazos.length > 0) {
           return error(422, 'PRODUCTO_NO_VENDIBLE', 'El producto está agotado', {
             campos: rechazos,

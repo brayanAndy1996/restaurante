@@ -194,9 +194,10 @@ necesita platos disponibles.
    cliente ve el cambio en su pantalla en unos 10 segundos. **Nada llega a cocina hasta que el mozo pulsa
    _Enviar_ en la cuenta.**
 
-Para ver las fotos de los platos con `pnpm dev`, deja `IMAGENES_PERMITIR_IP_LOCAL=1` en
-`apps/web/.env.local` (es lo que trae `apps/web/.env.example`). Esa variable es **solo para desarrollo y
-pruebas**: en producción no se define.
+Para ver las fotos de los platos con `pnpm dev`, `apps/web/.env.local` debe llevar `IMAGENES_PERMITIR_IP_LOCAL=1`:
+`pnpm local:preparar` la deja puesta al crear el archivo. Si lo copiaste a mano desde `apps/web/.env.example`, donde
+va comentada, quita el `#`. Esa variable es **solo para desarrollo y pruebas**: en producción no se define, y la carta
+web no construye ni arranca si vale 1 y sus direcciones públicas no son `localhost` ni `127.0.0.1`.
 
 ##### Con Docker (la imagen de la carta web)
 
@@ -261,7 +262,7 @@ usuario `postgres`).
 | `node --version` muestra una versión menor que 22                                       | Instala Node 22 o superior                                                                                                                                                                                                       |
 | La carta web dice «Esta carta no está disponible»                                       | Revisa que la carta esté _Publicada_ en Ajustes › Carta web, que la dirección sea la misma de la URL (en minúsculas) y que, en el modo mesa, el QR sea el vigente: _Cambiar QR_ deja de servir el anterior                       |
 | La carta web falla con «Falta la variable API_URL_INTERNA»                              | No existe `apps/web/.env.local`: corre `pnpm local:preparar` o copia `apps/web/.env.example` a `apps/web/.env.local`                                                                                                             |
-| Las fotos de la carta web no se ven                                                     | Deja `IMAGENES_PERMITIR_IP_LOCAL=1` en `apps/web/.env.local` y reinicia (solo desarrollo)                                                                                                                                        |
+| Las fotos de la carta web no se ven                                                     | Pon `IMAGENES_PERMITIR_IP_LOCAL=1` (sin `#`) en `apps/web/.env.local` y reinicia (solo desarrollo)                                                                                                                               |
 | La app dice "No hay conexión con el servidor"                                           | Revisa que `pnpm dev` siga corriendo y que http://localhost:3000/health responda                                                                                                                                                 |
 | Perdiste los PIN de demostración                                                        | Borra la base y vuelve a crearla: `docker compose down -v` y luego `pnpm local:preparar`                                                                                                                                         |
 | La app muestra "useSesion debe usarse dentro de SesionProvider"                         | Pasa a veces tras recompilar los paquetes: detén `pnpm dev` y vuelve a arrancarlo                                                                                                                                                |

@@ -6,12 +6,17 @@
 **/e2e/resultados
 **/playwright-report
 .git
-.env
-.env.*
-!.env.example
+# Ningún archivo de variables entra en la imagen (pueden traer secretos); solo los .env.example.
+**/.env
+**/.env.*
+!**/.env.example
 apps/api
 apps/app
 specs
 docs
-diseno
 prototipo
+diseno
+# La carta no necesita en la imagen sus pruebas, sus muestras de diseño ni su E2E.
+apps/web/e2e
+apps/web/diseno
+apps/web/test
