@@ -356,9 +356,18 @@ function Cuenta({
           Esta es la cuenta principal. Lo que tenías por enviar sigue en «Por enviar».
         </Aviso>
       ) : null}
-      {llegada.revisaElPedido ? (
+      {llegada.revisaElPedido && hayBorrador ? (
         <Aviso tipo="info" titulo="Pedido pasado a la cuenta">
-          Revisa el pedido con el cliente y pulsa Enviar para mandarlo a cocina
+          Revisa el pedido con el cliente. Toca «Por enviar» para revisarlo y mandarlo a cocina.
+          <div className="cuenta__accion-aviso">
+            <Link
+              to={rutaDeComandero(ordenId)}
+              state={{ vista: 'borrador' }}
+              className={claseBoton('secundario')}
+            >
+              Revisar y enviar
+            </Link>
+          </div>
         </Aviso>
       ) : null}
       {llegada.pidieronLaCuenta ? (

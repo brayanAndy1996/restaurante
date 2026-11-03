@@ -6,6 +6,7 @@ import {
   type AtencionEntrada,
   type AtencionRespuesta,
   type DescarteEntrada,
+  type LineaParaBorrador,
   type LlamadoDetalle,
   type LlamadoResumen,
   type LlamadosRespuesta,
@@ -277,4 +278,35 @@ export function motivoParaNoPasar(
   if (conEnvioEnCurso)
     return 'La cuenta tiene un envío a cocina sin terminar. Espera a que termine para pasar el pedido.';
   return null;
+}
+
+/**
+ * Las líneas de un pedido que ya se pasó a la cuenta, para volver a ponerlas en un borrador: lo que se pasó
+ * (`lineasPasadas`, con su cantidad) con los precios de hoy de la revisión. Una línea que hoy no está
+ * disponible no se puede agregar con seguridad y se cuenta aparte, para decirlo.
+ */
+export function lineasParaRecuperar(detalle: LlamadoDetalle): {
+  lineas: LineaParaBorrador[];
+  omitidas: number;
+} {
+  const lineas: LineaParaBorrador[] = [];
+  let omitidas = 0;
+  for (const pasada of detalle.lineasPasadas ?? []) {
+    const linea = detalle.lineas.find((l) => l.posicion === pasada.posicion);
+    if (!linea || !linea.revision.disponible) {
+      omitidas += 1;
+      continue;
+    }
+    lineas.push({
+      posicion: linea.posicion,
+      productoId: linea.productoId,
+      nombre: linea.nombre,
+      modificadores: linea.modificadores,
+      cantidad: pasada.cantidad,
+      observacion: linea.observacion,
+      precioUnitario: linea.revision.precioUnitario,
+      total: totalDeLineaDeLlamado(linea.revision.precioUnitario, pasada.cantidad),
+    });
+  }
+  return { lineas, omitidas };
 }

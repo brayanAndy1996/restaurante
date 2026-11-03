@@ -33,6 +33,8 @@ const MENSAJES = {
   REFERENCIA_INVALIDA:
     'Para abrir una mesa hace falta una persona de la sucursal. Ábrela desde el salón y vuelve a atender.',
   MESA_LIBRE: 'La mesa está libre. Indica cuántos comensales hay para abrirla.',
+  // Un `ordenId` ya usado u otro dato que la hoja no puede corregir: cerrarla y atender de nuevo genera uno nuevo.
+  DATOS_INVALIDOS: 'No pudimos atenderlo con estos datos. Ciérralo y vuelve a tocar «Atender».',
 } as const;
 
 /** Lo que se dice cuando el llamado ya estaba cerrado, según el estado en que quedó. */

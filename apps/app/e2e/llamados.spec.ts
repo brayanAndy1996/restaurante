@@ -429,6 +429,7 @@ test('el Mozo atiende con la mesa libre y la abre con 2 comensales; cambia una c
     await page.getByRole('button', { name: 'Pasar a la cuenta' }).click();
     ordenMesa1 = await esperarLaCuenta(page, 'Mesa 1');
     await expect(page.getByText('Pedido pasado a la cuenta')).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Revisar y enviar' })).toBeVisible();
     const porEnviar = page.getByRole('region', { name: 'Por enviar' });
     await expect(porEnviar).toContainText('2 ítems sin enviar a cocina');
     await expect(porEnviar).toContainText('S/ 34.00');

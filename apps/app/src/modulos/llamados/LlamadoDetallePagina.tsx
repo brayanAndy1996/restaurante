@@ -41,10 +41,12 @@ import {
   descartarLlamado,
   estadoDeLlamado,
   lineasParaPasar,
+  lineasParaRecuperar,
   montosIguales,
   motivoParaNoPasar,
   pasarLlamadoACuenta,
   textoDeAntiguedad,
+  textoDePlatos,
   totalDeLineaDeLlamado,
   totalDeLineasDeLlamado,
   type EdicionDeLinea,
@@ -149,6 +151,11 @@ function Detalle({
   const [motivo, setMotivo] = useState<string>('');
   const [falloDeDescarte, setFalloDeDescarte] = useState<string | null>(null);
   const [descartado, setDescartado] = useState(false);
+  // Otra persona ya había pasado este pedido: no se agrega nada al borrador de quien lo vio después.
+  const [pasoAjeno, setPasoAjeno] = useState(false);
+  // «Agregar a mi borrador» de un pedido que ya se pasó (recuperarlo).
+  const [recuperando, setRecuperando] = useState(false);
+  const [falloDeRecuperar, setFalloDeRecuperar] = useState<string | null>(null);
   const [sinAgregar, setSinAgregar] = useState<{
     ordenId: string;
     lineas: LineaParaBorrador[];
@@ -168,6 +175,12 @@ function Detalle({
     onSuccess: (respuesta) => {
       clientes.setQueryData(claveDetalleDeLlamado(llamadoId), respuesta.llamado);
       void clientes.invalidateQueries({ queryKey: CLAVES_TIEMPO_REAL.llamados });
+      // Solo quien lo pasó recibe las líneas en su borrador: si el servidor devuelve un paso ajeno (una réplica de
+      // otra persona), agregarlas aquí enviaría el pedido dos veces.
+      if (usuarioId === null || respuesta.llamado.cerradoPor?.id !== usuarioId) {
+        if (envio.sigueMontada()) setPasoAjeno(true);
+        return;
+      }
       // Las líneas van al borrador de esa cuenta en este equipo: nada llega a cocina hasta que se pulse «Enviar».
       const resultado = agregarLineasDeLlamado(
         claveDeBorrador(empresaId, usuarioId, respuesta.ordenId),
@@ -204,7 +217,9 @@ function Detalle({
         }
       }
       if (error instanceof ErrorApi && error.codigo === 'LLAMADO_CERRADO') {
-        setFallo(textoDeCerrado(error.estadoDelLlamado));
+        // Otra persona ya lo pasó: se dice quién y cuándo con el detalle que se vuelve a leer.
+        if (error.estadoDelLlamado === 'PASADO_A_CUENTA') setPasoAjeno(true);
+        else setFallo(textoDeCerrado(error.estadoDelLlamado));
         return;
       }
       setFallo(mensajeDeError(error, MENSAJES_DE_PASO));
@@ -302,6 +317,7 @@ function Detalle({
     if (!detalle || pasar.isPending || motivoNoPasar !== null) return;
     setFallo(null);
     setSinCuenta(false);
+    setPasoAjeno(false);
     pasar.mutate({ lineas: lineasParaPasar(detalle, ediciones) });
   }
 
@@ -314,6 +330,34 @@ function Detalle({
     );
     if (resultado === 'bloqueado') return;
     navegar(rutaDeOrden(sinAgregar.ordenId), { state: { revisaElPedido: true } });
+  }
+
+  const paraRecuperar = detalle.ordenId ? lineasParaRecuperar(detalle) : null;
+  const sePuedeRecuperar =
+    estado === 'PASADO_A_CUENTA' && esPedido && detalle.ordenId !== null && paraRecuperar !== null;
+
+  function recuperar() {
+    if (!detalle?.ordenId) return;
+    const { lineas } = lineasParaRecuperar(detalle);
+    if (lineas.length === 0) {
+      setFalloDeRecuperar(
+        'Ninguna de esas líneas está disponible hoy, así que no hay nada que agregar.',
+      );
+      return;
+    }
+    const resultado = agregarLineasDeLlamado(
+      claveDeBorrador(empresaId, usuarioId, detalle.ordenId),
+      llamadoId,
+      lineas,
+    );
+    if (resultado === 'bloqueado') {
+      setFalloDeRecuperar(
+        'La cuenta tiene un envío a cocina sin terminar. Espera a que termine e inténtalo de nuevo.',
+      );
+      return;
+    }
+    setRecuperando(false);
+    navegar(rutaDeOrden(detalle.ordenId), { state: { revisaElPedido: true } });
   }
 
   return (
@@ -400,9 +444,26 @@ function Detalle({
         {estado === 'PASADO_A_CUENTA' ? (
           <Aviso tipo="ok" titulo="Pasó a la cuenta">
             {detalle.cerradoPor ? `${detalle.cerradoPor.nombre} lo pasó` : 'Se pasó'}
-            {detalle.cerradoEn ? ` a las ${horaDeLima(detalle.cerradoEn)}` : ''}. Las líneas esperan
-            en «Por enviar» de la cuenta.{' '}
+            {detalle.cerradoEn ? ` a las ${horaDeLima(detalle.cerradoEn)}` : ''}. Pasarlo no envía
+            nada a cocina: el pedido queda en «Por enviar» en el equipo de quien lo pasó.{' '}
             {detalle.ordenId ? <Link to={rutaDeOrden(detalle.ordenId)}>Ir a la cuenta</Link> : null}
+            {sePuedeRecuperar && (paraRecuperar?.lineas.length ?? 0) > 0 ? (
+              <div className="llamado-detalle__accion">
+                <Boton
+                  onClick={() => {
+                    setFalloDeRecuperar(null);
+                    setRecuperando(true);
+                  }}
+                >
+                  Agregar a mi borrador
+                </Boton>
+              </div>
+            ) : null}
+          </Aviso>
+        ) : null}
+        {pasoAjeno ? (
+          <Aviso tipo="alerta" titulo="Otra persona ya pasó este pedido">
+            No agregamos nada a tu borrador, para que no salga dos veces.
           </Aviso>
         ) : null}
         {estado === 'ATENDIDO' && !esPedido ? (
@@ -559,6 +620,34 @@ function Detalle({
             onCambio={setMotivo}
           />
         </div>
+      </DialogoConfirmacion>
+
+      <DialogoConfirmacion
+        abierta={recuperando}
+        titulo="Agregar a mi borrador"
+        etiquetaConfirmar="Agregar a mi borrador"
+        error={
+          falloDeRecuperar ? (
+            <Aviso tipo="error" titulo="No se agregó nada">
+              {falloDeRecuperar}
+            </Aviso>
+          ) : null
+        }
+        onCancelar={() => setRecuperando(false)}
+        onConfirmar={recuperar}
+      >
+        <p className="llamado-hoja__texto">
+          Úsalo solo si nadie envió este pedido a cocina. Si ya se envió, saldrá dos veces.
+        </p>
+        {paraRecuperar ? (
+          <p className="llamado-hoja__texto">
+            Se agregarán {textoDePlatos(paraRecuperar.lineas.reduce((n, l) => n + l.cantidad, 0))} a
+            tu borrador de la cuenta.
+            {paraRecuperar.omitidas > 0
+              ? ` ${paraRecuperar.omitidas === 1 ? 'Una línea no está disponible hoy y se deja fuera.' : `${paraRecuperar.omitidas} líneas no están disponibles hoy y se dejan fuera.`}`
+              : ''}
+          </p>
+        ) : null}
       </DialogoConfirmacion>
 
       <AbrirMesaHoja

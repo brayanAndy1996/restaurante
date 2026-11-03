@@ -6,7 +6,7 @@ import { guardarSonidoDeLlamados } from '../src/lib/avisos-de-llamados';
 import { guardarTokenDeSesion } from '../src/lib/almacen';
 import { espera } from '../src/lib/api';
 import { usarMotorDeSonido, type MotorDeSonido } from '../src/modulos/cocina/sonido';
-import { claveDeBorrador, leerBorrador } from '../src/modulos/salon/borrador';
+import { borrarBorrador, claveDeBorrador, leerBorrador } from '../src/modulos/salon/borrador';
 import { ID, json, renderApp, servidor, type Manejador } from './ayudas';
 import { cocinaDe } from './ayudas-cocina';
 import {
@@ -24,6 +24,9 @@ import { socketVigente } from './ayudas-tiempo-real';
 const TOKEN =
   'se.11111111-1111-4111-8111-111111111111.22222222-2222-4222-8222-222222222222.secreto';
 const OTRA_PERSONA = uuid(31);
+/** Lo que dice la cuenta al llegar un pedido pasado, mientras haya algo «Por enviar». */
+const AVISO_DE_REVISION =
+  'Revisa el pedido con el cliente. Toca «Por enviar» para revisarlo y mandarlo a cocina.';
 
 /** El salón de los ejemplos: la mesa 1 libre, la 4 libre y la 5 con cuenta de Ana. */
 const salonDeEjemplo = () =>
@@ -569,6 +572,32 @@ describe('Atender (criterios 41, 42 y 71)', () => {
     expect(await screen.findByText('Este llamado ya se descartó.')).toBeInTheDocument();
   });
 
+  it('un `ordenId` ya usado (422 con `campos.ordenId`) se dice en genérico y la hoja se puede cerrar', async () => {
+    servidorDeLlamados({
+      llamados: () => [llamadoResumen(1)],
+      extra: {
+        'POST /llamados/*/atencion': () =>
+          json(422, {
+            codigo: 'DATOS_INVALIDOS',
+            mensaje: 'Datos inválidos',
+            campos: [{ campo: 'ordenId', mensaje: 'Ya existe una cuenta con ese identificador' }],
+          }),
+      },
+    });
+    renderApp('/salon?vista=llamados');
+    await userEvent.click(await screen.findByRole('button', { name: 'Atender la mesa 4' }));
+    const hoja = await screen.findByRole('dialog', { name: 'Atender la mesa 4' });
+    await userEvent.click(within(hoja).getByRole('button', { name: 'Atender y abrir la mesa' }));
+    expect(
+      await within(hoja).findByText(
+        'No pudimos atenderlo con estos datos. Ciérralo y vuelve a tocar «Atender».',
+      ),
+    ).toBeInTheDocument();
+    // Sin jerga ni «datos marcados»: no hay nada marcado en la hoja.
+    expect(within(hoja).queryByText(/datos marcados/)).toBeNull();
+    expect(within(hoja).getByRole('button', { name: 'Atender y abrir la mesa' })).toBeEnabled();
+  });
+
   it('«Pide la cuenta» lleva a la cuenta de la mesa con la pre-cuenta a la vista', async () => {
     servidorDeLlamados({
       llamados: () => [
@@ -645,8 +674,11 @@ describe('Detalle: revisar, pasar a la cuenta y descartar (criterios 71 a 73)', 
       ordenId: uuid(904),
       ...extra,
     });
-  const respuestaDelPaso = (posiciones = [0, 1]) => ({
-    llamado: atendido({ estado: 'PASADO_A_CUENTA' }),
+  const respuestaDelPaso = (
+    posiciones = [0, 1],
+    cerradoPor: { id: string; nombre: string } = { id: ID.usuario, nombre: 'Marta Pérez' },
+  ) => ({
+    llamado: atendido({ estado: 'PASADO_A_CUENTA', cerradoPor, cerradoEn: AHORA }),
     ordenId: uuid(904),
     lineas: posiciones.map((p) => ({
       posicion: p,
@@ -780,11 +812,7 @@ describe('Detalle: revisar, pasar a la cuenta y descartar (criterios 71 a 73)', 
     renderApp(RUTA);
     await userEvent.click(await screen.findByRole('button', { name: 'Pasar a la cuenta' }));
 
-    expect(
-      await screen.findByText(
-        'Revisa el pedido con el cliente y pulsa Enviar para mandarlo a cocina',
-      ),
-    ).toBeInTheDocument();
+    expect(await screen.findByText(AVISO_DE_REVISION)).toBeInTheDocument();
     const borrador = leerBorrador(claveDeBorrador(ID.empresa, ID.usuario, uuid(904)));
     expect(borrador.envioId).toBeNull();
     expect(borrador.lineas).toHaveLength(2);
@@ -807,9 +835,7 @@ describe('Detalle: revisar, pasar a la cuenta y descartar (criterios 71 a 73)', 
     const clave = claveDeBorrador(ID.empresa, ID.usuario, uuid(904));
     const primera = renderApp(RUTA);
     await userEvent.click(await screen.findByRole('button', { name: 'Pasar a la cuenta' }));
-    await screen.findByText(
-      'Revisa el pedido con el cliente y pulsa Enviar para mandarlo a cocina',
-    );
+    await screen.findByText(AVISO_DE_REVISION);
     expect(leerBorrador(clave).lineas).toHaveLength(2);
     primera.unmount();
 
@@ -820,9 +846,7 @@ describe('Detalle: revisar, pasar a la cuenta y descartar (criterios 71 a 73)', 
     await waitFor(() =>
       expect(s.de('POST', `/llamados/${idDeLlamado(1)}/paso-a-cuenta`)).toHaveLength(2),
     );
-    await screen.findByText(
-      'Revisa el pedido con el cliente y pulsa Enviar para mandarlo a cocina',
-    );
+    await screen.findByText(AVISO_DE_REVISION);
     expect(leerBorrador(clave).lineas).toHaveLength(2);
   });
 
@@ -862,11 +886,7 @@ describe('Detalle: revisar, pasar a la cuenta y descartar (criterios 71 a 73)', 
     await waitFor(() =>
       expect(s.de('POST', `/llamados/${idDeLlamado(1)}/paso-a-cuenta`)).toHaveLength(2),
     );
-    expect(
-      await screen.findByText(
-        'Revisa el pedido con el cliente y pulsa Enviar para mandarlo a cocina',
-      ),
-    ).toBeInTheDocument();
+    expect(await screen.findByText(AVISO_DE_REVISION)).toBeInTheDocument();
   });
 
   it('una línea rechazada al pasar queda marcada y nada se agrega al borrador', async () => {
@@ -950,5 +970,245 @@ describe('Detalle: revisar, pasar a la cuenta y descartar (criterios 71 a 73)', 
     expect(screen.queryByRole('button', { name: 'Descartar' })).toBeNull();
     expect(screen.getByText('Pasaste 1 a la cuenta')).toBeInTheDocument();
     expect(screen.getByText('No la pasaste a la cuenta')).toBeInTheDocument();
+  });
+
+  it('un paso que devuelve a otra persona como quien lo pasó no agrega nada al borrador y lo dice', async () => {
+    const ana = { id: OTRA_PERSONA, nombre: 'Ana Salón' };
+    let yaPasado = false;
+    servidorDeLlamados({
+      detalle: () =>
+        yaPasado
+          ? atendido({ estado: 'PASADO_A_CUENTA', cerradoPor: ana, cerradoEn: AHORA })
+          : atendido(),
+      extra: {
+        'POST /llamados/*/paso-a-cuenta': () => {
+          yaPasado = true;
+          return json(200, respuestaDelPaso([0, 1], ana));
+        },
+      },
+    });
+    renderApp(RUTA);
+    await userEvent.click(await screen.findByRole('button', { name: 'Pasar a la cuenta' }));
+
+    expect(await screen.findByText('Otra persona ya pasó este pedido')).toBeInTheDocument();
+    expect(await screen.findByText(/Ana Salón lo pasó/)).toBeInTheDocument();
+    expect(leerBorrador(claveDeBorrador(ID.empresa, ID.usuario, uuid(904))).lineas).toHaveLength(0);
+    // Se queda en el llamado: no la lleva a una cuenta con un borrador que no es suyo.
+    expect(screen.queryByText(AVISO_DE_REVISION)).toBeNull();
+  });
+
+  it('409 LLAMADO_CERRADO con estado PASADO_A_CUENTA dice que otra persona ya lo pasó', async () => {
+    let pasado = false;
+    servidorDeLlamados({
+      detalle: () =>
+        pasado
+          ? atendido({
+              estado: 'PASADO_A_CUENTA',
+              cerradoPor: { id: OTRA_PERSONA, nombre: 'Ana Salón' },
+              cerradoEn: AHORA,
+              lineasPasadas: [{ posicion: 0, cantidad: 2 }],
+            })
+          : atendido(),
+      extra: {
+        'POST /llamados/*/paso-a-cuenta': () => {
+          pasado = true;
+          return json(409, {
+            codigo: 'LLAMADO_CERRADO',
+            mensaje: 'Ya se pasó',
+            estado: 'PASADO_A_CUENTA',
+          });
+        },
+      },
+    });
+    renderApp(RUTA);
+    await userEvent.click(await screen.findByRole('button', { name: 'Pasar a la cuenta' }));
+
+    expect(await screen.findByText('Otra persona ya pasó este pedido')).toBeInTheDocument();
+    expect(await screen.findByText(/Ana Salón lo pasó/)).toBeInTheDocument();
+    expect(screen.queryByText('No se pasó nada a la cuenta')).toBeNull();
+    expect(leerBorrador(claveDeBorrador(ID.empresa, ID.usuario, uuid(904))).lineas).toHaveLength(0);
+  });
+
+  describe('«Agregar a mi borrador» en un pedido que ya se pasó', () => {
+    const pasado = (extra: Omit<Partial<LlamadoDetalle>, 'mesa'> = {}) =>
+      atendido({
+        estado: 'PASADO_A_CUENTA',
+        cerradoPor: { id: OTRA_PERSONA, nombre: 'Ana Salón' },
+        cerradoEn: AHORA,
+        lineasPasadas: [{ posicion: 0, cantidad: 1 }],
+        ...extra,
+      });
+    const clave = () => claveDeBorrador(ID.empresa, ID.usuario, uuid(904));
+
+    it('el aviso no promete un «Por enviar» que solo existe en el equipo de quien lo pasó', async () => {
+      servidorDeLlamados({ detalle: () => pasado() });
+      renderApp(RUTA);
+      const aviso =
+        (await screen.findByText(/Ana Salón lo pasó/)).closest('[role]') ?? document.body;
+      expect(aviso).toHaveTextContent(
+        'el pedido queda en «Por enviar» en el equipo de quien lo pasó',
+      );
+      expect(aviso).not.toHaveTextContent('Las líneas esperan');
+    });
+
+    it('pide confirmar con la advertencia y, al aceptar, agrega solo lo que se pasó y lleva a la cuenta', async () => {
+      servidorDeLlamados({ detalle: () => pasado() });
+      renderApp(RUTA);
+      await userEvent.click(await screen.findByRole('button', { name: 'Agregar a mi borrador' }));
+
+      const dialogo = await screen.findByRole('dialog', { name: 'Agregar a mi borrador' });
+      expect(dialogo).toHaveTextContent(
+        'Úsalo solo si nadie envió este pedido a cocina. Si ya se envió, saldrá dos veces.',
+      );
+      expect(dialogo).toHaveTextContent('Se agregarán 1 plato a tu borrador de la cuenta.');
+      // Aún no se agregó nada.
+      expect(leerBorrador(clave()).lineas).toHaveLength(0);
+
+      await userEvent.click(within(dialogo).getByRole('button', { name: 'Agregar a mi borrador' }));
+
+      expect(await screen.findByText(AVISO_DE_REVISION)).toBeInTheDocument();
+      const { lineas } = leerBorrador(clave());
+      // La posición 1 no se pasó: no se agrega.
+      expect(lineas).toHaveLength(1);
+      expect(lineas[0]).toMatchObject({
+        nombre: 'Combo hamburguesa',
+        cantidad: 1,
+        precioUnitario: '28.00',
+        llamadoId: idDeLlamado(1),
+      });
+    });
+
+    it('«Cancelar» no agrega nada', async () => {
+      servidorDeLlamados({ detalle: () => pasado() });
+      renderApp(RUTA);
+      await userEvent.click(await screen.findByRole('button', { name: 'Agregar a mi borrador' }));
+      const dialogo = await screen.findByRole('dialog', { name: 'Agregar a mi borrador' });
+      await userEvent.click(within(dialogo).getByRole('button', { name: 'Cancelar' }));
+      expect(leerBorrador(clave()).lineas).toHaveLength(0);
+    });
+
+    it('con un envío sin terminar en esa cuenta no agrega y lo dice dentro de la confirmación', async () => {
+      localStorage.setItem(clave(), JSON.stringify({ lineas: [], envioId: uuid(9999) }));
+      servidorDeLlamados({ detalle: () => pasado() });
+      renderApp(RUTA);
+      await userEvent.click(await screen.findByRole('button', { name: 'Agregar a mi borrador' }));
+      const dialogo = await screen.findByRole('dialog', { name: 'Agregar a mi borrador' });
+      await userEvent.click(within(dialogo).getByRole('button', { name: 'Agregar a mi borrador' }));
+
+      expect(
+        await within(dialogo).findByText(/La cuenta tiene un envío a cocina sin terminar/),
+      ).toBeInTheDocument();
+      expect(leerBorrador(clave()).lineas).toHaveLength(0);
+    });
+
+    it('lo que hoy no está disponible se deja fuera y se dice; sin nada disponible no hay botón', async () => {
+      const agotada = lineaDeLlamado(1, {
+        nombre: 'Gaseosa 1 L',
+        modificadores: [],
+        cantidad: 1,
+        revision: { disponible: false, codigo: 'PRODUCTO_NO_DISPONIBLE', motivo: 'Agotada' },
+      });
+      const pasadas = [
+        { posicion: 0, cantidad: 2 },
+        { posicion: 1, cantidad: 1 },
+      ];
+      servidorDeLlamados({
+        detalle: () => pasado({ lineas: [lineaDeLlamado(0), agotada], lineasPasadas: pasadas }),
+      });
+      const primera = renderApp(RUTA);
+      await userEvent.click(await screen.findByRole('button', { name: 'Agregar a mi borrador' }));
+      const dialogo = await screen.findByRole('dialog', { name: 'Agregar a mi borrador' });
+      expect(dialogo).toHaveTextContent('Se agregarán 2 platos a tu borrador de la cuenta.');
+      expect(dialogo).toHaveTextContent('Una línea no está disponible hoy y se deja fuera.');
+      primera.unmount();
+
+      servidorDeLlamados({
+        detalle: () => pasado({ lineas: [agotada], lineasPasadas: [{ posicion: 1, cantidad: 1 }] }),
+      });
+      renderApp(RUTA);
+      await screen.findByText(/Ana Salón lo pasó/);
+      expect(screen.queryByRole('button', { name: 'Agregar a mi borrador' })).toBeNull();
+    });
+
+    it('un llamado descartado o un aviso sin pedido no ofrecen agregar', async () => {
+      servidorDeLlamados({
+        detalle: () =>
+          atendido({
+            estado: 'DESCARTADO',
+            cerradoPor: { id: ID.usuario, nombre: 'Marta Pérez' },
+            cerradoEn: AHORA,
+          }),
+      });
+      renderApp(RUTA);
+      await screen.findByText('Este llamado se descartó');
+      expect(screen.queryByRole('button', { name: 'Agregar a mi borrador' })).toBeNull();
+    });
+  });
+});
+
+describe('Cuenta tras pasar un pedido: el aviso de revisión (criterio 72)', () => {
+  const RUTA = `/salon/llamados/${idDeLlamado(1)}`;
+  const clave = () => claveDeBorrador(ID.empresa, ID.usuario, uuid(904));
+  const pasada = () =>
+    llamadoDetalle(1, {
+      estado: 'ATENDIDO',
+      atendidoPor: { id: ID.usuario, nombre: 'Marta Pérez' },
+      atendidoEn: AHORA,
+      ordenId: uuid(904),
+    });
+  const respuesta = () => ({
+    llamado: llamadoDetalle(1, {
+      estado: 'PASADO_A_CUENTA',
+      atendidoPor: { id: ID.usuario, nombre: 'Marta Pérez' },
+      cerradoPor: { id: ID.usuario, nombre: 'Marta Pérez' },
+      cerradoEn: AHORA,
+      ordenId: uuid(904),
+    }),
+    ordenId: uuid(904),
+    lineas: [
+      {
+        posicion: 0,
+        productoId: uuid(500),
+        nombre: 'Combo hamburguesa',
+        modificadores: [],
+        cantidad: 1,
+        observacion: null,
+        precioUnitario: '30.00',
+        total: '30.00',
+      },
+    ],
+  });
+
+  it('dice qué hacer, trae «Revisar y enviar» hacia el borrador y se va cuando ya no hay nada por enviar', async () => {
+    servidorDeLlamados({
+      detalle: () => pasada(),
+      extra: { 'POST /llamados/*/paso-a-cuenta': () => json(200, respuesta()) },
+    });
+    renderApp(RUTA);
+    await userEvent.click(await screen.findByRole('button', { name: 'Pasar a la cuenta' }));
+
+    expect(await screen.findByText(AVISO_DE_REVISION)).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Revisar y enviar' })).toHaveAttribute(
+      'href',
+      `/salon/ordenes/${uuid(904)}/agregar`,
+    );
+
+    // Se envió o se vació el borrador: el aviso ya no tiene de qué hablar.
+    act(() => borrarBorrador(clave()));
+    await waitFor(() => expect(screen.queryByText(AVISO_DE_REVISION)).toBeNull());
+    expect(screen.queryByRole('link', { name: 'Revisar y enviar' })).toBeNull();
+  });
+
+  it('«Revisar y enviar» abre el borrador del comandero', async () => {
+    servidorDeLlamados({
+      detalle: () => pasada(),
+      extra: { 'POST /llamados/*/paso-a-cuenta': () => json(200, respuesta()) },
+    });
+    renderApp(RUTA);
+    await userEvent.click(await screen.findByRole('button', { name: 'Pasar a la cuenta' }));
+    await userEvent.click(await screen.findByRole('link', { name: 'Revisar y enviar' }));
+    // Lleva al borrador del comandero (no a la carta): ahí está «Enviar» con lo que se pasó.
+    expect(await screen.findByRole('button', { name: 'Enviar' })).toBeVisible();
+    expect(screen.getByText('Combo hamburguesa')).toBeInTheDocument();
   });
 });
