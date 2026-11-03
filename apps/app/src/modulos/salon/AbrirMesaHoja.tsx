@@ -39,11 +39,17 @@ export function AbrirMesaHoja({
   mesa,
   mozos,
   onCerrar,
+  alAbrir,
 }: {
   mesa: MesaPorAbrir | null;
   /** Las personas que pueden atender mesas en la sucursal (`mozos` de `GET /salon`), por nombre. */
   mozos: readonly { id: string; nombre: string }[];
   onCerrar: () => void;
+  /**
+   * Qué hacer cuando la mesa ya quedó abierta (la orden recién abierta o la que otra persona abrió antes):
+   * por defecto se va a su cuenta. El paso de un llamado a la cuenta la usa para seguir con el paso (005).
+   */
+  alAbrir?: (ordenId: string) => void;
 }) {
   return (
     <Hoja
@@ -56,7 +62,13 @@ export function AbrirMesaHoja({
       }
     >
       {mesa ? (
-        <FormularioDeApertura key={mesa.id} mesa={mesa} mozos={mozos} onCerrar={onCerrar} />
+        <FormularioDeApertura
+          key={mesa.id}
+          mesa={mesa}
+          mozos={mozos}
+          onCerrar={onCerrar}
+          {...(alAbrir ? { alAbrir } : {})}
+        />
       ) : null}
     </Hoja>
   );
@@ -66,10 +78,12 @@ function FormularioDeApertura({
   mesa,
   mozos,
   onCerrar,
+  alAbrir,
 }: {
   mesa: MesaPorAbrir;
   mozos: readonly { id: string; nombre: string }[];
   onCerrar: () => void;
+  alAbrir?: (ordenId: string) => void;
 }) {
   const sesion = useSesionActiva();
   const navegar = useNavigate();
@@ -113,7 +127,8 @@ function FormularioDeApertura({
       void clientes.invalidateQueries({ queryKey: CLAVES_TIEMPO_REAL.salon });
       if (envio.sigueMontada()) {
         onCerrar();
-        navegar(rutaDeOrden(orden.id));
+        if (alAbrir) alAbrir(orden.id);
+        else navegar(rutaDeOrden(orden.id));
       }
     },
     onError: (error) => {
@@ -123,7 +138,8 @@ function FormularioDeApertura({
         void clientes.invalidateQueries({ queryKey: CLAVES_TIEMPO_REAL.salon });
         if (error.ordenId) {
           onCerrar();
-          navegar(rutaDeOrden(error.ordenId), { state: { mesaOcupada: true } });
+          if (alAbrir) alAbrir(error.ordenId);
+          else navegar(rutaDeOrden(error.ordenId), { state: { mesaOcupada: true } });
           return;
         }
       }

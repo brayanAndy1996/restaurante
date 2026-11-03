@@ -52,13 +52,23 @@ interface PropsBanner {
   accion?: ReactNode;
   /** `timer` para textos que cambian cada segundo: los lectores de pantalla no los repiten. */
   rol?: 'status' | 'timer';
+  /** Una sola fila aunque la pantalla sea angosta: la acción se queda a la derecha (el aviso de un llamado). */
+  compacto?: boolean;
 }
 
 /** Banner de estado: dice con palabras qué pasa y qué hacer. Persistente; nunca solo color. */
-export function BannerDeEstado({ tono, icono, titulo, children, accion, rol }: PropsBanner) {
+export function BannerDeEstado({
+  tono,
+  icono,
+  titulo,
+  children,
+  accion,
+  rol,
+  compacto,
+}: PropsBanner) {
   return (
     <div
-      className={clases('ui-banner', `ui-banner--${tono}`)}
+      className={clases('ui-banner', `ui-banner--${tono}`, compacto && 'ui-banner--compacto')}
       role={rol ?? (tono === 'soporte' ? 'region' : 'status')}
       aria-label={tono === 'soporte' ? 'Modo soporte' : undefined}
     >

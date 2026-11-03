@@ -288,7 +288,10 @@ export function useBorrador(clave: string): BorradorEnPantalla {
               // Editar una línea que vino de un llamado no la desliga de él: una réplica no la duplicaría.
               lineas: b.lineas.map((l) =>
                 l.clave === claveDeLinea
-                  ? { ...linea, ...(l.llamadoId && !linea.llamadoId ? { llamadoId: l.llamadoId } : {}) }
+                  ? {
+                      ...linea,
+                      ...(l.llamadoId && !linea.llamadoId ? { llamadoId: l.llamadoId } : {}),
+                    }
                   : l,
               ),
             },

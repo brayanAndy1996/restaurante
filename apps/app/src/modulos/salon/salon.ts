@@ -86,11 +86,25 @@ export function grupoDeMesa(mesa: MesaDelSalon): string | undefined {
   return otras.length > 0 ? otras.join(', ') : undefined;
 }
 
-/** Las mesas de una zona como las dibuja la cuadrícula, con su estado, su detalle y su grupo. */
-export function mesasDeCuadricula(zona: ZonaDelSalon, ahoraMs: number): MesaDeCuadricula[] {
+/** El llamado vigente de una mesa, tal como lo dice su baldosa (005, criterio 68). */
+export interface LlamadoDeMesa {
+  tipo: 'PEDIDO' | 'LLAMAR_MOZO' | 'PEDIR_CUENTA';
+  texto: string;
+}
+
+/**
+ * Las mesas de una zona como las dibuja la cuadrícula, con su estado, su detalle, su grupo y, si tienen un
+ * llamado vigente, su etiqueta (`llamados` va de la mesa a su llamado).
+ */
+export function mesasDeCuadricula(
+  zona: ZonaDelSalon,
+  ahoraMs: number,
+  llamados?: ReadonlyMap<string, LlamadoDeMesa>,
+): MesaDeCuadricula[] {
   return zona.mesas.map((mesa) => {
     const detalle = detalleDeMesa(mesa, ahoraMs);
     const grupo = grupoDeMesa(mesa);
+    const llamado = llamados?.get(mesa.id);
     return {
       id: mesa.id,
       nombre: mesa.nombre,
@@ -101,6 +115,7 @@ export function mesasDeCuadricula(zona: ZonaDelSalon, ahoraMs: number): MesaDeCu
       estado: mesa.estado,
       ...(detalle ? { detalle } : {}),
       ...(grupo ? { grupo } : {}),
+      ...(llamado ? { llamado } : {}),
     };
   });
 }
@@ -175,6 +190,12 @@ export function totalDeMesa(mesa: MesaDelSalon): string | null {
 
 /** Ruta de la cuenta de una mesa (T16 la dibuja completa). */
 export const rutaDeOrden = (ordenId: string) => `/salon/ordenes/${ordenId}`;
+
+/** El salón en su segmento «Llamados» (005, criterio 68). */
+export const rutaDeLlamados = () => '/salon?vista=llamados';
+
+/** El detalle de un llamado para revisarlo con el cliente (005, criterio 71). */
+export const rutaDeLlamado = (llamadoId: string) => `/salon/llamados/${llamadoId}`;
 
 /** Rutas del mapa en modo selección para mover la cuenta o unir mesas (criterio 94). */
 export const rutaDeMover = (ordenId: string) => `${rutaDeOrden(ordenId)}/mover`;

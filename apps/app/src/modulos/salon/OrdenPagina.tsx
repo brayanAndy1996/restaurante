@@ -81,6 +81,10 @@ interface EstadoDeLlegada {
   unida?: boolean;
   /** Lo que acaba de hacerse desde otra pantalla (mover o unir mesas), dicho en una frase. */
   hecho?: string;
+  /** El mozo acaba de pasar un llamado de la mesa a esta cuenta: sus líneas esperan en «Por enviar» (005, criterio 72). */
+  revisaElPedido?: boolean;
+  /** El cliente pidió la cuenta desde su QR y el mozo lo atendió: la pre-cuenta queda a la vista (005, criterio 73). */
+  pidieronLaCuenta?: boolean;
 }
 
 const MENSAJES_DE_PRECUENTA = {
@@ -179,6 +183,13 @@ function Cuenta({
   const puedeLiberar = usePermiso('ATENDER_MESA') !== 'prohibido';
   const puedeAtender = usePermiso('ATENDER_MESA') !== 'prohibido';
   const puedeMoverUnir = usePermiso('MOVER_UNIR_MESAS') !== 'prohibido';
+
+  // «Pidieron la cuenta»: al llegar, la pre-cuenta queda a la vista aunque la cuenta sea larga.
+  const seccionDePrecuenta = useRef<HTMLElement>(null);
+  const llevarAPrecuenta = llegada.pidieronLaCuenta === true && orden !== undefined;
+  useEffect(() => {
+    if (llevarAPrecuenta) seccionDePrecuenta.current?.scrollIntoView({ block: 'center' });
+  }, [llevarAPrecuenta]);
 
   const montado = useRef(true);
   useEffect(() => {
@@ -345,6 +356,18 @@ function Cuenta({
           Esta es la cuenta principal. Lo que tenías por enviar sigue en «Por enviar».
         </Aviso>
       ) : null}
+      {llegada.revisaElPedido ? (
+        <Aviso tipo="info" titulo="Pedido pasado a la cuenta">
+          Revisa el pedido con el cliente y pulsa Enviar para mandarlo a cocina
+        </Aviso>
+      ) : null}
+      {llegada.pidieronLaCuenta ? (
+        <Aviso tipo="info" titulo="El cliente pidió la cuenta">
+          {ofrecePrecuenta
+            ? 'Toca «Pedir pre-cuenta» cuando esté lista.'
+            : 'Aún no hay nada enviado para cobrar. Cuando haya consumo podrás pedir la pre-cuenta.'}
+        </Aviso>
+      ) : null}
       {enviado ? <AvisoDeEnvio numero={enviado.numero} esAdicion={enviado.esAdicion} /> : null}
       {consulta.isError ? (
         <Aviso tipo="alerta" titulo="No pudimos actualizar la cuenta">
@@ -497,7 +520,11 @@ function Cuenta({
       ) : null}
 
       {abierta && (ofrecePrecuenta || puedeMoverUnir) ? (
-        <section className="cuenta__acciones" aria-label="Pre-cuenta, mover y unir">
+        <section
+          className="cuenta__acciones"
+          aria-label="Pre-cuenta, mover y unir"
+          ref={seccionDePrecuenta}
+        >
           {ofrecePrecuenta ? (
             <>
               {enPrecuenta ? (

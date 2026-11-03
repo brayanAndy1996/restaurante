@@ -84,6 +84,9 @@ export {
   Bluetooth as IconoBluetooth,
   Network as IconoRed,
   QrCode as IconoQr,
+  ConciergeBell as IconoLlamarMozo,
+  ClipboardList as IconoPedido,
+  Receipt as IconoCuenta,
 } from 'lucide-react';
 
 interface PropsIcono {

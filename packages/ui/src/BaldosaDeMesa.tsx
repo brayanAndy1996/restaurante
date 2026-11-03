@@ -1,10 +1,13 @@
 import type { EstadoMesa, FormaMesa } from '@restaurante/dominio';
 import {
   Icono,
+  IconoCuenta,
   IconoFormaCuadrada,
   IconoFormaRectangular,
   IconoFormaRedonda,
+  IconoLlamarMozo,
   IconoOk,
+  IconoPedido,
   IconoUnidas,
   IconoUsuarios,
   type LucideIcon,
@@ -30,6 +33,12 @@ const ICONO_DE_FORMA: Record<FormaMesa, LucideIcon> = {
   RECTANGULAR: IconoFormaRectangular,
 };
 
+const ICONO_DE_LLAMADO: Record<'PEDIDO' | 'LLAMAR_MOZO' | 'PEDIR_CUENTA', LucideIcon> = {
+  PEDIDO: IconoPedido,
+  LLAMAR_MOZO: IconoLlamarMozo,
+  PEDIR_CUENTA: IconoCuenta,
+};
+
 export interface PropsBaldosaDeMesa {
   nombre: string;
   capacidad: number;
@@ -43,6 +52,11 @@ export interface PropsBaldosaDeMesa {
    * baldosa con un eslabón, para que las mesas unidas se reconozcan sin leer.
    */
   grupo?: string;
+  /**
+   * Un llamado vigente de la mesa (005): lo que el cliente pidió desde su QR ("Pedido", "Llama al mozo",
+   * "Pide la cuenta"). Va en una franja con icono y texto al pie de la baldosa y en su etiqueta accesible.
+   */
+  llamado?: { tipo: 'PEDIDO' | 'LLAMAR_MOZO' | 'PEDIR_CUENTA'; texto: string };
   /** Por qué no se puede elegir (modo selección): baldosa apagada, sin toque, con el motivo en su etiqueta. */
   noElegible?: string;
   /** Mesa elegida: lleva una marca además del color y se anuncia como presionada. */
@@ -74,6 +88,7 @@ export function BaldosaDeMesa({
   estado,
   detalle,
   grupo,
+  llamado,
   noElegible,
   elegida,
   onClick,
@@ -91,6 +106,7 @@ export function BaldosaDeMesa({
     TEXTO_DE_FORMA_DE_MESA[forma],
     textoEstado,
     textoGrupo,
+    llamado?.texto,
     noElegible,
   ]
     .filter(Boolean)
@@ -99,6 +115,7 @@ export function BaldosaDeMesa({
     'ui-mesa',
     estado && `ui-mesa--${estado.toLowerCase().replace('_', '-')}`,
     grupo && 'ui-mesa--grupo',
+    llamado && 'ui-mesa--llamado',
     noElegible && 'ui-mesa--no-elegible',
     elegida && 'ui-mesa--elegida',
     className,
@@ -128,6 +145,12 @@ export function BaldosaDeMesa({
           <Icono icono={ICONO_DE_FORMA[forma]} tamano={16} />
         </span>
       )}
+      {llamado ? (
+        <span className="ui-mesa__llamado" aria-hidden="true">
+          <Icono icono={ICONO_DE_LLAMADO[llamado.tipo]} tamano={16} />
+          <span>{llamado.texto}</span>
+        </span>
+      ) : null}
       {elegida ? (
         <span className="ui-mesa__marca" aria-hidden="true">
           <Icono icono={IconoOk} tamano={16} />

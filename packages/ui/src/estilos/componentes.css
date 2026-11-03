@@ -433,6 +433,22 @@ select.ui-campo__control {
   }
 }
 
+/* El aviso de un llamado es corto: en celular su acción se queda a la derecha, en una sola fila */
+@media (max-width: 479px) {
+  .ui-banner--compacto {
+    flex-wrap: nowrap;
+    align-items: center;
+  }
+  .ui-banner--compacto .ui-banner__accion {
+    width: auto;
+    margin-left: auto;
+  }
+  .ui-banner--compacto .ui-banner__accion .ui-boton {
+    width: auto;
+    white-space: nowrap;
+  }
+}
+
 /* ---------- Teclado numérico y puntos del PIN ---------- */
 .ui-puntos {
   display: flex;
@@ -1779,6 +1795,34 @@ button.ui-mesa:active {
 }
 .ui-mesa--en-precuenta .ui-mesa__detalle {
   color: var(--color-aviso-texto);
+}
+/*
+ * Llamado vigente de la mesa (005): franja de ají al pie con icono y texto. El texto pasa a una segunda línea
+ * ("Llama al / mozo") en vez de cortarse: la baldosa mide 88 a 104 px. Las mesas con llamado reparten su
+ * contenido desde arriba para dejar sitio a la franja.
+ */
+.ui-mesa--llamado {
+  justify-content: flex-start;
+  padding-bottom: 36px;
+}
+.ui-mesa__llamado {
+  position: absolute;
+  inset: auto 0 0 0;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 32px;
+  padding: 2px 4px;
+  border-top: 1px solid var(--color-aviso-borde);
+  background: var(--color-aviso-suave);
+  color: var(--color-aviso-texto);
+  font-size: 0.8125rem;
+  line-height: 0.9375rem;
+  font-weight: 700;
+  text-align: left;
+}
+.ui-mesa__llamado > .ui-icono {
+  flex: none;
 }
 /* Eslabón de las mesas unidas: lleva el color del estado de la baldosa */
 .ui-mesa__grupo {

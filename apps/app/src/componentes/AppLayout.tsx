@@ -10,9 +10,10 @@ import {
   Navegacion,
   type LucideIcon,
 } from '@restaurante/ui';
+import { lazy, Suspense } from 'react';
 import { NavLink, Outlet } from 'react-router-dom';
 import { VigilanteDeInactividad } from '../modulos/acceso/inactividad';
-import { destinosDeNavegacion, type IdDeDestino } from '../modulos/acceso/navegacion';
+import { destinosDeNavegacion, veElSalon, type IdDeDestino } from '../modulos/acceso/navegacion';
 import { useSesion } from '../modulos/acceso/sesion';
 import { AvisosDeListoDeSesion, BannerDeAvisosDeListo } from './AvisosDeListo';
 import { BannerDeImpresion } from './BannerDeImpresion';
@@ -23,6 +24,12 @@ import {
   useEstadoDeCenefa,
 } from './AvisosGlobales';
 import { TiempoRealDeSesion } from './TiempoRealDeSesion';
+
+// Los avisos de llamados (sonido, vibración y banner) se bajan aparte, ya con la sesión abierta: no cuentan en
+// el paquete inicial (005, criterio 69).
+const AvisosDeLlamados = lazy(() =>
+  import('./AvisosDeLlamados').then((m) => ({ default: m.AvisosDeLlamados })),
+);
 
 const ICONO_DE_DESTINO: Record<IdDeDestino, LucideIcon> = {
   inicio: IconoInicio,
@@ -59,6 +66,11 @@ export function AppLayout() {
         <BannerDeSuscripcion />
         <BannerDeImpresion />
         <BannerDeAvisosDeListo />
+        {veElSalon(sesion) ? (
+          <Suspense fallback={null}>
+            <AvisosDeLlamados />
+          </Suspense>
+        ) : null}
         <VigilanteDeInactividad />
       </div>
       <div className="app__marco">

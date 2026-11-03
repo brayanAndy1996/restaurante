@@ -25,6 +25,8 @@ export interface MesaDeCuadricula {
   detalle?: string;
   /** Las otras mesas de la misma cuenta ("5, 6"): la baldosa dice "Grupo con 5, 6" y lleva un eslabón. */
   grupo?: string;
+  /** Un llamado vigente de la mesa (005): se dibuja como una franja con icono y texto al pie de la baldosa. */
+  llamado?: { tipo: 'PEDIDO' | 'LLAMAR_MOZO' | 'PEDIR_CUENTA'; texto: string };
   /**
    * Por qué esta mesa no se puede elegir ahora (modo selección de mover y unir): "Ocupada: para juntar
    * cuentas usa Unir". La baldosa se ve apagada, no se toca y la etiqueta accesible dice el motivo.
@@ -224,6 +226,7 @@ export function CuadriculaDeMesas({
                         {...(mesa.estado ? { estado: mesa.estado } : {})}
                         {...(mesa.detalle ? { detalle: mesa.detalle } : {})}
                         {...(mesa.grupo ? { grupo: mesa.grupo } : {})}
+                        {...(mesa.llamado ? { llamado: mesa.llamado } : {})}
                         {...(mesa.noElegible ? { noElegible: mesa.noElegible } : {})}
                         {...(onElegirMesa && !mesa.noElegible
                           ? {
