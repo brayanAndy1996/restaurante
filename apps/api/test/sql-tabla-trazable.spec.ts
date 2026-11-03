@@ -1,6 +1,17 @@
 // Prueba del desarrollador (no protegida) de T7: los ayudantes de migración `sqlTrazabilidad` y
 // `sqlTablaDeEmpresaTrazable` sobre una tabla de prueba que se crea y se descarta dentro de una transacción
 // del migrador (nunca queda nada en la base), y que `sqlTablaDeEmpresa` no cambió su salida.
+//
+// Aislada de las demás suites: los archivos de prueba corren en paralelo sobre la misma base. Las llaves
+// foráneas que agrega `sqlTrazabilidad` apuntan a `usuario`, `superadministrador` y `equipo`, y quitarlas
+// (`sqlQuitarTrazabilidad`) pide un bloqueo exclusivo sobre esas tablas; dentro de la misma transacción que
+// las agregó (bloqueo `SHARE ROW EXCLUSIVE`) eso es una mejora de bloqueo que se abraza mortalmente con
+// cualquier otra suite que lea y luego inserte en `usuario` (`40P01`, visto en la CI). Por eso la tabla de
+// prueba vive en un esquema propio, dentro de la transacción descartable, con copias estructurales de las
+// tres tablas (`LIKE public.… INCLUDING ALL`: mismas columnas y mismas llaves únicas que las reales, así que
+// la llave compuesta `(id, empresa_id)` sigue comprobándose) y `search_path` hacia ese esquema: la prueba
+// no toma ningún bloqueo exclusivo ni de modificación sobre las tablas compartidas.
+import { randomBytes } from 'node:crypto';
 import type { Client } from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import {
@@ -27,10 +38,22 @@ const TABLA = `CREATE TABLE tabla_de_prueba (
   dato text
 );`;
 
-/** Corre `fn` dentro de una transacción del migrador que siempre se revierte. */
+/** Las tablas a las que apuntan las llaves foráneas de la trazabilidad. */
+const TABLAS_REFERENCIADAS = ['usuario', 'superadministrador', 'equipo'] as const;
+
+/**
+ * Corre `fn` dentro de una transacción del migrador que siempre se revierte, con `search_path` hacia un esquema
+ * propio que tiene copias estructurales de las tablas que referencia la trazabilidad (ver la nota del archivo).
+ */
 async function enTransaccionDescartable<T>(fn: () => Promise<T>): Promise<T> {
+  const esquema = `prueba_trazable_${randomBytes(6).toString('hex')}`;
   await migrador.query('BEGIN');
   try {
+    await migrador.query(`CREATE SCHEMA ${esquema}`);
+    await migrador.query(`SET LOCAL search_path = ${esquema}, public`);
+    for (const tabla of TABLAS_REFERENCIADAS) {
+      await migrador.query(`CREATE TABLE ${esquema}.${tabla} (LIKE public.${tabla} INCLUDING ALL)`);
+    }
     return await fn();
   } finally {
     await migrador.query('ROLLBACK');

@@ -203,6 +203,16 @@ export function sqlTrazabilidad(tabla: string, opciones: OpcionesTrazabilidad = 
  * Deshace `sqlTrazabilidad`: quita el trigger, las llaves, los `CHECK` y las columnas (incluidas las
  * llaves hacia `equipo` que haya agregado la migración de equipos, que caen con sus columnas). No toca
  * los demás datos.
+ *
+ * Bloqueos: quitar las columnas arrastra sus llaves foráneas, y soltar una llave pide un bloqueo
+ * `ACCESS EXCLUSIVE` también sobre la tabla referenciada (`usuario`, `superadministrador` y, si existe,
+ * `equipo`), no solo sobre `tabla`. Si la misma transacción ya había agregado esas llaves con
+ * `sqlTrazabilidad`, es una mejora de bloqueo (`SHARE ROW EXCLUSIVE` a `ACCESS EXCLUSIVE`) que se abraza
+ * mortalmente (`40P01`) con cualquier otra sesión que lea `usuario` y luego escriba en él: no mezclar las
+ * dos funciones en una transacción sobre la base compartida (las pruebas lo hacen en un esquema propio).
+ * Una migración `down` real, sola en su transacción, no mejora bloqueos, pero con tráfico puede cruzarse con
+ * una transacción de la aplicación que tenga `usuario` y espere `tabla` (o al revés): córrela en ventana de
+ * mantenimiento o con `SET LOCAL lock_timeout`, y reintenta.
  */
 export function sqlQuitarTrazabilidad(tabla: string): string {
   const t = identificador(tabla);
