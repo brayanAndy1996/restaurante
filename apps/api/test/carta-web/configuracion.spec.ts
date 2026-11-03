@@ -169,6 +169,30 @@ describe('criterio 2 · nombre, dirección y color', () => {
     );
   });
 
+  it('la auditoría de la configuración lleva la entidad, también la de la primera vez (entidad_id es la fila de carta_web)', async () => {
+    // Una empresa nueva, sin configuración: el primer `PUT` la crea.
+    const empresa = await altaEmpresa(ctx, e.sa);
+    exigirEstado(
+      await putCarta(empresa.admin.token, {
+        nombre: 'Con auditoría',
+        slug: direccion('audit'),
+        colorPrincipal: '#1D6B3A',
+      }),
+      200,
+      'crear',
+    );
+    const carta = await admin.query<{ id: string }>(
+      'SELECT id FROM carta_web WHERE empresa_id = $1',
+      [empresa.empresaId],
+    );
+    const filas = await admin.query<{ entidad_id: string | null }>(
+      `SELECT entidad_id FROM auditoria WHERE empresa_id = $1 AND accion = 'configurar_carta_web'`,
+      [empresa.empresaId],
+    );
+    expect(carta.rows).toHaveLength(1);
+    expect(filas.rows).toEqual([{ entidad_id: carta.rows[0]!.id }]);
+  });
+
   it('al cambiar la dirección, la anterior deja de buscarse y la nueva se encuentra', async () => {
     const primera = direccion('antes');
     const segunda = direccion('despues');
