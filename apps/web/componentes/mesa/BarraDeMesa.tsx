@@ -33,9 +33,9 @@ export function BarraDeMesa({
   return (
     <div className="barra" role="region" aria-label="Tu mesa" ref={barraRef}>
       <div className="barra__contenido">
-        <div className="barra__avisos" aria-live="polite">
-          {avisos}
-        </div>
+        {/* Sin `aria-live` aquí: cada `Aviso` ya trae su `role` (`status` o `alert`) y un contenedor vivo encima
+            haría que el lector de pantalla lo dijera dos veces. */}
+        <div className="barra__avisos">{avisos}</div>
         {pedido ? (
           <button type="button" className="boton-principal" onClick={alVerPedido}>
             <span className="barra__cantidad">

@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { DisponibilidadPublica, LlamadoEntrada, MesaPublica } from '@restaurante/contratos';
+// Entrada `llamados` del dominio: sin `decimal.js`, para no sumar peso a la primera carga del modo mesa.
+import { MAXIMO_LINEAS_LLAMADO } from '@restaurante/dominio/llamados';
 import { ErrorApi } from '@/lib/api';
 import { EVENTO_DISPONIBILIDAD } from '@/lib/disponibilidad';
 import {
@@ -12,6 +14,7 @@ import {
   REINTENTOS_DE_SERVIDOR,
   avisoDeError,
   avisoDeEstado,
+  esReintentable,
   consultarEstado,
   consultarMesa,
   enviarLlamado,
@@ -372,7 +375,7 @@ export function Mesa({ codigo, mesa, productos, aceptaLlamados, llamadoPendiente
             ESPERAS_REINTENTO_MS[Math.min(intentosSinRed, ESPERAS_REINTENTO_MS.length - 1)]!;
           intentosSinRed += 1;
           temporizador = setTimeout(() => void probar(), espera);
-        } else if (error.estado >= 500) {
+        } else if (esReintentable(error)) {
           if (fallosDelServidor < REINTENTOS_DE_SERVIDOR) {
             const espera = ESPERAS_REINTENTO_MS[fallosDelServidor]!;
             fallosDelServidor += 1;
@@ -532,7 +535,7 @@ export function Mesa({ codigo, mesa, productos, aceptaLlamados, llamadoPendiente
           producto={producto}
           noDisponibles={disponibles?.get(producto.id) ?? SIN_NO_DISPONIBLES}
           linea={lineaEnEdicion}
-          lleno={pedido.lineas.length >= 30}
+          lleno={pedido.lineas.length >= MAXIMO_LINEAS_LLAMADO}
           alGuardar={(linea) => {
             if (hoja.clave) {
               setPedido((p) => reemplazarLinea(p, hoja.clave!, linea));

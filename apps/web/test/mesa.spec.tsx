@@ -509,6 +509,33 @@ describe('enviar al mozo y reintento con el mismo id (criterios 86 y 87)', () =>
     expect(await screen.findByText('Avisamos al mozo')).toBeInTheDocument();
     expect(cuerpos[intentos]!.id).toBe(idDelIntento);
   }, 20000);
+
+  it('un 409 CONFLICTO (el mismo id en dos peticiones a la vez) se reintenta con el mismo id y llega (criterio 29)', async () => {
+    api.envios = [errorApi(409, 'CONFLICTO'), creado('x')];
+    const usuario = userEvent.setup();
+    montar();
+    await agregarCausa(usuario);
+    const hoja = await verPedido(usuario);
+    await usuario.click(within(hoja).getByRole('button', { name: 'Enviar al mozo' }));
+    // Espera 1 s y repite; la segunda vez la API responde 201 (la réplica por id).
+    expect(await screen.findByText('Avisamos al mozo', {}, { timeout: 5000 })).toBeInTheDocument();
+    expect(cuerpos).toHaveLength(2);
+    expect(cuerpos[1]!.id).toBe(cuerpos[0]!.id);
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  }, 10000);
+
+  it('un 409 LLAMADO_PENDIENTE es final: no se reintenta', async () => {
+    api.envios = [errorApi(409, 'LLAMADO_PENDIENTE'), creado('x')];
+    const usuario = userEvent.setup();
+    montar();
+    await agregarCausa(usuario);
+    const hoja = await verPedido(usuario);
+    await usuario.click(within(hoja).getByRole('button', { name: 'Enviar al mozo' }));
+    expect(await within(hoja).findByRole('alert')).toHaveTextContent('Ya avisamos al mozo');
+    // Más que la primera espera de reintento (1 s): si se hubiera reintentado, ya habría un segundo envío.
+    await new Promise((resolver) => setTimeout(resolver, 1500));
+    expect(cuerpos).toHaveLength(1);
+  }, 10000);
 });
 
 describe('rechazos en palabras (criterios 85 y 86)', () => {

@@ -5,15 +5,33 @@ import { KB, esperarDescargas, suma, sumaCuerpos, vigilarDescargas } from './ayu
 // los bytes que pasaron por la red (cabeceras y cuerpo comprimido). `scripts/presupuesto.mjs` mide lo mismo en el build;
 // aquí se comprueba contra la carta armada y servida de verdad, con fotos, el logo y la disponibilidad.
 const CODIGO_MESA = 'Mesa4AbCdEfGhIjKlMnOpQ';
+// "Gran Carta" de la API falsa: 10 familias × 15 productos con foto y descripción, un tercio con un grupo de 4 opciones
+// y un quinto combos de 3 componentes (el criterio 88 pide el HTML en 60 kB o menos con 150 productos).
+const CARTA_GRANDE = '/gran-carta/centro';
+const CODIGO_MESA_GRANDE = 'GranMesa1AbCdEfGhIjKlM';
+const PRODUCTOS_DE_LA_CARTA_GRANDE = 150;
 
 test.skip(!!process.env.E2E_API_URL, 'Usa los datos de la API falsa');
 
 const esJs = (d: { tipo: string; url: string }) => d.tipo === 'script';
 
 test.describe('primera vista a 360 × 740', () => {
-  for (const { nombre, ruta, limiteJsKb } of [
-    { nombre: 'la carta', ruta: '/sabor-norteno/miraflores', limiteJsKb: 140 },
-    { nombre: 'el modo mesa', ruta: `/m/${CODIGO_MESA}`, limiteJsKb: 150 },
+  for (const { nombre, ruta, limiteJsKb, productos } of [
+    { nombre: 'la carta', ruta: '/sabor-norteno/miraflores', limiteJsKb: 140, productos: 9 },
+    { nombre: 'el modo mesa', ruta: `/m/${CODIGO_MESA}`, limiteJsKb: 150, productos: 9 },
+    // Con 150 productos (criterio 88): el mismo techo de 400 kB en la primera vista y el HTML en 60 kB o menos.
+    {
+      nombre: 'la carta de 150 productos',
+      ruta: CARTA_GRANDE,
+      limiteJsKb: 140,
+      productos: PRODUCTOS_DE_LA_CARTA_GRANDE,
+    },
+    {
+      nombre: 'el modo mesa con 150 productos',
+      ruta: `/m/${CODIGO_MESA_GRANDE}`,
+      limiteJsKb: 150,
+      productos: PRODUCTOS_DE_LA_CARTA_GRANDE,
+    },
   ]) {
     test(`${nombre} baja 400 kB o menos en total, sin fuentes web y con lo comprimido`, async ({
       page,
@@ -22,6 +40,8 @@ test.describe('primera vista a 360 × 740', () => {
       const respuesta = await page.goto(ruta);
       expect(respuesta?.status()).toBe(200);
       await esperarDescargas(page);
+      // La medida vale lo que vale la carta: la página trae todos los productos del catálogo de la prueba.
+      await expect(page.locator('[data-producto-id]')).toHaveCount(productos);
 
       const total = suma(descargas);
       const js = sumaCuerpos(descargas, esJs);
@@ -37,7 +57,7 @@ test.describe('primera vista a 360 × 740', () => {
         limiteJsKb * KB,
       );
       expect(css, 'CSS: 20 kB o menos').toBeLessThanOrEqual(20 * KB);
-      expect(html, 'HTML de una carta chica: lejos de los 60 kB').toBeLessThanOrEqual(60 * KB);
+      expect(html, 'HTML (gzip): 60 kB o menos').toBeLessThanOrEqual(60 * KB);
       // La pila del sistema: ni un byte de tipografía.
       expect(descargas.filter((d) => d.tipo === 'font')).toEqual([]);
       // Lo que baja el servidor viene comprimido (salvo lo diminuto, que el servidor no comprime).

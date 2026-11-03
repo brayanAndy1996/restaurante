@@ -91,7 +91,7 @@ export const cartaWebRespuestaSchema = z.object({
   configurada: z.boolean(),
   nombre: z.string().nullable(),
   slug: z.string().nullable(),
-  colorPrincipal: z.string(),
+  colorPrincipal: colorPrincipalSchema,
   logoUrl: z.string().nullable(),
   /** `CARTA_WEB_URL/<empresa>`, o `null` si falta la dirección o `CARTA_WEB_URL`. */
   url: z.string().nullable(),
@@ -138,7 +138,7 @@ export const qrMesaRespuestaSchema = z.object({
 export const datosEmpresaPublicaSchema = z.strictObject({
   nombre: z.string(),
   logoUrl: z.string().nullable(),
-  colorPrincipal: z.string(),
+  colorPrincipal: colorPrincipalSchema,
 });
 
 /** `GET /publico/cartas/:empresaSlug` (criterio 18). */

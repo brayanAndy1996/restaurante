@@ -108,6 +108,20 @@ test.describe('modo mesa', () => {
     expect(await llamados(request)).toHaveLength(1);
   });
 
+  test('un 409 CONFLICTO se reintenta con el mismo id y el mozo recibe un solo pedido (criterio 29)', async ({
+    page,
+    request,
+  }) => {
+    await agregarLomo(page);
+    await control(request, 'conflicto/1');
+    const hoja = await abrirPedido(page);
+    await hoja.getByRole('button', { name: 'Enviar al mozo' }).click();
+    await expect(page.getByText('Avisamos al mozo')).toBeVisible({ timeout: 10_000 });
+    // El primer envío recibió el 409; el reintento (1 s después, mismo id) quedó guardado.
+    expect((await estadisticas(request)).recibidos).toBe(2);
+    expect(await llamados(request)).toHaveLength(1);
+  });
+
   test('un plato que se agota antes de enviar queda marcado "Se agotó" y no deja enviar', async ({
     page,
     request,

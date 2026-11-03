@@ -22,6 +22,15 @@ export const ESPERAS_REINTENTO_MS = [1_000, 2_000, 5_000, 10_000] as const;
 /** Veces que se reintenta un 5xx antes de pararse y dejar que el cliente pulse otra vez. */
 export const REINTENTOS_DE_SERVIDOR = 3;
 
+/**
+ * Un error que no es final: el 5xx del servidor y el 409 `CONFLICTO` (criterio 29: dos peticiones del mismo `id` a la
+ * vez; la segunda, repetida, responde 201). Se reintenta con el mismo `id`. Un 409 `LLAMADO_PENDIENTE` o
+ * `FUERA_DE_HORARIO` sí es final: repetirlo no cambia la respuesta.
+ */
+export function esReintentable(error: ErrorApi): boolean {
+  return error.estado >= 500 || (error.estado === 409 && error.codigo === 'CONFLICTO');
+}
+
 const objeto = (dato: unknown): dato is Record<string, unknown> =>
   typeof dato === 'object' && dato !== null;
 
@@ -158,6 +167,8 @@ export function rechazosDeLineas(
   return rechazos;
 }
 
+// Pendiente (M5, revisión de 5b): esto lee el texto del campo `mensaje` de la API, que no es un contrato estable;
+// ver «Avisos y estados del llamado» en `DESIGN.md`. No se cambia hasta que la API dé un código por línea.
 function motivoDeLinea(
   mensaje: string,
   nombreDeOpcion: (id: string) => string | undefined,
@@ -203,6 +214,11 @@ export function avisoDeError(error: ErrorApi, rechazadas = false): AvisoDeMesa {
       };
     case 'MONTO_FUERA_DE_RANGO':
       return e('Tu pedido es demasiado grande', 'Quita algo del pedido o habla con el mozo.');
+    case 'CONFLICTO':
+      return e(
+        'No pudimos enviar tu pedido',
+        'Inténtalo otra vez en un momento. Si sigue igual, habla con el mozo.',
+      );
   }
   if (error.estado === 422 && rechazadas) {
     return e('No pudimos enviar tu pedido', 'Quita lo que está marcado y envíalo otra vez.');

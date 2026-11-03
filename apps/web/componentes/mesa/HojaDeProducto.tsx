@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react';
 import {
   CANTIDAD_MAXIMA_LLAMADO,
   LARGO_NOTA_LLAMADO,
+  MAXIMO_LINEAS_LLAMADO,
   calcularLinea,
   precioEnSoles,
   precioEsCero,
@@ -32,7 +33,7 @@ interface Props {
   noDisponibles: ReadonlySet<string>;
   /** Presente al editar una línea del pedido. */
   linea?: LineaPedido;
-  /** El pedido ya tiene 30 líneas distintas y esta sería nueva. */
+  /** El pedido ya tiene el máximo de líneas distintas y esta sería nueva. */
   lleno: boolean;
   alGuardar: (linea: Omit<LineaPedido, 'clave'>) => void;
   alCerrar: () => void;
@@ -77,7 +78,7 @@ export function HojaDeProducto({
   const sinLugar = lleno && !linea;
   const puedeGuardar = resultado.valido && !sinLugar;
   const motivo = sinLugar
-    ? 'Tu pedido ya tiene 30 platos distintos. Quita uno para agregar otro.'
+    ? `Tu pedido ya tiene ${MAXIMO_LINEAS_LLAMADO} platos distintos. Quita uno para agregar otro.`
     : faltan[0]
       ? `Falta elegir: ${faltan[0].nombre}`
       : null;
@@ -166,14 +167,14 @@ export function HojaDeProducto({
               ) : null}
               {grupo.modificadores.map((m) => {
                 const marcada = elegidos.includes(m.id);
-                const lleno = !unica && !marcada && elegidosDelGrupo >= grupo.maximo;
+                const sinCupo = !unica && !marcada && elegidosDelGrupo >= grupo.maximo;
                 return (
-                  <label className="opcion" key={m.id} data-apagada={lleno ? '' : undefined}>
+                  <label className="opcion" key={m.id} data-apagada={sinCupo ? '' : undefined}>
                     <input
                       type={unica ? 'radio' : 'checkbox'}
                       name={grupo.id}
                       checked={marcada}
-                      disabled={lleno}
+                      disabled={sinCupo}
                       onChange={(e) => elegir(grupo, m.id, e.target.checked)}
                     />
                     <span>{m.nombre}</span>

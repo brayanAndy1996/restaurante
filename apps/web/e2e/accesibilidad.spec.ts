@@ -201,7 +201,7 @@ test.describe('lo que axe no ve', () => {
     await expect(llamar).toBeFocused();
   });
 
-  test('los avisos y errores se anuncian (aria-live) y llevan icono y palabras', async ({
+  test('los avisos y errores se anuncian (role status o alert, una sola vez) y llevan icono y palabras', async ({
     page,
     request,
   }) => {
@@ -210,8 +210,10 @@ test.describe('lo que axe no ve', () => {
     await page.getByRole('button', { name: /Llamar al mozo/ }).click();
     await page.getByRole('button', { name: 'Sí, llamar al mozo' }).click();
     const barra = page.getByRole('region', { name: 'Tu mesa' });
-    await expect(barra.locator('[aria-live="polite"]')).toContainText('Avisamos al mozo');
+    // El anuncio lo da el `role="status"` del aviso; el contenedor no es una región viva (no se dice dos veces).
+    await expect(barra.getByRole('status')).toContainText('Avisamos al mozo');
     await expect(barra.getByRole('status')).toContainText('Puedes seguir viendo la carta.');
+    await expect(barra.locator('[aria-live]')).toHaveCount(0);
     // Con un pendiente, otro envío se rechaza en palabras, con role="alert".
     await request.post(`${API}/__control/reiniciar`);
     await page.goto(`/m/${CODIGO_MESA}`);

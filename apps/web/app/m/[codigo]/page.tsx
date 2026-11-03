@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation';
 import { CartaWeb, etiquetaDeMesa } from '@/componentes/CartaWeb';
 import { Mesa } from '@/componentes/mesa/Mesa';
 import { obtenerCarta, obtenerMesa } from '@/lib/api-servidor';
+import { esImagenOptimizable } from '@/lib/imagenes';
 import type { ProductoMesa } from '@/lib/pedido';
 
 // El modo mesa se arma en cada petición (criterio 80); sus cabeceras (`private, no-store`, `noindex`,
@@ -35,7 +36,8 @@ export default async function PaginaDeMesa({ params }: Props) {
       id,
       nombre,
       descripcion,
-      fotoUrl,
+      // La misma regla que la lista: una foto de otro origen no se pinta, ni en la hoja del producto.
+      fotoUrl: esImagenOptimizable(fotoUrl) ? fotoUrl : null,
       precio,
       grupos,
     })),
