@@ -13,7 +13,9 @@ secciones ya aprobadas y cerradas. Hoy son:
 - **Sección 3b, Impresión básica:** impresoras de red por estación y de caja, vinculación del puente por
   QR, cola de trabajos con reenvío, tickets ESC/POS y un simulador del puente para probarla sin Android
   (la app Android llega en la 3c).
+- **Sección 5a, Carta web y llamados desde la mesa:** la API, los QR de las mesas (en Ajustes › Mapa de mesas) y los llamados (en Salón › Llamados).
 
+La carta para el cliente (sección 5b: la carta y el modo mesa) está en la rama `claude/upbeat-wright-q09k0n` y todavía no está en `main`.
 Las secciones siguientes (caja, etc.) se trabajan en otra rama y llegan a `main` cuando se aprueban.
 
 ## 1. Lo que necesitas instalar
@@ -59,7 +61,7 @@ pnpm local:preparar
 
 Este comando hace todo por ti:
 
-1. Crea el archivo `.env` a partir de `.env.example`, con las variables de desarrollo.
+1. Crea el archivo `.env` a partir de `.env.example`, con las variables de desarrollo, y `apps/web/.env.local` a partir de `apps/web/.env.example` (la carta web).
 2. Levanta PostgreSQL 16 en Docker, en el **puerto 5433** para no chocar con otro PostgreSQL que
    tengas instalado.
 3. Crea los roles y la base `restaurante`, y aplica las migraciones.
@@ -173,9 +175,9 @@ La app del puente (Android) llega en la entrega 3c. Mientras tanto puedes probar
 
 Si el texto del QR trae una dirección que tu computadora no alcanza, agrega `--api http://localhost:3000`. Más opciones: `pnpm puente:simular --ayuda`.
 
-#### Carta web y pedido desde la mesa (sección 5)
+#### Carta web y pedido desde la mesa (sección 5b)
 
-La carta web es otra aplicación (`apps/web`, Next.js) que corre en el **puerto 3001**. La ve el cliente del
+Esta parte está en la rama `claude/upbeat-wright-q09k0n`, todavía no en `main`. La carta web es otra aplicación (`apps/web`, Next.js) que corre en el **puerto 3001**. La ve el cliente del
 restaurante en su propio celular, sin cuenta y sin instalar nada. Hazlo después del paso 4 de la carta, porque
 necesita platos disponibles.
 
@@ -189,7 +191,7 @@ necesita platos disponibles.
    Toca un plato, elige sus opciones, mira _Tu pedido_ y pulsa _Enviar al mozo_. También puedes pulsar
    _Llamar al mozo_ o _Pedir la cuenta_. La pantalla dice con palabras qué pasó con tu llamado:
    _Avisamos al mozo_, _El mozo viene a tu mesa_, _El mozo tomó tu pedido_…
-4. **Haz de mozo.** En otra ventana, entra como `fogon.mozo`: te llega el aviso al instante. Ábrelo, _Atender_
+4. **Haz de mozo.** En otra ventana, entra como `fogon.mozo`: te llega el aviso al instante (con la PWA abierta). Ábrelo, _Atender_
    (si la mesa está libre, la abre con los comensales), ajusta lo que haga falta y _Pasar a la cuenta_. El
    cliente ve el cambio en su pantalla en unos 10 segundos. **Nada llega a cocina hasta que el mozo pulsa
    _Enviar_ en la cuenta.**
@@ -229,7 +231,10 @@ Tu celular tiene que estar en la misma red Wi-Fi que la computadora.
 
 3. Para probar también la carta web desde el celular, en `apps/web/.env.local` pon tu IP en
    `NEXT_PUBLIC_API_URL=http://192.168.1.20:3000` y `CARTA_WEB_URL=http://192.168.1.20:3001`, y en `.env`
-   la misma `CARTA_WEB_URL` (es la que llevan los QR).
+   la misma `CARTA_WEB_URL` (es la que llevan los QR). Quita `IMAGENES_PERMITIR_IP_LOCAL=1` de
+   `apps/web/.env.local`: con una dirección que no es `localhost`, la carta web no construye ni arranca con esa
+   variable. Sin ella, las fotos no se ven en el celular; para revisarlas, vuelve a `localhost` y pon otra vez la
+   variable.
 4. Vuelve a arrancar con `pnpm dev` y abre `http://192.168.1.20:5173` (el personal) o
    `http://192.168.1.20:3001/m/<código>` (la carta de una mesa) en el celular.
 
@@ -244,7 +249,8 @@ usuario `postgres`).
 1. Copia `.env.example` a `.env`.
 2. En `.env`, cambia el puerto `5433` por el de tu PostgreSQL (normalmente `5432`) en todas las URL,
    y pon la contraseña de tu usuario administrador en `DATABASE_ADMIN_URL`.
-3. Ejecuta:
+3. Copia `apps/web/.env.example` a `apps/web/.env.local` (`pnpm local:preparar` lo hace sola; sin él, la carta web falla con «Falta la variable API_URL_INTERNA»).
+4. Ejecuta:
 
    ```bash
    pnpm db:preparar     # roles y base `restaurante`

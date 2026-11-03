@@ -117,7 +117,7 @@ Sin pruebas protegidas (no es ruta crítica). No cambia la API: si una pantalla 
 
 ### Fase A · Armado (frontend)
 
-- [ ] T20 · frontend · `apps/web` según "Carta web (5b)" de `plan.md`: Next.js con App Router y TypeScript, `output: 'standalone'`, scripts de Turborepo (`build`, `lint`, `typecheck`, `test`), ESLint y `tsconfig` de `packages/config`, Vitest con Testing Library, Playwright, `Dockerfile`, variables en `.env.example` (`API_URL_INTERNA`, `NEXT_PUBLIC_API_URL`, `CARTA_WEB_URL`, `ARCHIVOS_URL_PUBLICA`), `lib/api.ts`, el esqueleto de rutas con `not-found` y `robots.ts`, `scripts/presupuesto.mjs` y su paso en CI. (criterios 78, 93 en parte)
+- [x] T20 · frontend · `apps/web` según "Carta web (5b)" de `plan.md`: Next.js con App Router y TypeScript, `output: 'standalone'`, scripts de Turborepo (`build`, `lint`, `typecheck`, `test`), ESLint y `tsconfig` de `packages/config`, Vitest con Testing Library, Playwright, `Dockerfile`, variables en `.env.example` (`API_URL_INTERNA`, `NEXT_PUBLIC_API_URL`, `CARTA_WEB_URL`, `ARCHIVOS_URL_PUBLICA`), `lib/api.ts`, el esqueleto de rutas con `not-found` y `robots.ts`, `scripts/presupuesto.mjs` y su paso en CI. (criterios 78, 93 en parte)
 
 ### Fase C · Implementación
 
@@ -127,25 +127,25 @@ La fase C de 5b empieza por el brief de diseño. El frontend usa la skill `impec
 
 Commit propio.
 
-- [ ] T21 · frontend · Con `impeccable`, `apps/web/PRODUCT.md` (cliente sentado en la mesa, celular propio, datos móviles, español de Perú, trato de tú) y `apps/web/DESIGN.md` (tipo "Operate" con la marca del restaurante: logo, nombre y color con `colorDeMarcaAccesible`; fuentes del sistema; lista con foto, nombre y precio; hojas para el producto y el pedido) y una muestra estática de la carta y del modo mesa. El orquestador los muestra al usuario y no se construyen pantallas hasta su aprobación. (criterio 89)
+- [x] T21 · frontend · Con `impeccable`, `apps/web/PRODUCT.md` (cliente sentado en la mesa, celular propio, datos móviles, español de Perú, trato de tú) y `apps/web/DESIGN.md` (tipo "Operate" con la marca del restaurante: logo, nombre y color con `colorDeMarcaAccesible`; fuentes del sistema; lista con foto, nombre y precio; hojas para el producto y el pedido) y una muestra estática de la carta y del modo mesa. El orquestador los muestra al usuario y no se construyen pantallas hasta su aprobación. (criterio 89)
 
 #### C5 · RF-40, RF-41, HU-09: la carta
 
 Commit propio.
 
-- [ ] T22 · frontend · Rutas `/<empresa>`, `/<empresa>/<sucursal>` y `/m/<código>` (este último solo con la carta y el encabezado de la mesa); `middleware.ts` de minúsculas; caché y cabeceras del criterio 80; la carta del servidor con encabezado, horario, familias como enlaces y productos con `next/image`; la isla de disponibilidad con `If-None-Match` cada 15 s y al volver a la pestaña; `opengraph-image.tsx` y metadatos. Pruebas de componente de la disponibilidad y del horario. (criterios 79 a 83)
-- [ ] T23 · tester · Suite completa, lint, tipos, build y presupuesto de la carta.
+- [x] T22 · frontend · Rutas `/<empresa>`, `/<empresa>/<sucursal>` y `/m/<código>` (este último solo con la carta y el encabezado de la mesa); `proxy.ts` de minúsculas (Next 16 llama `proxy` al antiguo `middleware`); caché y cabeceras del criterio 80; la carta del servidor con encabezado, horario, familias como enlaces y productos con `next/image`; la isla de disponibilidad con `If-None-Match` cada 15 s y al volver a la pestaña; `opengraph-image.tsx` y metadatos. Pruebas de componente de la disponibilidad y del horario. (criterios 79 a 83)
+- [x] T23 · tester · Suite completa, lint, tipos, build y presupuesto de la carta.
 
 #### C6 · HU-40, RF-85, RF-86: el modo mesa
 
 Commit propio.
 
-- [ ] T24 · frontend · Modo mesa: hoja de producto con grupos y `validarSeleccion`, cantidad 1 a 20 y observación; "Tu pedido" con edición, total con `totalOrden`, nota y "Enviar al mozo"; pedido en `sessionStorage` por código; `id` del llamado conservado hasta una respuesta final y reintento con el mismo `id` sin red; "Llamar al mozo" y "Pedir la cuenta" con confirmación; envíos desactivados con un pendiente; banner y consulta del estado cada 10 s; mensajes de 409, 422 por línea y 429 en palabras; líneas que se agotaron marcadas "Se agotó". Pruebas de componente: reintento con el mismo `id`, rechazo por línea, banner de estado, pedido que sobrevive a la recarga. (criterios 82 en el modo mesa, 84 a 87)
-- [ ] T25 · frontend · Presupuesto del criterio 88 (`scripts/presupuesto.mjs` y medición de bytes transferidos en el E2E a 360 × 740); accesibilidad del criterio 90 con una revisión automática (axe) en el E2E; compatibilidad del criterio 91; E2E de punta a punta del criterio 92 con dos contextos (cliente y Mozo) contra la API y la PWA, incluida la cabecera `Referrer-Policy` del modo mesa; `docker-compose` y `DESPLIEGUE-LOCAL.md` con el puerto 3001. (criterios 88, 90 a 93)
-- [ ] T26 · tester · Suite completa, lint, tipos, build, presupuesto de la carta y de la PWA y E2E de 5a y 5b.
+- [x] T24 · frontend · Modo mesa: hoja de producto con grupos y `validarSeleccion`, cantidad 1 a 20 y observación; "Tu pedido" con edición, total con `totalOrden`, nota y "Enviar al mozo"; pedido en `sessionStorage` por código; `id` del llamado conservado hasta una respuesta final y reintento con el mismo `id` sin red; "Llamar al mozo" y "Pedir la cuenta" con confirmación; envíos desactivados con un pendiente; banner y consulta del estado cada 10 s; mensajes de 409, 422 por línea y 429 en palabras; líneas que se agotaron marcadas "Se agotó". Pruebas de componente: reintento con el mismo `id`, rechazo por línea, banner de estado, pedido que sobrevive a la recarga. (criterios 82 en el modo mesa, 84 a 87)
+- [x] T25 · frontend · Presupuesto del criterio 88 (`scripts/presupuesto.mjs` y medición de bytes transferidos en el E2E a 360 × 740); accesibilidad del criterio 90 con una revisión automática (axe) en el E2E; compatibilidad del criterio 91; E2E de punta a punta del criterio 92 con dos contextos (cliente y Mozo) contra la API y la PWA, incluida la cabecera `Referrer-Policy` del modo mesa; `docker-compose` y `DESPLIEGUE-LOCAL.md` con el puerto 3001. (criterios 88, 90 a 93)
+- [x] T26 · tester · Suite completa, lint, tipos, build, presupuesto de la carta y de la PWA y E2E de 5a y 5b.
 
 ### Fase D · Revisión, verificación y cierre (5b)
 
-- [ ] T27 · revisor · Comparar con `spec.md`, `plan.md`, `CLAUDE.md` y el `DESIGN.md` aprobado de `apps/web`: solo rutas públicas de la API, ningún dato de más mostrado, montos con `packages/dominio`, zod solo en el servidor, cabeceras de caché, `noindex` y `Referrer-Policy` del modo mesa, presupuesto, accesibilidad. Si el presupuesto no se puede cumplir, propone el ajuste con su motivo. El orquestador decide si pide además un ataque corto sobre la carta web (fuga del código por `Referer` o por la caché, reintentos que dupliquen llamados); no es obligatorio porque 5b no es ruta crítica.
-- [ ] T28 · tester · Suite completa, lint, tipos, build, presupuestos y E2E de 5a y 5b; la imagen de Docker de `apps/web` arranca con `docker compose up` según `DESPLIEGUE-LOCAL.md`.
-- [ ] T29 · documentador · Commit de cierre de 5b y documentación (README de `apps/web`: variables, cómo correrla, caché y presupuesto); estado de `spec.md` a "5a terminada (fecha); 5b terminada (fecha)". El orquestador lleva a los documentos compartidos los "Cambios propuestos" que tocan a 5b.
+- [x] T27 · revisor · Comparar con `spec.md`, `plan.md`, `CLAUDE.md` y el `DESIGN.md` aprobado de `apps/web`: solo rutas públicas de la API, ningún dato de más mostrado, montos con `packages/dominio`, zod solo en el servidor, cabeceras de caché, `noindex` y `Referrer-Policy` del modo mesa, presupuesto, accesibilidad. Si el presupuesto no se puede cumplir, propone el ajuste con su motivo. El orquestador decide si pide además un ataque corto sobre la carta web (fuga del código por `Referer` o por la caché, reintentos que dupliquen llamados); no es obligatorio porque 5b no es ruta crítica.
+- [x] T28 · tester · Suite completa, lint, tipos, build, presupuestos y E2E de 5a y 5b; la imagen de Docker de `apps/web` arranca con `docker compose up` según `DESPLIEGUE-LOCAL.md`. Docker sin verificar en este entorno: el daemon de Docker no responde (ver riesgos de 5b en `spec.md`).
+- [x] T29 · documentador · Commit de cierre de 5b y documentación (README de `apps/web`: variables, cómo correrla, caché y presupuesto); estado de `spec.md` a "5a terminada (fecha); 5b terminada (fecha)". El orquestador lleva a los documentos compartidos los "Cambios propuestos" que tocan a 5b.

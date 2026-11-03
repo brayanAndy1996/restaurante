@@ -2,8 +2,8 @@
 
 Sistema en la nube para restaurantes pequeños del Perú, alquilado por sucursal. Monorepo con pnpm y
 Turborepo: `apps/api` (NestJS + Sequelize + PostgreSQL), `packages/dominio` (reglas puras),
-`packages/contratos` (esquemas zod) y `packages/config`. La PWA del personal ya existe (`apps/app`); la carta web para los clientes (`apps/web`) y el puente Android
-llegan en historias posteriores. En `apps/api/src/modulos/` están además los módulos `carta-web` (configuración de la carta y carta pública) y `llamados` (llamados desde la mesa, dueño de la tabla `llamado`); los QR de las mesas viven en `salon`. El diseño y los requerimientos viven en los documentos compartidos
+`packages/contratos` (esquemas zod) y `packages/config`. La PWA del personal (`apps/app`) y la carta web de los clientes (`apps/web`) ya existen; el puente Android
+llega en historias posteriores. En `apps/api/src/modulos/` están además los módulos `carta-web` (configuración de la carta y carta pública) y `llamados` (llamados desde la mesa, dueño de la tabla `llamado`); los QR de las mesas viven en `salon`. El diseño y los requerimientos viven en los documentos compartidos
 que enlaza `CLAUDE.md`; las historias, en `specs/NNN-nombre/`.
 
 ## Estado
@@ -32,7 +32,7 @@ La sección 2 de los requerimientos, «Carta» (especificación 003, historias H
 
 Lo que la Carta deja a las secciones siguientes: **Salón** (3) muestra la carta con `GET /carta/sucursal` y arma cada línea de venta con `CartaVentaService.prepararLinea` (precio, modificadores, componentes y estaciones); **Caja** (4) toma de esa línea `afectacionIgv` y `aplicaIcbper`; **Pedidos web** (5) publica la misma vista con `cartaDeSucursal` y vuelve a validar con `prepararLinea` al confirmar; **Inventario** (6) lee el `tipoControlStock` de cada producto y marca agotados con origen `SIN_STOCK`.
 
-La sección 3a de los requerimientos, «Salón y Cocina» (especificación 004, historias HU-10 a HU-17 y HU-19), está terminada en la rama de trabajo `claude/upbeat-wright-q09k0n`; todavía no está en `main`. Su especificación, plan y tareas están en [`specs/004-salon-cocina/`](specs/004-salon-cocina/). Incluye la revisión y tres rondas de ataque adversarial sobre las partes críticas (montos, envío de comandas, permisos y aislamiento). Lo construido:
+La sección 3a de los requerimientos, «Salón y Cocina» (especificación 004, historias HU-10 a HU-17 y HU-19), está terminada y ya está en `main`. Su especificación, plan y tareas están en [`specs/004-salon-cocina/`](specs/004-salon-cocina/). Incluye la revisión y tres rondas de ataque adversarial sobre las partes críticas (montos, envío de comandas, permisos y aislamiento). Lo construido:
 
 - **Mapa de mesas** (RF-22): zonas y mesas diseñadas en Ajustes, con una cuadrícula. El salón las muestra por zona, en mapa o en lista, con su estado (libre, ocupada o en pre-cuenta).
 - **Abrir mesa y tiempo real** (HU-10, RF-23, RF-24): comensales y mozo responsable. Los cambios llegan a los equipos de la sucursal por Socket.IO, con el adaptador de PostgreSQL; sin conexión, la pantalla se refresca cada 30 segundos.
@@ -44,7 +44,7 @@ La sección 3a de los requerimientos, «Salón y Cocina» (especificación 004, 
 - **Inactividad de Cocina/Barra** (RF-11, decisión 11): la sesión de Cocina/Barra se cierra a los 60 minutos sin actividad (configurable de 1 a 720). Los demás roles no cambian.
 - **Permisos, trazabilidad y aislamiento**: quién abrió, comandó y autorizó queda registrado. Las tablas nuevas llevan RLS, y las pruebas protegidas comprueban que una empresa no ve nada de otra.
 
-La sección 3b de los requerimientos, «Impresión básica» (especificación 004, historias HU-38 y HU-39), está terminada en la misma rama de trabajo; todavía no está en `main`. Incluye la revisión y cuatro rondas de ataque adversarial sobre la impresión. Lo construido:
+La sección 3b de los requerimientos, «Impresión básica» (especificación 004, historias HU-38 y HU-39), está terminada y ya está en `main`. Incluye la revisión y cuatro rondas de ataque adversarial sobre la impresión. Lo construido:
 
 - **Impresoras de red** (RF-76): alta, edición y desactivación en Ajustes › Impresión, con ancho de 58 u 80 mm, juego de caracteres y marca de gaveta. Hasta 50 activas por sucursal. Bluetooth se configura, pero solo se imprime con la app del puente (entrega 3c).
 - **Destino por estación** (RF-19): cada estación sale a la pantalla de cocina o a una impresora, y hay una impresora de caja para las pre-cuentas.
@@ -56,13 +56,18 @@ La sección 3b de los requerimientos, «Impresión básica» (especificación 00
 
 La siguiente es la 3c: la app Android del puente (Kotlin), que se especifica aparte.
 
-La entrega 5a de la especificación 005, «Carta web y pedido desde la mesa con QR» (HU-40 a HU-42 completas; HU-09, RF-40 y RF-41 en su parte de API), está terminada en la misma rama de trabajo; todavía no está en `main`. Su especificación, plan y tareas están en [`specs/005-carta-web-mesa/`](specs/005-carta-web-mesa/). La 5b, la carta para los clientes en `apps/web`, está en curso. Incluye la revisión y una ronda de ataque adversarial sobre las rutas públicas y los llamados. Lo construido:
+La entrega 5a de la especificación 005, «Carta web y pedido desde la mesa con QR» (HU-40 a HU-42 completas; HU-09, RF-40 y RF-41 en su parte de API), está terminada y ya está en `main`. Su especificación, plan y tareas están en [`specs/005-carta-web-mesa/`](specs/005-carta-web-mesa/). Incluye la revisión y una ronda de ataque adversarial sobre las rutas públicas y los llamados. Lo construido:
 
 - **Carta web por sucursal** (RF-40): nombre, dirección, color, logo y publicación de cada sucursal, en Ajustes › Carta web. La carta pública solo muestra lo que se puede pedir en ese momento (RF-41).
 - **QR de las mesas** (RF-84, HU-42): cada mesa tiene su código, que abre `CARTA_WEB_URL/m/<código>`. La hoja se imprime desde Ajustes › Mapa de mesas, y cambiar el QR de una mesa deja sin efecto el anterior.
 - **Llamados desde la mesa** (RF-85 a RF-88, HU-40 y HU-41): la API recibe el pedido de la mesa, «Llamar al mozo» y «Pedir la cuenta», y los muestra en Salón › Llamados con aviso en vivo. El mozo atiende (si la mesa está libre, la abre), revisa el pedido con el cliente, lo pasa a la cuenta o lo descarta. Nada llega a cocina hasta que alguien pulsa «Enviar». Un llamado pendiente vence a los 15 minutos, cada mesa tiene uno pendiente a la vez y hay límites por mesa y por conexión.
 
-Hasta la 5b, el cliente no tiene pantalla: el modo mesa no se usa con clientes reales. Ver «Carta web y llamados (5a)» más abajo.
+La entrega 5b de la especificación 005, «Carta web y pedido desde la mesa» (`apps/web`, Next.js), está terminada en la misma rama de trabajo; todavía no está en `main`. Lo construido:
+
+- **Carta por sucursal** (RF-40, RF-41): `CARTA_WEB_URL/<empresa>/<sucursal>`, con logo, color, fotos, horario y solo lo que se puede pedir ahora. Se actualiza sola cuando se agota algo y tiene vista previa al compartir.
+- **Modo mesa** (HU-40, RF-85, RF-86): el QR de cada mesa abre `CARTA_WEB_URL/m/<código>`. El cliente arma su pedido y lo manda al mozo, llama al mozo o pide la cuenta, y ve con palabras el estado de su llamado. Nada se cobra y nada llega a cocina hasta que el mozo pulsa «Enviar».
+
+Ver «Carta web y pedido desde la mesa (5b)» más abajo.
 
 ## Requisitos
 
@@ -77,12 +82,12 @@ pnpm install --frozen-lockfile
 
 ```bash
 pnpm local:preparar   # PostgreSQL 16 (puerto 5433), roles, base migrada y datos de demostración
-pnpm dev              # API en http://localhost:3000 y la app del personal en http://localhost:5173
+pnpm dev              # API en http://localhost:3000, app del personal en http://localhost:5173 y carta web en http://localhost:3001
 curl http://localhost:3000/health
 ```
 
 `local:preparar` crea `.env` a partir de `.env.example` si falta (trae todas las variables que
-necesita `pnpm dev`, incluida `NODE_ENV`), levanta `docker-compose.yml`, y ejecuta `db:preparar`,
+necesita `pnpm dev`, incluida `NODE_ENV`), crea `apps/web/.env.local` a partir de `apps/web/.env.example` si falta, levanta `docker-compose.yml` y ejecuta `db:preparar`,
 `db:migrar`, la compilación de los paquetes compartidos (`packages/dominio` y `packages/contratos`) y
 `db:semilla`. Funciona en un clon recién instalado, sin compilar nada antes: los paquetes compartidos
 se exportan desde `dist/`, que no se versiona. Se puede repetir sin duplicar nada.
@@ -314,7 +319,7 @@ Para ver los estados: detén el simulador (Ctrl+C) y espera hasta un minuto y me
 
 ## Carta web y llamados desde la mesa (5a)
 
-La 5a incluye la API, la PWA del personal y los QR. La pantalla del cliente (la carta pública y el modo mesa) es la 5b, en `apps/web`: hasta entonces el enlace de un QR no abre nada y el modo mesa no se usa con clientes reales. Los llamados sí se pueden probar desde ya con `curl` contra la API pública (abajo).
+La 5a incluye la API, la PWA del personal y los QR. La pantalla del cliente (la carta pública y el modo mesa) está en la 5b, en `apps/web` (ver «Carta web y pedido desde la mesa (5b)» más abajo). Los llamados también se pueden probar con `curl` contra la API pública (abajo).
 
 ### Variables `CARTA_WEB_URL` y `CABECERA_IP_CLIENTE`
 
@@ -391,6 +396,38 @@ En local, sin `CABECERA_IP_CLIENTE`, todos los `curl` cuentan como una sola cone
 
 El aviso de un llamado (banner, sonido y vibración) llega solo mientras la PWA está abierta en el equipo del mozo. No hay notificaciones push: con la pantalla apagada, la app en segundo plano o cerrada, el mozo se entera al volver a abrirla, cuando la lista de **Salón › Llamados** muestra los pendientes. Las notificaciones push quedan fuera de alcance, como en 004. Sin conexión en tiempo real, la lista se refresca cada 30 segundos. El sonido necesita un toque en la app (lo exigen los navegadores) y se silencia en el equipo con **Sonido de avisos**, en esa misma lista.
 
+## Carta web y pedido desde la mesa (5b)
+
+La carta para el cliente es `apps/web` (Next.js, puerto 3001). Se configura en Ajustes › Carta web y en Ajustes › Mapa de mesas, y tiene dos partes:
+
+- **La carta de la sucursal**, en `CARTA_WEB_URL/<empresa>/<sucursal>`: la página para compartir, con su vista previa.
+- **El modo mesa**, en `CARTA_WEB_URL/m/<código>`: lo que abre el QR de cada mesa. El cliente arma su pedido y lo manda al mozo, llama al mozo o pide la cuenta. Nada se cobra, y nada llega a cocina hasta que el mozo pulsa «Enviar» (ver «Carta web y llamados desde la mesa (5a)»).
+
+**Cómo levantarla.** `pnpm dev` la levanta junto con la API (3000) y la PWA (5173). Lee `apps/web/.env.local`, que `pnpm local:preparar` crea a partir de `apps/web/.env.example`; sin ese archivo, las páginas fallan con «Falta la variable API_URL_INTERNA». `CARTA_WEB_URL` debe ser la misma en `.env` (la API la usa para los QR y para el CORS de `/publico/*`) y en `apps/web/.env.local`. Para ver las fotos en local, `IMAGENES_PERMITIR_IP_LOCAL=1` (que pone `pnpm local:preparar`) solo vale con direcciones `localhost`: la carta web no construye ni arranca si sus direcciones públicas son otras. El celular y Docker están en [`DESPLIEGUE-LOCAL.md`](DESPLIEGUE-LOCAL.md).
+
+**Pruebas y E2E.** Con la API falsa de `apps/web/e2e/api-falsa.mjs` (puerto 3100), que no necesita base de datos:
+
+```bash
+pnpm --filter @restaurante/web test                              # Vitest: componentes, horario, pedido y reglas
+pnpm build:compartidos                                           # si no corriste local:preparar: los paquetes compartidos
+pnpm --filter @restaurante/web build                             # la carta, como en producción
+pnpm --filter @restaurante/web presupuesto                       # peso de la carta, después de build (criterio 88)
+pnpm --filter @restaurante/web exec playwright install chromium  # la primera vez
+pnpm --filter @restaurante/web e2e                               # carta, modo mesa, peso, accesibilidad y compatibilidad
+```
+
+La E2E construye la carta y la sirve como en producción, y levanta la API falsa si no está corriendo.
+
+Para el punta a punta (criterio 92), con la API real, la PWA del Mozo y la carta web: prepara la base (`pnpm db:preparar && pnpm db:migrar && pnpm db:semilla`), agrega `http://localhost:5174` a `ORIGENES_PERMITIDOS` en `.env` y corre:
+
+```bash
+E2E_API_URL=http://localhost:3000 pnpm --filter @restaurante/web e2e
+```
+
+Con `E2E_API_URL`, Playwright levanta la API y la PWA del personal (puerto 5174) si no están corriendo, y solo corre `punta-a-punta.spec.ts`.
+
+Documentos de la carta: [`apps/web/README.md`](apps/web/README.md) (scripts, variables, rutas y regla de peso), [`apps/web/PRODUCT.md`](apps/web/PRODUCT.md) y [`apps/web/DESIGN.md`](apps/web/DESIGN.md) (producto y diseño, aprobados el 2026-11-03), y [`DESPLIEGUE-LOCAL.md`](DESPLIEGUE-LOCAL.md) (cómo probarla paso a paso).
+
 ## Pruebas
 
 Las pruebas de la API son de integración contra PostgreSQL real, sin mocks de la base. Necesitan
@@ -427,6 +464,7 @@ utilidades están en `apps/api/test/README.md`. Las pruebas de `packages/*` no u
 | `API_URL_PUBLICA`                                                        | URL pública de la API, sin barra final: va en el QR de vinculación del puente de impresión (`restaurante-puente://vincular?api=<URL>&t=<código>`). Con `development` y `test` vale `http://localhost:<PORT>` si falta; en producción hay que definirla; sin ella, crear un código de vinculación responde 503 `CONFIGURACION_INCOMPLETA`                          |
 | `CARTA_WEB_URL`                                                          | URL base de la carta web (`apps/web`), sin barra final: la de los QR (`<CARTA_WEB_URL>/m/<código>`). Con `development` y `test` vale `http://localhost:3001`; en producción hay que definirla (ver «Carta web y llamados (5a)»)                                                                                                                                   |
 | `CABECERA_IP_CLIENTE`                                                    | Cabecera con la IP real del cliente para el límite de llamados por conexión (la IP nunca se guarda). Detrás de Cloudflare, `cf-connecting-ip`; sin un proxy de confianza delante, no la definas (ver «Carta web y llamados (5a)»)                                                                                                                                 |
+| `IMAGENES_PERMITIR_IP_LOCAL`                                             | Solo para `apps/web` (desarrollo, E2E y la imagen de Docker de la carta, que la toma de este `.env`): `1` deja que Next optimice fotos de `localhost`. Con `CARTA_WEB_URL` o `ARCHIVOS_URL_PUBLICA` que no sean `localhost`, la carta web no construye (ver «Carta web y pedido desde la mesa (5b)»)                                                              |
 | `EMPRESA_POR_HEADER`                                                     | **Solo pruebas.** `habilitado` con `NODE_ENV=test` da un principal de prueba (Administrador, actor `prueba`) a las peticiones sin `Authorization` con `x-empresa-id`; la API se niega a arrancar con él en `development` y en `production`. No lo pongas en tu `.env`                                                                                             |
 | `PIN_PEPPER`                                                             | Secreto (base64, 32 bytes o más) con el que se calcula la huella de los PIN. Obligatoria en producción; con `development` o `test` hay un valor local. **Cambiarla invalida todos los PIN** (y las claves de idempotencia de las últimas 24 horas, cuya huella también se calcula con HMAC y una clave derivada de ella); nunca va en la base ni en los respaldos |
 | `ORIGENES_PERMITIDOS`                                                    | Orígenes de la PWA permitidos por CORS, separados por coma, sin ruta ni barra final. Obligatoria en producción (por defecto local: `http://localhost:5173`)                                                                                                                                                                                                       |

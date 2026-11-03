@@ -6,7 +6,7 @@
   - **Se dejan para la sección de delivery** (alcance propuesto por el orquestador): HU-21 salvo la carta base, RF-42 a RF-49 (pedido para llevar y delivery por WhatsApp, consentimiento, bandeja, pedidos telefónicos). Esta sección deja listos la carta pública, `apps/web`, la resolución pública de la empresa y la protección por mesa e IP para reutilizarlos ("Notas para otras secciones").
   - Fuente de negocio: `fuentes.md` de esta carpeta (requerimientos rev. 38, diseño rev. 27) con las seis "Decisiones del usuario (2026-11-02)", que los criterios citan como "decisión N", y las decisiones de 002, 003 y 004 que siguen vigentes.
 - **Ruta crítica:** sí, en parte. Confirmada por el orquestador el 2026-11-03 (paso 3): P1 aislamiento de las rutas públicas, P2 llamados (confirmación, vencimiento y protección contra pedidos falsos), P3 paso a la cuenta sin llegar a cocina y P4 permisos y trazabilidad, todos en 5a; 5b no es crítica. Ver "Clasificación de ruta crítica".
-- **Estado:** aprobada por el usuario (2026-11-03), con las nueve recomendaciones de "Preguntas resueltas"; 5a terminada (2026-11-03); en curso 5b.
+- **Estado:** aprobada por el usuario (2026-11-03), con las nueve recomendaciones de "Preguntas resueltas"; 5a terminada (2026-11-03); 5b terminada (2026-11-03).
 
 ## Objetivo
 
@@ -453,6 +453,19 @@ El usuario aprobó la dirección de diseño de `apps/web` (T21) con tres ajustes
 1. **Presupuesto de la carta:** 140 kB de JavaScript gzip en lugar de 120 kB (criterio 88). La base de Next 16 con React 19 ya pesa 131.8 kB sin nada nuestro.
 2. **Color claro de la marca:** se conserva el color y el texto encima pasa a casi negro cuando el blanco no contrasta (criterio 89). Antes se oscurecía el color.
 3. **Familias de la carta:** una sola fila que se desliza de lado y queda fija arriba (criterio 81). Antes eran filas que pasan de línea y ocupaban media pantalla en el modo mesa.
+4. **Primera carga del modo mesa:** pesa 147.4 kB de JavaScript gzip, con límite de 150 kB (`presupuesto`). Las hojas de producto y de pedido, y las reglas de montos con `decimal.js`, se bajan con `import()` al primer toque, con límite propio de 25 kB (miden 16.6 kB). La primera carga usa la entrada `@restaurante/dominio/llamados`, sin `decimal.js`. "Llamar al mozo" y "Pedir la cuenta" no dependen de ese bloque.
+5. **Horario en el navegador:** "Abierto ahora" y "Cerrado ahora" se calculan en el servidor. El navegador solo elige la fila de una tabla de transiciones de 48 horas que manda el servidor; no repite las reglas de horario.
+6. **Caché pública:** solo `/<empresa>/<sucursal>` la lleva (`s-maxage=30`). `/<empresa>`, que redirige, no. Los 5xx nunca salen con caché pública (lo prueba el E2E de la carta con la API falsa). `/m/<código>` va con `private, no-store`.
+7. **Imágenes en local:** `IMAGENES_PERMITIR_IP_LOCAL` solo vale en desarrollo y en el E2E. Con ella activa, el build y el arranque fallan si `CARTA_WEB_URL` o `ARCHIVOS_URL_PUBLICA` no son `localhost` o `127.0.0.1`.
+8. **Reintentos del envío:** un 409 `CONFLICTO` se reintenta con el mismo `id`, con el mismo contador que los 5xx: 3 reintentos (1, 2 y 5 segundos) y después el cliente pulsa otra vez.
+9. **Pedido nuevo con otro pendiente:** la barra del modo mesa muestra arriba el estado del llamado y debajo "Ver tu pedido", para que el cliente no pierda lo que está armando.
+10. **Contratos de 5a tocados (a confirmar):** en `packages/contratos/src/carta-web.ts`, `colorPrincipal` de las respuestas de configuración y de carta pública pasa de texto libre a `colorPrincipalSchema` (`#RRGGBB`). La forma de las respuestas no cambia. Es el único cambio de 5b a los contratos de 5a; `apps/api` no cambió.
+11. **Next 16:** la redirección a minúsculas vive en `apps/web/proxy.ts`, porque Next 16 llama `proxy` al antiguo `middleware`.
+12. **Riesgos aceptados o pendientes de la 5b:**
+    - Safari no se prueba en WebKit: el E2E corre en Chromium, y Safari se cubre con la comprobación de funciones CSS (`compatibilidad.spec.ts`).
+    - La imagen Docker de `apps/web` no se construyó en este entorno: el daemon de Docker no responde. Queda por verificar con `docker compose --profile web up -d --build web` (T28).
+    - Los textos de rechazo por línea dependen de los mensajes de la API (M5): si cambian, la carta muestra "Ya no se vende" en lugar del motivo.
+    - El margen del presupuesto de la carta es de 0.3 kB (139.7 de 140).
 
 ## Decisiones del especificador
 
