@@ -32,6 +32,7 @@ import {
   nombreUnico,
   pedirPrecuenta,
   reactivar,
+  sesionContrasena,
   simpleNuevo,
   unirMesasOk,
   type LineaCuerpo,
@@ -893,6 +894,7 @@ describe('criterio 51 · réplica', () => {
     expect((await eventosPublicados(ctx)).map((e) => e.nombre)).toEqual([]);
   });
 
+  // Ajustado por la ronda 1 del ataque (2026-11-03): la réplica del paso es solo de la misma persona.
   it('otra clave sobre un llamado ya pasado con las mismas líneas responde 200 con el paso original (instantánea), también desde otra sesión', async () => {
     const plato = await productoPropio(ctx, esc, '20.00');
     const p = await pedidoAtendido([lineaDe(plato.id, 2), L.gaseosa(1)]);
@@ -907,7 +909,8 @@ describe('criterio 51 · réplica', () => {
     ctx.reloj.avanzar(2 * MINUTO);
     await limpiarRegistros(ctx);
 
-    for (const token of [t().mozo, t().mozo2]) {
+    const otraSesionDelMozo = await sesionContrasena(ctx, mozo(), A().S1);
+    for (const token of [t().mozo, otraSesionDelMozo]) {
       const otra = await pasarLlamado(ctx, token, p.id, { lineas });
       exigirEstado(otra, 200, 'otra clave con las mismas líneas');
       expect(otra.body.lineas).toEqual(primera.body.lineas);
@@ -919,6 +922,11 @@ describe('criterio 51 · réplica', () => {
         cerradoPor: primera.body.llamado.cerradoPor,
       });
     }
+    // Otra persona (Mozo2) no recibe la réplica: 409 LLAMADO_CERRADO con el estado y sin líneas.
+    const deOtraPersona = await pasarLlamado(ctx, t().mozo2, p.id, { lineas });
+    esperarError(deOtraPersona, 409, 'LLAMADO_CERRADO');
+    expect(deOtraPersona.body.estado).toBe('PASADO_A_CUENTA');
+    expect(deOtraPersona.body.lineas).toBeUndefined();
     expect((await eventosPublicados(ctx)).map((e) => e.nombre)).toEqual([]);
     expect((await filaLlamado(admin, p.mesa.empresaId, p.id))!.cerrado_por_usuario_id).toBe(
       mozo().id,
@@ -952,6 +960,7 @@ describe('criterio 51 · réplica', () => {
     },
   );
 
+  // Ajustado por la ronda 1 del ataque (2026-11-03): la réplica del paso es solo de la misma persona.
   it('dos pasos simultáneos con las mismas líneas terminan en un solo paso y un solo aviso', async () => {
     const p = await pedidoAtendido();
     const conteoInicial = await conteoDePedidos(admin, p.mesa.empresaId);
@@ -960,11 +969,18 @@ describe('criterio 51 · réplica', () => {
       pasarLlamado(ctx, t().mozo, p.id, { lineas: todasLasLineas() }),
       pasarLlamado(ctx, t().mozo2, p.id, { lineas: todasLasLineas() }),
     ]);
-    expect([a.status, b.status]).toEqual([200, 200]);
-    expect(a.body.lineas).toEqual(b.body.lineas);
-    expect(a.body.ordenId).toBe(b.body.ordenId);
-    expect(a.body.llamado.cerradoEn).toBe(b.body.llamado.cerradoEn);
-    expect(a.body.llamado.cerradoPor).toEqual(b.body.llamado.cerradoPor);
+    expect([a.status, b.status].sort()).toEqual([200, 409]);
+    const ganador = a.status === 200 ? a : b;
+    const perdedor = a.status === 200 ? b : a;
+    const personaGanadora = a.status === 200 ? mozo() : esc.mozo2;
+    esperarError(perdedor, 409, 'LLAMADO_CERRADO');
+    expect(perdedor.body.estado).toBe('PASADO_A_CUENTA');
+    expect(perdedor.body.lineas).toBeUndefined();
+    expect(ganador.body.lineas).toHaveLength(3);
+    expect(ganador.body.llamado.cerradoPor.id).toBe(personaGanadora.id);
+    expect((await filaLlamado(admin, p.mesa.empresaId, p.id))!.cerrado_por_usuario_id).toBe(
+      personaGanadora.id,
+    );
     expect(await eventosDeLlamado(ctx, 'llamado.cambio')).toHaveLength(1);
     expect((await foto(p)).conteo).toEqual(conteoInicial);
   });
