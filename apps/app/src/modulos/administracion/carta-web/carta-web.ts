@@ -11,8 +11,10 @@ import {
 import {
   LARGO_MAXIMO_SLUG,
   LARGO_MINIMO_SLUG,
+  COLOR_SOBRE_MARCA,
   SLUGS_RESERVADOS,
   colorDeMarcaAccesible,
+  colorDeMarcaSobreBlanco,
   contraste,
   esSlugValido,
   propuestaDeSlug,
@@ -111,27 +113,28 @@ export function colorEscrito(texto: string): string {
 export const colorValido = (texto: string) => FORMATO_COLOR.test(texto);
 
 export interface MarcaEnLaCarta {
-  /** Color con el que se pintan el encabezado y los botones de la carta. */
+  /** Color con el que se pintan el encabezado y los botones de la carta: el que eligió el restaurante, sin tocar. */
   fondo: string;
+  /** Color de las letras encima: blanco o casi negro, el que alcance 4.5:1. */
   texto: string;
-  /** El color elegido se tuvo que oscurecer para que las letras blancas se lean (4.5:1). */
-  seOscurecio: boolean;
-  /** Contraste del color elegido con el blanco, con un decimal ("2.8"). */
-  contrasteElegido: string;
-  contrasteFinal: string;
+  /** Cómo se dice ese texto en palabras: "blancas" u "oscuras". */
+  letras: 'blancas' | 'oscuras';
+  /** Contraste de las letras con el color, con un decimal ("9.4"). */
+  contraste: string;
+  /** Color de los indicadores sobre fondo blanco (opción elegida): la marca, o las letras si la marca es muy clara. */
+  indicador: string;
 }
 
 /** El color que verá el cliente y por qué: las reglas son las de `packages/dominio`, aquí solo se muestran. */
 export function marcaEnLaCarta(color: string): MarcaEnLaCarta | null {
   if (!colorValido(color)) return null;
-  const elegido = color.toUpperCase();
-  const { fondo, texto } = colorDeMarcaAccesible(elegido);
+  const { fondo, texto } = colorDeMarcaAccesible(color);
   return {
     fondo,
     texto,
-    seOscurecio: fondo !== elegido,
-    contrasteElegido: contraste(elegido, texto).toFixed(1),
-    contrasteFinal: contraste(fondo, texto).toFixed(1),
+    letras: texto === COLOR_SOBRE_MARCA ? 'blancas' : 'oscuras',
+    contraste: contraste(fondo, texto).toFixed(1),
+    indicador: colorDeMarcaSobreBlanco(color),
   };
 }
 

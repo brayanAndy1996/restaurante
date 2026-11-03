@@ -346,18 +346,11 @@ function FormularioDeCartaWeb({ carta }: { carta: CartaWebRespuesta }) {
           {marca ? (
             <>
               <MuestraDeMarca nombre={borrador.nombre} logoUrl={carta.logoUrl} marca={marca} />
-              {marca.seOscurecio ? (
-                <Aviso tipo="alerta" titulo="Oscurecimos un poco tu color para que se lea bien">
-                  Con letras blancas, {borrador.colorPrincipal} tiene un contraste de{' '}
-                  {marca.contrasteElegido}:1 y el mínimo es 4.5:1. En tu carta usaremos{' '}
-                  {marca.fondo}.
-                </Aviso>
-              ) : (
-                <p className="carta-web__contraste texto-ayuda">
-                  <Icono icono={IconoOk} tamano={16} />
-                  Con letras blancas tiene un contraste de {marca.contrasteElegido}:1: se lee bien.
-                </p>
-              )}
+              <p className="carta-web__contraste texto-ayuda">
+                <Icono icono={IconoOk} tamano={16} />
+                Usaremos tu color tal como lo elegiste, con letras {marca.letras} encima: contraste
+                de {marca.contraste}:1, se lee bien.
+              </p>
             </>
           ) : null}
         </section>

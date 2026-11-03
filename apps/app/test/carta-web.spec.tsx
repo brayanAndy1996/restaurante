@@ -280,43 +280,40 @@ describe('Ajustes › Carta web: configurar (criterio 74)', () => {
   });
 });
 
-describe('Ajustes › Carta web: color con muestra y aviso de contraste (criterios 74 y 89)', () => {
-  it('un color claro se oscurece con el mismo cálculo de packages/dominio y lo dice', async () => {
+describe('Ajustes › Carta web: color con muestra y contraste de las letras (criterios 74 y 89)', () => {
+  it('un color claro se conserva y lleva letras oscuras, con el mismo cálculo de packages/dominio', async () => {
     api(CONFIGURADA);
     renderApp('/administracion/carta-web');
     const color = await screen.findByRole('textbox', { name: 'Color de tu marca' });
     await userEvent.clear(color);
-    await userEvent.type(color, 'ffd400');
-    expect(color).toHaveValue('#FFD400');
-    expect(
-      screen.getByText('Oscurecimos un poco tu color para que se lea bien'),
-    ).toBeInTheDocument();
+    await userEvent.type(color, 'f2a900');
+    expect(color).toHaveValue('#F2A900');
     const { colorDeMarcaAccesible } = await import('@restaurante/dominio');
-    const { fondo } = colorDeMarcaAccesible('#FFD400');
-    expect(fondo).not.toBe('#FFD400');
-    expect(screen.getByText(new RegExp(`En tu carta usaremos ${fondo}`))).toBeInTheDocument();
-    // La muestra pinta el color que se usará, no el elegido.
+    expect(colorDeMarcaAccesible('#F2A900')).toEqual({ fondo: '#F2A900', texto: '#111111' });
+    expect(screen.getByText(/con letras oscuras encima/)).toBeInTheDocument();
+    expect(screen.queryByText(/Oscurecimos/)).toBeNull();
+    // La muestra pinta el color elegido, con las letras que llevará la carta web.
     const muestra = screen.getByRole('figure', { name: 'Muestra de tu carta con este color' });
-    expect(within(muestra).getByText('Sabor Norteño').parentElement).toHaveStyle({
-      background: fondo,
-    });
-    expect(within(muestra).getByText('Color ajustado')).toBeInTheDocument();
+    const encabezado = within(muestra).getByText('Sabor Norteño').parentElement;
+    expect(encabezado).toHaveStyle({ background: '#F2A900', color: '#111111' });
+    expect(within(muestra).getByText('Se lee bien')).toBeInTheDocument();
+    expect(within(muestra).getByText(/Letras oscuras sobre #F2A900/)).toBeInTheDocument();
   });
 
-  it('un color con buen contraste lo confirma con palabras y no lo cambia', async () => {
+  it('un color oscuro lleva letras blancas y la muestra lo confirma con palabras', async () => {
     api(CONFIGURADA);
     renderApp('/administracion/carta-web');
     await screen.findByRole('textbox', { name: 'Color de tu marca' });
-    expect(screen.getByText(/se lee bien\./)).toBeInTheDocument();
+    expect(screen.getByText(/con letras blancas encima/)).toBeInTheDocument();
     const muestra = screen.getByRole('figure', { name: 'Muestra de tu carta con este color' });
     expect(within(muestra).getByText('Se lee bien')).toBeInTheDocument();
     expect(within(muestra).getByText('Sabor Norteño').parentElement).toHaveStyle({
       background: '#1D4A9E',
+      color: '#FFFFFF',
     });
-    expect(screen.queryByText('Oscurecimos un poco tu color para que se lea bien')).toBeNull();
   });
 
-  it('guarda el color elegido en mayúsculas, aunque se oscurezca solo al mostrarlo', async () => {
+  it('guarda el color elegido en mayúsculas', async () => {
     const s = api(CONFIGURADA);
     renderApp('/administracion/carta-web');
     const color = await screen.findByRole('textbox', { name: 'Color de tu marca' });
