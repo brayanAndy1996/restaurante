@@ -158,17 +158,17 @@ export class PasoACuentaService {
   private validarPosiciones(fila: FilaLlamado, entrada: PasoACuentaEntrada): void {
     const campos: CampoError[] = [];
     const vistas = new Set<number>();
-    entrada.lineas.forEach((linea, indice) => {
+    for (const linea of entrada.lineas) {
       if (linea.posicion >= fila.lineas.length) {
         campos.push({
-          campo: `lineas.${indice}.posicion`,
+          campo: `lineas.${linea.posicion}`,
           mensaje: 'La posición no es de una línea del llamado',
         });
       } else if (vistas.has(linea.posicion)) {
-        campos.push({ campo: `lineas.${indice}.posicion`, mensaje: 'La posición está repetida' });
+        campos.push({ campo: `lineas.${linea.posicion}`, mensaje: 'La posición está repetida' });
       }
       vistas.add(linea.posicion);
-    });
+    }
     if (campos.length > 0) throw posicionesInvalidas(campos);
   }
 
@@ -176,7 +176,7 @@ export class PasoACuentaService {
    * Cada línea pedida se prepara de nuevo con `prepararLineas` (sucursal del llamado, producto, modificadores y
    * observación del llamado, la cantidad de la entrada, el instante de ahora): los precios y la disponibilidad son los
    * del sistema, no los que vio el cliente (decisión 3). Si alguna se rechaza, 422 con una entrada de `campos` por línea
-   * (`lineas.<i>`, con la posición y el motivo) y nada cambia.
+   * (`lineas.<posición>`, con la posición contando desde 0 en el llamado y el motivo) y nada cambia.
    */
   private async prepararLineas(
     fila: FilaLlamado,
@@ -196,7 +196,7 @@ export class PasoACuentaService {
       [];
     const preparadas: LineaParaBorrador[] = [];
     resultados.forEach((resultado, orden) => {
-      const { posicion, indice } = pedidas[orden]!;
+      const { posicion } = pedidas[orden]!;
       const guardada = fila.lineas[posicion]!;
       if (!resultado.ok) {
         const revision = motivoDeNoDisponible(resultado.error, guardada);
@@ -205,8 +205,8 @@ export class PasoACuentaService {
           codigo: codigoDeRechazo(resultado.error),
           mensaje: revision.motivo,
           campo: {
-            campo: `lineas.${indice}`,
-            mensaje: `Posición ${posicion}: ${revision.codigo}`,
+            campo: `lineas.${posicion}`,
+            mensaje: revision.codigo,
           },
         });
         return;
@@ -237,11 +237,11 @@ export class PasoACuentaService {
 
     // Topes de monto (criterio 27): por línea y del total de lo que se pasa.
     const fuera: CampoError[] = [];
-    preparadas.forEach((linea, orden) => {
+    preparadas.forEach((linea) => {
       if (excedeMontoMaximo(linea.precioUnitario) || excedeMontoMaximo(linea.total)) {
         fuera.push({
-          campo: `lineas.${pedidas[orden]!.indice}`,
-          mensaje: `Posición ${linea.posicion}: el monto de la línea supera el máximo`,
+          campo: `lineas.${linea.posicion}`,
+          mensaje: 'El monto de la línea supera el máximo',
         });
       }
     });
