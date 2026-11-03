@@ -104,7 +104,11 @@ export class CreacionLlamadosService {
     // Una forma inválida responde 404 sin consultar nada ni ocupar un lugar del tope.
     if (!CODIGO_MESA_REGEX.test(codigo)) throw cartaNoDisponible();
     const normalizada = normalizarEntrada(entrada);
-    const soltar = this.tope.entrar(codigo, normalizada.id);
+    const soltar = this.tope.entrar(
+      codigo,
+      normalizada.id,
+      huellaDeEntrada(normalizada).toString('hex'),
+    );
     try {
       return await this.publico.porCodigoDeMesa(codigo, () =>
         this.crearDentro(codigo, entrada, normalizada, ip),

@@ -21,7 +21,7 @@ import { LIMITE_CUERPO_BYTES, traducirErrorDeCuerpo } from './nucleo/errores/fil
 import {
   esRutaPublica,
   limitarCuerpoPublico,
-  limitarCuerpoPublicoLeido,
+  verificarCuerpoPublico,
   origenDe,
 } from './nucleo/http/rutas-publicas';
 
@@ -150,10 +150,14 @@ export async function crearAplicacion(
   // asegura que, si se responde sin leerlo, lo que falte por llegar se descarte.
   app.use(descartarCuerpoDeFotoAlResponder());
   // Un cuerpo mayor a 100 KB responde 413 CUERPO_DEMASIADO_GRANDE (lo traduce el filtro global).
-  app.useBodyParser('json', { limit: LIMITE_CUERPO_BYTES });
-  app.useBodyParser('urlencoded', { limit: LIMITE_CUERPO_BYTES, extended: true });
-  // Sin `Content-Length` (cuerpo por partes), el límite de 16 KB de las rutas públicas se aplica con lo ya leído.
-  app.use(limitarCuerpoPublicoLeido());
+  // Los `POST` públicos se miden además con los bytes recibidos (`verify`, también con cuerpo por partes): más de
+  // 16 KB responde 413 (criterio 17).
+  app.useBodyParser('json', { limit: LIMITE_CUERPO_BYTES, verify: verificarCuerpoPublico });
+  app.useBodyParser('urlencoded', {
+    limit: LIMITE_CUERPO_BYTES,
+    extended: true,
+    verify: verificarCuerpoPublico,
+  });
   // Un JSON mal formado responde 400 DATOS_INVALIDOS con un mensaje fijo, no el del analizador (40c).
   app.use(
     (error: unknown, _peticion: unknown, _respuesta: unknown, siguiente: (e?: unknown) => void) =>

@@ -102,9 +102,10 @@ export class CartaWebService {
     const ahora = this.reloj.ahora();
     try {
       if (actual === undefined) {
-        await this.conexion.query(
+        // `RETURNING id`: la auditoría de la primera configuración lleva la entidad (`entidadId`).
+        const creadas = await this.conexion.query<{ id: string }>(
           `INSERT INTO carta_web (empresa_id, nombre, slug, color_principal, creado_en, actualizado_en)
-           VALUES ($1, $2, $3, $4, $5, $5)`,
+           VALUES ($1, $2, $3, $4, $5, $5) RETURNING id`,
           {
             bind: [
               this.contexto.empresaActual(),
@@ -113,9 +114,10 @@ export class CartaWebService {
               despues.colorPrincipal,
               ahora,
             ],
+            type: QueryTypes.SELECT,
           },
         );
-        await this.auditar(null, despues, null);
+        await this.auditar(null, despues, creadas[0]!.id);
         return this.consultar();
       }
       const antes = {

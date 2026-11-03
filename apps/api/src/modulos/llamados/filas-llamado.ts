@@ -20,9 +20,11 @@ export interface FilaLlamado {
   orden_id: string | null;
   atendido_por_usuario_id: string | null;
   atendido_por_equipo_id: string | null;
+  atendido_por_sesion_id: string | null;
   atendido_en: Date | null;
   cerrado_por_usuario_id: string | null;
   cerrado_por_equipo_id: string | null;
+  cerrado_por_sesion_id: string | null;
   cerrado_en: Date | null;
   motivo_descarte: string | null;
   lineas_pasadas: { posicion: number; cantidad: number }[] | null;
@@ -32,7 +34,8 @@ export interface FilaLlamado {
 
 export const COLUMNAS_LLAMADO = `l.id, l.sucursal_id, l.mesa_id, l.tipo, l.estado, l.lineas, l.nota, l.total,
   l.vence_en, l.destinatario_mozo_id, l.orden_id, l.atendido_por_usuario_id, l.atendido_por_equipo_id,
-  l.atendido_en, l.cerrado_por_usuario_id, l.cerrado_por_equipo_id, l.cerrado_en, l.motivo_descarte,
+  l.atendido_por_sesion_id, l.atendido_en, l.cerrado_por_usuario_id, l.cerrado_por_equipo_id,
+  l.cerrado_por_sesion_id, l.cerrado_en, l.motivo_descarte,
   l.lineas_pasadas, l.vencido_en, l.creado_en`;
 
 /**

@@ -14,11 +14,28 @@ export const PREFIJO_PUBLICO = '/publico/';
 /** Tamaño máximo del cuerpo de un `POST` público (criterio 17): un pedido grande cabe con holgura en 16 KB. */
 export const LIMITE_CUERPO_PUBLICO_BYTES = 16 * 1024;
 
-/** `true` si la URL de la petición es de una ruta pública (con o sin query). */
+/**
+ * La ruta (sin query ni fragmento) de la URL de una petición. Acepta también la forma absoluta de la línea de
+ * petición (`POST http://host/publico/…`), que Express enruta igual que la relativa.
+ */
+function rutaDe(url: string): string {
+  const sinQuery = url.split(/[?#]/, 1)[0] ?? '';
+  if (sinQuery.startsWith('/')) return sinQuery;
+  try {
+    return new URL(url).pathname;
+  } catch {
+    return sinQuery;
+  }
+}
+
+/**
+ * `true` si la URL de la petición es de una ruta pública (con o sin query). **No distingue mayúsculas**: el
+ * enrutador de Express tampoco (`/PUBLICO/mesas/…` llega al mismo controlador que `/publico/mesas/…`), así que el
+ * tope de 16 KB y el CORS de la carta web tienen que tratarlas igual.
+ */
 export function esRutaPublica(url: string | undefined): boolean {
   if (url === undefined) return false;
-  const ruta = url.split('?', 1)[0] ?? '';
-  return ruta.startsWith(PREFIJO_PUBLICO);
+  return rutaDe(url).toLowerCase().startsWith(PREFIJO_PUBLICO);
 }
 
 /** El origen (`esquema://host:puerto`) de una URL, o `undefined` si no hay URL o no es válida. */
@@ -59,18 +76,14 @@ export function limitarCuerpoPublico() {
 }
 
 /**
- * Después del analizador de cuerpos: un `POST` público sin `Content-Length` (cuerpo por partes, que el analizador
- * deja pasar hasta 100 KB) con más de 16 KB leídos también responde 413.
+ * `verify` de los analizadores de cuerpo (`json` y `urlencoded`): recibe los **bytes** que llegaron (también cuando
+ * el cuerpo viene por partes, sin `Content-Length`, y ya descomprimidos si traía `Content-Encoding`) y rechaza con
+ * 413 un `POST` público de más de 16 KB. Mide lo recibido, no el JSON ya analizado: un cuerpo con escapes `\u`
+ * (6 bytes por carácter) pesa mucho más en el cable que su resultado. Las demás rutas no se miden aquí (su límite
+ * es el de 100 KB del analizador).
  */
-export function limitarCuerpoPublicoLeido() {
-  return (peticion: Request, _respuesta: Response, siguiente: NextFunction): void => {
-    if (esPostPublico(peticion) && peticion.body !== undefined && peticion.body !== null) {
-      const leido = Buffer.byteLength(JSON.stringify(peticion.body), 'utf8');
-      if (leido > LIMITE_CUERPO_PUBLICO_BYTES) {
-        siguiente(demasiadoGrande());
-        return;
-      }
-    }
-    siguiente();
-  };
+export function verificarCuerpoPublico(peticion: Request, _respuesta: Response, cuerpo: Buffer): void {
+  if (esPostPublico(peticion) && cuerpo.length > LIMITE_CUERPO_PUBLICO_BYTES) {
+    throw demasiadoGrande();
+  }
 }

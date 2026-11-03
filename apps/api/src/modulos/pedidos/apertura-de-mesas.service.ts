@@ -28,14 +28,18 @@ export class AperturaDeMesasService {
    * Abre la mesa con las reglas de 004: 404 si la mesa no es de la sucursal activa, 409 `CONFLICTO` si está
    * inactiva, 409 `MESA_OCUPADA` (con el `ordenId` que la ocupa) si ya tiene una orden, 422 `REFERENCIA_INVALIDA` si
    * `mozoId` no atiende mesas en la sucursal y 422 `CLAVE_IDEMPOTENCIA_REUTILIZADA` si `id` ya es de otra orden. Un
-   * mismo `id` con la misma mesa devuelve la orden existente sin efectos.
+   * mismo `id` solo se acepta si esa orden sigue siendo la vigente de la mesa; si no (liberada, unida, de otra mesa o
+   * de otra sucursal), 422 `DATOS_INVALIDOS` con `campos.ordenId` y nada cambia (criterio 42).
    */
   abrir(entrada: AbrirMesaEntrada): Promise<OrdenRespuesta> {
-    return this.ordenes.abrir({
-      id: entrada.id,
-      mesaId: entrada.mesaId,
-      comensales: entrada.comensales,
-      mozoId: entrada.mozoId,
-    });
+    return this.ordenes.abrir(
+      {
+        id: entrada.id,
+        mesaId: entrada.mesaId,
+        comensales: entrada.comensales,
+        mozoId: entrada.mozoId,
+      },
+      { soloVigente: true },
+    );
   }
 }

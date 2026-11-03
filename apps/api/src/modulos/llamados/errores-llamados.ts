@@ -80,15 +80,16 @@ export const llamadoTomado = (
  * 409 `LLAMADO_VENCIDO` (criterios 44 y 53): nadie lo atendió en 15 minutos. Conserva los cambios de la petición:
  * quien lo lanza ya guardó el llamado como `VENCIDO` y esa escritura se confirma.
  */
-export const llamadoVencido = (): ErrorAplicacion => {
-  const error = new ErrorAplicacion(
+export const llamadoVencido = (): ErrorAplicacion =>
+  new ErrorAplicacion(
     409,
     'LLAMADO_VENCIDO',
     'Este llamado venció: nadie lo atendió a tiempo',
+    undefined,
+    undefined,
+    undefined,
+    { conservarCambios: true },
   );
-  error.conservarCambios = true;
-  return error;
-};
 
 /** 409 `LLAMADO_CERRADO` (criterios 44, 46, 51 y 53): ya no admite la acción; lleva el `estado` en que quedó. */
 export const llamadoCerrado = (estado: EstadoLlamado): ErrorAplicacion =>

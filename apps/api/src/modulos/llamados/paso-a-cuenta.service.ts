@@ -27,6 +27,7 @@ import {
 } from './errores-llamados';
 import { EventosLlamados } from './eventos-llamados';
 import { leerLlamado, type FilaLlamado } from './filas-llamado';
+import { esLaMismaPersona } from './persona-de-llamado';
 import { PresentacionLlamados, motivoDeNoDisponible } from './presentacion-llamados';
 
 type LineaDelPaso = { posicion: number; cantidad: number };
@@ -42,7 +43,7 @@ const huellaDelPaso = (lineas: readonly LineaDelPaso[]): Buffer =>
  * `cocina.*`, `salon.cambio` ni `orden.cambio`. Las líneas llegan a cocina solo cuando alguien pulsa "Enviar" en el
  * borrador (`POST /ordenes/:id/envios` de 004), que vuelve a validarlas y a calcular su precio.
  *
- * Con el llamado bloqueado (`FOR UPDATE`): réplica natural (el mismo paso, de cualquier sesión, responde lo guardado);
+ * Con el llamado bloqueado (`FOR UPDATE`): réplica natural (el mismo paso, de la misma persona desde cualquier sesión, responde lo guardado);
  * estado y tipo; posiciones; cuenta vigente de la mesa; y las líneas preparadas de nuevo con los precios y la
  * disponibilidad de hoy, todo o nada.
  */
@@ -72,10 +73,18 @@ export class PasoACuentaService {
       .sort((a, b) => a.posicion - b.posicion || a.indice - b.indice);
     const huella = huellaDelPaso(pedidas.map(({ posicion, cantidad }) => ({ posicion, cantidad })));
 
-    // Réplica natural (criterio 51): un llamado ya pasado con las mismas líneas devuelve el paso original.
+    // Réplica natural (criterio 51): un llamado ya pasado con las mismas líneas devuelve el paso original, pero solo a
+    // la misma persona que lo pasó (su usuario, desde cualquier sesión o equipo; en soporte, la misma sesión). Otra
+    // persona no recibe las líneas: 409 `LLAMADO_CERRADO`, como con otras líneas.
     if (fila.estado === 'PASADO_A_CUENTA') {
-      const guardado = await this.respuestaGuardada(fila.id);
-      if (guardado !== null && guardado.huella.equals(huella)) return guardado.respuesta;
+      const quienPaso = {
+        usuarioId: fila.cerrado_por_usuario_id,
+        sesionId: fila.cerrado_por_sesion_id,
+      };
+      if (esLaMismaPersona(principal, quienPaso)) {
+        const guardado = await this.respuestaGuardada(fila.id);
+        if (guardado !== null && guardado.huella.equals(huella)) return guardado.respuesta;
+      }
       throw llamadoCerrado('PASADO_A_CUENTA');
     }
     if (fila.estado === 'DESCARTADO') throw llamadoCerrado('DESCARTADO');
@@ -100,6 +109,7 @@ export class PasoACuentaService {
       lineas_pasadas: lineasPasadas,
       cerrado_por_usuario_id: principal.usuarioId,
       cerrado_por_equipo_id: principal.equipoId,
+      cerrado_por_sesion_id: principal.sesionId,
       cerrado_en: ahora,
     };
     const respuesta = pasoACuentaRespuestaSchema.parse({
@@ -111,7 +121,7 @@ export class PasoACuentaService {
       `UPDATE llamado
           SET estado = 'PASADO_A_CUENTA', orden_id = $2, lineas_pasadas = $3::jsonb,
               cerrado_por_usuario_id = $4, cerrado_por_equipo_id = $5, cerrado_en = $6,
-              respuesta_paso = $7::jsonb, huella_paso = $8, actualizado_en = $6
+              respuesta_paso = $7::jsonb, huella_paso = $8, cerrado_por_sesion_id = $9, actualizado_en = $6
         WHERE id = $1`,
       {
         bind: [
@@ -123,6 +133,7 @@ export class PasoACuentaService {
           ahora,
           JSON.stringify(respuesta),
           huella,
+          principal.sesionId,
         ],
         type: QueryTypes.UPDATE,
       },

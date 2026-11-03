@@ -24,6 +24,7 @@ import {
 } from './errores-llamados';
 import { EventosLlamados } from './eventos-llamados';
 import { guardarVencido, leerLlamado, type FilaLlamado } from './filas-llamado';
+import { esLaMismaPersona } from './persona-de-llamado';
 import { PresentacionLlamados } from './presentacion-llamados';
 
 /**
@@ -65,8 +66,13 @@ export class AtencionLlamadosService {
 
     const estado = await this.estadoParaAtender(fila, ahora);
     if (estado === 'ATENDIDO') {
-      // Réplica natural: la misma persona otra vez recibe el estado actual, sin efectos; otra, `LLAMADO_TOMADO`.
-      if (fila.atendido_por_usuario_id !== principal.usuarioId) {
+      // Réplica natural: la misma persona otra vez recibe el estado actual, sin efectos; otra, `LLAMADO_TOMADO`. Dos
+      // sesiones de soporte (ambas sin usuario) no son la misma persona: se distinguen por la sesión (criterio 43).
+      const quienAtendio = {
+        usuarioId: fila.atendido_por_usuario_id,
+        sesionId: fila.atendido_por_sesion_id,
+      };
+      if (!esLaMismaPersona(principal, quienAtendio)) {
         throw llamadoTomado(await this.persona(fila.atendido_por_usuario_id));
       }
       return {
@@ -95,7 +101,9 @@ export class AtencionLlamadosService {
         ordenId = orden.id;
         mesaAbierta = true;
       } catch (error) {
-        // Otra persona abrió la mesa mientras se esperaba su bloqueo: se usa esa orden (criterio 42).
+        // Defensa explícita: la mesa está bloqueada (`FOR UPDATE`) y no tenía una orden vigente cuando se leyó, así
+        // que `MESA_OCUPADA` no debería ocurrir. Si ocurre (por ejemplo, un camino de apertura que no tome ese
+        // bloqueo), se usa la orden que ocupa la mesa en lugar de fallar (criterio 42).
         const ocupante = ordenDeMesaOcupada(error);
         if (ocupante === undefined) throw error;
         ordenId = ocupante;
@@ -105,10 +113,10 @@ export class AtencionLlamadosService {
     await this.conexion.query(
       `UPDATE llamado
           SET estado = 'ATENDIDO', atendido_por_usuario_id = $2, atendido_por_equipo_id = $3, atendido_en = $4,
-              orden_id = coalesce($5::uuid, orden_id), actualizado_en = $4
+              orden_id = coalesce($5::uuid, orden_id), atendido_por_sesion_id = $6, actualizado_en = $4
         WHERE id = $1`,
       {
-        bind: [fila.id, principal.usuarioId, principal.equipoId, ahora, ordenId],
+        bind: [fila.id, principal.usuarioId, principal.equipoId, ahora, ordenId, principal.sesionId],
         type: QueryTypes.UPDATE,
       },
     );
@@ -149,10 +157,17 @@ export class AtencionLlamadosService {
     await this.conexion.query(
       `UPDATE llamado
           SET estado = 'DESCARTADO', cerrado_por_usuario_id = $2, cerrado_por_equipo_id = $3, cerrado_en = $4,
-              motivo_descarte = $5, actualizado_en = $4
+              motivo_descarte = $5, cerrado_por_sesion_id = $6, actualizado_en = $4
         WHERE id = $1`,
       {
-        bind: [fila.id, principal.usuarioId, principal.equipoId, ahora, entrada.motivo ?? null],
+        bind: [
+          fila.id,
+          principal.usuarioId,
+          principal.equipoId,
+          ahora,
+          entrada.motivo ?? null,
+          principal.sesionId,
+        ],
         type: QueryTypes.UPDATE,
       },
     );

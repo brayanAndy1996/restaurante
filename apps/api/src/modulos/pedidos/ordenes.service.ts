@@ -18,10 +18,20 @@ import {
   mesaOcupada,
   mozoInvalido,
   ordenConConsumo,
+  ordenIdYaUsado,
 } from './errores-pedidos';
 import { EventosPedidos } from './eventos-pedidos';
 import { mesasVigentesDeOrden } from './mesas-de-orden';
 import { VistaOrdenService } from './vista-orden';
+
+/** Variantes de la apertura de una mesa. */
+export interface OpcionesDeApertura {
+  /**
+   * La réplica del mismo `id` solo vale si esa orden sigue siendo la vigente de la mesa (la apertura que hace la
+   * atención de un llamado, historia 005, criterio 42). Sin esta opción rige el criterio 12 de 004.
+   */
+  soloVigente?: boolean;
+}
 
 interface OrdenExistente {
   id: string;
@@ -54,18 +64,21 @@ export class OrdenesService {
    * bloqueo de la fila de la mesa serializa las aperturas de la misma mesa; el índice único de `orden_mesa` es la
    * red de seguridad. Los `INSERT` usan `ON CONFLICT DO NOTHING` para no abortar la transacción.
    */
-  async abrir(entrada: AbrirOrdenEntrada): Promise<OrdenRespuesta> {
+  async abrir(
+    entrada: AbrirOrdenEntrada,
+    opciones: OpcionesDeApertura = {},
+  ): Promise<OrdenRespuesta> {
     const sucursalId = this.sesion.sucursalActiva();
     const id = entrada.id.toLowerCase();
     const mesaId = entrada.mesaId.toLowerCase();
 
     const yaExiste = await this.buscarPorId(id);
-    if (yaExiste !== undefined) return this.replicaDeApertura(yaExiste, mesaId, sucursalId);
+    if (yaExiste !== undefined) return this.replicaDeApertura(yaExiste, mesaId, sucursalId, opciones);
 
     const [mesa] = await this.mesas.bloquear([mesaId], sucursalId);
     // Si la misma apertura estaba en curso, ya terminó (el bloqueo de la mesa nos hizo esperar).
     const ganada = await this.buscarPorId(id);
-    if (ganada !== undefined) return this.replicaDeApertura(ganada, mesaId, sucursalId);
+    if (ganada !== undefined) return this.replicaDeApertura(ganada, mesaId, sucursalId, opciones);
     if (mesa === undefined || !mesa.activa) throw mesaInactiva();
 
     const ocupante = await this.ordenVigenteDeLaMesa(mesaId);
@@ -90,7 +103,7 @@ export class OrdenesService {
       // Otra petición con el mismo `id` confirmó entre la lectura y el INSERT: es una réplica.
       const otra = await this.buscarPorId(id);
       if (otra === undefined) throw idDeClienteReutilizado();
-      return this.replicaDeApertura(otra, mesaId, sucursalId);
+      return this.replicaDeApertura(otra, mesaId, sucursalId, opciones);
     }
     const relacion = await this.conexion.query<{ id: string }>(
       `INSERT INTO orden_mesa (empresa_id, orden_id, mesa_id, desde, hasta, creado_en, actualizado_en)
@@ -197,12 +210,30 @@ export class OrdenesService {
    * Criterio 12: el mismo `id` con la misma mesa devuelve la orden existente, tal como está ahora y sin efectos;
    * con otra mesa (o de otra sucursal), 422 `CLAVE_IDEMPOTENCIA_REUTILIZADA`. "La misma mesa" es una de las que la
    * orden ha tenido (ocupó antes de moverse o unirse).
+   *
+   * Con `soloVigente` (la apertura que hace la atención de un llamado, historia 005, criterio 42) la orden existente
+   * solo vale si **sigue siendo la vigente de esa mesa**: una liberada, unida, de otra mesa o de otra sucursal es un
+   * `ordenId` ya usado (422 `DATOS_INVALIDOS` con `campos.ordenId`) y nada cambia.
    */
   private async replicaDeApertura(
     existente: OrdenExistente,
     mesaId: string,
     sucursalId: string,
+    opciones: OpcionesDeApertura = {},
   ): Promise<OrdenRespuesta> {
+    if (opciones.soloVigente === true) {
+      const vigente = await this.conexion.query<{ orden_id: string }>(
+        `SELECT om.orden_id
+           FROM orden_mesa om
+           JOIN orden o ON o.id = om.orden_id
+          WHERE om.orden_id = $1 AND om.mesa_id = $2 AND om.hasta IS NULL
+            AND o.sucursal_id = $3 AND o.estado = 'ABIERTA'
+          LIMIT 1`,
+        { bind: [existente.id, mesaId, sucursalId], type: QueryTypes.SELECT },
+      );
+      if (vigente.length === 0) throw ordenIdYaUsado();
+      return this.vista.armar(existente.id, sucursalId);
+    }
     if (existente.sucursalId !== sucursalId) throw idDeClienteReutilizado();
     const relaciones = await this.conexion.query<{ mesa_id: string }>(
       'SELECT mesa_id FROM orden_mesa WHERE orden_id = $1 AND mesa_id = $2 LIMIT 1',
