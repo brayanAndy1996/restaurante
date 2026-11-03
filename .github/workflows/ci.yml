@@ -7,7 +7,8 @@ on:
 jobs:
   verificar:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    # La suite combinada (app, API con PostgreSQL, web y ui) tarda ~20 min en 4 vCPU: 15 min no alcanzaban.
+    timeout-minutes: 35
 
     services:
       postgres:
@@ -55,7 +56,10 @@ jobs:
       - run: pnpm build
       # Peso del paquete inicial de la PWA (apps/app): carga rápida con datos móviles.
       - run: pnpm --filter @restaurante/app presupuesto
-      - run: pnpm test
+      # Peso del JavaScript y el CSS de la carta web (apps/web), criterio 88 de la historia 005.
+      - run: pnpm --filter @restaurante/web presupuesto
+      # --continue: si falla una suite, las demás terminan y se ven todas las fallas de una vez (el paso sigue fallando).
+      - run: pnpm test --continue
         env:
           NODE_ENV: test # obligatoria (criterio 29b); las contraseñas de los roles las da el job
 
@@ -92,7 +96,8 @@ jobs:
       DATABASE_TIEMPO_REAL_URL: postgres://restaurante_tiempo_real:tiempo_real_ci@localhost:5432/restaurante
       # Valores solo para CI (no son secretos de producción).
       PIN_PEPPER: Y2ktcGluLXBlcHBlci1zb2xvLXBhcmEtcHJ1ZWJhcyEh
-      ORIGENES_PERMITIDOS: http://localhost:5173
+      # La PWA de la E2E de la carta web corre en el 5174 (el 5173 es el de la E2E de la PWA).
+      ORIGENES_PERMITIDOS: http://localhost:5173,http://localhost:5174
       # Carta web (historia 005).
       CARTA_WEB_URL: http://localhost:3001
       # Las fotos de la carta (historia 003) se guardan en disco en desarrollo.
@@ -118,6 +123,12 @@ jobs:
       # La prueba usa al superadministrador de la semilla y crea su propia empresa en cada corrida.
       - run: pnpm db:semilla
       - run: pnpm --filter @restaurante/app e2e
+      # La carta web (historia 005, 5b): con una API falsa (carta, modo mesa, peso, accesibilidad y compatibilidad) y de
+      # punta a punta con la API real, la PWA del Mozo y la carta web (criterio 92).
+      - run: pnpm --filter @restaurante/web e2e
+      - run: pnpm --filter @restaurante/web e2e
+        env:
+          E2E_API_URL: http://localhost:3000
 
       - uses: actions/upload-artifact@v4
         if: failure()
@@ -126,4 +137,6 @@ jobs:
           path: |
             apps/app/e2e/resultados
             apps/app/playwright-report
+            apps/web/e2e/resultados
+            apps/web/playwright-report
           retention-days: 7

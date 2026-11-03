@@ -9,10 +9,18 @@
 // Reproducción determinista: un cliente aparte bloquea la fila de la empresa, así que la auditoría de T (que
 // ya tiene el combo C) queda esperando. Entonces X (el segundo `PATCH` de C) y Y (la operación legítima) toman
 // lo suyo en el orden que forma el ciclo. Al soltar la fila no debe haber ningún abrazo mortal: ninguna
-// operación responde 409 y la base no cuenta ningún `deadlock` nuevo.
+// operación responde 409 y ninguna conexión de esta prueba recibe un `40P01`.
+//
+// Cómo se cuentan los abrazos: los archivos de prueba corren en paralelo sobre la misma base, y
+// `pg_stat_database.deadlocks` cuenta los de toda la base, así que un abrazo de otra suite (por ejemplo una
+// prueba de DDL) rompía esta comprobación sin que el `PATCH` tuviera culpa. Cada archivo corre en su propio
+// proceso: se cuentan los `40P01` que reciben las conexiones de este proceso (las de la API bajo prueba y las de
+// los clientes de la prueba) observando `Query.prototype.handleError` de `pg`, que ve cualquier error del
+// servidor sin importar quién hizo la consulta. Una prueba aparte comprueba que el medidor sí ve un abrazo.
 import { randomBytes } from 'node:crypto';
+import { createRequire } from 'node:module';
 import type { Client } from 'pg';
-import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { abrirCliente } from '../utilidades';
 import {
   arrancarCarta,
@@ -36,7 +44,22 @@ let e: EscenarioCarta;
 let datos: DatosCarta;
 let token: string;
 
+/** `Query` de `pg` (la misma clase que usan Sequelize y los clientes de la prueba: un solo `pg` en el árbol). */
+const Query = createRequire(__filename)('pg/lib/query') as {
+  prototype: { handleError: (error: { code?: string }, conexion: unknown) => void };
+};
+const SQLSTATE_ABRAZO_MORTAL = '40P01';
+const espiaErrores = vi.spyOn(Query.prototype, 'handleError');
+
+/** Cuántos `40P01` recibieron las conexiones de este proceso desde el último `mockClear`. */
+const abrazosPropios = (): number =>
+  espiaErrores.mock.calls.filter(([error]) => error?.code === SQLSTATE_ABRAZO_MORTAL).length;
+
 const dormir = (ms: number) => new Promise((resolver) => setTimeout(resolver, ms));
+
+beforeEach(() => {
+  espiaErrores.mockClear();
+});
 
 beforeAll(async () => {
   // Varias conexiones: las tres peticiones deben estar a la vez dentro de sus transacciones.
@@ -59,19 +82,6 @@ const crear = async (ruta: string, cuerpo: unknown): Promise<string> => {
   const res = await llamar(ctx, token, { metodo: 'post', ruta, cuerpo });
   exigirEstado(res, 201, `POST ${ruta}`);
   return res.body.id as string;
-};
-
-const abrazos = async (): Promise<number> => {
-  const filas = await admin.query<{ n: string }>(
-    'SELECT deadlocks AS n FROM pg_stat_database WHERE datname = current_database()',
-  );
-  return Number(filas.rows[0]!.n);
-};
-
-/** Espera a que `pg_stat_database` (que se actualiza con retraso) refleje los abrazos de la corrida. */
-const abrazosTrasUnRato = async (): Promise<number> => {
-  await dormir(1_500);
-  return abrazos();
 };
 
 interface Escena {
@@ -146,7 +156,6 @@ describe('F1 · el PATCH de producto no forma ciclos con una lectura sin bloqueo
         [f2],
       )
     ).rows.map((f) => f.id);
-    const antes = await abrazos();
 
     await externo.query('BEGIN');
     await externo.query('SELECT id FROM empresa WHERE id = $1 FOR UPDATE', [e.A.empresaId]);
@@ -183,14 +192,13 @@ describe('F1 · el PATCH de producto no forma ciclos con una lectura sin bloqueo
     } finally {
       await externo.query('ROLLBACK').catch(() => undefined);
     }
-    expect(await abrazosTrasUnRato()).toBe(antes);
+    expect(abrazosPropios(), 'abrazos mortales (40P01) de esta prueba').toBe(0);
   });
 
   it.each(['familia', 'reactiva'] as const)(
     'D3 · alta de combo legítima en F2 (%s)',
     async (variante) => {
       const { f1, f2, c, p } = await armarEscena('f1');
-      const antes = await abrazos();
 
       await externo.query('BEGIN');
       await externo.query('SELECT id FROM empresa WHERE id = $1 FOR UPDATE', [e.A.empresaId]);
@@ -231,7 +239,7 @@ describe('F1 · el PATCH de producto no forma ciclos con una lectura sin bloqueo
       } finally {
         await externo.query('ROLLBACK').catch(() => undefined);
       }
-      expect(await abrazosTrasUnRato()).toBe(antes);
+      expect(abrazosPropios(), 'abrazos mortales (40P01) de esta prueba').toBe(0);
     },
   );
 
@@ -258,5 +266,35 @@ describe('F1 · el PATCH de producto no forma ciclos con una lectura sin bloqueo
     ).rows[0]!;
     expect(fila.activo).toBe(true);
     expect([f1, f2]).toContain(fila.familia_id);
+  });
+});
+
+describe('el medidor de abrazos propios', () => {
+  it('ve un 40P01 provocado por dos conexiones de esta prueba (si no, el cero de arriba no probaría nada)', async () => {
+    const clave1 = randomBytes(4).readInt32BE();
+    const clave2 = randomBytes(4).readInt32BE();
+    const a = await abrirCliente('admin');
+    const b = await abrirCliente('admin');
+    try {
+      await a.query('BEGIN');
+      await b.query('BEGIN');
+      await a.query('SELECT pg_advisory_xact_lock($1)', [clave1]);
+      await b.query('SELECT pg_advisory_xact_lock($1)', [clave2]);
+      const deA = a.query('SELECT pg_advisory_xact_lock($1)', [clave2]);
+      await dormir(200);
+      const deB = b.query('SELECT pg_advisory_xact_lock($1)', [clave1]);
+      const resultados = await Promise.allSettled([deA, deB]);
+      const rechazados = resultados.filter((r) => r.status === 'rejected');
+      expect(rechazados).toHaveLength(1);
+      expect((rechazados[0] as PromiseRejectedResult).reason).toMatchObject({
+        code: SQLSTATE_ABRAZO_MORTAL,
+      });
+    } finally {
+      await a.query('ROLLBACK').catch(() => undefined);
+      await b.query('ROLLBACK').catch(() => undefined);
+      await a.end();
+      await b.end();
+    }
+    expect(abrazosPropios()).toBe(1);
   });
 });

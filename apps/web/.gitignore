@@ -1,0 +1,4 @@
+.next/
+next-env.d.ts
+e2e/resultados/
+playwright-report/

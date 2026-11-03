@@ -78,14 +78,15 @@ describe('color', () => {
     expect(colorEscrito('')).toBe('');
   });
 
-  it('un color con buen contraste no se toca; uno claro se oscurece (cálculo de packages/dominio)', () => {
+  it('el color elegido nunca se toca: las letras son blancas u oscuras (cálculo de packages/dominio)', () => {
     const bueno = marcaEnLaCarta('#1D4A9E');
-    expect(bueno).toMatchObject({ fondo: '#1D4A9E', seOscurecio: false, texto: '#FFFFFF' });
-    const claro = marcaEnLaCarta('#FFD400');
-    expect(claro?.seOscurecio).toBe(true);
-    expect(claro?.fondo).not.toBe('#FFD400');
-    expect(Number(claro?.contrasteElegido)).toBeLessThan(4.5);
-    expect(Number(claro?.contrasteFinal)).toBeGreaterThanOrEqual(4.5);
+    expect(bueno).toMatchObject({ fondo: '#1D4A9E', letras: 'blancas', texto: '#FFFFFF' });
+    expect(bueno?.indicador).toBe('#1D4A9E');
+    const claro = marcaEnLaCarta('#f2a900');
+    expect(claro).toMatchObject({ fondo: '#F2A900', letras: 'oscuras', texto: '#111111' });
+    expect(Number(claro?.contraste)).toBeGreaterThanOrEqual(4.5);
+    // Un indicador sobre blanco no puede ser un amarillo que no se ve: usa las letras oscuras.
+    expect(claro?.indicador).toBe('#111111');
     expect(marcaEnLaCarta('#12')).toBeNull();
   });
 });

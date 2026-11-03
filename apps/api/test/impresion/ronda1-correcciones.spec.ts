@@ -584,6 +584,15 @@ describe('revocar un puente cierra sus conexiones aunque la revocación no las a
 
     const socket = await conectarSocketDelPuente(ctx.app, cierres, puente.token);
     await esperarHasta(() => socket.conectado, 3000, 'la conexión del puente');
+    // La revisión periódica de 60 s (que dispara el reloj de la aplicación, no la prueba) podría caer justo entre la
+    // revocación y las comprobaciones de abajo: cerraría el socket antes de `expect(socket.conectado).toBe(true)`, o
+    // `revisarAhora()` se uniría a una revisión que ya consultó antes de la revocación y no cerraría nada. Se detiene
+    // ese reloj y se espera a la revisión en curso, si la hay: desde aquí solo corren las revisiones de la prueba.
+    const tiempoReal = ctx.app.get(ServidorTiempoReal, { strict: false });
+    clearInterval(
+      (tiempoReal as unknown as { temporizador: NodeJS.Timeout | null }).temporizador ?? undefined,
+    );
+    await tiempoReal.revisarAhora();
     // Se revoca "por debajo": ni `desconectarPuente` ni el cierre normal corren, como en la carrera.
     await escribir(
       'UPDATE puente SET activo = false, revocado_en = now(), actualizado_en = now() WHERE id = $1',
@@ -592,7 +601,7 @@ describe('revocar un puente cierra sus conexiones aunque la revocación no las a
     expect(await validador.alConectar(datos)).toBe(false);
     expect([...(await validador.siguenActivos(A().empresaId, [puente.id]))]).toEqual([]);
     expect(socket.conectado).toBe(true);
-    await ctx.app.get(ServidorTiempoReal, { strict: false }).revisarAhora();
+    await tiempoReal.revisarAhora();
     await socket.esperarDesconexion(3000);
     expect(socket.conectado).toBe(false);
   });

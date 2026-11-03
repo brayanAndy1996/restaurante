@@ -150,7 +150,8 @@ describe('VentanaClaveSupervisor: autorizar', () => {
     // maxLength lo impide al escribir; un pegado programático lo prueba igual.
     await userEvent.type(campo, 'a');
     (campo as HTMLTextAreaElement).removeAttribute('maxlength');
-    await userEvent.type(campo, 'a'.repeat(300));
+    await userEvent.click(campo);
+    await userEvent.paste('a'.repeat(300));
     await pin('123456');
     expect(await screen.findByText('Usa 300 caracteres como máximo')).toBeInTheDocument();
     expect(s.de('POST', '/autorizaciones')).toHaveLength(0);

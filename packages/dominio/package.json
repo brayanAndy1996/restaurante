@@ -16,6 +16,16 @@
         "types": "./dist/index.d.ts",
         "default": "./dist/index.js"
       }
+    },
+    "./llamados": {
+      "import": {
+        "types": "./dist/llamados.d.mts",
+        "default": "./dist/llamados.mjs"
+      },
+      "require": {
+        "types": "./dist/llamados.d.ts",
+        "default": "./dist/llamados.js"
+      }
     }
   },
   "sideEffects": false,

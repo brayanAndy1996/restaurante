@@ -161,7 +161,7 @@ apps/web/
   componentes/                   Carta, Familia, Producto (servidor); islas de cliente: Disponibilidad, HojaDeProducto, TuPedido, BotonesDeMesa, EstadoDelLlamado
   lib/api.ts                     fetch del servidor (API_URL_INTERNA) y del navegador (NEXT_PUBLIC_API_URL), con validación de contratos en el servidor
   lib/pedido.ts                  pedido en sessionStorage por código, id del llamado y reintento
-  middleware.ts                  minúsculas (308)
+  proxy.ts                       minúsculas (308)
   scripts/presupuesto.mjs        mide el JavaScript y el CSS del build (88)
   test/ y e2e/                   Vitest y Playwright
   Dockerfile

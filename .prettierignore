@@ -1,5 +1,8 @@
 node_modules
 dist
+.next
+next-env.d.ts
+playwright-report
 .turbo
 coverage
 pnpm-lock.yaml
@@ -10,3 +13,5 @@ specs
 CLAUDE.md
 # Prototipo: index.html se genera con `node prototipo/armar.mjs` a partir de prototipo.html
 prototipo/index.html
+# Resultados de las pruebas E2E (Playwright): se generan al correrlas y no se versionan
+**/e2e/resultados

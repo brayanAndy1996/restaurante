@@ -17,5 +17,30 @@ services:
       timeout: 3s
       retries: 10
 
+  # Carta web y modo mesa (apps/web, Next.js; historia 005) en http://localhost:3001. Es opcional y no arranca con
+  # `docker compose up` a secas (construir la imagen tarda): `docker compose --profile web up -d --build web`.
+  # La API y la PWA corren en tu computadora con `pnpm dev`; el contenedor llega a la API por `host.docker.internal`.
+  # Las variables salen del `.env` de la raíz (ver `.env.example`). `NEXT_PUBLIC_API_URL` se incrusta al construir: es
+  # la dirección con la que el navegador de quien escanea el QR llega a la API.
+  web:
+    profiles: ['web']
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: ${API_URL_PUBLICA:-http://localhost:3000}
+        ARCHIVOS_URL_PUBLICA: ${ARCHIVOS_URL_PUBLICA:-http://localhost:3000/archivos}
+        CARTA_WEB_URL: ${CARTA_WEB_URL:-http://localhost:3001}
+        IMAGENES_PERMITIR_IP_LOCAL: ${IMAGENES_PERMITIR_IP_LOCAL:-}
+    restart: unless-stopped
+    environment:
+      API_URL_INTERNA: ${WEB_API_URL_INTERNA:-http://host.docker.internal:3000}
+      CARTA_WEB_URL: ${CARTA_WEB_URL:-http://localhost:3001}
+      ARCHIVOS_URL_PUBLICA: ${ARCHIVOS_URL_PUBLICA:-http://localhost:3000/archivos}
+    extra_hosts:
+      - 'host.docker.internal:host-gateway'
+    ports:
+      - '${WEB_PUERTO_LOCAL:-3001}:3001'
+
 volumes:
   postgres_datos:

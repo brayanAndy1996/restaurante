@@ -5,4 +5,13 @@ export {
   esSlugValido,
   propuestaDeSlug,
 } from './slugs';
-export { COLOR_SOBRE_MARCA, CONTRASTE_MINIMO, colorDeMarcaAccesible, contraste } from './color';
+export {
+  COLOR_SOBRE_MARCA,
+  COLOR_SOBRE_MARCA_CLARA,
+  CONTRASTE_MINIMO,
+  CONTRASTE_MINIMO_CONTROL,
+  colorDeMarcaAccesible,
+  colorDeMarcaSobreBlanco,
+  contraste,
+} from './color';
+export { precioEnSoles, precioEsCero, precioLeido } from './precios';

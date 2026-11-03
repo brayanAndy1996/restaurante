@@ -9,7 +9,7 @@
   },
   "scripts": {
     "build": "turbo run build",
-    "dev": "turbo run dev --filter=@restaurante/api --filter=@restaurante/app",
+    "dev": "turbo run dev --filter=@restaurante/api --filter=@restaurante/app --filter=@restaurante/web",
     "lint": "turbo run lint",
     "typecheck": "turbo run typecheck",
     "test": "turbo run test",
