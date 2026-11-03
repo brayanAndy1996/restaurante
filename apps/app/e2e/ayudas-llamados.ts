@@ -76,7 +76,10 @@ export type CuerpoDeLlamado =
   | { id: string; tipo: 'LLAMAR_MOZO' | 'PEDIR_CUENTA' };
 
 /** El cuerpo de un pedido, con un `id` nuevo (el que genera el navegador del cliente al pulsar «Enviar»). */
-export function pedidoDelCliente(lineas: readonly LineaDelCliente[], nota?: string): CuerpoDeLlamado {
+export function pedidoDelCliente(
+  lineas: readonly LineaDelCliente[],
+  nota?: string,
+): CuerpoDeLlamado {
   return {
     id: randomUUID(),
     tipo: 'PEDIDO',
@@ -138,7 +141,9 @@ export const bannerDeLlamado = (page: Page, texto: string | RegExp): Locator =>
 
 /** El segmento «Llamados» del salón, con su contador de pendientes. */
 export const segmentoDeLlamados = (page: Page): Locator =>
-  page.getByRole('group', { name: 'Qué ver en el salón' }).getByRole('button', { name: /^Llamados/ });
+  page
+    .getByRole('group', { name: 'Qué ver en el salón' })
+    .getByRole('button', { name: /^Llamados/ });
 
 /** Abre la lista de llamados del salón (el segmento «Llamados»). */
 export async function abrirLaListaDeLlamados(page: Page): Promise<void> {
