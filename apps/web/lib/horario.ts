@@ -1,4 +1,5 @@
 import { dentroDeHorario, type TramoHorario } from '@restaurante/dominio';
+import type { FilaDeHorario, TablaDeHorario } from './horario-vivo';
 
 /**
  * El horario de la sucursal tal como lo lee el cliente (criterio 81): "Abierto ahora · hasta las 23:00" o "Cerrado
@@ -101,6 +102,55 @@ export function estadoDeHorario(
         ? ' mañana'
         : ` el ${DIAS_LARGOS[Math.floor(proxima.inicio / MINUTOS_POR_DIA) % 7] ?? ''}`;
   return { abierto: false, texto: `Cerrado ahora · abre${cuando} a las ${hora}` };
+}
+
+const MS_POR_MINUTO = 60_000;
+const MS_POR_DIA = MINUTOS_POR_DIA * MS_POR_MINUTO;
+
+/** Medianoche de Lima del día de `instante`, en epoch ms. */
+function medianocheDeLima(instante: number): number {
+  return Math.floor((instante - DESFASE_LIMA_MS) / MS_POR_DIA) * MS_POR_DIA + DESFASE_LIMA_MS;
+}
+
+/**
+ * La tabla de transiciones de las próximas `horas` horas para el navegador (`lib/horario-vivo.ts`): la fila de
+ * ahora y una por cada cambio de lo que dice `estadoDeHorario` (abre, cierra, o pasa la medianoche de Lima, que
+ * cambia "abre mañana" por "abre"). Cada fila usa la misma lógica del servidor, así que el navegador no repite
+ * ninguna regla. Sin horario, la tabla va vacía.
+ */
+export function tablaDeHorario(
+  horario: readonly TramoHorario[],
+  ahora: Date = new Date(),
+  horas = 48,
+): TablaDeHorario {
+  const inicio = ahora.getTime();
+  const hasta = inicio + horas * 60 * MS_POR_MINUTO;
+  const primera = estadoDeHorario(horario, ahora);
+  if (!primera) return { hasta, filas: [] };
+
+  // Cada candidato es un instante en que algo puede cambiar: la medianoche de Lima y el `desde` y el `hasta` de
+  // cada tramo, en cada uno de los días que cubre la tabla. Los que no cambian nada se descartan abajo.
+  const candidatos = new Set<number>();
+  const hoy = medianocheDeLima(inicio);
+  for (let dia = 0; dia <= Math.ceil(horas / 24); dia += 1) {
+    const base = hoy + dia * MS_POR_DIA;
+    candidatos.add(base);
+    for (const tramo of horario) {
+      candidatos.add(base + aMinutos(tramo.desde) * MS_POR_MINUTO);
+      candidatos.add(base + aMinutos(tramo.hasta) * MS_POR_MINUTO);
+    }
+  }
+
+  const filas: FilaDeHorario[] = [{ desde: inicio, ...primera }];
+  for (const instante of [...candidatos].sort((a, b) => a - b)) {
+    if (instante <= inicio || instante >= hasta) continue;
+    const estado = estadoDeHorario(horario, new Date(instante));
+    const anterior = filas[filas.length - 1]!;
+    if (estado && (estado.abierto !== anterior.abierto || estado.texto !== anterior.texto)) {
+      filas.push({ desde: instante, ...estado });
+    }
+  }
+  return { hasta, filas };
 }
 
 /**

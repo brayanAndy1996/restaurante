@@ -122,6 +122,37 @@ test.describe('la carta', () => {
     await expect(page.getByText(/Abierto ahora|Cerrado ahora/)).toHaveCount(0);
   });
 
+  test.describe('el horario sigue la hora del navegador (criterio 81)', () => {
+    const TURNO = '/turnos/abre-pronto';
+    const HORAS = 3600_000;
+
+    test('una página servida "cerrado" dice "Abierto ahora" si el reloj del navegador ya pasó la apertura', async ({
+      page,
+      request,
+    }) => {
+      test.skip(!CON_CONTROL, 'Usa la sucursal "abre-pronto" de la API falsa');
+      // El servidor arma la página con su hora: abre en 3 horas.
+      expect((await (await request.get(TURNO)).text()).includes('Cerrado ahora')).toBe(true);
+      // El navegador va 4 horas adelante (por ejemplo, la página venía del CDN de anoche).
+      await page.clock.install({ time: new Date(Date.now() + 4 * HORAS) });
+      await page.goto(TURNO);
+      await expect(page.getByText(/^Abierto ahora · hasta las /)).toBeVisible();
+      await expect(page.locator('[data-horario]')).toHaveAttribute('data-abierto', 'true');
+    });
+
+    test('con el reloj antes de la apertura deja "Cerrado ahora" y al pasarla lo corrige sin recargar', async ({
+      page,
+    }) => {
+      test.skip(!CON_CONTROL, 'Usa la sucursal "abre-pronto" de la API falsa');
+      await page.clock.install({ time: new Date(Date.now() + 1 * HORAS) });
+      await page.goto(TURNO);
+      await expect(page.getByText(/^Cerrado ahora · abre /)).toBeVisible();
+      // Pasan 3 horas: el siguiente ciclo de 15 s ya dice que está abierto.
+      await page.clock.fastForward(3 * HORAS);
+      await expect(page.getByText(/^Abierto ahora · hasta las /)).toBeVisible({ timeout: 20_000 });
+    });
+  });
+
   for (const ancho of [320, 360, 768]) {
     test(`sin desplazamiento horizontal a ${ancho} px`, async ({ page }) => {
       await page.setViewportSize({ width: ancho, height: 740 });

@@ -7,6 +7,7 @@ import { FamiliaActual } from './FamiliaActual';
 import { Familias } from './Familias';
 import { Icono } from './Iconos';
 import { Producto } from './Producto';
+import { tablaDeHorario } from '@/lib/horario';
 
 /** El color de la marca como variables de CSS: el fondo, el texto encima y el indicador sobre blanco. */
 export function variablesDeMarca(colorPrincipal: string): CSSProperties {
@@ -100,7 +101,11 @@ export function CartaWeb({ carta, empresaSlug, sucursalSlug, mesa, barra }: Prop
         </main>
       </div>
       {barra}
-      <Disponibilidad empresa={empresaSlug} sucursal={sucursalSlug} />
+      <Disponibilidad
+        empresa={empresaSlug}
+        sucursal={sucursalSlug}
+        horario={tablaDeHorario(carta.sucursal.horario)}
+      />
       {carta.familias.length > 0 ? <FamiliaActual /> : null}
     </div>
   );

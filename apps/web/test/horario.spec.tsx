@@ -2,7 +2,8 @@ import type { TramoHorario } from '@restaurante/dominio';
 import { render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import { DatoDeHorario } from '../componentes/DatoDeHorario';
-import { estadoDeHorario, resumenDeHorario } from '../lib/horario';
+import { estadoDeHorario, resumenDeHorario, tablaDeHorario } from '../lib/horario';
+import { actualizarHorario, filaVigente, type TablaDeHorario } from '../lib/horario-vivo';
 
 // Horario de la cabecera (criterio 81). Lima es UTC−5: el lunes 2 de noviembre de 2026 a las 18:00 en Lima son
 // las 23:00 UTC. Las fechas se escriben en UTC para que la prueba no dependa de la zona de quien la corre.
@@ -129,5 +130,108 @@ describe('DatoDeHorario', () => {
   it('sin horario no dibuja nada', () => {
     const { container } = render(<DatoDeHorario horario={[]} ahora={lima(LUNES, '18:00')} />);
     expect(container).toBeEmptyDOMElement();
+  });
+});
+
+describe('tablaDeHorario (el servidor arma las transiciones de las próximas 48 h)', () => {
+  it('sin horario va vacía', () => {
+    expect(tablaDeHorario([], lima(LUNES, '18:00')).filas).toEqual([]);
+  });
+
+  it('empieza con la fila de ahora y sigue con cada cambio, con el texto que daría estadoDeHorario', () => {
+    const ahora = lima(LUNES, '10:00');
+    const { filas, hasta } = tablaDeHorario(semana, ahora);
+    expect(hasta).toBe(ahora.getTime() + 48 * 3600_000);
+    expect(filas[0]).toEqual({
+      desde: ahora.getTime(),
+      abierto: false,
+      texto: 'Cerrado ahora · abre a las 12:00',
+    });
+    expect(filas[1]).toEqual({
+      desde: lima(LUNES, '12:00').getTime(),
+      abierto: true,
+      texto: 'Abierto ahora · hasta las 23:00',
+    });
+    // Al cerrar a las 23:00 dice "abre mañana"; pasada la medianoche de Lima vuelve a decir "abre".
+    expect(filas[2]).toEqual({
+      desde: lima(LUNES, '23:00').getTime(),
+      abierto: false,
+      texto: 'Cerrado ahora · abre mañana a las 12:00',
+    });
+    expect(filas[3]).toEqual({
+      desde: lima(LUNES + 1, '00:00').getTime(),
+      abierto: false,
+      texto: 'Cerrado ahora · abre a las 12:00',
+    });
+  });
+
+  it('cada fila coincide con estadoDeHorario en ese instante y un minuto antes de la siguiente', () => {
+    const ahora = lima(LUNES, '10:00');
+    const { filas, hasta } = tablaDeHorario(semana, ahora);
+    filas.forEach((fila, i) => {
+      const fin = filas[i + 1]?.desde ?? hasta;
+      for (const instante of [fila.desde, fin - 60_000]) {
+        const estado = estadoDeHorario(semana, new Date(instante));
+        expect({ abierto: fila.abierto, texto: fila.texto }).toEqual(estado);
+      }
+    });
+  });
+
+  it('un tramo que cruza la medianoche (sábado hasta las 02:00) cambia a las 02:00 del domingo', () => {
+    const { filas } = tablaDeHorario(semana, lima(7, '20:00'));
+    expect(filas[0]?.texto).toBe('Abierto ahora · hasta las 02:00');
+    expect(filas[1]).toMatchObject({ desde: lima(8, '02:00').getTime(), abierto: false });
+  });
+});
+
+describe('filaVigente (el navegador elige la fila de su hora)', () => {
+  const tabla: TablaDeHorario = {
+    hasta: 5000,
+    filas: [
+      { desde: 1000, abierto: false, texto: 'cerrado' },
+      { desde: 2000, abierto: true, texto: 'abierto' },
+      { desde: 3000, abierto: false, texto: 'cerrado otra vez' },
+    ],
+  };
+
+  it('antes de la primera fila no elige ninguna', () => {
+    expect(filaVigente(tabla, 999)).toBeNull();
+  });
+
+  it('en cada transición ya vale la nueva, y un instante antes la anterior', () => {
+    expect(filaVigente(tabla, 1000)?.texto).toBe('cerrado');
+    expect(filaVigente(tabla, 1999)?.texto).toBe('cerrado');
+    expect(filaVigente(tabla, 2000)?.texto).toBe('abierto');
+    expect(filaVigente(tabla, 2999)?.texto).toBe('abierto');
+    expect(filaVigente(tabla, 3000)?.texto).toBe('cerrado otra vez');
+    expect(filaVigente(tabla, 4999)?.texto).toBe('cerrado otra vez');
+  });
+
+  it('con la tabla agotada o vacía no elige nada (queda el texto del servidor)', () => {
+    expect(filaVigente(tabla, 5000)).toBeNull();
+    expect(filaVigente({ hasta: 5000, filas: [] }, 2000)).toBeNull();
+  });
+});
+
+describe('actualizarHorario', () => {
+  const montar = () => {
+    render(<DatoDeHorario horario={semana} ahora={lima(LUNES, '10:00')} />);
+    return screen.getByText(/Cerrado ahora/).closest('p')!;
+  };
+  const tabla = tablaDeHorario(semana, lima(LUNES, '10:00'));
+
+  it('cambia el texto y data-abierto cuando el navegador ya pasó la apertura', () => {
+    const dato = montar();
+    expect(dato).toHaveAttribute('data-abierto', 'false');
+    actualizarHorario(document, tabla, lima(LUNES, '13:00').getTime());
+    expect(screen.getByText('Abierto ahora · hasta las 23:00')).toBeInTheDocument();
+    expect(dato).toHaveAttribute('data-abierto', 'true');
+  });
+
+  it('con la tabla agotada deja el texto del servidor', () => {
+    const dato = montar();
+    actualizarHorario(document, tabla, lima(LUNES + 3, '13:00').getTime());
+    expect(dato).toHaveTextContent('Cerrado ahora · abre a las 12:00');
+    expect(dato).toHaveAttribute('data-abierto', 'false');
   });
 });

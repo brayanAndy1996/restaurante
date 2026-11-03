@@ -314,8 +314,35 @@ const SUCURSAL_CENTRO = {
 
 const FAMILIAS_GRANDES = familiasGrandes();
 
+/**
+ * Una sucursal que abre dentro de 3 horas (hora de Lima) y cierra 5 horas después, calculada en cada pedido: sirve
+ * para probar que la página servida "cerrado" pasa a "abierto" cuando el reloj del navegador ya pasó la apertura
+ * (criterio 81).
+ */
+function sucursalQueAbrePronto() {
+  const limaDe = (ms) => new Date(ms - 5 * 3600_000);
+  const hhmm = (f) =>
+    `${String(f.getUTCHours()).padStart(2, '0')}:${String(f.getUTCMinutes()).padStart(2, '0')}`;
+  const abre = limaDe(Date.now() + 3 * 3600_000);
+  const cierra = limaDe(Date.now() + 8 * 3600_000);
+  return {
+    nombre: 'Turno',
+    slug: 'abre-pronto',
+    direccion: 'Av. del Sol 100, Lima',
+    horario: [{ dia: ((abre.getUTCDay() + 6) % 7) + 1, desde: hhmm(abre), hasta: hhmm(cierra) }],
+    abiertaAhora: false,
+  };
+}
+
 const EMPRESAS = {
   'sabor-norteno': { datos: EMPRESA, sucursales: [SUCURSAL_MIRAFLORES, SUCURSAL_BARRANCO] },
+  // Abre en 3 horas: la página sale "Cerrado ahora" y el navegador, con su reloj más adelante, la corrige.
+  turnos: {
+    datos: { nombre: 'Turnos', logoUrl: null, colorPrincipal: '#1D4A9E' },
+    get sucursales() {
+      return [sucursalQueAbrePronto()];
+    },
+  },
   // La carta de 150 productos del criterio 88 (peso del HTML).
   'gran-carta': {
     datos: {
