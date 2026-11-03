@@ -1,0 +1,187 @@
+/* Ajustes › Mapa de mesas › QR de las mesas (005, criterios 75 y 76): se carga junto con la pantalla. */
+
+/* ---------- En pantalla: una fila por mesa ---------- */
+
+.qr-hoja {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espacio-xl);
+}
+
+.qr-zona {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espacio-sm);
+}
+
+.qr-impreso {
+  display: none;
+}
+
+.qr-mesa {
+  display: grid;
+  grid-template-columns: 4.5rem minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--espacio-md);
+  min-height: var(--alto-baldosa-persona);
+  padding: var(--espacio-md) var(--espacio-lg);
+  border-bottom: 1px solid var(--color-junta);
+}
+
+.qr-mesa__codigo {
+  width: 4.5rem;
+  height: 4.5rem;
+  overflow: hidden;
+  border: 1px solid var(--color-junta);
+  border-radius: var(--radio-etiqueta);
+}
+.qr-mesa__codigo .qr__dibujo,
+.qr-mesa__codigo .qr__esqueleto {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.qr-mesa__vacio {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+  background: var(--color-inactivo);
+  color: var(--color-tinta-suave);
+}
+
+.qr-mesa__texto {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--espacio-xs);
+  min-width: 0;
+}
+.qr-mesa__nombre {
+  font-size: 1.0625rem;
+  line-height: 1.5rem;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.qr-mesa__estado {
+  display: block;
+}
+
+/* ---------- Al imprimir: tarjetas de 9 x 9 cm, seis por hoja A4 ---------- */
+
+@media print {
+  @page {
+    size: A4 portrait;
+    margin: 1cm;
+  }
+
+  /* Solo se imprimen las tarjetas: fuera la barra, la navegación, los avisos y los textos de la pantalla */
+  html.imprime-hoja-qr,
+  html.imprime-hoja-qr body,
+  html.imprime-hoja-qr #raiz {
+    height: auto;
+    overflow: visible;
+    background: #ffffff;
+  }
+  html.imprime-hoja-qr .saltar,
+  html.imprime-hoja-qr .ui-cenefa,
+  html.imprime-hoja-qr .app__avisos,
+  html.imprime-hoja-qr .ui-nav,
+  html.imprime-hoja-qr .pagina__barra,
+  html.imprime-hoja-qr .pagina__pie,
+  html.imprime-hoja-qr .pagina__titulo,
+  html.imprime-hoja-qr .qr-pantalla,
+  html.imprime-hoja-qr dialog {
+    display: none !important;
+  }
+  html.imprime-hoja-qr .app,
+  html.imprime-hoja-qr .app__marco,
+  html.imprime-hoja-qr .pagina {
+    display: block;
+    height: auto;
+    min-height: 0;
+  }
+  html.imprime-hoja-qr .app__principal {
+    overflow: visible;
+  }
+  /* En la página solo queda la hoja: ningún aviso ni texto de la pantalla */
+  html.imprime-hoja-qr .pagina__contenido > :not(.qr-hoja) {
+    display: none !important;
+  }
+  html.imprime-hoja-qr .pagina__contenido {
+    display: block;
+    max-width: none;
+    padding: 0;
+  }
+
+  /* Todas las zonas forman una sola cuadrícula de dos columnas: tres filas de 9 cm por hoja */
+  .qr-hoja {
+    display: grid;
+    grid-template-columns: repeat(2, 9cm);
+    grid-auto-rows: 9cm;
+    justify-content: center;
+    gap: 0;
+  }
+  .qr-zona,
+  .qr-lista {
+    display: contents;
+  }
+
+  .qr-impreso {
+    display: block;
+  }
+
+  .qr-mesa {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.2cm;
+    width: 9cm;
+    height: 9cm;
+    min-height: 0;
+    padding: 0.4cm;
+    /* Guía de corte (en papel: gris neutro, tinta negra; no son colores de la app) */
+    border: 0.5pt dashed #8a8a8a;
+    background: #ffffff;
+    color: #000000;
+    text-align: center;
+    break-inside: avoid;
+    page-break-inside: avoid;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  .qr-mesa--sin-codigo {
+    display: none;
+  }
+  .qr-mesa__sucursal {
+    order: 1;
+    font-size: 10pt;
+    line-height: 1.2;
+    font-weight: 600;
+    overflow-wrap: anywhere;
+  }
+  .qr-mesa__texto {
+    order: 2;
+    align-items: center;
+  }
+  .qr-mesa__nombre {
+    font-size: 26pt;
+    line-height: 1.1;
+    font-weight: 700;
+  }
+  .qr-mesa__codigo {
+    order: 3;
+    width: 5cm;
+    height: 5cm;
+    border: 0;
+    border-radius: 0;
+  }
+  .qr-mesa__escanea {
+    order: 4;
+    max-width: 7cm;
+    font-size: 10pt;
+    line-height: 1.25;
+  }
+}

@@ -1,0 +1,265 @@
+/* Ajustes › Carta web (005, criterio 74): se carga junto con la pantalla, no con el paquete inicial */
+
+.carta-web {
+  max-width: 40rem;
+  gap: var(--espacio-xl);
+}
+
+.carta-web__intro {
+  max-width: 40rem;
+}
+
+.carta-web__grupo {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espacio-md);
+  min-width: 0;
+}
+
+.carta-web__grupo + .carta-web__grupo {
+  padding-top: var(--espacio-xl);
+  border-top: 1px solid var(--color-junta);
+}
+
+/* La dirección se lee entera aunque sea larga */
+.carta-web__vista {
+  overflow-wrap: anywhere;
+  color: var(--color-tinta);
+}
+
+.carta-web__propuesta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--espacio-sm);
+}
+.carta-web__propuesta p {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+/* Un campo o aviso al que se salta por un error no queda tapado por la barra ni la acción fija */
+.carta-web .ui-campo__control,
+.carta-web .ui-aviso {
+  scroll-margin-block: 5rem 7rem;
+}
+
+/* ---------- Logo ---------- */
+
+.logo-carta {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espacio-md);
+}
+.logo-carta__fila {
+  display: flex;
+  align-items: center;
+  gap: var(--espacio-lg);
+}
+.logo-carta__marco {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 6rem;
+  height: 6rem;
+  overflow: hidden;
+  background: var(--color-baldosa);
+  border: 1px solid var(--color-junta);
+  border-radius: var(--radio-baldosa);
+}
+.logo-carta__imagen {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+.logo-carta__vacio {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--espacio-xs);
+  color: var(--color-tinta-suave);
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+}
+.logo-carta__texto {
+  min-width: 0;
+}
+.logo-carta__texto p {
+  margin: 0;
+}
+.logo-carta__estado {
+  display: flex;
+  align-items: center;
+  gap: var(--espacio-sm);
+  font-weight: 600;
+}
+.logo-carta__acciones {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--espacio-sm);
+}
+
+/* ---------- Color y muestra ---------- */
+
+.carta-web__color {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--espacio-md);
+}
+.carta-web__color > .ui-campo {
+  flex: 1;
+  min-width: 0;
+}
+
+/* El selector nativo, del alto de un campo y alineado con él (la etiqueta del campo queda arriba) */
+.carta-web__selector {
+  flex: none;
+  display: block;
+  /* Etiqueta del campo: 1.125rem + su separación */
+  margin-top: 1.625rem;
+}
+.carta-web__selector input[type='color'] {
+  display: block;
+  width: var(--alto-campo);
+  height: var(--alto-campo);
+  padding: 4px;
+  background: var(--color-baldosa);
+  border: 1px solid var(--color-borde-control);
+  border-radius: var(--radio-baldosa);
+  cursor: pointer;
+}
+.carta-web__selector--error input[type='color'] {
+  border: 2px solid var(--color-peligro);
+}
+.carta-web__selector input[type='color']:focus-visible {
+  outline: 3px solid var(--color-accion);
+  outline-offset: 2px;
+}
+.carta-web__selector input[type='color']::-webkit-color-swatch-wrapper {
+  padding: 0;
+}
+.carta-web__selector input[type='color']::-webkit-color-swatch {
+  border: 0;
+  border-radius: var(--radio-etiqueta);
+}
+.carta-web__selector input[type='color']::-moz-color-swatch {
+  border: 0;
+  border-radius: var(--radio-etiqueta);
+}
+
+.carta-web__contraste {
+  display: flex;
+  align-items: center;
+  gap: var(--espacio-sm);
+  margin: 0;
+  color: var(--color-exito);
+}
+
+/* La muestra de la carta: encabezado de la marca y el botón de acción, como los verá el cliente */
+.muestra {
+  margin: 0;
+  overflow: hidden;
+  background: var(--color-baldosa);
+  border: 1px solid var(--color-junta);
+  border-radius: var(--radio-baldosa);
+}
+.muestra__encabezado {
+  display: flex;
+  align-items: center;
+  gap: var(--espacio-md);
+  min-height: 3.5rem;
+  padding: var(--espacio-sm) var(--espacio-lg);
+}
+.muestra__logo {
+  flex: none;
+  width: 2.5rem;
+  height: 2.5rem;
+  object-fit: contain;
+  background: #ffffff;
+  border-radius: var(--radio-etiqueta);
+}
+.muestra__nombre {
+  min-width: 0;
+  font-size: 1.125rem;
+  line-height: 1.5rem;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+.muestra__cuerpo {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--espacio-md);
+  padding: var(--espacio-lg);
+}
+.muestra__boton {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--alto-control);
+  padding-inline: var(--espacio-lg);
+  border-radius: var(--radio-baldosa);
+  font-size: 1.0625rem;
+  font-weight: 600;
+}
+.muestra__nota {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--espacio-xs);
+  min-width: 0;
+}
+.muestra__nota .texto-ayuda {
+  overflow-wrap: anywhere;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------- Sucursales ---------- */
+
+.carta-web__sucursales {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.carta-web__sucursal {
+  padding-block: var(--espacio-xl);
+  border-top: 1px solid var(--color-junta);
+}
+.carta-web__sucursal:first-child {
+  padding-top: var(--espacio-md);
+  border-top: 0;
+}
+.carta-web__sucursal:last-child {
+  padding-bottom: 0;
+}
+.carta-web__sucursal-cabecera {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--espacio-sm);
+}
+.carta-web__sucursal-nombre {
+  margin: 0;
+  font-size: 1.0625rem;
+  line-height: 1.5rem;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.carta-web__enlace {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--espacio-sm) var(--espacio-md);
+}
+.carta-web__enlace p {
+  flex: 1 1 12rem;
+  margin: 0;
+}
+.carta-web__enlace p:empty {
+  display: none;
+}

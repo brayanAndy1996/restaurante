@@ -10,12 +10,16 @@ import {
   IconoMapa,
   IconoMas,
   IconoOrdenar,
+  Icono,
+  IconoQr,
   Segmentos,
+  claseBoton,
   moverEnLista,
   type MesaDeCuadricula,
 } from '@restaurante/ui';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { Link } from 'react-router-dom';
 import { AvisoPendiente } from '../../../componentes/PendienteDeEnvio';
 import { MUTACION_SIN_PAUSA, useEnvioPendiente } from '../../../lib/envios';
 import { mensajeDeError } from '../../../lib/errores';
@@ -566,6 +570,12 @@ function MapaDeSucursal({ sucursal }: { sucursal: { id: string; nombre: string }
     )
   ) : (
     <>
+      <div className="mapa__enlaces">
+        <Link to="/administracion/mesas/qr" className={claseBoton('secundario')}>
+          <Icono icono={IconoQr} tamano={20} />
+          QR de las mesas
+        </Link>
+      </div>
       <Segmentos
         etiqueta="Zonas del salón"
         opciones={opcionesDeZona}
