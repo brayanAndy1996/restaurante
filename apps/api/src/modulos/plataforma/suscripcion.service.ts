@@ -282,6 +282,23 @@ export class SuscripcionService {
   }
 
   /**
+   * Módulos del plan de cada sucursal pedida, con una sola consulta (historia 005: la lista de sucursales publicadas
+   * de una empresa). Una sucursal sin suscripción queda con la lista vacía.
+   */
+  async modulosDeSucursales(sucursalIds: readonly string[]): Promise<Map<string, Modulo[]>> {
+    const resultado = new Map<string, Modulo[]>();
+    for (const id of sucursalIds) resultado.set(id, []);
+    if (sucursalIds.length === 0) return resultado;
+    const filas = await this.conexion.query<{ sucursal_id: string; modulos: string[] }>(
+      `SELECT s.sucursal_id, p.modulos FROM suscripcion s JOIN plan p ON p.id = s.plan_id
+        WHERE s.sucursal_id = ANY($1::uuid[])`,
+      { bind: [[...new Set(sucursalIds)]], type: QueryTypes.SELECT },
+    );
+    for (const f of filas) resultado.set(f.sucursal_id, soloModulos(f.modulos));
+    return resultado;
+  }
+
+  /**
    * Suscripción de una sucursal que crea el Administrador (`POST /sucursales`, criterio 70): plan por
    * defecto y vencimiento el día del alta (fecha de Lima). Dentro del contexto de empresa de la petición.
    */

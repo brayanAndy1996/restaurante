@@ -24,3 +24,14 @@ export const cartaWebSinConfigurar = (): ErrorAplicacion =>
 /** 422 del logo (criterio 3), con las mismas reglas de forma que la foto de un producto. */
 export const logoInvalido = (mensaje: string): ErrorAplicacion =>
   new ErrorAplicacion(422, 'FOTO_INVALIDA', mensaje);
+
+/** Mensaje del 404 de todo lo que la carta pública no muestra (criterio 14). */
+export const MENSAJE_CARTA_NO_DISPONIBLE = 'La carta no está disponible';
+
+/**
+ * 404 de las rutas públicas (criterio 14): el mismo cuerpo para un código o una dirección desconocidos, una mesa
+ * inactiva o con el código reemplazado, una sucursal sin publicar o sin `PEDIDOS_WEB` y un llamado de otra mesa. Así
+ * nadie puede distinguir qué existe y qué no.
+ */
+export const cartaNoDisponible = (): ErrorAplicacion =>
+  new ErrorAplicacion(404, 'NO_ENCONTRADO', MENSAJE_CARTA_NO_DISPONIBLE);

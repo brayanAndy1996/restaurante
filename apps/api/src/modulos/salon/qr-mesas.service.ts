@@ -53,7 +53,16 @@ export class QrMesasService {
 
   /** `POST /sucursales/:sucursalId/mesas/:mesaId/qr` (criterio 9): un código nuevo; el anterior deja de funcionar. */
   async cambiar(sucursalId: string, mesaId: string): Promise<QrMesaRespuesta> {
-    await this.exigirSucursal(sucursalId);
+    // Una sucursal ajena o inexistente y una mesa ajena o inexistente dan el mismo 404, con el mismo mensaje
+    // (criterio 66): no se puede saber cuál de las dos falló.
+    try {
+      await this.exigirSucursal(sucursalId);
+    } catch (error) {
+      if (error instanceof ErrorAplicacion && error.getStatus() === 404) {
+        throw noEncontrado('La mesa');
+      }
+      throw error;
+    }
     const base = this.exigirUrl();
     const mesas = await this.conexion.query<{ nombre: string; activa: boolean }>(
       'SELECT nombre, activa FROM mesa WHERE id = $1 AND sucursal_id = $2',

@@ -75,18 +75,31 @@ export class CartaVentaService {
    * El resultado de `prepararLinea` para cada línea, en el mismo orden, con **un solo cargador** (las consultas de
    * la carta restringidas a los productos de las líneas) en lugar de uno por línea (historia 005, plan "Costo de
    * `prepararLineas`"). Cada elemento es la línea preparada o el error que `prepararLinea` habría lanzado con esa
-   * línea (`ErrorProductoNoVendible`, `ErrorSeleccionInvalida` o 404): quien llama decide si es todo o nada. No
-   * escribe nada. FIRMA: la implementación llega en la fase C (T9).
+   * línea (`ErrorProductoNoVendible`, `ErrorSeleccionInvalida`, 404 o `RangeError` por la cantidad): quien llama
+   * decide si es todo o nada. Una sucursal que no existe en la empresa lanza 404 para todo el lote. No escribe nada.
    */
   async prepararLineas(
     sucursalId: string,
     lineas: readonly LineaParaPreparar[],
     instante: Date,
   ): Promise<ResultadoPrepararLinea[]> {
-    void sucursalId;
-    void lineas;
-    void instante;
-    throw new Error('No implementado');
+    const dia = await this.diaDe(sucursalId, instante);
+    if (lineas.length === 0) return [];
+    const ids = [
+      ...new Set(lineas.map((l) => l.productoId.toLowerCase()).filter((id) => esUuid(id))),
+    ];
+    const carta = await cargarCarta(this.conexion, {
+      sucursalId: sucursalId.toLowerCase(),
+      diaOperativo: dia,
+      productoIds: ids,
+    });
+    return lineas.map((linea): ResultadoPrepararLinea => {
+      try {
+        return { ok: true, linea: this.armarLinea(carta, linea) };
+      } catch (error) {
+        return { ok: false, error };
+      }
+    });
   }
 
   /**
@@ -106,6 +119,13 @@ export class CartaVentaService {
       diaOperativo: dia,
       productoId,
     });
+    return this.armarLinea(carta, entrada);
+  }
+
+  /** La parte pura de `prepararLinea`: arma la línea con la carta ya cargada (compartida con `prepararLineas`). */
+  private armarLinea(carta: CartaCargada, entrada: LineaParaPreparar): LineaPreparada {
+    const productoId = entrada.productoId.toLowerCase();
+    if (!esUuid(productoId)) throw noEncontrado('El producto');
     const producto = carta.porId.get(productoId);
     if (producto === undefined) throw noEncontrado('El producto');
 

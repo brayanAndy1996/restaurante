@@ -1,13 +1,19 @@
 /**
- * Estados y vencimiento de los llamados (historia 005, criterio 56; ruta crítica P2). Firmas públicas: la
- * implementación llega en la fase C (T8).
+ * Estados y vencimiento de los llamados (historia 005, criterio 56; ruta crítica P2). Reglas puras: el reloj entra
+ * siempre como argumento (el de la API), nunca se lee aquí.
  */
-import type { AccionLlamado, EstadoLlamado, TipoLlamado } from './catalogos';
+import {
+  MINUTOS_VENCIMIENTO_LLAMADO,
+  type AccionLlamado,
+  type EstadoLlamado,
+  type TipoLlamado,
+} from './catalogos';
+
+const MS_POR_MINUTO = 60_000;
 
 /** Instante en que vence un llamado creado en `creadoEn`: `creadoEn` + `MINUTOS_VENCIMIENTO_LLAMADO`. */
 export function venceEnLlamado(creadoEn: Date): Date {
-  void creadoEn;
-  throw new Error('No implementado');
+  return new Date(creadoEn.getTime() + MINUTOS_VENCIMIENTO_LLAMADO * MS_POR_MINUTO);
 }
 
 /**
@@ -18,9 +24,10 @@ export function estadoVigenteLlamado(
   llamado: { estado: EstadoLlamado; venceEn: Date },
   ahora: Date,
 ): EstadoLlamado {
-  void llamado;
-  void ahora;
-  throw new Error('No implementado');
+  if (llamado.estado === 'PENDIENTE' && ahora.getTime() >= llamado.venceEn.getTime()) {
+    return 'VENCIDO';
+  }
+  return llamado.estado;
 }
 
 /**
@@ -32,8 +39,14 @@ export function siguienteEstadoLlamado(
   estado: EstadoLlamado,
   accion: AccionLlamado,
 ): EstadoLlamado | null {
-  void tipo;
-  void estado;
-  void accion;
-  throw new Error('No implementado');
+  if (estado === 'PENDIENTE') {
+    if (accion === 'ATENDER') return 'ATENDIDO';
+    if (accion === 'DESCARTAR') return 'DESCARTADO';
+    return null;
+  }
+  if (estado === 'ATENDIDO' && tipo === 'PEDIDO') {
+    if (accion === 'PASAR_A_CUENTA') return 'PASADO_A_CUENTA';
+    if (accion === 'DESCARTAR') return 'DESCARTADO';
+  }
+  return null;
 }

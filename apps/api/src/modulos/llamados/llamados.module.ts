@@ -6,9 +6,13 @@ import { SalonModule } from '../salon';
 import { SeguridadModule } from '../seguridad';
 import { AtencionLlamadosService } from './atencion-llamados.service';
 import { CreacionLlamadosService } from './creacion-llamados.service';
+import { EventosLlamados } from './eventos-llamados';
+import { LimitesLlamados } from './limites-llamados';
 import { LlamadosController } from './llamados.controller';
 import { MesaPublicaController } from './mesa-publica.controller';
 import { PasoACuentaService } from './paso-a-cuenta.service';
+import { ResolucionMesa } from './resolucion-mesa';
+import { TopeDeCreaciones } from './tope-de-creaciones';
 import { VistaLlamadosService } from './vista-llamados.service';
 
 /**
@@ -23,6 +27,10 @@ import { VistaLlamadosService } from './vista-llamados.service';
   controllers: [MesaPublicaController, LlamadosController],
   providers: [
     CreacionLlamadosService,
+    EventosLlamados,
+    LimitesLlamados,
+    ResolucionMesa,
+    TopeDeCreaciones,
     VistaLlamadosService,
     AtencionLlamadosService,
     PasoACuentaService,

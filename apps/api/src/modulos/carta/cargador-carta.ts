@@ -23,8 +23,9 @@ import { QueryTypes, type Sequelize } from 'sequelize';
  * 5. Componentes de combos y menús.
  * 6. Opciones del día de la sucursal para el día operativo actual.
  *
- * Con `productoId` (para `prepararLinea`) las consultas 1, 4, 5 y 6 se restringen a ese producto, sus
- * componentes y sus productos ligados: son las mismas seis consultas, con menos filas.
+ * Con `productoId` (para `prepararLinea`) o `productoIds` (para `prepararLineas`, historia 005) las consultas 1, 4,
+ * 5 y 6 se restringen a esos productos, sus componentes y sus productos ligados: son las mismas seis consultas,
+ * con menos filas.
  */
 
 export interface AgotadoCargado {
@@ -139,14 +140,18 @@ export interface OpcionesDeCarga {
   diaOperativo: string;
   /** Solo este producto, sus componentes y sus productos ligados. */
   productoId?: string;
+  /** Solo estos productos, sus componentes y sus productos ligados (varias líneas con un solo cargador). */
+  productoIds?: readonly string[];
 }
 
 /** Las seis consultas fijas de la carta de una sucursal. */
 export async function cargarCarta(
   conexion: Pick<Sequelize, 'query'>,
-  { sucursalId, diaOperativo, productoId }: OpcionesDeCarga,
+  { sucursalId, diaOperativo, productoId, productoIds }: OpcionesDeCarga,
 ): Promise<CartaCargada> {
-  const filtro = productoId ?? null;
+  // Una lista de ids (o uno solo) restringe las consultas; sin ninguno se carga toda la carta.
+  const lista = productoIds ?? (productoId === undefined ? null : [productoId]);
+  const filtro = lista === null ? null : [...new Set(lista)];
 
   // 1. Productos con el ajuste y el agotado de la sucursal.
   const filas = await conexion.query<FilaProducto>(
@@ -160,13 +165,13 @@ export async function cargarCarta(
        JOIN familia f ON f.id = p.familia_id
        LEFT JOIN producto_sucursal ps ON ps.producto_id = p.id AND ps.sucursal_id = $1
        LEFT JOIN producto_agotado ag ON ag.producto_id = p.id AND ag.sucursal_id = $1
-      WHERE $2::uuid IS NULL
-         OR p.id = $2::uuid
-         OR p.id IN (SELECT cc.producto_id FROM componente_combo cc WHERE cc.combo_id = $2::uuid)
+      WHERE $2::uuid[] IS NULL
+         OR p.id = ANY($2::uuid[])
+         OR p.id IN (SELECT cc.producto_id FROM componente_combo cc WHERE cc.combo_id = ANY($2::uuid[]))
          OR p.id IN (SELECT m.producto_id
                        FROM producto_grupo pg
                        JOIN modificador m ON m.grupo_id = pg.grupo_id AND m.activo
-                      WHERE pg.producto_id = $2::uuid AND m.producto_id IS NOT NULL)
+                      WHERE pg.producto_id = ANY($2::uuid[]) AND m.producto_id IS NOT NULL)
       ORDER BY p.orden, p.id`,
     { bind: [sucursalId, filtro], type: QueryTypes.SELECT },
   );
@@ -190,7 +195,7 @@ export async function cargarCarta(
        FROM producto_grupo pg
        JOIN grupo_modificadores g ON g.id = pg.grupo_id AND g.activo
        LEFT JOIN modificador m ON m.grupo_id = g.id AND m.activo
-      WHERE $1::uuid IS NULL OR pg.producto_id = $1::uuid
+      WHERE $1::uuid[] IS NULL OR pg.producto_id = ANY($1::uuid[])
       ORDER BY pg.producto_id, pg.orden, g.id, m.orden, m.id`,
     { bind: [filtro], type: QueryTypes.SELECT },
   );
@@ -198,7 +203,7 @@ export async function cargarCarta(
   // 5. Componentes de combos y menús.
   const filasComponente = await conexion.query<FilaComponente>(
     `SELECT combo_id, producto_id, cantidad FROM componente_combo
-      WHERE $1::uuid IS NULL OR combo_id = $1::uuid
+      WHERE $1::uuid[] IS NULL OR combo_id = ANY($1::uuid[])
       ORDER BY combo_id, orden, producto_id`,
     { bind: [filtro], type: QueryTypes.SELECT },
   );
@@ -206,7 +211,7 @@ export async function cargarCarta(
   // 6. Opciones del día operativo actual.
   const filasOpcion = await conexion.query<{ producto_id: string; modificador_id: string }>(
     `SELECT producto_id, modificador_id FROM menu_del_dia_opcion
-      WHERE sucursal_id = $1 AND dia_operativo = $2::date AND ($3::uuid IS NULL OR producto_id = $3::uuid)`,
+      WHERE sucursal_id = $1 AND dia_operativo = $2::date AND ($3::uuid[] IS NULL OR producto_id = ANY($3::uuid[]))`,
     { bind: [sucursalId, diaOperativo, filtro], type: QueryTypes.SELECT },
   );
 

@@ -52,6 +52,26 @@ export class CartaWebConsultaService {
     };
   }
 
+  /** La configuración de la carta web de la empresa del contexto (hay una sola), o `null` si no la configuró. */
+  async deLaEmpresa(): Promise<CartaWebDeEmpresa | null> {
+    const filas = await this.conexion.query<{
+      nombre: string;
+      slug: string;
+      color_principal: string;
+      logo_clave: string | null;
+    }>('SELECT nombre, slug, color_principal, logo_clave FROM carta_web LIMIT 1', {
+      type: QueryTypes.SELECT,
+    });
+    const f = filas[0];
+    if (f === undefined) return null;
+    return {
+      nombre: f.nombre,
+      slug: f.slug,
+      colorPrincipal: f.color_principal,
+      logoUrl: f.logo_clave === null ? null : this.almacen.urlPublica(f.logo_clave),
+    };
+  }
+
   /** Si la carta de la sucursal está publicada, su dirección; si no (o si no hay configuración), `null`. */
   async sucursalPublicada(sucursalId: string): Promise<SucursalPublicada | null> {
     const filas = await this.conexion.query<{ sucursal_id: string; slug: string }>(
@@ -76,5 +96,17 @@ export class CartaWebConsultaService {
     return filas[0] === undefined
       ? null
       : { sucursalId: filas[0].sucursal_id, slug: filas[0].slug };
+  }
+
+  /** Las sucursales de la empresa del contexto con la carta publicada, con su dirección. */
+  async sucursalesPublicadas(): Promise<SucursalPublicada[]> {
+    const filas = await this.conexion.query<{ sucursal_id: string; slug: string }>(
+      `SELECT s.sucursal_id, s.slug FROM carta_web_sucursal s
+        WHERE s.publicada
+          AND EXISTS (SELECT 1 FROM carta_web w WHERE w.empresa_id = s.empresa_id)
+        ORDER BY s.slug, s.sucursal_id`,
+      { type: QueryTypes.SELECT },
+    );
+    return filas.map((f) => ({ sucursalId: f.sucursal_id, slug: f.slug }));
   }
 }

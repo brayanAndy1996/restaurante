@@ -71,6 +71,13 @@ const RUTAS_PUBLICAS = [
   'POST /sesiones/pin',
   'GET /equipo',
   'POST /plataforma/sesiones',
+  // Historia 005 (carta web y modo mesa): las seis rutas públicas nuevas.
+  'GET /publico/cartas/:empresaSlug',
+  'GET /publico/cartas/:empresaSlug/:sucursalSlug',
+  'GET /publico/cartas/:empresaSlug/:sucursalSlug/disponibilidad',
+  'GET /publico/mesas/:codigo',
+  'POST /publico/mesas/:codigo/llamados',
+  'GET /publico/mesas/:codigo/llamados/:id',
 ];
 
 @Controller('sonda-fase-a')

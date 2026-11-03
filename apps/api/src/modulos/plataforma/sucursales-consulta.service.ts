@@ -80,14 +80,33 @@ export class SucursalesConsultaService {
   /**
    * Nombre, dirección y horario de las sucursales pedidas (de la empresa del contexto; las que no existen no
    * aparecen), con una sola consulta fija (historia 005, criterios 19, 22 y 35). Nunca devuelve el establecimiento,
-   * el RUC, el emisor ni el WhatsApp. FIRMA: la implementación llega en la fase C (T9).
+   * el RUC, el emisor ni el WhatsApp.
    */
   async datosPublicos(
     sucursalIds: readonly string[],
     transaccion?: Transaction,
   ): Promise<Map<string, DatosPublicosSucursal>> {
-    void sucursalIds;
-    void transaccion;
-    throw new Error('No implementado');
+    const unicas = [...new Set(sucursalIds)];
+    const datos = new Map<string, DatosPublicosSucursal>();
+    if (unicas.length === 0) return datos;
+    const filas = await this.conexion.query<{
+      id: string;
+      nombre: string;
+      direccion: string;
+      horario: TramoHorario[];
+    }>('SELECT id, nombre, direccion, horario FROM sucursal WHERE id = ANY($1::uuid[])', {
+      bind: [unicas],
+      type: QueryTypes.SELECT,
+      transaction: transaccion,
+    });
+    for (const f of filas) {
+      datos.set(f.id, {
+        id: f.id,
+        nombre: f.nombre,
+        direccion: f.direccion,
+        horario: Array.isArray(f.horario) ? f.horario : [],
+      });
+    }
+    return datos;
   }
 }

@@ -1,8 +1,8 @@
 /**
  * Reglas del horario y de los destinatarios de los llamados (historia 005, criterios 35, 36 y 56; ruta crítica
- * P2). Firmas públicas: la implementación llega en la fase C (T8).
+ * P2).
  */
-import type { TramoHorario } from '../horario';
+import { dentroDeHorario, type TramoHorario } from '../horario';
 
 /**
  * `true` si la mesa acepta llamados: si tiene una cuenta abierta, si la sucursal no tiene horario cargado (lista
@@ -13,8 +13,9 @@ export function aceptaLlamados(entrada: {
   ahora: Date;
   mesaConCuenta: boolean;
 }): boolean {
-  void entrada;
-  throw new Error('No implementado');
+  if (entrada.mesaConCuenta) return true;
+  if (entrada.horario === null || entrada.horario.length === 0) return true;
+  return dentroDeHorario([...entrada.horario], entrada.ahora);
 }
 
 /**
@@ -22,6 +23,5 @@ export function aceptaLlamados(entrada: {
  * las personas que atienden mesas en la sucursal) si está libre.
  */
 export function destinatariosDeLlamado(mozoResponsableId: string | null): string[] | null {
-  void mozoResponsableId;
-  throw new Error('No implementado');
+  return mozoResponsableId === null ? null : [mozoResponsableId];
 }
