@@ -1,0 +1,2098 @@
+<!doctype html>
+<html lang="es-PE">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex" />
+    <title>Muestra de diseño · Carta web (datos de ejemplo)</title>
+    <!--
+      Muestra ESTÁTICA de la dirección de diseño de la carta web (historia 005, tarea T21). No es la aplicación:
+      no usa la API ni Next, y todo lo que dice es de ejemplo (el restaurante "Sabor Norteño", sus platos, sus
+      fotos y su logo no existen). Se abre directo en el navegador:
+
+        carta       ?pantalla=carta
+        modo mesa   ?pantalla=mesa            (con "Tu pedido": &hoja=pedido, con el producto: &hoja=producto)
+        estados     ?pantalla=estados         (avisos del llamado, errores y confirmaciones)
+
+      Otras opciones: &llamado=pendiente|atendido|pasado|descartado|vencido, &pedido=vacio, &hoja=llamar|cuenta
+      y &marca=2|3|4 para ver la misma carta con otro color de restaurante.
+
+      Los colores de la marca son los que devuelve colorDeMarcaAccesible (packages/dominio) y los montos los que
+      devuelven calcularLinea y totalOrden; aquí solo se copian. La aplicación real nunca los escribe a mano.
+    -->
+    <style>
+      :root {
+        /* Marca del restaurante: colorDeMarcaAccesible('#E4572E').fondo; el texto encima siempre es blanco. */
+        --marca: #cb4d29;
+        --sobre-marca: #ffffff;
+        --marca-suave: color-mix(in oklab, var(--marca) 8%, #ffffff);
+        --marca-borde: color-mix(in oklab, var(--marca) 30%, #ffffff);
+        --marca-hundida: color-mix(in oklab, var(--marca) 80%, #000000);
+
+        --fondo: #ffffff;
+        --hundido: #f4f5f6;
+        --tinta: #16191d;
+        --tinta-suave: #4a5058;
+        --tinta-tenue: #666c74;
+        --junta: #e2e5e8;
+        --junta-fuerte: #c3c8cd;
+        --borde-control: #7a8088;
+        --inactivo: #e7e9eb;
+
+        --exito: #17653f;
+        --exito-suave: #e5f3eb;
+        --exito-borde: #a9d6bc;
+        --exito-oscuro: #0f4a2d;
+        --aviso-suave: #fff1d0;
+        --aviso-borde: #e8c877;
+        --aviso-oscuro: #7a4a00;
+        --error: #b3261e;
+        --error-suave: #fce8e6;
+        --error-borde: #e7b3ae;
+        --error-oscuro: #7f1a14;
+
+        --fuente: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+
+        --radio-control: 8px;
+        --radio-etiqueta: 4px;
+        --radio-hoja: 16px;
+        --ancho-columna: 640px;
+        --altura-barra: 0px;
+      }
+      /* Otros colores de restaurante, ya pasados por colorDeMarcaAccesible (el original va al lado). */
+      [data-marca='2'] {
+        --marca: #1d4a9e; /* #1D4A9E, sin cambio */
+      }
+      [data-marca='3'] {
+        --marca: #9d6e00; /* #F2A900 oscurecido para llegar a 4.5:1 con el blanco */
+      }
+      [data-marca='4'] {
+        --marca: #2c8654; /* #2E8B57 oscurecido */
+      }
+
+      *,
+      *::before,
+      *::after {
+        box-sizing: border-box;
+      }
+      html {
+        -webkit-text-size-adjust: 100%;
+      }
+      body {
+        margin: 0;
+        font-family: var(--fuente);
+        font-size: 1rem;
+        line-height: 1.5rem;
+        color: var(--tinta);
+        background: var(--fondo);
+        font-variant-numeric: tabular-nums;
+        accent-color: var(--marca);
+      }
+      h1,
+      h2,
+      h3,
+      p,
+      ul,
+      fieldset {
+        margin: 0;
+        padding: 0;
+      }
+      ul {
+        list-style: none;
+      }
+      button,
+      textarea {
+        font: inherit;
+        color: inherit;
+      }
+      button {
+        cursor: pointer;
+      }
+      ::selection {
+        background: var(--marca-borde);
+        color: var(--tinta);
+      }
+      textarea {
+        caret-color: var(--marca);
+      }
+      :focus-visible {
+        outline: 3px solid var(--tinta);
+        outline-offset: 2px;
+      }
+      .cabecera :focus-visible,
+      .boton-principal:focus-visible {
+        outline-color: #ffffff;
+      }
+      .boton-principal:focus-visible {
+        outline-offset: -5px;
+      }
+      .sr {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        overflow: hidden;
+        clip-path: inset(50%);
+        white-space: nowrap;
+      }
+      .icono {
+        width: 24px;
+        height: 24px;
+        flex: none;
+        fill: none;
+        stroke: currentColor;
+        stroke-width: 1.75;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+      }
+      .icono--s {
+        width: 20px;
+        height: 20px;
+      }
+
+      /* Qué se ve en cada pantalla. */
+      body[data-pantalla='carta'] .solo-mesa,
+      body[data-pantalla='estados'] .solo-carta,
+      body:not([data-pantalla='estados']) .solo-estados {
+        display: none !important;
+      }
+      body[data-pantalla='mesa'] .solo-carta-publica,
+      body[data-pedido='vacio'] .con-pedido,
+      body:not([data-pedido='vacio']) .sin-pedido {
+        display: none !important;
+      }
+
+      .saltar {
+        position: absolute;
+        left: 8px;
+        top: -80px;
+        z-index: 10;
+        min-height: 48px;
+        display: inline-flex;
+        align-items: center;
+        padding: 0 16px;
+        background: #ffffff;
+        color: var(--tinta);
+        font-weight: 600;
+        border-radius: var(--radio-control);
+        border: 2px solid var(--tinta);
+      }
+      .saltar:focus {
+        top: 8px;
+      }
+
+      /* ---------- Cabecera de la marca ---------- */
+      .cabecera {
+        background: var(--marca);
+        color: var(--sobre-marca);
+        padding: 16px 16px 20px;
+      }
+      .cabecera__contenido {
+        max-width: var(--ancho-columna);
+        margin: 0 auto;
+      }
+      .cabecera__marca {
+        display: flex;
+        gap: 12px;
+        align-items: center;
+      }
+      .logo {
+        width: 56px;
+        height: 56px;
+        flex: none;
+        display: grid;
+        place-items: center;
+        background: #ffffff;
+        border-radius: 12px;
+      }
+      .cabecera h1 {
+        font-size: 1.375rem;
+        line-height: 1.75rem;
+        font-weight: 700;
+        letter-spacing: -0.005em;
+        overflow-wrap: anywhere;
+      }
+      .cabecera__sucursal {
+        font-size: 1rem;
+        line-height: 1.5rem;
+        font-weight: 600;
+      }
+      .cabecera__direccion {
+        margin-top: 12px;
+        font-size: 0.9375rem;
+        line-height: 1.3125rem;
+      }
+      .cabecera__marca + .cabecera__estados {
+        margin-top: 16px;
+      }
+      .cabecera__estados {
+        margin-top: 12px;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+      .dato {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        min-height: 32px;
+        padding: 4px 10px 4px 8px;
+        background: #ffffff;
+        color: var(--tinta);
+        border-radius: var(--radio-etiqueta);
+        font-size: 0.875rem;
+        line-height: 1.25rem;
+        font-weight: 600;
+      }
+      .dato .icono {
+        width: 20px;
+        height: 20px;
+      }
+
+      /* ---------- Contenido ---------- */
+      .columna {
+        max-width: var(--ancho-columna);
+        margin: 0 auto;
+      }
+      main {
+        padding-bottom: calc(var(--altura-barra) + 32px);
+      }
+      body[data-pantalla='mesa'] {
+        --altura-barra: 128px;
+      }
+      .familias {
+        padding: 16px 16px 0;
+      }
+      .familias ul {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+      .familias a {
+        display: inline-flex;
+        align-items: center;
+        min-height: 48px;
+        padding: 0 14px;
+        border: 1px solid var(--borde-control);
+        border-radius: var(--radio-control);
+        background: var(--fondo);
+        color: var(--tinta);
+        font-size: 0.9375rem;
+        font-weight: 600;
+        text-decoration: none;
+      }
+      .familias a:active {
+        background: var(--marca-suave);
+        border-color: var(--marca);
+      }
+      .guia {
+        margin: 16px 16px 0;
+        display: flex;
+        gap: 8px;
+        align-items: center;
+        font-size: 0.9375rem;
+        line-height: 1.3125rem;
+        color: var(--tinta-suave);
+      }
+      .guia .icono {
+        width: 20px;
+        height: 20px;
+        color: var(--marca);
+      }
+
+      .seccion h2 {
+        padding: 24px 16px 8px;
+        font-size: 1.1875rem;
+        line-height: 1.5rem;
+        font-weight: 700;
+        scroll-margin-top: 8px;
+      }
+      .fila {
+        position: relative;
+        border-top: 1px solid var(--junta);
+      }
+      .seccion .fila:last-child {
+        border-bottom: 1px solid var(--junta);
+      }
+      .producto {
+        position: relative;
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 16px;
+        padding: 16px;
+      }
+      .producto__nombre {
+        font-size: 1.0625rem;
+        line-height: 1.375rem;
+        font-weight: 600;
+      }
+      .producto__desc {
+        margin-top: 4px;
+        font-size: 0.9375rem;
+        line-height: 1.3125rem;
+        color: var(--tinta-suave);
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+      }
+      .producto__incluye {
+        margin-top: 4px;
+        font-size: 0.875rem;
+        line-height: 1.25rem;
+        color: var(--tinta-suave);
+      }
+      .producto__pie {
+        margin-top: 8px;
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 4px 12px;
+      }
+      .precio {
+        font-size: 1.0625rem;
+        line-height: 1.375rem;
+        font-weight: 700;
+      }
+      .foto {
+        position: relative;
+        width: 96px;
+        height: 96px;
+        align-self: start;
+      }
+      .foto svg {
+        display: block;
+        width: 100%;
+        height: 100%;
+        border-radius: var(--radio-control);
+      }
+      .foto__mas {
+        position: absolute;
+        right: -6px;
+        bottom: -6px;
+        width: 44px;
+        height: 44px;
+        display: grid;
+        place-items: center;
+        background: var(--marca);
+        color: var(--sobre-marca);
+        border: 3px solid #ffffff;
+        border-radius: var(--radio-control);
+      }
+      .producto--sin-foto .foto__mas {
+        position: static;
+        align-self: end;
+      }
+      /* En el modo mesa, toda la fila es un botón (sin anidar controles): se estira sobre ella. */
+      .producto__boton {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        background: transparent;
+        border: 0;
+        border-radius: 0;
+        padding: 0;
+      }
+      .producto__boton:active {
+        background: color-mix(in oklab, var(--marca) 6%, transparent);
+      }
+      .producto__boton:focus-visible {
+        outline-offset: -3px;
+      }
+      .etiqueta {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        min-height: 24px;
+        padding: 0 8px 0 6px;
+        border-radius: var(--radio-etiqueta);
+        font-size: 0.8125rem;
+        line-height: 1.125rem;
+        font-weight: 700;
+        background: var(--marca-suave);
+        border: 1px solid var(--marca-borde);
+        color: var(--tinta);
+      }
+      .etiqueta .icono {
+        width: 16px;
+        height: 16px;
+        stroke-width: 2.25;
+        color: var(--marca);
+      }
+      .etiqueta--aviso {
+        background: var(--aviso-suave);
+        border-color: var(--aviso-borde);
+        color: var(--aviso-oscuro);
+      }
+      .etiqueta--error {
+        background: var(--error-suave);
+        border-color: var(--error-borde);
+        color: var(--error-oscuro);
+      }
+      .etiqueta--error .icono,
+      .etiqueta--aviso .icono {
+        color: currentColor;
+      }
+      .etiqueta--neutra {
+        background: var(--hundido);
+        border-color: var(--junta-fuerte);
+        color: var(--tinta-suave);
+      }
+      .pie-de-muestra {
+        margin: 24px 16px 0;
+        font-size: 0.875rem;
+        line-height: 1.25rem;
+        color: var(--tinta-suave);
+      }
+
+      /* ---------- Botones ---------- */
+      .boton-principal,
+      .boton-secundario,
+      .boton-texto {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        border-radius: var(--radio-control);
+        font-size: 1.0625rem;
+        line-height: 1.5rem;
+        font-weight: 600;
+        text-align: left;
+      }
+      .boton-principal {
+        width: 100%;
+        min-height: 56px;
+        padding: 0 16px;
+        justify-content: space-between;
+        background: var(--marca);
+        color: var(--sobre-marca);
+        border: 0;
+      }
+      .boton-principal:active {
+        background: var(--marca-hundida);
+        transform: translateY(1px);
+      }
+      .boton-principal[aria-disabled='true'],
+      .boton-secundario[aria-disabled='true'] {
+        background: var(--inactivo);
+        color: var(--tinta-suave);
+        border-color: var(--junta-fuerte);
+        transform: none;
+        cursor: not-allowed;
+      }
+      .boton-secundario {
+        min-height: 48px;
+        padding: 0 8px;
+        gap: 6px;
+        background: var(--fondo);
+        color: var(--tinta);
+        border: 1px solid var(--borde-control);
+        font-size: 0.9375rem;
+        justify-content: center;
+      }
+      .boton-secundario:active {
+        background: var(--marca-suave);
+        border-color: var(--marca);
+      }
+      .boton-texto {
+        min-height: 48px;
+        padding: 0 12px;
+        background: transparent;
+        border: 0;
+        color: var(--tinta);
+        font-size: 0.9375rem;
+        text-decoration: underline;
+        text-underline-offset: 3px;
+        text-decoration-thickness: 1px;
+      }
+      .boton-texto--peligro {
+        color: var(--error);
+      }
+      .boton-icono {
+        width: 48px;
+        height: 48px;
+        display: inline-grid;
+        place-items: center;
+        background: var(--fondo);
+        border: 1px solid var(--borde-control);
+        border-radius: var(--radio-control);
+        padding: 0;
+      }
+      .boton-icono:active {
+        background: var(--marca-suave);
+        border-color: var(--marca);
+      }
+      .boton-icono[aria-disabled='true'] {
+        background: var(--inactivo);
+        color: var(--tinta-tenue);
+        border-color: var(--junta-fuerte);
+      }
+
+      /* ---------- Barra de abajo del modo mesa ---------- */
+      .barra {
+        position: fixed;
+        inset: auto 0 0 0;
+        z-index: 5;
+        background: var(--fondo);
+        border-top: 1px solid var(--junta-fuerte);
+        padding: 8px 16px calc(8px + env(safe-area-inset-bottom));
+      }
+      .barra__contenido {
+        max-width: var(--ancho-columna);
+        margin: 0 auto;
+        display: grid;
+        gap: 8px;
+      }
+      .barra__llamados {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 8px;
+      }
+      .barra__cantidad {
+        font-weight: 600;
+      }
+      .barra__cantidad span:first-child {
+        font-weight: 400;
+      }
+
+      /* ---------- Avisos (estado del llamado, errores) ---------- */
+      .aviso {
+        display: grid;
+        grid-template-columns: auto minmax(0, 1fr) auto;
+        gap: 4px 12px;
+        align-items: start;
+        padding: 12px;
+        border: 1px solid var(--marca-borde);
+        border-radius: var(--radio-control);
+        background: var(--marca-suave);
+        color: var(--tinta);
+        font-size: 0.9375rem;
+        line-height: 1.3125rem;
+      }
+      .aviso .icono {
+        margin-top: 0;
+        color: var(--marca);
+      }
+      .aviso__titulo {
+        font-size: 1rem;
+        line-height: 1.5rem;
+        font-weight: 700;
+      }
+      .aviso__texto {
+        grid-column: 2;
+      }
+      .aviso__cerrar {
+        grid-column: 3;
+        grid-row: 1 / span 2;
+        align-self: center;
+        margin: -12px -12px -12px 0;
+        min-height: 48px;
+      }
+      .aviso--exito {
+        background: var(--exito-suave);
+        border-color: var(--exito-borde);
+        color: var(--exito-oscuro);
+      }
+      .aviso--exito .icono {
+        color: var(--exito);
+      }
+      .aviso--aviso {
+        background: var(--aviso-suave);
+        border-color: var(--aviso-borde);
+        color: var(--aviso-oscuro);
+      }
+      .aviso--aviso .icono {
+        color: var(--aviso-oscuro);
+      }
+      .aviso--error {
+        background: var(--error-suave);
+        border-color: var(--error-borde);
+        color: var(--error-oscuro);
+      }
+      .aviso--error .icono {
+        color: var(--error);
+      }
+      .barra .aviso {
+        padding: 8px 12px;
+      }
+      /* El estado del llamado reemplaza al pedido en la barra y apaga los envíos. */
+      body:not([data-llamado]) .barra__llamado {
+        display: none;
+      }
+      body[data-llamado] .barra__pedido {
+        display: none;
+      }
+      body[data-llamado='pendiente'] .barra__llamados .boton-secundario {
+        background: var(--inactivo);
+        color: var(--tinta-suave);
+        border-color: var(--junta-fuerte);
+      }
+      body[data-llamado]:not([data-llamado='pendiente']) .barra__llamado-pendiente,
+      body[data-llamado='pendiente'] .barra__llamado-final {
+        display: none;
+      }
+      body[data-llamado='pendiente'] .barra__llamado-pendiente {
+        display: grid;
+      }
+      /* Un solo aviso a la vez según el estado. */
+      .aviso-estado {
+        display: none;
+      }
+      body[data-llamado='pendiente'] .aviso-estado--pendiente,
+      body[data-llamado='atendido'] .aviso-estado--atendido,
+      body[data-llamado='pasado'] .aviso-estado--pasado,
+      body[data-llamado='descartado'] .aviso-estado--descartado,
+      body[data-llamado='vencido'] .aviso-estado--vencido {
+        display: grid;
+      }
+
+      /* ---------- Hojas inferiores ---------- */
+      .hoja {
+        padding: 0;
+        border: 0;
+        width: 100%;
+        max-width: 560px;
+        max-height: 92dvh;
+        margin: auto auto 0;
+        border-radius: var(--radio-hoja) var(--radio-hoja) 0 0;
+        background: var(--fondo);
+        color: var(--tinta);
+        box-shadow: 0 -8px 24px rgba(22, 25, 29, 0.16);
+        overflow: hidden;
+      }
+      .hoja[open] {
+        display: flex;
+        flex-direction: column;
+        animation: sube 220ms cubic-bezier(0.22, 1, 0.36, 1);
+      }
+      .hoja::backdrop {
+        background: rgba(22, 25, 29, 0.45);
+      }
+      @keyframes sube {
+        from {
+          transform: translateY(32px);
+          opacity: 0;
+        }
+        to {
+          transform: none;
+          opacity: 1;
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .hoja[open] {
+          animation: none;
+        }
+        .boton-principal:active {
+          transform: none;
+        }
+      }
+      .hoja__asa {
+        flex: none;
+        width: 40px;
+        height: 4px;
+        margin: 8px auto 0;
+        border-radius: 2px;
+        background: var(--junta-fuerte);
+      }
+      .hoja__cabecera {
+        flex: none;
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        gap: 8px;
+        padding: 8px 8px 8px 16px;
+      }
+      .hoja__titulo {
+        padding-top: 8px;
+        font-size: 1.25rem;
+        line-height: 1.625rem;
+        font-weight: 700;
+      }
+      .hoja__subtitulo {
+        font-size: 0.9375rem;
+        line-height: 1.3125rem;
+        color: var(--tinta-suave);
+      }
+      .hoja__cuerpo {
+        flex: 1 1 auto;
+        overflow-y: auto;
+        overscroll-behavior: contain;
+        padding: 8px 16px 16px;
+        display: grid;
+        gap: 24px;
+        align-content: start;
+      }
+      .hoja__pie {
+        flex: none;
+        display: grid;
+        gap: 8px;
+        padding: 12px 16px calc(12px + env(safe-area-inset-bottom));
+        background: var(--fondo);
+        border-top: 1px solid var(--junta);
+      }
+      .hoja__total {
+        display: flex;
+        justify-content: space-between;
+        align-items: baseline;
+        font-size: 1.0625rem;
+        font-weight: 600;
+      }
+      .hoja__total strong {
+        font-size: 1.375rem;
+        line-height: 1.75rem;
+        font-weight: 700;
+      }
+      .hoja__ayuda {
+        font-size: 0.875rem;
+        line-height: 1.25rem;
+        color: var(--tinta-suave);
+      }
+      .foto-grande {
+        display: block;
+        width: 100%;
+        height: 152px;
+        border-radius: var(--radio-control);
+      }
+
+      /* Producto: grupos de modificadores */
+      .grupo {
+        border: 0;
+        min-width: 0;
+      }
+      .hoja__titulo:focus {
+        outline: none;
+      }
+      .hoja__producto {
+        display: flex;
+        gap: 12px;
+        align-items: center;
+      }
+      .hoja__producto .foto {
+        width: 72px;
+        height: 72px;
+        flex: none;
+      }
+      .grupo legend {
+        float: left;
+        width: 100%;
+        padding: 0;
+        font-size: 1.0625rem;
+        line-height: 1.375rem;
+        font-weight: 700;
+      }
+      .grupo__regla {
+        clear: both;
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 4px 8px;
+        margin: 4px 0 8px;
+        font-size: 0.9375rem;
+        line-height: 1.3125rem;
+        color: var(--tinta-suave);
+      }
+      .opciones {
+        border: 1px solid var(--junta-fuerte);
+        border-radius: var(--radio-control);
+        overflow: hidden;
+      }
+      .opcion {
+        display: grid;
+        grid-template-columns: 24px minmax(0, 1fr) auto;
+        gap: 12px;
+        align-items: center;
+        min-height: 56px;
+        padding: 8px 12px;
+        cursor: pointer;
+      }
+      .opcion + .opcion {
+        border-top: 1px solid var(--junta);
+      }
+      .opcion input {
+        width: 24px;
+        height: 24px;
+        margin: 0;
+      }
+      .opcion:has(input:checked) {
+        background: var(--marca-suave);
+      }
+      .opcion:has(input:focus-visible) {
+        outline: 3px solid var(--tinta);
+        outline-offset: -3px;
+      }
+      .opcion__extra {
+        font-weight: 600;
+        font-size: 0.9375rem;
+      }
+
+      .campo label,
+      .campo__etiqueta {
+        display: block;
+        font-size: 1rem;
+        line-height: 1.5rem;
+        font-weight: 600;
+      }
+      .campo textarea {
+        display: block;
+        width: 100%;
+        margin-top: 4px;
+        min-height: 72px;
+        padding: 12px;
+        border: 1px solid var(--borde-control);
+        border-radius: var(--radio-control);
+        background: var(--fondo);
+        resize: none;
+        font-size: 1rem;
+        line-height: 1.5rem;
+      }
+      .campo textarea::placeholder {
+        color: var(--tinta-tenue);
+      }
+      .campo__contador {
+        margin-top: 4px;
+        text-align: right;
+        font-size: 0.875rem;
+        line-height: 1.25rem;
+        color: var(--tinta-suave);
+      }
+      .cantidad {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 12px;
+      }
+      .contador {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+      }
+      .contador output {
+        min-width: 48px;
+        text-align: center;
+        font-size: 1.125rem;
+        line-height: 1.5rem;
+        font-weight: 700;
+      }
+
+      /* Tu pedido */
+      .lineas > li {
+        padding: 12px 0;
+        border-top: 1px solid var(--junta);
+      }
+      .lineas > li:first-child {
+        border-top: 0;
+        padding-top: 0;
+      }
+      .linea__cabecera {
+        display: flex;
+        justify-content: space-between;
+        gap: 16px;
+        align-items: baseline;
+      }
+      .linea__nombre {
+        font-size: 1.0625rem;
+        line-height: 1.375rem;
+        font-weight: 600;
+        overflow-wrap: anywhere;
+      }
+      .linea__detalle {
+        margin-top: 2px;
+        font-size: 0.9375rem;
+        line-height: 1.3125rem;
+        color: var(--tinta-suave);
+      }
+      .linea__acciones {
+        margin: 4px 0 -4px -12px;
+        display: flex;
+        gap: 4px;
+        align-items: center;
+        flex-wrap: wrap;
+      }
+      .linea--agotada .linea__nombre,
+      .linea--agotada .linea__detalle,
+      .linea--agotada .precio {
+        color: var(--tinta-suave);
+      }
+      .linea--agotada .precio {
+        text-decoration: line-through;
+      }
+      .linea__motivo {
+        margin-top: 8px;
+      }
+
+      /* ---------- Estados (página de revisión) ---------- */
+      .estados {
+        padding: 24px 16px 48px;
+        display: grid;
+        gap: 32px;
+      }
+      .estados h1 {
+        font-size: 1.375rem;
+        line-height: 1.75rem;
+        font-weight: 700;
+      }
+      .estados h2 {
+        font-size: 1.1875rem;
+        line-height: 1.5rem;
+        font-weight: 700;
+        margin-bottom: 8px;
+      }
+      .estados__lista {
+        display: grid;
+        gap: 12px;
+      }
+      .estados__lista > li {
+        display: grid;
+        gap: 4px;
+      }
+      .estados__rotulo {
+        font-size: 0.8125rem;
+        line-height: 1.125rem;
+        font-weight: 700;
+        color: var(--tinta-suave);
+      }
+      .estados .hoja-estatica {
+        border: 1px solid var(--junta-fuerte);
+        border-radius: var(--radio-hoja);
+        padding: 24px 16px 16px;
+        background: var(--fondo);
+        display: grid;
+        gap: 16px;
+      }
+      .confirmar__acciones {
+        display: grid;
+        gap: 8px;
+      }
+      .confirmar__acciones .boton-principal {
+        justify-content: center;
+      }
+      .barra-estatica {
+        border: 1px solid var(--junta-fuerte);
+        border-radius: var(--radio-control);
+        padding: 8px;
+        display: grid;
+        gap: 8px;
+      }
+
+      /* Tablet y más: columna de lectura centrada; las hojas siguen subiendo desde abajo. */
+      @media (min-width: 768px) {
+        .producto {
+          padding: 16px 24px;
+        }
+        .familias,
+        .guia {
+          padding-left: 24px;
+          padding-right: 24px;
+        }
+        .seccion h2 {
+          padding-left: 24px;
+          padding-right: 24px;
+        }
+      }
+    </style>
+  </head>
+  <body data-pantalla="carta">
+    <!-- Iconos de contorno de un mismo trazo (1.75 px), 24 px. -->
+    <svg width="0" height="0" style="position: absolute" aria-hidden="true" focusable="false">
+      <defs>
+        <symbol id="i-mas" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14" /></symbol>
+        <symbol id="i-menos" viewBox="0 0 24 24"><path d="M5 12h14" /></symbol>
+        <symbol id="i-x" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12" /></symbol>
+        <symbol id="i-check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5" /></symbol>
+        <symbol id="i-reloj" viewBox="0 0 24 24">
+          <circle cx="12" cy="12" r="9" />
+          <path d="M12 7v5l3 2" />
+        </symbol>
+        <symbol id="i-info" viewBox="0 0 24 24">
+          <circle cx="12" cy="12" r="9" />
+          <path d="M12 16v-4M12 8h.01" />
+        </symbol>
+        <symbol id="i-alerta" viewBox="0 0 24 24">
+          <path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z" />
+          <path d="M12 9v4M12 17h.01" />
+        </symbol>
+        <symbol id="i-campana" viewBox="0 0 24 24">
+          <path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9" />
+          <path d="M10.3 21a1.94 1.94 0 0 0 3.4 0" />
+        </symbol>
+        <symbol id="i-cuenta" viewBox="0 0 24 24">
+          <path
+            d="M5 2v20l2.3-1.5L9.7 22l2.3-1.5 2.3 1.5 2.4-1.5L19 22V2l-2.3 1.5L14.3 2 12 3.5 9.7 2 7.3 3.5 5 2Z"
+          />
+          <path d="M9 8h6M9 12h6M9 16h3" />
+        </symbol>
+        <symbol id="i-mesa" viewBox="0 0 24 24">
+          <path d="M3 9h18M5 9v10M19 9v10M3 9l1.2-4h15.6L21 9" />
+        </symbol>
+        <symbol id="i-lapiz" viewBox="0 0 24 24">
+          <path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5Z" />
+        </symbol>
+        <symbol id="i-basura" viewBox="0 0 24 24">
+          <path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6M10 11v5M14 11v5" />
+        </symbol>
+        <symbol id="i-sin-red" viewBox="0 0 24 24">
+          <path
+            d="M2 8.8a15 15 0 0 1 4-2.4M22 8.8a15 15 0 0 0-9.6-3.7M5 12.9a10 10 0 0 1 3.2-2M19 12.9a10 10 0 0 0-3.6-2.2M8.5 16.4a5 5 0 0 1 7 0M12 20h.01M2 2l20 20"
+          />
+        </symbol>
+
+        <!-- Fotos de ejemplo (96 × 96): ilustraciones sencillas, no fotos reales. -->
+        <symbol id="f-ceviche" viewBox="0 0 96 96" preserveAspectRatio="xMidYMid slice">
+          <rect width="96" height="96" fill="#cfe5e1" />
+          <circle cx="48" cy="50" r="36" fill="#ffffff" />
+          <circle cx="48" cy="50" r="28" fill="#eef1f2" />
+          <g fill="#f4e6c8" stroke="#d9c79c" stroke-width="1">
+            <rect x="32" y="40" width="14" height="10" rx="3" />
+            <rect x="48" y="36" width="14" height="10" rx="3" transform="rotate(12 55 41)" />
+            <rect x="40" y="52" width="14" height="10" rx="3" transform="rotate(-10 47 57)" />
+            <rect x="56" y="50" width="12" height="9" rx="3" />
+          </g>
+          <path
+            d="M30 56c6-6 12-6 18 0M52 38c6-5 12-4 16 2"
+            fill="none"
+            stroke="#b5527a"
+            stroke-width="3"
+            stroke-linecap="round"
+          />
+          <circle cx="66" cy="62" r="4" fill="#f0b43c" />
+          <circle cx="60" cy="68" r="3.5" fill="#f0b43c" />
+          <path d="M28 44c3-3 6-3 8 0-3 3-6 3-8 0Z" fill="#6aa84f" />
+        </symbol>
+        <symbol id="f-lomo" viewBox="0 0 96 96" preserveAspectRatio="xMidYMid slice">
+          <rect width="96" height="96" fill="#e8d2be" />
+          <circle cx="48" cy="50" r="36" fill="#ffffff" />
+          <circle cx="48" cy="50" r="28" fill="#eef1f2" />
+          <ellipse cx="34" cy="58" rx="13" ry="9" fill="#ffffff" stroke="#cfd3d6" />
+          <g fill="#e9b949">
+            <rect x="48" y="34" width="5" height="22" rx="2" transform="rotate(30 50 45)" />
+            <rect x="56" y="34" width="5" height="22" rx="2" transform="rotate(48 58 45)" />
+            <rect x="62" y="44" width="5" height="20" rx="2" transform="rotate(70 64 54)" />
+            <rect x="44" y="36" width="5" height="20" rx="2" transform="rotate(12 46 46)" />
+          </g>
+          <g fill="#6f4426">
+            <rect x="36" y="34" width="20" height="6" rx="3" transform="rotate(-12 46 37)" />
+            <rect x="40" y="42" width="22" height="6" rx="3" transform="rotate(8 51 45)" />
+            <rect x="42" y="50" width="18" height="6" rx="3" transform="rotate(-6 51 53)" />
+          </g>
+          <g fill="#c8402b">
+            <circle cx="58" cy="40" r="4" />
+            <circle cx="46" cy="62" r="3.5" />
+          </g>
+          <path
+            d="M52 62c4 3 9 1 11-3"
+            fill="none"
+            stroke="#a65a82"
+            stroke-width="3"
+            stroke-linecap="round"
+          />
+        </symbol>
+        <symbol id="f-arroz" viewBox="0 0 96 96" preserveAspectRatio="xMidYMid slice">
+          <rect width="96" height="96" fill="#dde8c6" />
+          <circle cx="48" cy="50" r="36" fill="#ffffff" />
+          <circle cx="48" cy="50" r="28" fill="#eef1f2" />
+          <ellipse cx="46" cy="50" rx="22" ry="17" fill="#8db255" />
+          <g fill="#a6c76d">
+            <circle cx="36" cy="44" r="2" />
+            <circle cx="44" cy="40" r="2" />
+            <circle cx="54" cy="46" r="2" />
+            <circle cx="40" cy="54" r="2" />
+            <circle cx="52" cy="56" r="2" />
+          </g>
+          <path d="M52 34c8 0 14 6 12 14-3 7-12 6-14 0-2-6-1-11 2-14Z" fill="#b9733a" />
+          <rect
+            x="63"
+            y="44"
+            width="10"
+            height="5"
+            rx="2.5"
+            fill="#f1e3cc"
+            transform="rotate(30 68 46)"
+          />
+          <circle cx="36" cy="58" r="3.5" fill="#c8402b" />
+        </symbol>
+        <symbol id="f-causa" viewBox="0 0 96 96" preserveAspectRatio="xMidYMid slice">
+          <rect width="96" height="96" fill="#f3e2b0" />
+          <circle cx="48" cy="50" r="36" fill="#ffffff" />
+          <circle cx="48" cy="50" r="28" fill="#eef1f2" />
+          <rect x="28" y="38" width="40" height="10" rx="3" fill="#f0c040" />
+          <rect x="28" y="48" width="40" height="6" rx="3" fill="#f6efe1" />
+          <rect x="28" y="54" width="40" height="8" rx="3" fill="#f0c040" />
+          <circle cx="36" cy="36" r="4" fill="#4a3a52" />
+          <circle cx="50" cy="35" r="3" fill="#6aa84f" />
+          <path
+            d="M58 35c3-3 6-2 7 1"
+            fill="none"
+            stroke="#c8402b"
+            stroke-width="3"
+            stroke-linecap="round"
+          />
+        </symbol>
+        <symbol id="f-chicha" viewBox="0 0 96 96" preserveAspectRatio="xMidYMid slice">
+          <rect width="96" height="96" fill="#e3d0e6" />
+          <path
+            d="M30 28h36l-4 48a6 6 0 0 1-6 5H40a6 6 0 0 1-6-5l-4-48Z"
+            fill="#ffffff"
+            fill-opacity="0.75"
+            stroke="#b79bbd"
+            stroke-width="2"
+          />
+          <path
+            d="M32 38h32l-3.2 37a4 4 0 0 1-4 3.6H39.200a4 4 0 0 1-4-3.600L32 38Z"
+            fill="#5b1f5e"
+          />
+          <g fill="#ffffff" fill-opacity="0.55">
+            <rect x="38" y="44" width="10" height="10" rx="2" transform="rotate(10 43 49)" />
+            <rect x="50" y="52" width="9" height="9" rx="2" transform="rotate(-8 54 56)" />
+          </g>
+          <path d="M60 14 52 40" stroke="#d9a8c4" stroke-width="4" stroke-linecap="round" />
+        </symbol>
+        <symbol id="f-suspiro" viewBox="0 0 96 96" preserveAspectRatio="xMidYMid slice">
+          <rect width="96" height="96" fill="#f6d9d9" />
+          <path
+            d="M28 46h40l-5 24a6 6 0 0 1-6 5H39a6 6 0 0 1-6-5l-5-24Z"
+            fill="#ffffff"
+            stroke="#d6b3b3"
+            stroke-width="2"
+          />
+          <path d="M31 46c0-12 34-12 34 0Z" fill="#f4e6c8" />
+          <path d="M34 38c6-14 22-14 28 0-8-4-20-4-28 0Z" fill="#ffffff" stroke="#e5d3d3" />
+          <circle cx="48" cy="27" r="3.5" fill="#c8402b" />
+          <path d="M31 52h34" stroke="#f0d8a0" stroke-width="5" />
+        </symbol>
+      </defs>
+    </svg>
+
+    <a class="saltar" href="#carta">Ir a la carta</a>
+
+    <!-- ===================================== CARTA Y MODO MESA ===================================== -->
+    <div class="solo-carta">
+      <header class="cabecera">
+        <div class="cabecera__contenido">
+          <div class="cabecera__marca">
+            <div class="logo" role="img" aria-label="Logo de Sabor Norteño (ejemplo)">
+              <svg width="44" height="44" viewBox="0 0 44 44" aria-hidden="true">
+                <circle cx="22" cy="22" r="20" fill="none" stroke="#16191d" stroke-width="2.5" />
+                <path d="M12 26c4-10 16-12 20-4-6-2-12 0-20 4Z" fill="#16191d" />
+                <circle cx="29" cy="21" r="1.6" fill="#ffffff" />
+                <path d="M32 22l5-3v6l-5-3Z" fill="#16191d" />
+              </svg>
+            </div>
+            <div>
+              <h1>Sabor Norteño</h1>
+              <p class="cabecera__sucursal">Miraflores</p>
+            </div>
+          </div>
+          <p class="cabecera__direccion solo-carta-publica">Av. Larco 345, Miraflores</p>
+          <div class="cabecera__estados">
+            <p class="dato solo-mesa">
+              <svg class="icono"><use href="#i-mesa" /></svg>
+              Mesa 4
+            </p>
+            <p class="dato">
+              <svg class="icono"><use href="#i-reloj" /></svg>
+              Abierto ahora · hasta las 23:00
+            </p>
+          </div>
+        </div>
+      </header>
+
+      <main id="carta">
+        <div class="columna">
+          <nav class="familias" aria-label="Secciones de la carta">
+            <ul>
+              <li><a href="#entradas">Entradas</a></li>
+              <li><a href="#ceviches">Ceviches</a></li>
+              <li><a href="#fondos">Platos de fondo</a></li>
+              <li><a href="#bebidas">Bebidas</a></li>
+              <li><a href="#postres">Postres</a></li>
+              <li><a href="#menu">Menú del día</a></li>
+            </ul>
+          </nav>
+
+          <p class="guia solo-mesa sin-pedido">
+            <svg class="icono"><use href="#i-info" /></svg>
+            Toca un plato para agregarlo a tu pedido.
+          </p>
+
+          <section class="seccion" id="entradas" aria-labelledby="h-entradas">
+            <h2 id="h-entradas">Entradas</h2>
+            <ul>
+              <li class="fila">
+                <article class="producto" aria-labelledby="p-causa">
+                  <div>
+                    <h3 class="producto__nombre" id="p-causa">Causa limeña</h3>
+                    <p class="producto__desc">
+                      Capas de papa amarilla con pollo, palta y mayonesa casera.
+                    </p>
+                    <div class="producto__pie">
+                      <p class="precio">
+                        <span aria-hidden="true">S/ 22.00</span><span class="sr">22 soles</span>
+                      </p>
+                    </div>
+                  </div>
+                  <div class="foto">
+                    <svg role="img" aria-label="Causa limeña"><use href="#f-causa" /></svg>
+                    <span class="foto__mas solo-mesa" aria-hidden="true"
+                      ><svg class="icono"><use href="#i-mas" /></svg
+                    ></span>
+                  </div>
+                  <button
+                    type="button"
+                    class="producto__boton solo-mesa"
+                    data-hoja="hoja-producto"
+                    aria-label="Causa limeña, 22 soles. Agregar al pedido"
+                  ></button>
+                </article>
+              </li>
+              <li class="fila">
+                <article class="producto producto--sin-foto" aria-labelledby="p-anticucho">
+                  <div>
+                    <h3 class="producto__nombre" id="p-anticucho">Anticuchos de corazón</h3>
+                    <p class="producto__desc">Dos palitos con papa dorada y ají panca.</p>
+                    <div class="producto__pie">
+                      <p class="precio">
+                        <span aria-hidden="true">S/ 26.00</span><span class="sr">26 soles</span>
+                      </p>
+                    </div>
+                  </div>
+                  <span class="foto__mas solo-mesa" aria-hidden="true"
+                    ><svg class="icono"><use href="#i-mas" /></svg
+                  ></span>
+                  <button
+                    type="button"
+                    class="producto__boton solo-mesa"
+                    data-hoja="hoja-producto"
+                    aria-label="Anticuchos de corazón, 26 soles. Agregar al pedido"
+                  ></button>
+                </article>
+              </li>
+            </ul>
+          </section>
+
+          <section class="seccion" id="ceviches" aria-labelledby="h-ceviches">
+            <h2 id="h-ceviches">Ceviches</h2>
+            <ul>
+              <li class="fila">
+                <article class="producto" aria-labelledby="p-ceviche">
+                  <div>
+                    <h3 class="producto__nombre" id="p-ceviche">Ceviche clásico</h3>
+                    <p class="producto__desc">Pescado del día, limón, ají limo, camote y choclo.</p>
+                    <div class="producto__pie">
+                      <p class="precio">
+                        <span aria-hidden="true">S/ 38.00</span><span class="sr">38 soles</span>
+                      </p>
+                      <span class="etiqueta con-pedido solo-mesa"
+                        ><svg class="icono"><use href="#i-check" /></svg>1 en tu pedido</span
+                      >
+                    </div>
+                  </div>
+                  <div class="foto">
+                    <svg role="img" aria-label="Ceviche clásico"><use href="#f-ceviche" /></svg>
+                    <span class="foto__mas solo-mesa" aria-hidden="true"
+                      ><svg class="icono"><use href="#i-mas" /></svg
+                    ></span>
+                  </div>
+                  <button
+                    type="button"
+                    class="producto__boton solo-mesa"
+                    data-hoja="hoja-producto"
+                    aria-label="Ceviche clásico, 38 soles. Agregar al pedido"
+                  ></button>
+                </article>
+              </li>
+              <li class="fila">
+                <article class="producto producto--sin-foto" aria-labelledby="p-mixto">
+                  <div>
+                    <h3 class="producto__nombre" id="p-mixto">Ceviche mixto</h3>
+                    <p class="producto__desc">
+                      Pescado, calamar y pulpo en leche de tigre, con camote glaseado.
+                    </p>
+                    <div class="producto__pie">
+                      <p class="precio">
+                        <span aria-hidden="true">S/ 42.00</span><span class="sr">42 soles</span>
+                      </p>
+                    </div>
+                  </div>
+                  <span class="foto__mas solo-mesa" aria-hidden="true"
+                    ><svg class="icono"><use href="#i-mas" /></svg
+                  ></span>
+                  <button
+                    type="button"
+                    class="producto__boton solo-mesa"
+                    data-hoja="hoja-producto"
+                    aria-label="Ceviche mixto, 42 soles. Agregar al pedido"
+                  ></button>
+                </article>
+              </li>
+            </ul>
+          </section>
+
+          <section class="seccion" id="fondos" aria-labelledby="h-fondos">
+            <h2 id="h-fondos">Platos de fondo</h2>
+            <ul>
+              <li class="fila">
+                <article class="producto" aria-labelledby="p-lomo">
+                  <div>
+                    <h3 class="producto__nombre" id="p-lomo">Lomo saltado</h3>
+                    <p class="producto__desc">
+                      Lomo fino, cebolla, tomate y papas fritas, con arroz.
+                    </p>
+                    <div class="producto__pie">
+                      <p class="precio">
+                        <span aria-hidden="true">S/ 36.00</span><span class="sr">36 soles</span>
+                      </p>
+                      <span class="etiqueta con-pedido solo-mesa"
+                        ><svg class="icono"><use href="#i-check" /></svg>2 en tu pedido</span
+                      >
+                    </div>
+                  </div>
+                  <div class="foto">
+                    <svg role="img" aria-label="Lomo saltado"><use href="#f-lomo" /></svg>
+                    <span class="foto__mas solo-mesa" aria-hidden="true"
+                      ><svg class="icono"><use href="#i-mas" /></svg
+                    ></span>
+                  </div>
+                  <button
+                    type="button"
+                    class="producto__boton solo-mesa"
+                    data-hoja="hoja-producto"
+                    aria-label="Lomo saltado, 36 soles. Agregar al pedido"
+                  ></button>
+                </article>
+              </li>
+              <li class="fila">
+                <article class="producto" aria-labelledby="p-arroz">
+                  <div>
+                    <h3 class="producto__nombre" id="p-arroz">Arroz con pollo</h3>
+                    <p class="producto__desc">
+                      Arroz al culantro con presa de pollo, salsa criolla y papa a la huancaína.
+                    </p>
+                    <div class="producto__pie">
+                      <p class="precio">
+                        <span aria-hidden="true">S/ 28.00</span><span class="sr">28 soles</span>
+                      </p>
+                    </div>
+                  </div>
+                  <div class="foto">
+                    <svg role="img" aria-label="Arroz con pollo"><use href="#f-arroz" /></svg>
+                    <span class="foto__mas solo-mesa" aria-hidden="true"
+                      ><svg class="icono"><use href="#i-mas" /></svg
+                    ></span>
+                  </div>
+                  <button
+                    type="button"
+                    class="producto__boton solo-mesa"
+                    data-hoja="hoja-producto"
+                    aria-label="Arroz con pollo, 28 soles. Agregar al pedido"
+                  ></button>
+                </article>
+              </li>
+            </ul>
+          </section>
+
+          <section class="seccion" id="bebidas" aria-labelledby="h-bebidas">
+            <h2 id="h-bebidas">Bebidas</h2>
+            <ul>
+              <li class="fila">
+                <article class="producto" aria-labelledby="p-chicha">
+                  <div>
+                    <h3 class="producto__nombre" id="p-chicha">Chicha morada</h3>
+                    <p class="producto__desc">Jarra para compartir, con hielo y limón.</p>
+                    <div class="producto__pie">
+                      <p class="precio">
+                        <span aria-hidden="true">S/ 16.00</span><span class="sr">16 soles</span>
+                      </p>
+                      <span class="etiqueta con-pedido solo-mesa"
+                        ><svg class="icono"><use href="#i-check" /></svg>1 en tu pedido</span
+                      >
+                    </div>
+                  </div>
+                  <div class="foto">
+                    <svg role="img" aria-label="Chicha morada"><use href="#f-chicha" /></svg>
+                    <span class="foto__mas solo-mesa" aria-hidden="true"
+                      ><svg class="icono"><use href="#i-mas" /></svg
+                    ></span>
+                  </div>
+                  <button
+                    type="button"
+                    class="producto__boton solo-mesa"
+                    data-hoja="hoja-producto"
+                    aria-label="Chicha morada, 16 soles. Agregar al pedido"
+                  ></button>
+                </article>
+              </li>
+            </ul>
+          </section>
+
+          <section class="seccion" id="postres" aria-labelledby="h-postres">
+            <h2 id="h-postres">Postres</h2>
+            <ul>
+              <li class="fila">
+                <article class="producto" aria-labelledby="p-suspiro">
+                  <div>
+                    <h3 class="producto__nombre" id="p-suspiro">Suspiro a la limeña</h3>
+                    <p class="producto__desc">Manjar blanco con merengue de oporto.</p>
+                    <div class="producto__pie">
+                      <p class="precio">
+                        <span aria-hidden="true">S/ 14.00</span><span class="sr">14 soles</span>
+                      </p>
+                    </div>
+                  </div>
+                  <div class="foto">
+                    <svg role="img" aria-label="Suspiro a la limeña"><use href="#f-suspiro" /></svg>
+                    <span class="foto__mas solo-mesa" aria-hidden="true"
+                      ><svg class="icono"><use href="#i-mas" /></svg
+                    ></span>
+                  </div>
+                  <button
+                    type="button"
+                    class="producto__boton solo-mesa"
+                    data-hoja="hoja-producto"
+                    aria-label="Suspiro a la limeña, 14 soles. Agregar al pedido"
+                  ></button>
+                </article>
+              </li>
+            </ul>
+          </section>
+
+          <section class="seccion" id="menu" aria-labelledby="h-menu">
+            <h2 id="h-menu">Menú del día</h2>
+            <ul>
+              <li class="fila">
+                <article class="producto producto--sin-foto" aria-labelledby="p-menu">
+                  <div>
+                    <h3 class="producto__nombre" id="p-menu">Menú ejecutivo</h3>
+                    <p class="producto__desc">Incluye entrada, plato de fondo y refresco.</p>
+                    <p class="producto__incluye">
+                      Entrada: causa limeña o ensalada. Fondo: lomo saltado o arroz con pollo.
+                    </p>
+                    <div class="producto__pie">
+                      <p class="precio">
+                        <span aria-hidden="true">S/ 25.00</span><span class="sr">25 soles</span>
+                      </p>
+                    </div>
+                  </div>
+                  <span class="foto__mas solo-mesa" aria-hidden="true"
+                    ><svg class="icono"><use href="#i-mas" /></svg
+                  ></span>
+                  <button
+                    type="button"
+                    class="producto__boton solo-mesa"
+                    data-hoja="hoja-producto"
+                    aria-label="Menú ejecutivo, 25 soles. Agregar al pedido"
+                  ></button>
+                </article>
+              </li>
+            </ul>
+          </section>
+
+          <p class="pie-de-muestra">
+            Muestra de diseño con datos de ejemplo: el restaurante, los platos, los precios y las
+            fotos no existen.
+          </p>
+        </div>
+      </main>
+
+      <!-- Barra fija del modo mesa: el pedido, "Llamar al mozo" y "Pedir la cuenta"; o el estado del llamado. -->
+      <div class="barra solo-mesa" role="region" aria-label="Tu mesa">
+        <div class="barra__contenido">
+          <div class="barra__llamado" aria-live="polite">
+            <!-- Cada estado del llamado, con su texto (criterio 86). -->
+            <div class="aviso aviso-estado aviso-estado--pendiente" role="status">
+              <svg class="icono"><use href="#i-campana" /></svg>
+              <div>
+                <p class="aviso__titulo">Avisamos al mozo</p>
+                <p class="aviso__texto">Puedes seguir viendo la carta.</p>
+              </div>
+            </div>
+            <div class="aviso aviso--exito aviso-estado aviso-estado--atendido" role="status">
+              <svg class="icono"><use href="#i-check" /></svg>
+              <p class="aviso__titulo">El mozo viene a tu mesa</p>
+              <button type="button" class="boton-texto aviso__cerrar" data-cerrar-aviso>
+                Entendido
+              </button>
+            </div>
+            <div class="aviso aviso--exito aviso-estado aviso-estado--pasado" role="status">
+              <svg class="icono"><use href="#i-check" /></svg>
+              <p class="aviso__titulo">El mozo tomó tu pedido</p>
+              <button type="button" class="boton-texto aviso__cerrar" data-cerrar-aviso>
+                Entendido
+              </button>
+            </div>
+            <div class="aviso aviso--error aviso-estado aviso-estado--descartado" role="status">
+              <svg class="icono"><use href="#i-alerta" /></svg>
+              <div>
+                <p class="aviso__titulo">No pudimos atender este pedido</p>
+                <p class="aviso__texto">Habla con el mozo.</p>
+              </div>
+              <button type="button" class="boton-texto aviso__cerrar" data-cerrar-aviso>
+                Entendido
+              </button>
+            </div>
+            <div class="aviso aviso--aviso aviso-estado aviso-estado--vencido" role="status">
+              <svg class="icono"><use href="#i-reloj" /></svg>
+              <div>
+                <p class="aviso__titulo">Nadie respondió a tiempo</p>
+                <p class="aviso__texto">Llama al mozo o vuelve a enviarlo.</p>
+              </div>
+              <button type="button" class="boton-texto aviso__cerrar" data-cerrar-aviso>
+                Entendido
+              </button>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            class="boton-principal barra__pedido con-pedido"
+            data-hoja="hoja-pedido"
+          >
+            <span class="barra__cantidad"><span>Ver tu pedido · </span><span>4 platos</span></span>
+            <span><span aria-hidden="true">S/ 132.00</span><span class="sr">132 soles</span></span>
+          </button>
+
+          <div class="barra__llamados">
+            <button type="button" class="boton-secundario" data-hoja="hoja-llamar">
+              <svg class="icono icono--s"><use href="#i-campana" /></svg>
+              Llamar al mozo
+            </button>
+            <button type="button" class="boton-secundario" data-hoja="hoja-cuenta">
+              <svg class="icono icono--s"><use href="#i-cuenta" /></svg>
+              Pedir la cuenta
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Hoja del producto: reglas en palabras, cantidad, indicaciones y el precio de la línea (calcularLinea). -->
+      <dialog class="hoja" id="hoja-producto" aria-labelledby="t-producto">
+        <div class="hoja__asa" aria-hidden="true"></div>
+        <div class="hoja__cabecera">
+          <div class="hoja__producto">
+            <div class="foto">
+              <svg role="img" aria-label="Lomo saltado"><use href="#f-lomo" /></svg>
+            </div>
+            <div>
+              <h2 class="hoja__titulo" id="t-producto" tabindex="-1" autofocus style="padding: 0">
+                Lomo saltado
+              </h2>
+              <p class="hoja__subtitulo">
+                <span aria-hidden="true">S/ 36.00</span><span class="sr">36 soles</span>
+              </p>
+            </div>
+          </div>
+          <button type="button" class="boton-icono" data-cerrar aria-label="Cerrar">
+            <svg class="icono"><use href="#i-x" /></svg>
+          </button>
+        </div>
+        <div class="hoja__cuerpo">
+          <p>Lomo fino, cebolla, tomate y papas fritas, con arroz.</p>
+
+          <fieldset class="grupo">
+            <legend>Punto de la carne</legend>
+            <p class="grupo__regla">
+              <span class="etiqueta etiqueta--neutra">Obligatorio</span>
+              <span>Elige 1</span>
+            </p>
+            <div class="opciones">
+              <label class="opcion"
+                ><input type="radio" name="punto" /><span>Jugoso</span><span></span
+              ></label>
+              <label class="opcion"
+                ><input type="radio" name="punto" checked /><span>Término medio</span><span></span
+              ></label>
+              <label class="opcion"
+                ><input type="radio" name="punto" /><span>Bien cocido</span><span></span
+              ></label>
+            </div>
+          </fieldset>
+
+          <fieldset class="grupo">
+            <legend>Extras</legend>
+            <p class="grupo__regla">
+              <span class="etiqueta etiqueta--neutra">Opcional</span>
+              <span>Elige hasta 2</span>
+            </p>
+            <div class="opciones">
+              <label class="opcion"
+                ><input type="checkbox" checked /><span>Huevo frito</span
+                ><span class="opcion__extra">+ S/ 3.00</span></label
+              >
+              <label class="opcion"
+                ><input type="checkbox" /><span>Porción de arroz</span
+                ><span class="opcion__extra">+ S/ 4.00</span></label
+              >
+              <label class="opcion"
+                ><input type="checkbox" /><span>Ají amarillo molido</span
+                ><span class="opcion__extra">+ S/ 2.00</span></label
+              >
+            </div>
+          </fieldset>
+
+          <div class="cantidad">
+            <span class="campo__etiqueta" id="e-cantidad">Cantidad</span>
+            <div class="contador" role="group" aria-labelledby="e-cantidad">
+              <button type="button" class="boton-icono" data-menos aria-label="Quitar uno">
+                <svg class="icono"><use href="#i-menos" /></svg>
+              </button>
+              <output id="cantidad-producto" aria-live="polite">2</output>
+              <button type="button" class="boton-icono" data-mas aria-label="Agregar uno">
+                <svg class="icono"><use href="#i-mas" /></svg>
+              </button>
+            </div>
+          </div>
+
+          <div class="campo">
+            <label for="obs-producto">Indicaciones para la cocina (opcional)</label>
+            <textarea
+              id="obs-producto"
+              rows="2"
+              maxlength="140"
+              placeholder="Por ejemplo: sin cebolla"
+            ></textarea>
+            <p class="campo__contador">0 de 140</p>
+          </div>
+        </div>
+        <div class="hoja__pie">
+          <button type="button" class="boton-principal" data-agregar>
+            <span>Agregar al pedido</span>
+            <span><span aria-hidden="true">S/ 78.00</span><span class="sr">78 soles</span></span>
+          </button>
+        </div>
+      </dialog>
+
+      <!-- Hoja de "Tu pedido": líneas editables, nota para el mozo y el total (totalOrden). -->
+      <dialog class="hoja" id="hoja-pedido" aria-labelledby="t-pedido">
+        <div class="hoja__asa" aria-hidden="true"></div>
+        <div class="hoja__cabecera">
+          <div>
+            <h2 class="hoja__titulo" id="t-pedido" tabindex="-1" autofocus>Tu pedido</h2>
+            <p class="hoja__subtitulo">Mesa 4 · 4 platos</p>
+          </div>
+          <button type="button" class="boton-icono" data-cerrar aria-label="Cerrar">
+            <svg class="icono"><use href="#i-x" /></svg>
+          </button>
+        </div>
+        <div class="hoja__cuerpo">
+          <ul class="lineas">
+            <li>
+              <div class="linea__cabecera">
+                <h3 class="linea__nombre">1 × Ceviche clásico</h3>
+                <p class="precio">
+                  <span aria-hidden="true">S/ 38.00</span><span class="sr">38 soles</span>
+                </p>
+              </div>
+              <div class="linea__acciones">
+                <button type="button" class="boton-texto">
+                  <svg class="icono icono--s"><use href="#i-lapiz" /></svg>Editar
+                </button>
+                <button type="button" class="boton-texto boton-texto--peligro">
+                  <svg class="icono icono--s"><use href="#i-basura" /></svg>Quitar
+                </button>
+              </div>
+            </li>
+            <li>
+              <div class="linea__cabecera">
+                <h3 class="linea__nombre">2 × Lomo saltado</h3>
+                <p class="precio">
+                  <span aria-hidden="true">S/ 78.00</span><span class="sr">78 soles</span>
+                </p>
+              </div>
+              <p class="linea__detalle">Término medio · Huevo frito (+ S/ 3.00)</p>
+              <p class="linea__detalle">Indicaciones: sin cebolla</p>
+              <div class="linea__acciones">
+                <button type="button" class="boton-texto">
+                  <svg class="icono icono--s"><use href="#i-lapiz" /></svg>Editar
+                </button>
+                <button type="button" class="boton-texto boton-texto--peligro">
+                  <svg class="icono icono--s"><use href="#i-basura" /></svg>Quitar
+                </button>
+              </div>
+            </li>
+            <li>
+              <div class="linea__cabecera">
+                <h3 class="linea__nombre">1 × Chicha morada</h3>
+                <p class="precio">
+                  <span aria-hidden="true">S/ 16.00</span><span class="sr">16 soles</span>
+                </p>
+              </div>
+              <div class="linea__acciones">
+                <button type="button" class="boton-texto">
+                  <svg class="icono icono--s"><use href="#i-lapiz" /></svg>Editar
+                </button>
+                <button type="button" class="boton-texto boton-texto--peligro">
+                  <svg class="icono icono--s"><use href="#i-basura" /></svg>Quitar
+                </button>
+              </div>
+            </li>
+          </ul>
+
+          <div class="campo">
+            <label for="nota-pedido">Nota para el mozo (opcional)</label>
+            <textarea
+              id="nota-pedido"
+              rows="2"
+              maxlength="140"
+              placeholder="Por ejemplo: somos 4, el niño no come ají"
+            ></textarea>
+            <p class="campo__contador">0 de 140</p>
+          </div>
+        </div>
+        <div class="hoja__pie">
+          <p class="hoja__total">
+            <span>Total</span>
+            <strong
+              ><span aria-hidden="true">S/ 132.00</span><span class="sr">132 soles</span></strong
+            >
+          </p>
+          <p class="hoja__ayuda">El mozo revisará tu pedido contigo antes de mandarlo a cocina.</p>
+          <button type="button" class="boton-principal" data-enviar style="justify-content: center">
+            Enviar al mozo
+          </button>
+        </div>
+      </dialog>
+
+      <!-- Confirmaciones cortas de "Llamar al mozo" y "Pedir la cuenta". -->
+      <dialog class="hoja" id="hoja-llamar" aria-labelledby="t-llamar">
+        <div class="hoja__asa" aria-hidden="true"></div>
+        <div class="hoja__cuerpo" style="padding-top: 16px">
+          <h2 class="hoja__titulo" id="t-llamar" style="padding: 0">
+            ¿Llamamos al mozo a tu mesa?
+          </h2>
+          <p>El mozo recibirá un aviso en la Mesa 4 y vendrá en cuanto pueda.</p>
+          <div class="confirmar__acciones">
+            <button
+              type="button"
+              class="boton-principal"
+              data-enviar
+              style="justify-content: center"
+            >
+              Sí, llamar al mozo
+            </button>
+            <button type="button" class="boton-secundario" data-cerrar>Ahora no</button>
+          </div>
+        </div>
+      </dialog>
+      <dialog class="hoja" id="hoja-cuenta" aria-labelledby="t-cuenta">
+        <div class="hoja__asa" aria-hidden="true"></div>
+        <div class="hoja__cuerpo" style="padding-top: 16px">
+          <h2 class="hoja__titulo" id="t-cuenta" style="padding: 0">¿Pedimos la cuenta?</h2>
+          <p>El mozo traerá la cuenta de la Mesa 4. Lo que ya pediste sigue en tu mesa.</p>
+          <div class="confirmar__acciones">
+            <button
+              type="button"
+              class="boton-principal"
+              data-enviar
+              style="justify-content: center"
+            >
+              Sí, pedir la cuenta
+            </button>
+            <button type="button" class="boton-secundario" data-cerrar>Ahora no</button>
+          </div>
+        </div>
+      </dialog>
+    </div>
+
+    <!-- ===================================== ESTADOS Y MENSAJES ===================================== -->
+    <main class="solo-estados estados columna">
+      <h1>Estados y mensajes del modo mesa</h1>
+
+      <section aria-labelledby="e-llamado">
+        <h2 id="e-llamado">
+          Estado del llamado (se consulta cada 10 segundos mientras esté pendiente)
+        </h2>
+        <ul class="estados__lista">
+          <li>
+            <span class="estados__rotulo">PENDIENTE · los envíos quedan apagados</span>
+            <div class="aviso">
+              <svg class="icono"><use href="#i-campana" /></svg>
+              <div>
+                <p class="aviso__titulo">Avisamos al mozo</p>
+                <p class="aviso__texto">Puedes seguir viendo la carta.</p>
+              </div>
+            </div>
+          </li>
+          <li>
+            <span class="estados__rotulo">ATENDIDO</span>
+            <div class="aviso aviso--exito">
+              <svg class="icono"><use href="#i-check" /></svg>
+              <p class="aviso__titulo">El mozo viene a tu mesa</p>
+            </div>
+          </li>
+          <li>
+            <span class="estados__rotulo">PASADO A LA CUENTA</span>
+            <div class="aviso aviso--exito">
+              <svg class="icono"><use href="#i-check" /></svg>
+              <p class="aviso__titulo">El mozo tomó tu pedido</p>
+            </div>
+          </li>
+          <li>
+            <span class="estados__rotulo">DESCARTADO</span>
+            <div class="aviso aviso--error">
+              <svg class="icono"><use href="#i-alerta" /></svg>
+              <div>
+                <p class="aviso__titulo">No pudimos atender este pedido</p>
+                <p class="aviso__texto">Habla con el mozo.</p>
+              </div>
+            </div>
+          </li>
+          <li>
+            <span class="estados__rotulo">VENCIDO</span>
+            <div class="aviso aviso--aviso">
+              <svg class="icono"><use href="#i-reloj" /></svg>
+              <div>
+                <p class="aviso__titulo">Nadie respondió a tiempo</p>
+                <p class="aviso__texto">Llama al mozo o vuelve a enviarlo.</p>
+              </div>
+            </div>
+          </li>
+        </ul>
+      </section>
+
+      <section aria-labelledby="e-errores">
+        <h2 id="e-errores">Errores, en palabras</h2>
+        <ul class="estados__lista">
+          <li>
+            <span class="estados__rotulo">409 FUERA_DE_HORARIO</span>
+            <div class="aviso aviso--aviso" role="alert">
+              <svg class="icono"><use href="#i-reloj" /></svg>
+              <div>
+                <p class="aviso__titulo">El local está cerrado ahora</p>
+                <p class="aviso__texto">
+                  Por ahora no recibimos pedidos desde la mesa. Habla con el mozo.
+                </p>
+              </div>
+            </div>
+          </li>
+          <li>
+            <span class="estados__rotulo">409 LLAMADO_PENDIENTE</span>
+            <div class="aviso" role="alert">
+              <svg class="icono"><use href="#i-campana" /></svg>
+              <div>
+                <p class="aviso__titulo">Ya avisamos al mozo</p>
+                <p class="aviso__texto">
+                  En cuanto te atienda podrás enviar otro pedido o volver a llamarlo.
+                </p>
+              </div>
+            </div>
+          </li>
+          <li>
+            <span class="estados__rotulo">429 DEMASIADOS_LLAMADOS · con el tiempo de espera</span>
+            <div class="aviso aviso--aviso" role="alert">
+              <svg class="icono"><use href="#i-reloj" /></svg>
+              <div>
+                <p class="aviso__titulo">Enviaste varios avisos seguidos</p>
+                <p class="aviso__texto">
+                  Espera 2 minutos para volver a enviar, o habla con el mozo.
+                </p>
+              </div>
+            </div>
+          </li>
+          <li>
+            <span class="estados__rotulo">422 · una línea rechazada, en el pedido</span>
+            <div class="aviso aviso--error" role="alert">
+              <svg class="icono"><use href="#i-alerta" /></svg>
+              <div>
+                <p class="aviso__titulo">No pudimos enviar tu pedido</p>
+                <p class="aviso__texto">Quita lo que está marcado y envíalo otra vez.</p>
+              </div>
+            </div>
+            <div class="hoja-estatica" style="margin-top: 8px">
+              <div class="linea--agotada">
+                <div class="linea__cabecera">
+                  <h3 class="linea__nombre">2 × Lomo saltado</h3>
+                  <p class="precio">S/ 78.00</p>
+                </div>
+                <p class="linea__detalle">Término medio · Huevo frito (+ S/ 3.00)</p>
+                <p class="linea__motivo">
+                  <span class="etiqueta etiqueta--error"
+                    ><svg class="icono"><use href="#i-alerta" /></svg>Se agotó</span
+                  >
+                </p>
+                <div class="linea__acciones">
+                  <button type="button" class="boton-texto boton-texto--peligro">
+                    <svg class="icono icono--s"><use href="#i-basura" /></svg>Quitar
+                  </button>
+                </div>
+              </div>
+              <div>
+                <p class="linea__detalle" style="margin-bottom: 8px">
+                  Quita lo que se agotó para poder enviar.
+                </p>
+                <button
+                  type="button"
+                  class="boton-principal"
+                  aria-disabled="true"
+                  style="justify-content: center"
+                >
+                  Enviar al mozo
+                </button>
+              </div>
+            </div>
+          </li>
+          <li>
+            <span class="estados__rotulo">Otras razones de una línea rechazada</span>
+            <div class="hoja-estatica" style="gap: 8px">
+              <p>
+                <span class="etiqueta etiqueta--error"
+                  ><svg class="icono"><use href="#i-alerta" /></svg>Se agotó</span
+                >
+              </p>
+              <p>
+                <span class="etiqueta etiqueta--error"
+                  ><svg class="icono"><use href="#i-alerta" /></svg>Ya no se vende</span
+                >
+              </p>
+              <p>
+                <span class="etiqueta etiqueta--error"
+                  ><svg class="icono"><use href="#i-alerta" /></svg>Huevo frito ya no está
+                  disponible</span
+                >
+              </p>
+              <p>
+                <span class="etiqueta etiqueta--aviso"
+                  ><svg class="icono"><use href="#i-info" /></svg>El precio cambió a S/ 38.00</span
+                >
+              </p>
+            </div>
+          </li>
+          <li>
+            <span class="estados__rotulo">Sin red · se reintenta con el mismo pedido</span>
+            <div class="aviso aviso--aviso" role="status">
+              <svg class="icono"><use href="#i-sin-red" /></svg>
+              <div>
+                <p class="aviso__titulo">Sin conexión</p>
+                <p class="aviso__texto">Lo enviaremos cuando vuelva. No cierres esta página.</p>
+              </div>
+            </div>
+          </li>
+          <li>
+            <span class="estados__rotulo">Error del servidor (5xx)</span>
+            <div class="aviso aviso--error" role="alert">
+              <svg class="icono"><use href="#i-alerta" /></svg>
+              <div>
+                <p class="aviso__titulo">No pudimos enviar tu pedido</p>
+                <p class="aviso__texto">
+                  Inténtalo otra vez en un momento. Si sigue igual, habla con el mozo.
+                </p>
+              </div>
+            </div>
+          </li>
+          <li>
+            <span class="estados__rotulo">404 · página de la carta</span>
+            <div class="hoja-estatica" style="gap: 8px">
+              <h3 class="hoja__titulo" style="padding: 0">Esta carta no está disponible</h3>
+              <p>Revisa el enlace o el código QR de tu mesa, o pregunta al personal del local.</p>
+            </div>
+          </li>
+        </ul>
+      </section>
+
+      <section aria-labelledby="e-conf">
+        <h2 id="e-conf">Confirmaciones (hoja corta)</h2>
+        <div class="hoja-estatica">
+          <h3 class="hoja__titulo" style="padding: 0">¿Llamamos al mozo a tu mesa?</h3>
+          <p>El mozo recibirá un aviso en la Mesa 4 y vendrá en cuanto pueda.</p>
+          <div class="confirmar__acciones">
+            <button type="button" class="boton-principal" style="justify-content: center">
+              Sí, llamar al mozo
+            </button>
+            <button type="button" class="boton-secundario">Ahora no</button>
+          </div>
+        </div>
+      </section>
+
+      <section aria-labelledby="e-marcas">
+        <h2 id="e-marcas">
+          La misma marca con otros colores de restaurante (colorDeMarcaAccesible)
+        </h2>
+        <ul class="estados__lista">
+          <li>
+            <span class="estados__rotulo">#E4572E (3.7:1) → #CB4D29 (4.5:1)</span>
+            <button
+              type="button"
+              class="boton-principal"
+              style="justify-content: center; background: #cb4d29"
+            >
+              Enviar al mozo
+            </button>
+          </li>
+          <li>
+            <span class="estados__rotulo">#1D4A9E (8.3:1) → sin cambio</span>
+            <button
+              type="button"
+              class="boton-principal"
+              style="justify-content: center; background: #1d4a9e"
+            >
+              Enviar al mozo
+            </button>
+          </li>
+          <li>
+            <span class="estados__rotulo">#2E8B57 (4.3:1) → #2C8654 (4.5:1)</span>
+            <button
+              type="button"
+              class="boton-principal"
+              style="justify-content: center; background: #2c8654"
+            >
+              Enviar al mozo
+            </button>
+          </li>
+          <li>
+            <span class="estados__rotulo"
+              >#F2A900 ají amarillo (2.0:1) → #9D6E00 (4.5:1): se oscurece tanto que cambia de
+              carácter</span
+            >
+            <button
+              type="button"
+              class="boton-principal"
+              style="justify-content: center; background: #9d6e00"
+            >
+              Enviar al mozo
+            </button>
+          </li>
+        </ul>
+      </section>
+    </main>
+
+    <script>
+      (function () {
+        var q = new URLSearchParams(location.search);
+        var body = document.body;
+        body.dataset.pantalla = q.get('pantalla') || 'carta';
+        if (q.get('marca')) document.documentElement.dataset.marca = q.get('marca');
+        if (q.get('pedido') === 'vacio') body.dataset.pedido = 'vacio';
+        if (q.get('llamado')) body.dataset.llamado = q.get('llamado');
+
+        function hoja(id) {
+          return document.getElementById(id);
+        }
+        document.addEventListener('click', function (e) {
+          var t = e.target.closest('button');
+          if (!t) return;
+          if (t.dataset.hoja) hoja(t.dataset.hoja).showModal();
+          else if (t.hasAttribute('data-cerrar')) t.closest('dialog').close();
+          else if (t.hasAttribute('data-enviar')) {
+            t.closest('dialog').close();
+            body.dataset.llamado = 'pendiente';
+          } else if (t.hasAttribute('data-agregar')) t.closest('dialog').close();
+          else if (t.hasAttribute('data-cerrar-aviso')) delete body.dataset.llamado;
+          else if (t.hasAttribute('data-mas') || t.hasAttribute('data-menos')) {
+            var out = document.getElementById('cantidad-producto');
+            var n = Number(out.textContent) + (t.hasAttribute('data-mas') ? 1 : -1);
+            out.textContent = String(Math.min(20, Math.max(1, n)));
+          }
+        });
+        var abrir = q.get('hoja');
+        if (abrir) {
+          var d = hoja(
+            {
+              producto: 'hoja-producto',
+              pedido: 'hoja-pedido',
+              llamar: 'hoja-llamar',
+              cuenta: 'hoja-cuenta',
+            }[abrir],
+          );
+          if (d) d.showModal();
+        }
+      })();
+    </script>
+  </body>
+</html>
