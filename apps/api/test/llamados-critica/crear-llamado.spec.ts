@@ -1338,6 +1338,10 @@ describe('criterio 35 · horario', () => {
       const ok = await crearOk(clienteNuevo(ctx), mesa.codigo, cuerpoLlamarMozo());
       expect(ok.estado).toBe('PENDIENTE');
     } finally {
+      // El reloj estaba a las 03:00, unas 13 horas después de la última actividad: la sesión del Administrador
+      // ya caducó. Se vuelve a la hora de servicio antes de restaurar el horario, para que un fallo de la
+      // aserción no quede tapado por SESION_EXPIRADA ni deje la sesión cerrada para las pruebas siguientes.
+      ctx.reloj.fijar(HORA_DE_SERVICIO);
       await ponerHorario(ctx, A().tokenAdmin, A().S1, HORARIO_DE_SERVICIO);
     }
   });

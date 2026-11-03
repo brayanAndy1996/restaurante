@@ -596,7 +596,7 @@ describe('criterio 67 · 100 peticiones simultáneas que alternan A y B con un p
   }
 
   it('devuelven y cambian solo datos de su empresa, y cada evento llega solo a su sala', async () => {
-    const { m } = await sembrado();
+    const { m, sA, sB } = await sembrado();
     const empresas: ['A' | 'B', EmpresaDelMundo][] = [
       ['A', m.A],
       ['B', m.B],
@@ -610,18 +610,10 @@ describe('criterio 67 · 100 peticiones simultáneas que alternan A y B con un p
       A: (await sesiones(ctx, m.A.mozo, m.A.S1)).contrasena,
       B: (await sesiones(ctx, m.B.mozo, m.B.S1)).contrasena,
     };
-    // Un llamado previo por empresa, para leer su estado.
-    const previos: Record<'A' | 'B', string> = { A: randomUUID(), B: randomUUID() };
+    // Un llamado previo por empresa, para leer su estado: el LLAMAR_MOZO que dejó la siembra en la mesa 12
+    // (la mesa ya tiene un pendiente, y un segundo sería 409 LLAMADO_PENDIENTE por el criterio 30).
+    const previos: Record<'A' | 'B', string> = { A: sA.pendiente, B: sB.pendiente };
     const mesaDelPrevio = { A: m.A.mesa12, B: m.B.mesa12 };
-    for (const [clave2, empresa] of empresas) {
-      void empresa;
-      await crearLlamadoOk(
-        clientePublico(ctx),
-        mesaDelPrevio[clave2].codigo,
-        llamarAlMozo(previos[clave2]),
-        'el llamado previo',
-      );
-    }
     await asentar();
     ctx.publicador.limpiar();
 
@@ -679,7 +671,13 @@ describe('criterio 67 · 100 peticiones simultáneas que alternan A y B con un p
     const mesasDe = { A: new Set(mesas.A.map((x) => x.id)), B: new Set(mesas.B.map((x) => x.id)) };
     const productosDe = {
       A: new Set([m.A.carta.lomoId, m.A.carta.comboId, m.A.carta.gaseosaId]),
-      B: new Set([m.B.carta.lomoId, m.B.carta.comboId, m.B.carta.gaseosaId]),
+      // El producto exclusivo de B se vende en su S1; el de A no (solo en S2), así que no está en su carta.
+      B: new Set([
+        m.B.carta.lomoId,
+        m.B.carta.comboId,
+        m.B.carta.gaseosaId,
+        m.B.productoExclusivo.id,
+      ]),
     };
     const nombreDe = { A: m.A.nombreCarta, B: m.B.nombreCarta };
     tareas.forEach((t, i) => {
