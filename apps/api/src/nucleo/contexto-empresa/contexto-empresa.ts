@@ -13,6 +13,7 @@ import {
   type EstadoOperacion,
 } from '../base-de-datos/estado-operacion';
 import { CONEXION_API } from '../base-de-datos/token-api';
+import { ErrorAplicacion } from '../errores/error-aplicacion';
 import { SQL_FIJAR_ACTOR, SQL_FIJAR_CONTEXTO } from '../fijar-contexto';
 import type { TransaccionInterna } from '../base-de-datos/transaccion-interna';
 import { argumentosDeActor, type ActorTransaccion, type OpcionesEjecucion } from './actor';
@@ -92,10 +93,22 @@ export class ContextoEmpresa {
     } catch (error) {
       // Tras la confirmación `correrEfectos` no lanza; si algo lo hiciera, no hay nada que revertir.
       if (!confirmada && !transaccion.finished) {
+        // Un rechazo que debe dejar constancia (`conservarCambios`) confirma lo escrito y sigue lanzando el error;
+        // los efectos de `alConfirmar` no corren: el rechazo no publica nada.
+        const conservar = error instanceof ErrorAplicacion && error.conservarCambios;
         try {
-          await revertirPropia(transaccion);
+          if (conservar) await confirmarPropia(transaccion);
+          else await revertirPropia(transaccion);
         } catch {
-          // Sequelize ya destruye la conexión si el rollback falla; el error original es el que importa.
+          // Sequelize ya destruye la conexión si el rollback falla; el error original es el que importa. Si el
+          // `COMMIT` del rechazo falla, se intenta revertir y se responde igual el error original.
+          if (conservar && !transaccion.finished) {
+            try {
+              await revertirPropia(transaccion);
+            } catch {
+              // Nada más que hacer.
+            }
+          }
         }
       }
       throw error;

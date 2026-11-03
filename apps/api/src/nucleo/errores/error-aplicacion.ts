@@ -1,5 +1,6 @@
 import { HttpException } from '@nestjs/common';
 import type { CampoError, CodigoError, SeQuita, UsadoEn } from '@restaurante/contratos';
+import type { EstadoLlamado } from '@restaurante/dominio';
 import type { ZodError } from 'zod';
 
 /**
@@ -11,10 +12,23 @@ export interface DetalleDeError {
   usadoEn?: UsadoEn;
   seQuita?: SeQuita;
   ordenId?: string;
+  /** Solo en `LLAMADO_TOMADO` (historia 005, criterio 43): quién ya está atendiendo el llamado. */
+  atendidoPor?: { id: string; nombre: string };
+  /** Solo en `LLAMADO_CERRADO` (historia 005, criterios 44 y 53): el estado en que quedó el llamado. */
+  estado?: EstadoLlamado;
 }
 
 /** Error de negocio con código estable; el filtro global lo responde como `{ codigo, mensaje, campos? }`. */
 export class ErrorAplicacion extends HttpException {
+  /**
+   * Si es `true`, la petición responde este error **pero confirma** lo que ya escribió (en lugar de revertirlo):
+   * `ContextoEmpresa.ejecutar` hace `COMMIT` y la idempotencia libera la clave. Solo para el caso de que el rechazo
+   * deba dejar constancia en la base, como guardar un llamado vencido al intentar atenderlo (historia 005, criterio
+   * 44). Quien lo usa escribe únicamente lo que quiere conservar antes de lanzarlo: cualquier otro cambio de la
+   * petición también se confirmaría. Los eventos registrados con `alConfirmar` no se publican.
+   */
+  conservarCambios = false;
+
   constructor(
     estado: number,
     readonly codigo: CodigoError,

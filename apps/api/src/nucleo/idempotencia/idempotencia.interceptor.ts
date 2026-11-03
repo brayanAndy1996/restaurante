@@ -1,16 +1,17 @@
 import { CallHandler, ExecutionContext, Inject, Injectable, NestInterceptor } from '@nestjs/common';
 import { HTTP_CODE_METADATA } from '@nestjs/common/constants';
 import type { Request } from 'express';
-import { mergeMap, of, type Observable } from 'rxjs';
+import { catchError, mergeMap, of, type Observable } from 'rxjs';
 import type { Sequelize } from 'sequelize';
 import { CONEXION_API } from '../base-de-datos/token-api';
 import { estadoActual } from '../base-de-datos/estado-operacion';
 import { ContextoEmpresa } from '../contexto-empresa';
+import { ErrorAplicacion } from '../errores/error-aplicacion';
 import { principalActual } from '../principal';
 import { RELOJ, type Reloj } from '../reloj';
 import { leerClaveIdempotencia } from './clave';
 import { CLAVE_HUELLA, huellaDeEntrada } from './huella';
-import { completarClave, reservarClave, type PeticionIdempotente } from './reserva';
+import { completarClave, liberarClave, reservarClave, type PeticionIdempotente } from './reserva';
 
 /**
  * Idempotencia de las escrituras de empresa que llevan `@Idempotente()` (RNF-10, criterios 85 y 86). Corre
@@ -77,6 +78,14 @@ export class IdempotenciaInterceptor implements NestInterceptor {
       mergeMap(async (cuerpo: unknown) => {
         await completarClave(this.conexion, peticionIdempotente, estadoHttp, cuerpo);
         return cuerpo;
+      }),
+      // Un rechazo que conserva los cambios (`ErrorAplicacion.conservarCambios`) confirma la transacción: la clave
+      // reservada `en_curso` se libera antes, para que no quede reservada sin respuesta.
+      catchError(async (error: unknown) => {
+        if (error instanceof ErrorAplicacion && error.conservarCambios) {
+          await liberarClave(this.conexion, clave);
+        }
+        throw error;
       }),
     );
   }

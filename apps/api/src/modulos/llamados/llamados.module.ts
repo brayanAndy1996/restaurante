@@ -10,7 +10,9 @@ import { EventosLlamados } from './eventos-llamados';
 import { LimitesLlamados } from './limites-llamados';
 import { LlamadosController } from './llamados.controller';
 import { MesaPublicaController } from './mesa-publica.controller';
+import { NombresDeLlamados } from './nombres-llamados';
 import { PasoACuentaService } from './paso-a-cuenta.service';
+import { PresentacionLlamados } from './presentacion-llamados';
 import { ResolucionMesa } from './resolucion-mesa';
 import { TopeDeCreaciones } from './tope-de-creaciones';
 import { VistaLlamadosService } from './vista-llamados.service';
@@ -29,6 +31,8 @@ import { VistaLlamadosService } from './vista-llamados.service';
     CreacionLlamadosService,
     EventosLlamados,
     LimitesLlamados,
+    NombresDeLlamados,
+    PresentacionLlamados,
     ResolucionMesa,
     TopeDeCreaciones,
     VistaLlamadosService,

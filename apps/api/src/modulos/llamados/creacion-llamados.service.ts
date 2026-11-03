@@ -402,9 +402,14 @@ export class CreacionLlamadosService {
  */
 function rechazoDeLinea(indice: number, error: unknown): Rechazo | undefined {
   const campo = `lineas.${indice}`;
-  // Un producto de la empresa que esta sucursal no ofrece se rechaza igual que uno que no existe: el cliente no
-  // puede saber qué hay en las otras sucursales (criterio 15).
-  if (error instanceof ErrorProductoNoVendible && error.motivo !== 'NO_DISPONIBLE') {
+  // Un producto de la empresa que esta sucursal no ofrece, o que está desactivado, se rechaza igual que uno que no
+  // existe: el cliente no puede saber qué hay en las otras sucursales ni qué se desactivó (criterio 15 y decisión del
+  // orquestador de la C3). El mozo sí ve el motivo real en la revisión del detalle.
+  if (
+    error instanceof ErrorProductoNoVendible &&
+    error.motivo !== 'NO_DISPONIBLE' &&
+    error.motivo !== 'INACTIVO'
+  ) {
     return {
       codigo: error.codigo,
       mensaje: error.message,
