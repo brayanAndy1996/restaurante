@@ -1,4 +1,5 @@
 // spec: 002-plataforma-y-acceso (pruebas protegidas)
+// Ajustado por 005-carta-web-mesa (2026-11-03): rutas públicas de la carta web y del modo mesa.
 //
 // Ayudantes de las pruebas de acceso del grupo 1 (sesiones, ingreso con contraseña, usuarios y
 // horario). Solo usan los contratos públicos de la sección: HTTP (supertest), `crearSuperadministrador`
@@ -45,6 +46,12 @@ export const RUTAS_PUBLICAS = [
   'POST /sesiones/pin',
   'GET /equipo',
   'POST /plataforma/sesiones',
+  'GET /publico/cartas/:empresaSlug',
+  'GET /publico/cartas/:empresaSlug/:sucursalSlug',
+  'GET /publico/cartas/:empresaSlug/:sucursalSlug/disponibilidad',
+  'GET /publico/mesas/:codigo',
+  'POST /publico/mesas/:codigo/llamados',
+  'GET /publico/mesas/:codigo/llamados/:id',
 ];
 
 export type RolDeAcceso = 'MOZO' | 'CAJERO' | 'COCINA_BARRA' | 'SUPERVISOR';

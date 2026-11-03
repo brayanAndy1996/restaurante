@@ -1,4 +1,5 @@
 // spec: 004-salon-cocina (pruebas protegidas)
+// Ajustado por 005-carta-web-mesa (2026-11-03): ruta del cambio de QR de una mesa.
 //
 // P3 (parte 2) · Permisos de las rutas de salón y cocina (ruta crítica), criterios 78 y 79 (y el 10 y el 44 en lo
 // que toca a las sesiones de soporte):
@@ -91,6 +92,24 @@ const carta = () => (cartaPendiente ??= esc().then((e) => sembrarCartaSalon(ctx,
 const mesasS1 = () =>
   (mesasPendientes ??= esc().then((e) => new PoolDeMesas(ctx, e.A.tokenAdmin, e.A.S1)));
 
+/**
+ * La única ruta de otra sección que cae en el patrón `/sucursales/:x/(zonas|mesas)…` del criterio 78: el cambio
+ * de QR de una mesa (005, criterio 9), que exige `ADMINISTRAR` y ningún módulo. Se suma a la lista esperada; la
+ * regla no se relaja para ninguna otra ruta y la tabla de las 23 rutas de 3a no cambia.
+ */
+const RUTAS_AJENAS_QUE_ENTRAN_EN_EL_PATRON: RutaSalon[] = [
+  {
+    clave: 'POST /sucursales/:p/mesas/:p/qr',
+    accion: 'ADMINISTRAR',
+    modulo: null,
+    construir: (ids) => ({
+      metodo: 'post',
+      ruta: `/sucursales/${ids.sucursalId}/mesas/${ids.mesaId}/qr`,
+      cabeceras: { 'Idempotency-Key': randomUUID() },
+    }),
+  },
+];
+
 /** `:id`, `:sucursalId`, `:itemId`… valen lo mismo para comparar con la tabla de endpoints. */
 const normal = (ruta: string) => ruta.replace(/:[A-Za-z]+/g, ':p');
 
@@ -156,7 +175,9 @@ describe('criterio 78 · toda ruta de salón, órdenes, cocina, zonas y mesas es
   it('las rutas registradas en Nest son exactamente las de la tabla de endpoints y cada una tiene su acción y su módulo', async () => {
     await esc(); // la aplicación ya está arriba
     const registradas = rutasDeNest(ctx.app).filter((r) => esRutaDeSalon(r.ruta));
-    const esperadas = new Map<string, RutaSalon>(RUTAS_SALON.map((r) => [r.clave, r]));
+    const esperadas = new Map<string, RutaSalon>(
+      [...RUTAS_SALON, ...RUTAS_AJENAS_QUE_ENTRAN_EN_EL_PATRON].map((r) => [r.clave, r]),
+    );
     const problemas: string[] = [];
     const vistas = new Set<string>();
     for (const r of registradas) {
