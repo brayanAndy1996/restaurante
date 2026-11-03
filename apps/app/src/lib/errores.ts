@@ -22,6 +22,10 @@ export class ErrorApi extends Error {
   readonly reintentada: boolean;
   /** Solo en `MESA_OCUPADA` y `ORDEN_NO_ABIERTA`: la orden que ya está abierta o a la que se unió (004). */
   readonly ordenId: string | undefined;
+  /** Solo en `LLAMADO_TOMADO` (005): quién está atendiendo el llamado. */
+  readonly atendidoPor: { id: string; nombre: string } | undefined;
+  /** Solo en `LLAMADO_CERRADO` (005): el estado en que quedó el llamado. */
+  readonly estadoDelLlamado: string | undefined;
 
   constructor(datos: {
     estado: number;
@@ -33,6 +37,8 @@ export class ErrorApi extends Error {
     seQuita?: SeQuita;
     reintentada?: boolean;
     ordenId?: string;
+    atendidoPor?: { id: string; nombre: string };
+    estadoDelLlamado?: string;
   }) {
     super(datos.mensaje);
     this.name = 'ErrorApi';
@@ -44,6 +50,8 @@ export class ErrorApi extends Error {
     this.seQuita = datos.seQuita;
     this.reintentada = datos.reintentada ?? false;
     this.ordenId = datos.ordenId;
+    this.atendidoPor = datos.atendidoPor;
+    this.estadoDelLlamado = datos.estadoDelLlamado;
   }
 
   /** `true` si el servidor no llegó a contestar (red caída, tiempo agotado). */
@@ -68,6 +76,8 @@ export function errorDeRespuesta(estado: number, cuerpo: unknown, reintentada = 
       ...(e.usadoEn === undefined ? {} : { usadoEn: e.usadoEn }),
       ...(e.seQuita === undefined ? {} : { seQuita: e.seQuita }),
       ...(e.ordenId === undefined ? {} : { ordenId: e.ordenId }),
+      ...(e.atendidoPor === undefined ? {} : { atendidoPor: e.atendidoPor }),
+      ...(e.estado === undefined ? {} : { estadoDelLlamado: e.estado }),
       reintentada,
     });
   }
