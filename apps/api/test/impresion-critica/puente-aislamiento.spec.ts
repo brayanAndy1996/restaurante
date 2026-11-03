@@ -1,4 +1,5 @@
 // spec: 004-salon-cocina (pruebas protegidas)
+// Ajustado por 005-carta-web-mesa (2026-11-03): rutas públicas de la carta web y del modo mesa.
 //
 // P6 (parte 2) · Aislamiento y permisos del puente de impresión (ruta crítica), entrega 3b, criterios 129 a 133 y las
 // salas del 110 al 112:
@@ -236,6 +237,12 @@ const RUTAS_PUBLICAS = [
   'POST /sesiones/pin',
   'GET /equipo',
   'POST /plataforma/sesiones',
+  'GET /publico/cartas/:empresaSlug',
+  'GET /publico/cartas/:empresaSlug/:sucursalSlug',
+  'GET /publico/cartas/:empresaSlug/:sucursalSlug/disponibilidad',
+  'GET /publico/mesas/:codigo',
+  'POST /publico/mesas/:codigo/llamados',
+  'GET /publico/mesas/:codigo/llamados/:id',
 ];
 
 describe('criterio 129 · toda ruta de 3b está clasificada', () => {
