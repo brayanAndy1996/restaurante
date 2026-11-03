@@ -1,6 +1,30 @@
-/* Base mínima del esqueleto. Los tokens de la carta (color de la marca, tipografía, espacios) los fija DESIGN.md. */
+/*
+ * Estilos de la carta web (historia 005, 5b). Salen de la dirección de diseño `DESIGN.md` y de su muestra
+ * `diseno/carta-web.html`: pila del sistema, sin fuentes web, neutros fríos y un único color de marca que cambia de
+ * restaurante a restaurante. El color de la marca llega por variables en línea (`--marca`, `--sobre-marca`,
+ * `--indicador`), calculadas en el servidor con `colorDeMarcaAccesible` y `colorDeMarcaSobreBlanco` de
+ * `packages/dominio`; aquí solo se usan. Es CSS plano: pesa poco y no hay nada que cargar después.
+ */
 :root {
+  /* Sin marca (la página 404, la lista de sucursales de otra empresa): el azul por defecto del criterio 1. */
+  --marca: #1d4a9e;
+  --sobre-marca: #ffffff;
+  --indicador: #1d4a9e;
+
+  --fondo: #ffffff;
+  --hundido: #f4f5f6;
+  --tinta: #16191d;
+  --tinta-suave: #4a5058;
+  --junta: #e2e5e8;
+  --junta-fuerte: #c3c8cd;
+  --borde-control: #7a8088;
+
   --fuente: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+
+  --radio-control: 8px;
+  --radio-etiqueta: 4px;
+  --ancho-columna: 640px;
+  --altura-barra: 0px;
 }
 
 *,
@@ -11,17 +35,457 @@
 
 html {
   -webkit-text-size-adjust: 100%;
+  /* Alto de la fila fija de familias (65 px) más un poco de aire: un título al que se salta no queda tapado. */
+  scroll-padding-top: 72px;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  html {
+    scroll-behavior: smooth;
+  }
 }
 
 body {
   margin: 0;
   font-family: var(--fuente);
-  line-height: 1.5;
-  color: #1f2328;
-  background: #fff;
+  font-size: 1rem;
+  line-height: 1.5rem;
+  color: var(--tinta);
+  background: var(--fondo);
+  font-variant-numeric: tabular-nums;
+  accent-color: var(--indicador);
+}
+
+h1,
+h2,
+h3,
+p,
+ul {
+  margin: 0;
+  padding: 0;
+}
+
+ul {
+  list-style: none;
+}
+
+[hidden] {
+  display: none !important;
+}
+
+/* Lo que el navegador no dibuja por su cuenta también lleva el diseño: selección, cursor y foco. */
+::selection {
+  background: color-mix(in oklab, var(--indicador) 30%, #ffffff);
+  color: var(--tinta);
 }
 
 :focus-visible {
-  outline: 3px solid currentColor;
+  outline: 3px solid var(--tinta);
   outline-offset: 2px;
+}
+
+.cabecera :focus-visible {
+  outline-color: var(--sobre-marca);
+}
+
+.sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.icono {
+  width: 24px;
+  height: 24px;
+  flex: none;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.75;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.saltar {
+  position: absolute;
+  left: 8px;
+  top: -80px;
+  z-index: 10;
+  min-height: 48px;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 16px;
+  background: #ffffff;
+  color: var(--tinta);
+  font-weight: 600;
+  border: 2px solid var(--tinta);
+  border-radius: var(--radio-control);
+}
+
+.saltar:focus {
+  top: 8px;
+}
+
+/* ---------- Cabecera de la marca ---------- */
+.cabecera {
+  background: var(--marca);
+  color: var(--sobre-marca);
+  padding: 16px 16px 20px;
+}
+
+.cabecera__contenido {
+  max-width: var(--ancho-columna);
+  margin: 0 auto;
+}
+
+.cabecera__marca {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+.logo {
+  width: 56px;
+  height: 56px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  background: #ffffff;
+  border-radius: 12px;
+}
+
+.logo img {
+  display: block;
+  width: 48px;
+  height: 48px;
+  object-fit: contain;
+}
+
+.cabecera h1 {
+  font-size: 1.375rem;
+  line-height: 1.75rem;
+  font-weight: 700;
+  letter-spacing: -0.005em;
+  overflow-wrap: anywhere;
+  text-wrap: balance;
+}
+
+.cabecera__sucursal {
+  font-size: 1rem;
+  line-height: 1.5rem;
+  font-weight: 600;
+}
+
+.cabecera__direccion {
+  margin-top: 12px;
+  font-size: 0.9375rem;
+  line-height: 1.3125rem;
+}
+
+.cabecera__estados {
+  margin-top: 12px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.cabecera__marca + .cabecera__estados {
+  margin-top: 16px;
+}
+
+.dato {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 32px;
+  padding: 4px 10px 4px 8px;
+  background: #ffffff;
+  color: var(--tinta);
+  border-radius: var(--radio-etiqueta);
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+  font-weight: 600;
+}
+
+.dato .icono {
+  width: 20px;
+  height: 20px;
+}
+
+/* ---------- Familias: una fila que se desliza de lado y queda fija arriba ---------- */
+.familias {
+  position: sticky;
+  top: 0;
+  z-index: 4;
+  background: var(--fondo);
+  border-bottom: 1px solid var(--junta-fuerte);
+}
+
+.familias__interior {
+  position: relative;
+  max-width: var(--ancho-columna);
+  margin: 0 auto;
+}
+
+.familias ul {
+  display: flex;
+  gap: 8px;
+  padding: 8px 40px 8px 16px;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+  scroll-snap-type: x proximity;
+}
+
+.familias ul::-webkit-scrollbar {
+  display: none;
+}
+
+.familias li {
+  flex: none;
+  scroll-snap-align: start;
+  scroll-margin-left: 16px;
+}
+
+/* Indicio de que hay más a la derecha: el borde se desvanece a blanco. El relleno final de la fila (40 px) deja la
+   última familia libre del desvanecido al llegar al final. */
+.familias__interior::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 32px;
+  background: linear-gradient(to right, rgba(255, 255, 255, 0), var(--fondo));
+  pointer-events: none;
+}
+
+.familias a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 48px;
+  padding: 0 14px;
+  border: 1px solid var(--borde-control);
+  border-radius: var(--radio-control);
+  background: var(--fondo);
+  color: var(--tinta);
+  font-size: 0.9375rem;
+  font-weight: 600;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.familias a:active {
+  background: color-mix(in oklab, var(--marca) 8%, #ffffff);
+  border-color: var(--indicador);
+}
+
+/* La familia en pantalla (solo con JavaScript): tinta llena con letras blancas, no depende de la marca. */
+.familias a[aria-current='true'] {
+  background: var(--tinta);
+  border-color: var(--tinta);
+  color: #ffffff;
+}
+
+/* ---------- Contenido ---------- */
+.columna {
+  max-width: var(--ancho-columna);
+  margin: 0 auto;
+}
+
+.carta main {
+  padding-bottom: calc(var(--altura-barra) + 32px);
+}
+
+.carta[data-con-barra] {
+  /* La barra fija del modo mesa (llamar al mozo, pedir la cuenta, ver el pedido) llega con la tarea T24. */
+  --altura-barra: 128px;
+}
+
+.seccion h2 {
+  padding: 24px 16px 8px;
+  font-size: 1.1875rem;
+  line-height: 1.5rem;
+  font-weight: 700;
+  text-wrap: balance;
+}
+
+.fila {
+  position: relative;
+  border-top: 1px solid var(--junta);
+}
+
+.seccion .fila:last-child {
+  border-bottom: 1px solid var(--junta);
+}
+
+.producto {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 16px;
+  padding: 16px;
+}
+
+.producto__nombre {
+  font-size: 1.0625rem;
+  line-height: 1.375rem;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.producto__desc {
+  margin-top: 4px;
+  font-size: 0.9375rem;
+  line-height: 1.3125rem;
+  color: var(--tinta-suave);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.producto__incluye {
+  margin-top: 4px;
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+  color: var(--tinta-suave);
+}
+
+.producto__incluye li + li {
+  margin-top: 2px;
+}
+
+.producto__incluye strong {
+  font-weight: 600;
+  color: var(--tinta);
+}
+
+.producto__pie {
+  margin-top: 8px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 12px;
+}
+
+.precio {
+  font-size: 1.0625rem;
+  line-height: 1.375rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.foto {
+  position: relative;
+  width: 96px;
+  height: 96px;
+  align-self: start;
+}
+
+.foto img {
+  display: block;
+  width: 96px;
+  height: 96px;
+  object-fit: cover;
+  background: var(--hundido);
+  border-radius: var(--radio-control);
+}
+
+/* ---------- Páginas simples: lista de sucursales y 404 ---------- */
+.pagina {
+  max-width: var(--ancho-columna);
+  margin: 0 auto;
+  padding: 24px 16px 32px;
+}
+
+.pagina h1 {
+  font-size: 1.375rem;
+  line-height: 1.75rem;
+  font-weight: 700;
+  text-wrap: balance;
+}
+
+.pagina h2 {
+  font-size: 1.1875rem;
+  line-height: 1.5rem;
+  font-weight: 700;
+}
+
+.pagina p {
+  margin-top: 8px;
+  color: var(--tinta-suave);
+}
+
+.sucursales {
+  margin-top: 8px;
+  display: grid;
+  gap: 8px;
+}
+
+.sucursales a {
+  display: block;
+  min-height: 56px;
+  padding: 8px 16px;
+  color: var(--tinta);
+  text-decoration: none;
+  border: 1px solid var(--borde-control);
+  border-radius: var(--radio-control);
+}
+
+.sucursales a:active {
+  background: color-mix(in oklab, var(--marca) 8%, #ffffff);
+  border-color: var(--indicador);
+}
+
+.sucursales strong {
+  display: block;
+  font-size: 1.0625rem;
+  line-height: 1.375rem;
+}
+
+.sucursales span {
+  display: block;
+  font-size: 0.9375rem;
+  line-height: 1.3125rem;
+  color: var(--tinta-suave);
+}
+
+@media (min-width: 768px) {
+  .producto {
+    padding: 16px 24px;
+  }
+
+  .familias ul {
+    padding-left: 24px;
+  }
+
+  .familias li {
+    scroll-margin-left: 24px;
+  }
+
+  .seccion h2 {
+    padding-left: 24px;
+    padding-right: 24px;
+  }
+
+  .pagina {
+    padding-left: 24px;
+    padding-right: 24px;
+  }
+}
+
+.vacia {
+  padding: 32px 16px;
+  color: var(--tinta-suave);
+}
+
+/* Varias opciones de un combo o del menú del día en una misma línea: "causa limeña · ensalada". El separador
+   solo va entre las que se ven (las agotadas llevan `hidden`). */
+.opciones span:not([hidden]) ~ span:not([hidden])::before {
+  content: ' · ';
 }

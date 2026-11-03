@@ -16,11 +16,11 @@ import { gzipSync } from 'node:zlib';
 const RAIZ = new URL('../.next/', import.meta.url).pathname;
 const KB = 1024;
 
-// Límites del criterio 88: JavaScript de la carta 120 kB y del modo mesa 150 kB, CSS 20 kB (gzip).
-// DESVIACIÓN PENDIENTE DE DECISIÓN: la base de Next 16 con React 19 (App Router, sin una sola isla) ya pesa
-// 131.8 kB gzip, así que 120 kB no se puede cumplir en la carta. Mientras se decide el límite definitivo (T27, 88),
-// la carta se mide contra 140 kB: la base más el margen de la isla de disponibilidad. El modo mesa conserva sus
-// 150 kB, que dejan unos 18 kB para la hoja de producto, el pedido y los botones.
+// Límites del criterio 88: JavaScript de la carta 140 kB y del modo mesa 150 kB, CSS 20 kB (gzip). La carta tenía
+// 120 kB, pero la base de Next 16 con React 19 (App Router, sin una sola isla) ya pesa 131.8 kB gzip, así que 120 kB
+// no se podía cumplir; el usuario aprobó 140 kB el 2026-11-03: la base más el margen de las islas de la carta
+// (disponibilidad y familia en pantalla). El modo mesa conserva sus 150 kB, que dejan unos 18 kB para la hoja de
+// producto, el pedido y los botones.
 const LIMITE_CSS_KB = 20;
 const RUTAS = [
   { ruta: '/[empresa]', carpeta: '[empresa]', limiteJsKb: 140 },

@@ -8,7 +8,7 @@ export const metadata: Metadata = {
 /** Lo que la API responde con 404 (criterio 79): la página sale con estado HTTP 404. */
 export default function NoEncontrada() {
   return (
-    <main>
+    <main className="pagina">
       <h1>Esta carta no está disponible</h1>
       <p>Revisa el enlace o el código QR de tu mesa, o pregunta al personal del local.</p>
     </main>

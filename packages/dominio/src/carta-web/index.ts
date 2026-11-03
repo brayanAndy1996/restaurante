@@ -14,3 +14,4 @@ export {
   colorDeMarcaSobreBlanco,
   contraste,
 } from './color';
+export { precioEnSoles, precioEsCero, precioLeido } from './precios';
