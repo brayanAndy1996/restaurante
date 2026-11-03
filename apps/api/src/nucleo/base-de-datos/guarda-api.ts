@@ -94,11 +94,17 @@ export function instalarGuardaApi(sequelize: Sequelize): void {
 
     if (opts.sinEmpresa !== undefined) {
       if (
-        !esConsultaSinEmpresaValida(texto, opts, ['salud', 'verificacion-roles', 'autenticacion'])
+        !esConsultaSinEmpresaValida(texto, opts, [
+          'salud',
+          'verificacion-roles',
+          'autenticacion',
+          'carta-publica',
+          'codigo-mesa',
+        ])
       ) {
         throw new ContextoEmpresaAusenteError(
           'La marca sinEmpresa solo vale para las consultas fijas de salud, de verificación de roles y de ' +
-            'búsqueda de la empresa de un usuario',
+            'búsqueda de la empresa de un usuario, de una carta web o de una mesa',
         );
       }
       return consultar(sql, opts);

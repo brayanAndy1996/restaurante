@@ -6,10 +6,10 @@ import { TIPOS_DE_IMAGEN } from './leer-imagen';
 /** Tamaño máximo de una foto (criterio 14): 1 MB = 1 048 576 bytes. */
 export const LIMITE_FOTO_BYTES = 1_048_576;
 
-/** `PUT /carta/productos/:id/foto`: la única ruta de la API con cuerpo binario. */
-const RUTA_DE_LA_FOTO = /^\/carta\/productos\/[^/]+\/foto\/?$/;
+/** `PUT /carta/productos/:id/foto` y `PUT /carta-web/logo` (005): las únicas rutas de la API con cuerpo binario. */
+const RUTA_DE_LA_FOTO = /^\/(?:carta\/productos\/[^/]+\/foto|carta-web\/logo)\/?$/;
 
-/** `true` si la petición es la subida de una foto. */
+/** `true` si la petición es la subida de una foto o del logo de la carta web. */
 export function esSubidaDeFoto(metodo: string, ruta: string): boolean {
   return metodo === 'PUT' && RUTA_DE_LA_FOTO.test(ruta);
 }

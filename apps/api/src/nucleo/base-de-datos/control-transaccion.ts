@@ -12,6 +12,8 @@
  * rechaza (no se puede saber dónde termina).
  */
 import {
+  NOMBRE_FUNCION_EMPRESA_DE_CARTA,
+  NOMBRE_FUNCION_EMPRESA_DE_CODIGO_MESA,
   NOMBRE_FUNCION_EMPRESA_DE_USUARIO,
   NOMBRE_FUNCION_FIJAR_ACTOR,
   NOMBRE_FUNCION_FIJAR_CONTEXTO,
@@ -227,7 +229,8 @@ export function contieneControlDeTransaccion(texto: string): boolean {
  *   equivale a `set_config`), `ts_rewrite`, `ts_stat` y la fijación del contexto
  *   (`fijar_contexto_empresa` y `fijar_contexto_actor`, salvo la fijación propia de `ContextoEmpresa`,
  *   que la guarda reconoce por su origen antes de llegar aquí) y la búsqueda del usuario al ingresar
- *   (`empresa_de_usuario`, que solo corre fuera de todo contexto con su consulta fija).
+ *   (`empresa_de_usuario`, que solo corre fuera de todo contexto con su consulta fija), y las dos búsquedas
+ *   públicas de la historia 005 (`empresa_de_carta` y `empresa_de_codigo_mesa`, con el mismo trato).
  * - Texto de consultas y sesiones ajenas (38b y 38c): `pg_stat_activity`, `pg_stat_get_activity`,
  *   `pg_cancel_backend`, `pg_terminate_backend` y `pg_signal_backend`.
  * - Objetos grandes (38d): `pg_largeobject`, `pg_largeobject_metadata`, `loread` y `lowrite`.
@@ -249,6 +252,8 @@ export const NOMBRES_PROHIBIDOS: readonly string[] = [
   NOMBRE_FUNCION_FIJAR_CONTEXTO,
   NOMBRE_FUNCION_FIJAR_ACTOR,
   NOMBRE_FUNCION_EMPRESA_DE_USUARIO,
+  NOMBRE_FUNCION_EMPRESA_DE_CARTA,
+  NOMBRE_FUNCION_EMPRESA_DE_CODIGO_MESA,
   'pg_stat_activity',
   'pg_stat_get_activity',
   'pg_cancel_backend',

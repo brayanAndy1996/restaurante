@@ -19,6 +19,7 @@ import {
   noEncontrado,
   referenciaInvalida,
 } from './errores-salon';
+import { CodigosMesaService } from './codigos-mesa.service';
 import { COLUMNAS_MESA, aMesa } from './lectura-mapa';
 import { tomarTurnoDelMapa } from './mapa-bloqueo';
 import { UsoDeMesas } from './uso-de-mesas';
@@ -98,9 +99,13 @@ export class MesasService {
     @Inject(AuditoriaService) private readonly auditoria: AuditoriaService,
     @Inject(SucursalesConsultaService) private readonly sucursales: SucursalesConsultaService,
     @Inject(UsoDeMesas) private readonly uso: UsoDeMesas,
+    @Inject(CodigosMesaService) private readonly codigos: CodigosMesaService,
   ) {}
 
-  /** Criterio 3. 201 con la mesa; 400 si la celda cae fuera de la zona; 409 con nombre o celda repetidos. */
+  /**
+   * Criterio 3. 201 con la mesa; 400 si la celda cae fuera de la zona; 409 con nombre o celda repetidos. La mesa
+   * nace con su código de QR (005, criterio 6), sin cambiar la respuesta.
+   */
   async crear(sucursalId: string, zonaId: string, entrada: MesaEntrada): Promise<MesaRespuesta> {
     await this.exigirSucursal(sucursalId);
     await tomarTurnoDelMapa(this.conexion, sucursalId);
@@ -143,6 +148,8 @@ export class MesasService {
     } catch (error) {
       throw this.traducirUnicidad(error);
     }
+    // El código del QR nace con la mesa, en la misma transacción (historia 005, criterio 6).
+    await this.codigos.crearPara(id);
     await this.auditoria.registrar({
       accion: 'crear_mesa',
       sucursalId,

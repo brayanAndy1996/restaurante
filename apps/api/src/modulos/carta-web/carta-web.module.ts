@@ -11,7 +11,7 @@ import { LogoCartaWebController } from './logo-carta-web.controller';
 import { LogoCartaWebService } from './logo-carta-web.service';
 
 /**
- * Carta web (historia 005): dueño de `carta_web` y `carta_web_sucursal` (migración `202611020001-carta-web`, fase C).
+ * Carta web (historia 005): dueño de `carta_web` y `carta_web_sucursal` (migración `202611020001-carta-web`).
  * Importa `CartaModule` (`CartaVentaService`), `AuditoriaModule` y `SeguridadModule`; `SucursalesConsultaModule`,
  * `SuscripcionModule` y `ArchivosModule` son globales. No importa `SalonModule` ni `LlamadosModule`. Exporta
  * `CartaWebConsultaService`, que usa el módulo de llamados.

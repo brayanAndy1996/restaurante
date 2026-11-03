@@ -5,7 +5,8 @@
  *
  * Junto con el servicio de contexto, es el único archivo de la API autorizado a escribir
  * `fijar_contexto_empresa` (regla de ESLint, criterios 37 y 22e); las migraciones también, por su SQL.
- * Es además el único autorizado a escribir `fijar_contexto_actor` y `empresa_de_usuario` (historia 002).
+ * Es además el único autorizado a escribir `fijar_contexto_actor` y `empresa_de_usuario` (historia 002) y
+ * `empresa_de_carta` y `empresa_de_codigo_mesa` (historia 005).
  */
 
 /**
@@ -45,3 +46,16 @@ export const SQL_FIJAR_ACTOR = `SELECT ${NOMBRE_FUNCION_FIJAR_ACTOR}($1, $2, $3,
  * contexto de empresa la guarda rechaza su mención.
  */
 export const NOMBRE_FUNCION_EMPRESA_DE_USUARIO = 'empresa_de_usuario';
+
+/**
+ * Nombre de la función de la base que busca la empresa de una carta web por su dirección (historia 005, criterios
+ * 12 y 13). Mismo trato que `empresa_de_usuario`: solo este archivo, `consultas-sin-empresa.ts` y las migraciones
+ * lo escriben; dentro de un contexto de empresa la guarda rechaza su mención.
+ */
+export const NOMBRE_FUNCION_EMPRESA_DE_CARTA = 'empresa_de_carta';
+
+/**
+ * Nombre de la función de la base que busca la empresa de una mesa por el código de su QR (historia 005, criterios
+ * 12 y 13). Mismo trato que `empresa_de_carta`.
+ */
+export const NOMBRE_FUNCION_EMPRESA_DE_CODIGO_MESA = 'empresa_de_codigo_mesa';

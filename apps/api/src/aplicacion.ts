@@ -115,7 +115,8 @@ export async function crearAplicacion(
     exposedHeaders: ['Retry-After', 'Date', 'ETag'],
     maxAge: 600,
   });
-  // La foto de un producto es la única ruta con cuerpo binario, con su propio límite de 1 MB (historia 003). El
+  // La foto de un producto y el logo de la carta web (005) son las únicas rutas con cuerpo binario, con su propio
+  // límite de 1 MB (historia 003). El
   // controlador lee ese cuerpo después del guard y del permiso (401 y 403 van antes que el 413); aquí solo se
   // asegura que, si se responde sin leerlo, lo que falte por llegar se descarte.
   app.use(descartarCuerpoDeFotoAlResponder());

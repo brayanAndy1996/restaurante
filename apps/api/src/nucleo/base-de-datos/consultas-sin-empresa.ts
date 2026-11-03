@@ -1,24 +1,37 @@
 /**
  * Consultas que pueden correr sin contexto de empresa: la verificación de salud, la verificación de
- * roles al arrancar y la búsqueda de la empresa de un usuario al ingresar. Se marcan con la opción
- * `{ sinEmpresa: 'salud' | 'verificacion-roles' | 'autenticacion' }`.
+ * roles al arrancar, la búsqueda de la empresa de un usuario al ingresar y, desde la historia 005, la de la
+ * empresa de una carta web por su dirección y la de una mesa por el código de su QR. Se marcan con la opción
+ * `{ sinEmpresa: 'salud' | 'verificacion-roles' | 'autenticacion' | 'carta-publica' | 'codigo-mesa' }`.
  *
  * La marca no es un permiso general: cada motivo solo acepta un texto SQL exacto (definido aquí), sin
  * transacción y fuera de cualquier contexto de empresa u operación de plataforma; `salud` y
- * `verificacion-roles` sin parámetros y `autenticacion` con exactamente uno (el nombre de usuario).
- * Marcar otra consulta con `sinEmpresa` la hace fallar igual que si no tuviera contexto. Las dos
- * primeras leen solo el catálogo de PostgreSQL o devuelven una constante; la tercera llama a
- * `empresa_de_usuario`, que solo responde por un nombre exacto (no se puede enumerar: el esquema
- * `autenticacion` no tiene `USAGE` para la API).
+ * `verificacion-roles` sin parámetros y los demás con exactamente uno de texto (el nombre de usuario, la
+ * dirección o el código). Marcar otra consulta con `sinEmpresa` la hace fallar igual que si no tuviera
+ * contexto. Las dos primeras leen solo el catálogo de PostgreSQL o devuelven una constante; las otras llaman a
+ * `empresa_de_usuario`, `empresa_de_carta` o `empresa_de_codigo_mesa`, que solo responden por una coincidencia
+ * exacta y devuelven un uuid (no se puede enumerar: los esquemas `autenticacion` y `carta_publica` no tienen
+ * `USAGE` para la API).
  */
 import { QueryTypes, type QueryOptions, type Sequelize } from 'sequelize';
-import { NOMBRE_FUNCION_EMPRESA_DE_USUARIO } from '../fijar-contexto';
+import {
+  NOMBRE_FUNCION_EMPRESA_DE_CARTA,
+  NOMBRE_FUNCION_EMPRESA_DE_CODIGO_MESA,
+  NOMBRE_FUNCION_EMPRESA_DE_USUARIO,
+} from '../fijar-contexto';
 import { estadoActual } from './estado-operacion';
 
-export type MotivoSinEmpresa = 'salud' | 'verificacion-roles' | 'autenticacion';
+export type MotivoSinEmpresa =
+  'salud' | 'verificacion-roles' | 'autenticacion' | 'carta-publica' | 'codigo-mesa';
 
 /** Búsqueda de la empresa de un usuario por su nombre (criterio 89). Lleva un parámetro: el nombre. */
 export const SQL_EMPRESA_DE_USUARIO = `SELECT ${NOMBRE_FUNCION_EMPRESA_DE_USUARIO}($1) AS empresa_id`;
+
+/** Búsqueda de la empresa de una carta web por su dirección (historia 005). Lleva un parámetro: la dirección. */
+export const SQL_EMPRESA_DE_CARTA = `SELECT ${NOMBRE_FUNCION_EMPRESA_DE_CARTA}($1) AS empresa_id`;
+
+/** Búsqueda de la empresa de una mesa por el código de su QR (historia 005). Lleva un parámetro: el código. */
+export const SQL_EMPRESA_DE_CODIGO_MESA = `SELECT ${NOMBRE_FUNCION_EMPRESA_DE_CODIGO_MESA}($1) AS empresa_id`;
 
 export const SQL_SALUD = 'SELECT 1 AS ok';
 
@@ -83,10 +96,16 @@ const SQL_POR_MOTIVO: Record<MotivoSinEmpresa, string> = {
   salud: SQL_SALUD,
   'verificacion-roles': SQL_VERIFICACION_ROLES,
   autenticacion: SQL_EMPRESA_DE_USUARIO,
+  'carta-publica': SQL_EMPRESA_DE_CARTA,
+  'codigo-mesa': SQL_EMPRESA_DE_CODIGO_MESA,
 };
 
 /** Motivos cuya consulta lleva un único parámetro de texto; los demás no llevan ninguno. */
-const MOTIVOS_CON_PARAMETRO: readonly MotivoSinEmpresa[] = ['autenticacion'];
+const MOTIVOS_CON_PARAMETRO: readonly MotivoSinEmpresa[] = [
+  'autenticacion',
+  'carta-publica',
+  'codigo-mesa',
+];
 
 /** Opciones de una consulta marcada como excepción. */
 export interface OpcionesSinEmpresa extends QueryOptions {
@@ -161,27 +180,31 @@ export async function buscarEmpresaDeUsuario(
  * Empresa de la carta web con esa dirección (en minúsculas), o `null` si no existe (historia 005, criterios 12 y
  * 13). Corre fuera de todo contexto de empresa, con la consulta fija del motivo `carta-publica`; la API no puede
  * enumerar direcciones: solo la función de la base responde, y solo por una dirección exacta.
- * FIRMA: la implementación (motivo, consulta fija y función de la base) llega en la fase C (T5).
  */
 export async function buscarEmpresaDeCarta(
   conexion: Sequelize,
   slug: string,
 ): Promise<string | null> {
-  void conexion;
-  void slug;
-  throw new Error('No implementado');
+  const filas = await conexion.query<{ empresa_id: string | null }>(SQL_EMPRESA_DE_CARTA, {
+    sinEmpresa: 'carta-publica',
+    bind: [slug],
+    type: QueryTypes.SELECT,
+  } as OpcionesSinEmpresa & { type: QueryTypes.SELECT });
+  return filas[0]?.empresa_id ?? null;
 }
 
 /**
  * Empresa de la mesa con ese código (distingue mayúsculas), o `null` si no existe (historia 005, criterios 12 y
  * 13). Corre fuera de todo contexto de empresa, con la consulta fija del motivo `codigo-mesa`.
- * FIRMA: la implementación llega en la fase C (T5).
  */
 export async function buscarEmpresaDeCodigoMesa(
   conexion: Sequelize,
   codigo: string,
 ): Promise<string | null> {
-  void conexion;
-  void codigo;
-  throw new Error('No implementado');
+  const filas = await conexion.query<{ empresa_id: string | null }>(SQL_EMPRESA_DE_CODIGO_MESA, {
+    sinEmpresa: 'codigo-mesa',
+    bind: [codigo],
+    type: QueryTypes.SELECT,
+  } as OpcionesSinEmpresa & { type: QueryTypes.SELECT });
+  return filas[0]?.empresa_id ?? null;
 }

@@ -17,8 +17,9 @@
 //    de transacciones por autorizar (`nucleo/base-de-datos/autorizacion-transaccion`) solo se usan
 //    dentro de `src/nucleo/` (criterio 22c), con las mismas formas de importación de la regla 1.
 //
-// 4. (Historia 002) Los nombres de la función que fija el actor de la transacción (`fijar_contexto_actor`) y
-//    de la que busca la empresa de un usuario al ingresar (`empresa_de_usuario`) reciben el mismo trato que
+// 4. (Historias 002 y 005) Los nombres de la función que fija el actor de la transacción (`fijar_contexto_actor`),
+//    de la que busca la empresa de un usuario al ingresar (`empresa_de_usuario`) y de las que buscan la empresa
+//    de una carta web o de una mesa (`empresa_de_carta`, `empresa_de_codigo_mesa`) reciben el mismo trato que
 //    `fijar_contexto_empresa`: solo los escribe `src/nucleo/fijar-contexto.ts` (que define `SQL_FIJAR_ACTOR`),
 //    `src/nucleo/base-de-datos/consultas-sin-empresa.ts` (la consulta fija de ingreso) y las migraciones;
 //    y la constante `SQL_FIJAR_ACTOR` solo se usa dentro de `src/nucleo/`.
@@ -63,7 +64,8 @@ const MENSAJE_PARAMETRO =
 const MENSAJE_FUNCIONES_DE_ACCESO =
   'Solo src/nucleo/fijar-contexto.ts (SQL_FIJAR_ACTOR) y la consulta fija de ' +
   'src/nucleo/base-de-datos/consultas-sin-empresa.ts pueden escribir el nombre de la función que fija el ' +
-  'actor (fijar_contexto_actor) ni el de la que busca la empresa de un usuario (empresa_de_usuario). ' +
+  'actor (fijar_contexto_actor), el de la que busca la empresa de un usuario (empresa_de_usuario) ni los de las ' +
+  'que buscan la empresa de una carta web o de una mesa (empresa_de_carta, empresa_de_codigo_mesa). ' +
   'Usa ContextoEmpresa.ejecutar con { actor } o ContextoEmpresa.fijarActor.';
 
 /** Formas de cargar un módulo concreto que `no-restricted-imports` no ve. */
@@ -143,12 +145,12 @@ const SELECTORES_PARAMETRO = [
 const SELECTORES_FUNCIONES_DE_ACCESO = [
   {
     selector:
-      'Literal[value=/fijar_contexto_actor(?![A-Za-z0-9_$])|empresa_de_usuario(?![A-Za-z0-9_$])/i]',
+      'Literal[value=/fijar_contexto_actor(?![A-Za-z0-9_$])|empresa_de_usuario(?![A-Za-z0-9_$])|empresa_de_carta(?![A-Za-z0-9_$])|empresa_de_codigo_mesa(?![A-Za-z0-9_$])/i]',
     message: MENSAJE_FUNCIONES_DE_ACCESO,
   },
   {
     selector:
-      'TemplateElement[value.raw=/fijar_contexto_actor(?![A-Za-z0-9_$])|empresa_de_usuario(?![A-Za-z0-9_$])/i]',
+      'TemplateElement[value.raw=/fijar_contexto_actor(?![A-Za-z0-9_$])|empresa_de_usuario(?![A-Za-z0-9_$])|empresa_de_carta(?![A-Za-z0-9_$])|empresa_de_codigo_mesa(?![A-Za-z0-9_$])/i]',
     message: MENSAJE_FUNCIONES_DE_ACCESO,
   },
 ];
