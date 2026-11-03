@@ -6,7 +6,7 @@
   - **Se dejan para la sección de delivery** (alcance propuesto por el orquestador): HU-21 salvo la carta base, RF-42 a RF-49 (pedido para llevar y delivery por WhatsApp, consentimiento, bandeja, pedidos telefónicos). Esta sección deja listos la carta pública, `apps/web`, la resolución pública de la empresa y la protección por mesa e IP para reutilizarlos ("Notas para otras secciones").
   - Fuente de negocio: `fuentes.md` de esta carpeta (requerimientos rev. 38, diseño rev. 27) con las seis "Decisiones del usuario (2026-11-02)", que los criterios citan como "decisión N", y las decisiones de 002, 003 y 004 que siguen vigentes.
 - **Ruta crítica:** sí, en parte. Confirmada por el orquestador el 2026-11-03 (paso 3): P1 aislamiento de las rutas públicas, P2 llamados (confirmación, vencimiento y protección contra pedidos falsos), P3 paso a la cuenta sin llegar a cocina y P4 permisos y trazabilidad, todos en 5a; 5b no es crítica. Ver "Clasificación de ruta crítica".
-- **Estado:** aprobada por el usuario (2026-11-03), con las nueve recomendaciones de "Preguntas resueltas"; en curso 5a.
+- **Estado:** aprobada por el usuario (2026-11-03), con las nueve recomendaciones de "Preguntas resueltas"; 5a terminada (2026-11-03); en curso 5b.
 
 ## Objetivo
 
