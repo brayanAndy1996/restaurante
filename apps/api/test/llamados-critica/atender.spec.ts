@@ -743,12 +743,14 @@ describe('criterio 43 · dos atenciones a la vez', () => {
     const mesa = await nuevaMesa();
     const creado = await crearLlamado(ctx, mesa, cuerpoPedido([L.gaseosa(1)]));
     const k = randomUUID();
-    const primera = await atenderLlamado(ctx, t().mozo, creado.id, abriendo(), k);
+    // La réplica reenvía exactamente el mismo cuerpo (mismo ordenId): otro cuerpo con la misma clave sería 422.
+    const cuerpo = abriendo();
+    const primera = await atenderLlamado(ctx, t().mozo, creado.id, cuerpo, k);
     exigirEstado(primera, 200, 'atender');
     // Otra persona descarta el pedido atendido; la réplica de la misma clave sigue devolviendo lo guardado.
     await descartarOk(ctx, t().mozo2, creado.id, { motivo: 'Repetido' });
     await limpiarRegistros(ctx);
-    const replica = await atenderLlamado(ctx, t().mozo, creado.id, abriendo(), k);
+    const replica = await atenderLlamado(ctx, t().mozo, creado.id, cuerpo, k);
     exigirEstado(replica, 200, 'réplica de la atención');
     expect(replica.body).toEqual(primera.body);
     expect((await eventosPublicados(ctx)).map((e) => e.nombre)).toEqual([]);

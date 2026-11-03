@@ -405,6 +405,12 @@ describe('criterio 66 · un id de B en una ruta autenticada responde 404 igual q
   it('los llamados: detalle, atención, paso a la cuenta y descarte', async () => {
     const { m, sB } = await sembrado();
     const mozoA = (await sesiones(ctx, m.A.mozo, m.A.S1)).contrasena;
+    // El `pendiente` sembrado puede haber sido usado como id en A por el caso del criterio 15 (mismo UUID, su propia
+    // fila en A): se usa un llamado pendiente de B con un id que A nunca ha usado.
+    const [mesaDeB] = await mesasNuevas(ctx, m.B.tokenAdmin, m.B.S1, 1);
+    const pendienteDeB = randomUUID();
+    await crearLlamadoOk(clientePublico(ctx), mesaDeB!.codigo, llamarAlMozo(pendienteDeB));
+    expect(await filasDelLlamado(pendienteDeB)).toHaveLength(1);
     const antesB = await fotoDeLlamados(admin, m.B.empresaId);
     const antesA = await fotoDeLlamados(admin, m.A.empresaId);
     const rutas = (id: string): [string, () => ReturnType<typeof llamar>][] => [
@@ -441,7 +447,7 @@ describe('criterio 66 · un id de B en una ruta autenticada responde 404 igual q
       ],
     ];
     const fallos: string[] = [];
-    for (const idDeB of [sB.pendiente, sB.descartado]) {
+    for (const idDeB of [pendienteDeB, sB.descartado]) {
       for (const [nombre, hacer] of rutas(idDeB)) {
         const referencia = await rutas(randomUUID()).find(([n]) => n === nombre)![1]();
         const res = await hacer();

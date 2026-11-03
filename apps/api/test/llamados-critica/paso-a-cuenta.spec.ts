@@ -791,11 +791,14 @@ describe('criterio 49 · pasar a la cuenta no llega a cocina', () => {
 describe('criterio 50 · de punta a punta', () => {
   it('las líneas de la respuesta enviadas con POST /ordenes/:id/envios crean las comandas por estación con los precios del sistema', async () => {
     const p = await pedidoAtendido();
+    // La empresa ya tiene envíos de otros casos del archivo: se compara contra lo que había al empezar.
+    const inicio = await conteoDePedidos(admin, p.mesa.empresaId);
     const paso = pasoACuentaRespuestaSchema.parse(
       (await pasarOk(ctx, t().mozo, p.id, todasLasLineas())).body,
     );
+    // Pasar a la cuenta no manda nada a cocina: ningún conteo cambia.
     const antes = await conteoDePedidos(admin, p.mesa.empresaId);
-    expect(antes.envios).toBe(0);
+    expect(antes).toEqual(inicio);
 
     const res = await enviarComanda(ctx, t().mozo, paso.ordenId, envio(comoEnvio(paso.lineas)));
     exigirEstado(res, 201, 'enviar la comanda (004, criterio 15)');
@@ -814,9 +817,9 @@ describe('criterio 50 · de punta a punta', () => {
     for (const c of enviado.comandas) expect(c.tipo).toBe('COMANDA');
 
     const despues = await conteoDePedidos(admin, p.mesa.empresaId);
-    expect(despues.envios).toBe(1);
-    expect(despues.items).toBe(3);
-    expect(despues.comandas).toBe(2);
+    expect(despues.envios).toBe(antes.envios + 1);
+    expect(despues.items).toBe(antes.items + 3);
+    expect(despues.comandas).toBe(antes.comandas + 2);
     // El llamado ya estaba pasado y no cambió con el envío.
     expect((await filaLlamado(admin, p.mesa.empresaId, p.id))!.estado).toBe('PASADO_A_CUENTA');
   });
@@ -951,6 +954,7 @@ describe('criterio 51 · réplica', () => {
 
   it('dos pasos simultáneos con las mismas líneas terminan en un solo paso y un solo aviso', async () => {
     const p = await pedidoAtendido();
+    const conteoInicial = await conteoDePedidos(admin, p.mesa.empresaId);
     await limpiarRegistros(ctx);
     const [a, b] = await Promise.all([
       pasarLlamado(ctx, t().mozo, p.id, { lineas: todasLasLineas() }),
@@ -962,7 +966,7 @@ describe('criterio 51 · réplica', () => {
     expect(a.body.llamado.cerradoEn).toBe(b.body.llamado.cerradoEn);
     expect(a.body.llamado.cerradoPor).toEqual(b.body.llamado.cerradoPor);
     expect(await eventosDeLlamado(ctx, 'llamado.cambio')).toHaveLength(1);
-    expect((await foto(p)).conteo.envios).toBe(0);
+    expect((await foto(p)).conteo).toEqual(conteoInicial);
   });
 
   it('dos pasos simultáneos con líneas distintas: uno sale y el otro es 409 LLAMADO_CERRADO', async () => {
