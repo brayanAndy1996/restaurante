@@ -1,5 +1,4 @@
 import { Injectable } from '@nestjs/common';
-import { noImplementado } from '../../nucleo/errores';
 
 /** La impresora de una caja, ya resuelta, y si tiene gaveta. */
 export interface ImpresoraDeCaja {
@@ -14,8 +13,7 @@ export type ResolutorImpresoraDeCaja = (cajaId: string) => Promise<ImpresoraDeCa
  * Punto de enganche entre la reimpresión de un comprobante y las cajas (historia 006, criterio 90). Facturación no
  * lee `caja`: el módulo de caja registra al arrancar (como `COBROS` de pedidos) cómo obtener la impresora de una caja
  * (`caja.impresora_id` más `ImpresionPuerto.impresoraDeLaCaja`). En la emisión no hace falta: el cobro pasa la
- * impresora ya resuelta en `DatosDeEmision`. **Falla cerrado** (fase C): sin registro, reimprimir lanza un error.
- * FIRMAS de la fase A.
+ * impresora ya resuelta en `DatosDeEmision`. **Falla cerrado**: sin registro, reimprimir lanza un error.
  */
 @Injectable()
 export class RegistroImpresoraDeCaja {
@@ -25,8 +23,11 @@ export class RegistroImpresoraDeCaja {
     this.resolutor = resolutor;
   }
 
-  async deLaCaja(_cajaId: string): Promise<ImpresoraDeCaja | null> {
-    void this.resolutor;
-    throw noImplementado();
+  /** La impresora de la caja, o `null` si no hay ninguna activa. Sin resolutor registrado, lanza (falla cerrado). */
+  async deLaCaja(cajaId: string): Promise<ImpresoraDeCaja | null> {
+    if (this.resolutor === null) {
+      throw new Error('Nadie registró cómo obtener la impresora de una caja (módulo de caja)');
+    }
+    return this.resolutor(cajaId);
   }
 }

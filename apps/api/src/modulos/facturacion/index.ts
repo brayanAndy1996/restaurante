@@ -1,6 +1,7 @@
 export { FacturacionModule } from './facturacion.module';
 export { SeriesService } from './series.service';
-export type { ConfigurarSerie } from './series.service';
+export type { ConfigurarSerie, NumeroTomado } from './series.service';
+export { leerComprobante, textoDelNumero } from './lectura-comprobante';
 export { EmisionService } from './emision.service';
 export type { ComprobanteEmitido, DatosDeEmision, PagoParaTicket } from './emision.service';
 export { FacturadoService } from './facturado';

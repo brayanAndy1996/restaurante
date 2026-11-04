@@ -11,8 +11,8 @@ import { SeriesService } from './series.service';
 import { UltimaEmisionDeComprobantes } from './ultima-emision-de-comprobantes';
 
 /**
- * Facturación (historia 006, entrega 6a): dueño de `serie`, `comprobante` y `comprobante_linea` (todavía sin tablas:
- * migración 3 de la fase C). Numera sin saltos ni duplicados dentro de la transacción del cobro (`EmisionService`) y
+ * Facturación (historia 006, entrega 6a): dueño de `serie`, `comprobante` y `comprobante_linea` (migración
+ * `202611040003-facturacion`). Numera sin saltos ni duplicados dentro de la transacción del cobro (`EmisionService`) y
  * guarda cada comprobante tal como era al emitirse, con el detalle calculado de su parte (`comprobante.detalle_parte`).
  * Usa plataforma (`SuscripcionService`, y le registra la fecha del último comprobante de cada emisor) e impresión
  * (puerto `IMPRESION`, global); nunca lee tablas ajenas: el módulo de caja lo usa por sus servicios y le registra la

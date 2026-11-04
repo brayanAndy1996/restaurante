@@ -58,6 +58,14 @@ export type DestinoVisibleDeEstacion =
       impresora: { id: string; nombre: string };
     };
 
+/** Una impresora tal como la ve caja: para elegirla como impresora de una caja y para mostrarla. */
+export interface ImpresoraDeCajaVisible {
+  id: string;
+  nombre: string;
+  gaveta: boolean;
+  activa: boolean;
+}
+
 export interface ImpresionPuerto {
   /** El destino de cada estación pedida; una estación sin configurar sale por el `KDS`. */
   destinos(
@@ -83,12 +91,21 @@ export interface ImpresionPuerto {
    * La impresora de un trabajo de caja (historia 006, criterios 2 y 90): `impresoraId` (la propia de la caja, que
    * caja leyó de `caja.impresora_id`; impresión no lee `caja`) si es una impresora activa de la sucursal o, si es
    * `null` o ya no está activa, la de caja de la sucursal (`impresoraDeCaja`). Devuelve `gaveta` para saber si el
-   * ticket lleva el pulso; `null` si tampoco hay (el cobro se hace igual, sin imprimir). FIRMA de la fase A.
+   * ticket lleva el pulso; `null` si tampoco hay (el cobro se hace igual, sin imprimir).
    */
   impresoraDeLaCaja(
     sucursalId: string,
     impresoraId: string | null,
   ): Promise<{ id: string; gaveta: boolean } | null>;
+  /**
+   * De las impresoras dadas, las que son de la sucursal, con su nombre, si tienen gaveta y si están activas (historia
+   * 006, criterios 1 y 2): caja valida con esto la `impresoraId` de una caja y muestra su impresora sin leer
+   * `impresora`. Las de otra sucursal, de otra empresa o inexistentes no aparecen.
+   */
+  impresorasDeLaSucursal(
+    sucursalId: string,
+    impresoraIds: readonly string[],
+  ): Promise<ReadonlyMap<string, ImpresoraDeCajaVisible>>;
   /**
    * De las pre-cuentas dadas, el id del trabajo `PRECUENTA` de las que lo tienen (criterio 102): devolver la
    * vigente o una réplica no crea otro trabajo, devuelve este.

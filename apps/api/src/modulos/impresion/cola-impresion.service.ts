@@ -5,11 +5,11 @@ import { diaOperativo } from '@restaurante/dominio';
 import { QueryTypes, type Sequelize } from 'sequelize';
 import { CONEXION_API } from '../../nucleo/base-de-datos';
 import { ContextoEmpresa } from '../../nucleo/contexto-empresa';
-import { noImplementado } from '../../nucleo/errores';
 import { RELOJ, type Reloj } from '../../nucleo/reloj';
 import type {
   DestinoDeEstacion,
   DestinoVisibleDeEstacion,
+  ImpresoraDeCajaVisible,
   ImpresionPuerto,
   TrabajoParaEncolar,
 } from '../pedidos/impresion';
@@ -267,10 +267,39 @@ export class ColaImpresionService implements ImpresionPuerto {
   }
 
   async impresoraDeLaCaja(
-    _sucursalId: string,
-    _impresoraId: string | null,
+    sucursalId: string,
+    impresoraId: string | null,
   ): Promise<{ id: string; gaveta: boolean } | null> {
-    throw noImplementado();
+    if (impresoraId !== null) {
+      const propias = await this.conexion.query<{ id: string; gaveta: boolean }>(
+        'SELECT id, gaveta FROM impresora WHERE id = $1 AND sucursal_id = $2 AND activa',
+        { bind: [impresoraId, sucursalId], type: QueryTypes.SELECT },
+      );
+      if (propias[0] !== undefined) return propias[0];
+    }
+    const deLaSucursal = await this.conexion.query<{ id: string; gaveta: boolean }>(
+      `SELECT i.id, i.gaveta FROM impresion_sucursal s
+         JOIN impresora i ON i.id = s.impresora_caja_id AND i.empresa_id = s.empresa_id
+        WHERE s.sucursal_id = $1 AND i.activa`,
+      { bind: [sucursalId], type: QueryTypes.SELECT },
+    );
+    return deLaSucursal[0] ?? null;
+  }
+
+  async impresorasDeLaSucursal(
+    sucursalId: string,
+    impresoraIds: readonly string[],
+  ): Promise<ReadonlyMap<string, ImpresoraDeCajaVisible>> {
+    if (impresoraIds.length === 0) return new Map();
+    const filas = await this.conexion.query<ImpresoraDeCajaVisible>(
+      `SELECT id, nombre, gaveta, activa FROM impresora
+        WHERE sucursal_id = $1 AND id = ANY($2::uuid[])`,
+      {
+        bind: [sucursalId, [...new Set(impresoraIds.map((id) => id.toLowerCase()))]],
+        type: QueryTypes.SELECT,
+      },
+    );
+    return new Map(filas.map((f) => [f.id, f]));
   }
 
   async trabajosDePrecuentas(

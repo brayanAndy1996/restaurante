@@ -6,10 +6,12 @@ import type {
   TasaIgvRespuesta,
 } from '@restaurante/contratos';
 import type { RegimenTributario } from '@restaurante/dominio';
-import { SQLSTATE, sqlstateDe } from '../../nucleo/base-de-datos';
+import { QueryTypes, type Sequelize } from 'sequelize';
+import { CONEXION_API, SQLSTATE, sqlstateDe } from '../../nucleo/base-de-datos';
 import { ContextoEmpresa } from '../../nucleo/contexto-empresa';
 import { ErrorAplicacion } from '../../nucleo/errores/error-aplicacion';
-import { noImplementado } from '../../nucleo/errores';
+import { RELOJ, type Reloj } from '../../nucleo/reloj';
+import { AuditoriaService } from '../auditoria';
 import { MODELOS_API, type EmisorModelo, type Modelos } from './modelos';
 import { UltimaEmisionDeEmisor } from './ultima-emision';
 
@@ -45,6 +47,9 @@ export class EmisoresService {
     @Inject(MODELOS_API) private readonly modelos: Modelos,
     @Inject(ContextoEmpresa) private readonly contexto: ContextoEmpresa,
     @Inject(UltimaEmisionDeEmisor) private readonly ultimaEmision: UltimaEmisionDeEmisor,
+    @Inject(CONEXION_API) private readonly conexion: Sequelize,
+    @Inject(AuditoriaService) private readonly auditoria: AuditoriaService,
+    @Inject(RELOJ) private readonly reloj: Reloj,
   ) {}
 
   async listar(): Promise<EmisorRespuesta[]> {
@@ -78,33 +83,125 @@ export class EmisoresService {
   }
 
   /**
-   * Las tasas de IGV del emisor en orden de `desde` (historia 006, criterio 6). 404 si el emisor no es de la empresa.
-   * FIRMA de la fase A.
+   * Las tasas de IGV del emisor en orden de `desde` (historia 006, criterio 6). 404 si el emisor no es de la empresa
+   * (uno de otra empresa es indistinguible de uno inexistente).
    */
-  async tasasIgv(_emisorId: string): Promise<TasaIgvRespuesta[]> {
-    throw noImplementado();
+  async tasasIgv(emisorId: string): Promise<TasaIgvRespuesta[]> {
+    await this.exigirEmisor(emisorId);
+    return this.leerTasas(emisorId);
   }
 
   /**
-   * Crea o cambia la tasa de IGV del emisor desde una fecha (criterio 6): no se puede con `desde` igual o anterior a
-   * la fecha del último comprobante emitido por el emisor (409 `CONFLICTO`). Esa fecha la da el puerto
-   * `UltimaEmisionDeEmisor`, que registra facturación (plataforma no lee `comprobante`); sin registro, 409
-   * `CONFLICTO`. FIRMA de la fase A.
+   * Crea o cambia la tasa de IGV del emisor desde una fecha (criterio 6). Repetir el mismo valor responde 200 sin
+   * auditoría. No se puede crear ni cambiar una tasa con `desde` igual o anterior a la fecha de Lima del último
+   * comprobante emitido por el emisor (409 `CONFLICTO`: las ventas pasadas no se recalculan); esa fecha la da el puerto
+   * `UltimaEmisionDeEmisor` que registra facturación y, sin registro, se rechaza (falla cerrado). La fila del emisor se
+   * toma con `FOR NO KEY UPDATE`: dos cambios del mismo emisor se turnan y no se cruzan con los cobros, que solo
+   * necesitan `FOR KEY SHARE` por sus llaves foráneas.
    */
   async configurarTasaIgv(
-    _emisorId: string,
-    _desde: string,
-    _entrada: TasaIgvEntrada,
+    emisorId: string,
+    desde: string,
+    entrada: TasaIgvEntrada,
   ): Promise<TasaIgvRespuesta> {
-    void this.ultimaEmision;
-    throw noImplementado();
+    await this.exigirEmisor(emisorId, true);
+    const actuales = await this.conexion.query<{ id: string; tasa: string }>(
+      `SELECT id, tasa::text AS tasa FROM emisor_tasa_igv WHERE emisor_id = $1 AND desde = $2::date`,
+      { bind: [emisorId, desde], type: QueryTypes.SELECT },
+    );
+    const actual = actuales[0];
+    if (actual !== undefined && Number(actual.tasa) === Number(entrada.tasa)) {
+      return { desde, tasa: actual.tasa };
+    }
+    const ultima = await this.ultimaEmision.fecha(emisorId);
+    if (ultima !== null && desde <= ultima) {
+      throw new ErrorAplicacion(
+        409,
+        'CONFLICTO',
+        `El emisor ya emitió comprobantes hasta el ${ultima}: no se puede crear ni cambiar una tasa desde esa fecha o una anterior`,
+        [{ campo: 'desde', mensaje: 'Debe ser posterior al último comprobante emitido' }],
+      );
+    }
+    const guardadas = await this.conexion.query<{ id: string; tasa: string }>(
+      actual === undefined
+        ? `INSERT INTO emisor_tasa_igv (empresa_id, emisor_id, desde, tasa, creado_en, actualizado_en)
+           VALUES ($1, $2, $3::date, $4::numeric, $5, $5) RETURNING id, tasa::text AS tasa`
+        : `UPDATE emisor_tasa_igv SET tasa = $4::numeric, actualizado_en = $5
+            WHERE emisor_id = $2 AND desde = $3::date AND empresa_id = $1 RETURNING id, tasa::text AS tasa`,
+      {
+        bind: [this.contexto.empresaActual(), emisorId, desde, entrada.tasa, this.reloj.ahora()],
+        type: QueryTypes.SELECT,
+      },
+    );
+    const guardada = guardadas[0]!;
+    await this.auditoria.registrar({
+      accion: 'configurar_tasa_igv',
+      entidad: 'emisor_tasa_igv',
+      entidadId: guardada.id,
+      detalle: {
+        emisorId,
+        desde,
+        antes: actual?.tasa ?? null,
+        despues: guardada.tasa,
+      },
+    });
+    return { desde, tasa: guardada.tasa };
   }
 
   /**
-   * El emisor y la sucursal tal como se guardan en el comprobante (criterio 69). Lo usa el cobro (módulo de caja).
-   * FIRMA de la fase A.
+   * El emisor y la sucursal tal como se guardan en el comprobante (criterio 69). Lo usa el cobro (módulo de caja) y
+   * la emisión. 404 si la sucursal no es de la empresa.
    */
-  async datosParaComprobante(_sucursalId: string): Promise<DatosParaComprobante> {
-    throw noImplementado();
+  async datosParaComprobante(sucursalId: string): Promise<DatosParaComprobante> {
+    const filas = await this.conexion.query<{
+      sucursal_id: string;
+      nombre: string;
+      direccion: string;
+      codigo_establecimiento: string;
+      emisor_id: string;
+      ruc: string;
+      razon_social: string;
+      regimen: RegimenTributario;
+    }>(
+      `SELECT s.id AS sucursal_id, s.nombre, s.direccion, s.codigo_establecimiento::text AS codigo_establecimiento,
+              e.id AS emisor_id, e.ruc::text AS ruc, e.razon_social, e.regimen
+         FROM sucursal s
+         JOIN emisor e ON e.id = s.emisor_id AND e.empresa_id = s.empresa_id
+        WHERE s.id = $1`,
+      { bind: [sucursalId], type: QueryTypes.SELECT },
+    );
+    const fila = filas[0];
+    if (fila === undefined)
+      throw new ErrorAplicacion(404, 'NO_ENCONTRADO', 'La sucursal no existe');
+    return {
+      sucursal: {
+        id: fila.sucursal_id,
+        nombre: fila.nombre,
+        direccion: fila.direccion,
+        codigoEstablecimiento: fila.codigo_establecimiento,
+      },
+      emisor: {
+        id: fila.emisor_id,
+        ruc: fila.ruc,
+        razonSocial: fila.razon_social,
+        regimen: fila.regimen,
+      },
+    };
+  }
+
+  private async leerTasas(emisorId: string): Promise<TasaIgvRespuesta[]> {
+    return this.conexion.query<TasaIgvRespuesta>(
+      `SELECT to_char(desde, 'YYYY-MM-DD') AS desde, tasa::text AS tasa
+         FROM emisor_tasa_igv WHERE emisor_id = $1 ORDER BY desde`,
+      { bind: [emisorId], type: QueryTypes.SELECT },
+    );
+  }
+
+  private async exigirEmisor(emisorId: string, bloquear = false): Promise<void> {
+    const filas = await this.conexion.query<{ id: string }>(
+      `SELECT id FROM emisor WHERE id = $1${bloquear ? ' FOR NO KEY UPDATE' : ''}`,
+      { bind: [emisorId], type: QueryTypes.SELECT },
+    );
+    if (filas.length === 0) throw new ErrorAplicacion(404, 'NO_ENCONTRADO', 'El emisor no existe');
   }
 }

@@ -11,7 +11,7 @@ import {
 import { PipeUuid, PipeZod } from '../../nucleo/errores/pipes';
 import { Idempotente } from '../../nucleo/idempotencia';
 import { AuditoriaService } from '../auditoria';
-import { SoloAdministrador } from '../seguridad';
+import { Permiso, SoloAdministrador } from '../seguridad';
 import { EmisoresService } from './emisores.service';
 
 /** Emisores de la empresa de la sesión (criterios 9 y 70). */
@@ -46,20 +46,22 @@ export class EmisoresController {
   }
 
   /**
-   * Historia 006, criterio 6 (`ADMINISTRAR`, se agrega en la fase C): 200 `tasaIgvRespuesta[]` en orden de `desde`;
-   * 404 si el emisor es de otra empresa o no existe. FIRMA de la fase A.
+   * Historia 006, criterio 6 (`ADMINISTRAR`, sin módulo): 200 `tasaIgvRespuesta[]` en orden de `desde`; 403; 404 si
+   * el emisor es de otra empresa o no existe.
    */
   @Get(':id/tasas-igv')
+  @Permiso('ADMINISTRAR')
   async tasasIgv(@Param('id', PipeUuid) id: string): Promise<TasaIgvRespuesta[]> {
     return this.emisores.tasasIgv(id);
   }
 
   /**
-   * Historia 006, criterio 6 (`ADMINISTRAR`, se agrega en la fase C): crea o cambia la tasa desde `desde`. 200; 400;
-   * 404; 409 `CONFLICTO` (hay comprobantes emitidos desde esa fecha). Deja `configurar_tasa_igv` en la auditoría.
-   * FIRMA de la fase A.
+   * Historia 006, criterio 6 (`ADMINISTRAR`, sin módulo): crea o cambia la tasa desde `desde`. 200; 400; 403; 404; 409
+   * `CONFLICTO` (hay comprobantes emitidos desde esa fecha). Deja `configurar_tasa_igv` en la auditoría; repetir sin
+   * cambios responde 200 sin fila.
    */
   @Put(':id/tasas-igv/:desde')
+  @Permiso('ADMINISTRAR')
   async configurarTasaIgv(
     @Param('id', PipeUuid) id: string,
     @Param('desde', new PipeZod(tasaIgvDesdeSchema)) desde: string,
