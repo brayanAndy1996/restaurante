@@ -48,6 +48,15 @@ const MapaDeMesasPagina = lazy(() =>
     default: m.MapaDeMesasPagina,
   })),
 );
+// Cajas, series y tasa de IGV (006): cada pantalla es su bloque, que solo baja el Administrador al abrirla.
+const CajasPagina = lazy(() =>
+  import('./modulos/administracion/caja/CajasPagina').then((m) => ({ default: m.CajasPagina })),
+);
+const EmisoresPagina = lazy(() =>
+  import('./modulos/administracion/caja/EmisoresPagina').then((m) => ({
+    default: m.EmisoresPagina,
+  })),
+);
 const CartaWebPagina = lazy(() =>
   import('./modulos/administracion/carta-web/CartaWebPagina').then((m) => ({
     default: m.CartaWebPagina,
@@ -322,6 +331,8 @@ export function App() {
                 <Route path="/administracion/mesas/qr" element={<QrDeMesasPagina />} />
                 <Route path="/administracion/impresion" element={<ImpresionPagina />} />
                 <Route path="/administracion/carta-web" element={<CartaWebPagina />} />
+                <Route path="/administracion/cajas" element={<CajasPagina />} />
+                <Route path="/administracion/emisores" element={<EmisoresPagina />} />
               </Route>
             </Route>
           </Route>
