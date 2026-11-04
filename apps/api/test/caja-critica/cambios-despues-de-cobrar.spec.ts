@@ -289,7 +289,8 @@ describe('criterio 89 · la pre-cuenta con cobros', () => {
     // La pre-cuenta sigue sin ICBPER (pregunta 11): su total es el de 004 (68.20). Lo pagado es lo cobrado.
     expect(pre.total).toBe('68.20');
     expect(pre.pagado).toBe('28.00');
-    expect(pre.porPagar).toMatch(/^\d+\.\d{2}$/);
+    // Por pagar es el saldo sin ICBPER: la caja cobrará 41.20 (40.20 más 1.00 de ICBPER).
+    expect(pre.porPagar).toBe('40.20');
     // Una cuenta sin cobros no trae esos campos.
     const limpia = await cuentaC(ctx, A());
     const sin = await escribir(
@@ -306,5 +307,28 @@ describe('criterio 89 · la pre-cuenta con cobros', () => {
     expect(sin.body.porPagar).toBeUndefined();
     void api;
     void filas;
+  });
+
+  it('con una de dos partes iguales cobrada: total 68.20, pagado 34.60 y por pagar 34.10 (la caja cobrará 34.60)', async () => {
+    const cuenta = await cuentaC(ctx, A());
+    await cobrar(ctx, A().token.cajero!, cuenta, {
+      turnoId: await turno(),
+      total: '34.60',
+      parte: { tipo: 'IGUALES', partesRestantes: 2 },
+      formato: 'CONSUMO',
+    });
+    const res = await escribir(
+      ctx,
+      A().token.mozo!,
+      'post',
+      `/ordenes/${cuenta.ordenId}/precuentas`,
+      {
+        id: randomUUID(),
+      },
+    );
+    exigirEstado(res, 201, 'Pedir la pre-cuenta');
+    const pre = precuentaRespuestaSchema.parse(res.body);
+    expect(pre).toMatchObject({ total: '68.20', pagado: '34.60', porPagar: '34.10' });
+    expect(pre.nota).toContain('El ICBPER se suma al cobrar');
   });
 });

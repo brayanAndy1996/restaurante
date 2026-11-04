@@ -108,6 +108,11 @@ describe('criterio 64 · por ítems', () => {
     const lineas = await lineasDe(cobro.comprobante.id);
     const consumo = lineas.filter((l) => !l.gratuita && Number(l.bolsas) === 0);
     expect(consumo.map((l) => l.afectacion).sort()).toEqual(['EXONERADO', 'GRAVADO']);
+    // Las líneas "Por consumo" son de una unidad en ZZ y su precio unitario es su bruto.
+    for (const l of consumo) {
+      expect(l).toMatchObject({ descripcion: 'Por consumo', cantidad: 1, unidad: 'ZZ' });
+      expect(l.precio_unitario).toBe(l.bruto);
+    }
     expect(lineas.filter((l) => Number(l.bolsas) > 0)).toHaveLength(1);
   });
 
@@ -310,7 +315,18 @@ describe('criterio 67 · cortesías y bolsas en las partes', () => {
     const gratuitas = async (id: string) => (await lineasDe(id)).filter((l) => l.gratuita);
     const g1 = await gratuitas(primera.comprobante.id);
     expect(g1).toHaveLength(1);
-    expect(g1[0]).toMatchObject({ valor_referencial: '9.00', base: '7.63', igv: '1.37' });
+    // Una línea gratuita no cobra nada (todo en cero) y lleva su valor referencial con su base y su IGV.
+    expect(g1[0]).toMatchObject({
+      bruto: '0.00',
+      descuento: '0.00',
+      neto: '0.00',
+      base: '0.00',
+      igv: '0.00',
+      unidad: 'NIU',
+      valor_referencial: '9.00',
+      base_referencial: '7.63',
+      igv_referencial: '1.37',
+    });
     expect(await gratuitas(segunda.comprobante.id)).toEqual([]);
   });
 

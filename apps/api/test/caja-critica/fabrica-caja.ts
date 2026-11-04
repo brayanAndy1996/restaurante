@@ -316,6 +316,10 @@ async function prepararEmpresa(
         await alta('cajero2', [{ sucursalId: S1, rol: 'CAJERO' }]),
         await alta('supervisor', [{ sucursalId: S1, rol: 'SUPERVISOR' }]),
         await alta('mozo', [{ sucursalId: S1, rol: 'MOZO' }]),
+        await alta('mozoMulti', [
+          { sucursalId: S1, rol: 'MOZO' },
+          { sucursalId: S2, rol: 'MOZO' },
+        ]),
         await alta('cocina', [{ sucursalId: S1, rol: 'COCINA_BARRA' }]),
         await alta('supervisorS2', [{ sucursalId: S2, rol: 'SUPERVISOR' }]),
         await alta('supervisorS3', [{ sucursalId: S3!, rol: 'SUPERVISOR' }]),

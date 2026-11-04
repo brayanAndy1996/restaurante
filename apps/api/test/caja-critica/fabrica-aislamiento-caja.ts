@@ -117,13 +117,13 @@ export async function sembrarFilasCaja(apiCliente: Client, base: BaseCaja): Prom
       `INSERT INTO comprobante (id, empresa_id, sucursal_id, emisor_id, caja_id, turno_id, turno_responsable_id, cobro_id,
                                 serie_id, tipo, serie, numero, formato, fecha_emision, emitido_en, dia_operativo, emisor,
                                 sucursal, moneda, tasa_igv, subtotal, descuentos, op_gravadas, op_exoneradas, op_inafectas,
-                                op_gratuitas, igv, igv_gratuitas, icbper, total, monto_en_letras, orden_id, numero_parte,
+                                op_gratuitas, igv, igv_gratuitas, icbper, total, monto_en_letras, orden_id, mesas, numero_parte,
                                 detalle_parte, estado, creado_en, actualizado_en)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'BOLETA', 'B001', $10, 'DETALLADO', '2026-11-02', now(), '2026-11-02',
                '{"ruc":"20100070970","razonSocial":"Prueba SAC","regimen":"GENERAL"}'::jsonb,
                '{"nombre":"Sede","direccion":"Av. Prueba 1","codigoEstablecimiento":"0001"}'::jsonb,
                'PEN', '18.00', '50.00', '0.00', '42.37', '0.00', '0.00', '0.00', '7.63', '0.00', '0.00', '50.00',
-               'CINCUENTA CON 00/100 SOLES', $11, $12, '{}'::jsonb, 'POR_ENVIAR', now(), now())`,
+               'CINCUENTA CON 00/100 SOLES', $11, '{}'::text[], $12, '{}'::jsonb, 'POR_ENVIAR', now(), now())`,
       [
         id,
         E,
@@ -176,8 +176,8 @@ export async function sembrarFilasCaja(apiCliente: Client, base: BaseCaja): Prom
         [f.movimiento, E, f.turno],
       );
       await q(
-        `INSERT INTO serie (id, empresa_id, caja_id, emisor_id, tipo, serie, ultimo_numero, activa, creado_en, actualizado_en)
-         VALUES ($1, $2, $3, $4, 'BOLETA', 'B001', 2, true, now(), now())`,
+        `INSERT INTO serie (id, empresa_id, caja_id, emisor_id, tipo, serie, primer_numero, ultimo_numero, activa, creado_en, actualizado_en)
+         VALUES ($1, $2, $3, $4, 'BOLETA', 'B001', 1, 2, true, now(), now())`,
         [f.serie, E, f.caja, base.emisorId],
       );
       await comprobante(f.comprobante, 1, f.cobro);
@@ -185,9 +185,10 @@ export async function sembrarFilasCaja(apiCliente: Client, base: BaseCaja): Prom
       await q(
         `INSERT INTO comprobante_linea (id, empresa_id, comprobante_id, posicion, item_id, descripcion, cantidad, unidad,
                                         precio_unitario, valor_unitario, bruto, descuento, neto, base, igv, bolsas, icbper,
-                                        afectacion, gratuita, valor_referencial, creado_en, actualizado_en)
+                                        afectacion, gratuita, valor_referencial, base_referencial, igv_referencial, creado_en,
+                                        actualizado_en)
          VALUES ($1, $2, $3, 1, NULL, 'Lomo saltado', 2, 'NIU', '25.00', '21.1864406780', '50.00', '0.00', '50.00',
-                 '42.37', '7.63', 0, '0.00', 'GRAVADO', false, NULL, now(), now())`,
+                 '42.37', '7.63', 0, '0.00', 'GRAVADO', false, NULL, NULL, NULL, now(), now())`,
         [f.linea, E, f.comprobante],
       );
       await q(

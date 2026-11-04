@@ -22,6 +22,7 @@ import {
   cerrarTurnoCrudo,
   cobrar,
   conteo,
+  contar,
   crearCaja,
   crearEscenario,
   cuentaC,
@@ -31,6 +32,7 @@ import {
   exigirEstado,
   filas,
   sesionContrasena,
+  trabajosDe,
   type AppP5,
   type Escenario,
 } from './fabrica-caja';
@@ -76,15 +78,50 @@ describe('criterio 24 · abrir', () => {
     await cerrarSiAbierto(id, A().token.cajero!);
   });
 
-  it('repetir el mismo id devuelve el turno sin crear otro; con otra caja u otro fondo, 422 CLAVE_IDEMPOTENCIA_REUTILIZADA', async () => {
+  it('repetir el mismo id (misma clave, otra clave u otra sesión) responde 201 con el turno, aunque esté cerrado, sin efectos', async () => {
     const cajas = await A().cajas();
     const id = randomUUID();
-    const primera = await abrirTurnoCrudo(ctx, A().token.cajero2!, cajas.S1!.caja2, '50.00', id);
+    const clave = randomUUID();
+    const primera = await abrirTurnoCrudo(
+      ctx,
+      A().token.cajero2!,
+      cajas.S1!.caja2,
+      '50.00',
+      id,
+      clave,
+    );
     exigirEstado(primera, 201, 'Abrir el turno');
-    const otra = await abrirTurnoCrudo(ctx, A().token.cajero2!, cajas.S1!.caja2, '50.00', id);
-    expect([200, 201], otra.text).toContain(otra.status);
-    expect(otra.body).toEqual(primera.body);
+    const auditoriaAntes = await contar('SELECT 1 FROM auditoria WHERE empresa_id = $1', [A().id]);
+    const gavetasAntes = (await trabajosDe(A().S1, 'GAVETA')).length;
+    ctx.publicador.limpiar();
+    const misma = await abrirTurnoCrudo(
+      ctx,
+      A().token.cajero2!,
+      cajas.S1!.caja2,
+      '50.00',
+      id,
+      clave,
+    );
+    expect(misma.status, misma.text).toBe(201);
+    expect(misma.body).toEqual(primera.body);
+    const otraClave = await abrirTurnoCrudo(ctx, A().token.cajero2!, cajas.S1!.caja2, '50.00', id);
+    expect(otraClave.status, otraClave.text).toBe(201);
+    expect(otraClave.body).toEqual(primera.body);
+    const otraSesion = await abrirTurnoCrudo(
+      ctx,
+      A().token.supervisor!,
+      cajas.S1!.caja2,
+      '50.00',
+      id,
+    );
+    expect(otraSesion.status, otraSesion.text).toBe(201);
+    expect(otraSesion.body.id).toBe(id);
     expect(await turnosAbiertosDe(cajas.S1!.caja2)).toBe(1);
+    expect(ctx.publicador.eventos()).toEqual([]);
+    expect(await contar('SELECT 1 FROM auditoria WHERE empresa_id = $1', [A().id])).toBe(
+      auditoriaAntes,
+    );
+    expect((await trabajosDe(A().S1, 'GAVETA')).length).toBe(gavetasAntes);
     esperarError(
       await abrirTurnoCrudo(ctx, A().token.cajero2!, cajas.S1!.caja2, '60.00', id),
       422,
@@ -95,7 +132,12 @@ describe('criterio 24 · abrir', () => {
       422,
       'CLAVE_IDEMPOTENCIA_REUTILIZADA',
     );
-    await cerrarSiAbierto(primera.body.id, A().token.cajero2!);
+    // Con el turno ya cerrado la réplica sigue siendo 201 y trae el estado actual.
+    await cerrarSiAbierto(id, A().token.cajero2!);
+    const cerrado = await abrirTurnoCrudo(ctx, A().token.cajero2!, cajas.S1!.caja2, '50.00', id);
+    expect(cerrado.status, cerrado.text).toBe(201);
+    expect(cerrado.body).toMatchObject({ id, estado: 'CERRADO' });
+    expect(await turnosAbiertosDe(cajas.S1!.caja2)).toBe(0);
   });
 
   it('una caja inactiva responde 409 CONFLICTO; una caja de otra sucursal, de B o inexistente, 404', async () => {
@@ -360,15 +402,52 @@ describe('criterio 28 · ingresos y egresos', () => {
     expect(fila!.medio).toBe('EFECTIVO');
   });
 
-  it('repetir el mismo id devuelve el movimiento sin registrar otro', async () => {
+  it('repetir el mismo id responde 201 con el movimiento guardado, sin otro, sin eventos; otro tipo u otro monto, 422', async () => {
     const turnoId = await turnoPropio();
     const id = randomUUID();
     const a = await mov(A().token.cajero!, turnoId, { id });
-    const b = await mov(A().token.cajero!, turnoId, { id });
     expect(a.status).toBe(201);
-    expect([200, 201]).toContain(b.status);
+    ctx.publicador.limpiar();
+    const b = await mov(A().token.cajero!, turnoId, { id });
+    expect(b.status, b.text).toBe(201);
     expect(b.body).toEqual(a.body);
+    expect(ctx.publicador.eventos()).toEqual([]);
     expect(await filas('SELECT 1 FROM movimiento_caja WHERE id = $1', [id])).toHaveLength(1);
+    esperarError(
+      await mov(A().token.cajero!, turnoId, { id, tipo: 'EGRESO' }),
+      422,
+      'CLAVE_IDEMPOTENCIA_REUTILIZADA',
+    );
+    esperarError(
+      await mov(A().token.cajero!, turnoId, { id, monto: '21.00' }),
+      422,
+      'CLAVE_IDEMPOTENCIA_REUTILIZADA',
+    );
+    // Con otro motivo devuelve el guardado, con su motivo original.
+    const otroMotivo = await mov(A().token.cajero!, turnoId, {
+      id,
+      motivo: 'Otro motivo distinto',
+    });
+    expect(otroMotivo.status, otroMotivo.text).toBe(201);
+    expect(otroMotivo.body).toEqual(a.body);
+    expect(await filas('SELECT 1 FROM movimiento_caja WHERE id = $1', [id])).toHaveLength(1);
+  });
+
+  it('la réplica de un movimiento se reconoce aunque el turno ya esté cerrado', async () => {
+    const cajas = await A().cajas();
+    const t = await abrirTurno(ctx, A().token.cajero2!, cajas.S1!.caja2);
+    const id = randomUUID();
+    const original = await mov(A().token.cajero2!, t, { id });
+    exigirEstado(original, 201, 'Registrar el movimiento');
+    exigirEstado(
+      await cerrarTurnoCrudo(ctx, A().token.cajero2!, t, conteo({ EFECTIVO: '220.00' }, MOTIVOS)),
+      200,
+      'Cerrar',
+    );
+    const replica = await mov(A().token.cajero2!, t, { id });
+    expect(replica.status, replica.text).toBe(201);
+    expect(replica.body).toEqual(original.body);
+    esperarError(await mov(A().token.cajero2!, t), 409, 'TURNO_CERRADO');
   });
 
   it('un Supervisor registra en el turno ajeno; otro Cajero recibe 409 TURNO_AJENO; un Mozo, 403', async () => {

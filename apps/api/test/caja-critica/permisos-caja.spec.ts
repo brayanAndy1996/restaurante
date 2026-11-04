@@ -340,6 +340,49 @@ describe('criterio 99 · rechazos por rol', () => {
     expect(fallos, fallos.join('\n')).toEqual([]);
   });
 
+  it('sin sucursal activa no hay rol que evaluar: un Mozo que sería rechazado ve 409 SUCURSAL_NO_ELEGIDA, no 403', async () => {
+    const sinSucursal = await sesionContrasena(ctx, A().personas.mozoMulti!, null);
+    const fallos: string[] = [];
+    for (const ruta of RUTAS.filter((x) => x.modulo !== null)) {
+      const res = await api(
+        ctx,
+        sinSucursal,
+        ruta.metodo,
+        ruta.ruta(randomUUID(), A().S1),
+        ruta.metodo === 'get' || ruta.metodo === 'delete' ? undefined : {},
+        { 'Idempotency-Key': randomUUID() },
+      );
+      if (res.status !== 409 || res.body.codigo !== 'SUCURSAL_NO_ELEGIDA') {
+        fallos.push(`${ruta.clave}: ${res.status} ${res.body.codigo}`);
+      }
+    }
+    expect(fallos, fallos.join('\n')).toEqual([]);
+  });
+
+  it('el Administrador sin sucursal activa recibe 409 SUCURSAL_NO_ELEGIDA en las rutas con módulo; las de configuración no la necesitan', async () => {
+    const admin = A().token.admin!;
+    const fallos: string[] = [];
+    for (const ruta of RUTAS.filter((x) => x.modulo !== null)) {
+      const res = await api(
+        ctx,
+        admin,
+        ruta.metodo,
+        ruta.ruta(randomUUID(), A().S1),
+        ruta.metodo === 'get' || ruta.metodo === 'delete' ? undefined : {},
+        { 'Idempotency-Key': randomUUID() },
+      );
+      if (res.status !== 409 || res.body.codigo !== 'SUCURSAL_NO_ELEGIDA') {
+        fallos.push(`${ruta.clave}: ${res.status} ${res.body.codigo}`);
+      }
+    }
+    expect(fallos, fallos.join('\n')).toEqual([]);
+    exigirEstado(
+      await api(ctx, admin, 'get', `/sucursales/${A().S1}/cajas`),
+      200,
+      'Configuración sin sucursal activa',
+    );
+  });
+
   it('el rol es el de la sucursal activa: el Cajero de S1 es Mozo en S2 y recibe 403 PROHIBIDO en las rutas de COBRAR y OPERAR_CAJA', async () => {
     const enS2 = await sesionContrasena(ctx, A().personas.cajero!, A().S2);
     for (const ruta of RUTAS.filter((x) => x.accion === 'COBRAR' || x.accion === 'OPERAR_CAJA')) {

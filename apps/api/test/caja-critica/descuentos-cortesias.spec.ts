@@ -145,6 +145,8 @@ describe('criterios 38, 39 y 42 · descuentos', () => {
     const vista = await api(ctx, A().token.cajero, 'get', `/cuentas/${cuenta.ordenId}`);
     exigirEstado(vista, 200, 'GET /cuentas/:ordenId (006, criterio 36)');
     expect(vista.body.totales).toMatchObject({ descuentos: '5.60', total: '63.60' });
+    // `version` de la cuenta es `orden.version` (criterio 36).
+    expect(vista.body.version).toBe(await versionDe(cuenta.ordenId));
     expect(vista.body.lineas.find((l: Libre) => l.itemId === cuenta.item.lomo)).toMatchObject({
       neto: '50.40',
       descuento: { monto: '5.60' },
@@ -418,24 +420,31 @@ describe('criterio 40 · la clave queda atada a lo autorizado', () => {
     expect(await filasDeDescuento(cuenta.ordenId)).toEqual([]);
   });
 
-  it('una autorización vencida (más de 2 minutos) responde 403 AUTORIZACION_INVALIDA', async () => {
+  it('una autorización vencida (ahora ≥ expiraEn, 2 minutos) responde 403 AUTORIZACION_INVALIDA; un instante antes todavía sirve', async () => {
     const cuenta = await cuentaC(ctx, A());
-    const auth = await autorizar(
-      ctx,
-      A().token.cajero!,
-      pin(),
-      'APLICAR_DESCUENTO',
-      objetivoDescuento(cuenta, cuenta.item.lomo!),
-    );
-    ctx.reloj.avanzar(2 * 60_000 + 1_000);
-    const res = await descuento(
+    const objetivo = objetivoDescuento(cuenta, cuenta.item.lomo!);
+    const auth = await autorizar(ctx, A().token.cajero!, pin(), 'APLICAR_DESCUENTO', objetivo);
+    ctx.reloj.avanzar(2 * 60_000);
+    const exacta = await descuento(
       A().token.cajero!,
       cuenta,
       { itemId: cuenta.item.lomo! },
       auth.autorizacionId,
     );
-    esperarError(res, 403, 'AUTORIZACION_INVALIDA');
+    esperarError(exacta, 403, 'AUTORIZACION_INVALIDA');
     expect(await filasDeDescuento(cuenta.ordenId)).toEqual([]);
+    const justa = await autorizar(ctx, A().token.cajero!, pin(), 'APLICAR_DESCUENTO', objetivo);
+    ctx.reloj.avanzar(2 * 60_000 - 1_000);
+    exigirEstado(
+      await descuento(
+        A().token.cajero!,
+        cuenta,
+        { itemId: cuenta.item.lomo! },
+        justa.autorizacionId,
+      ),
+      201,
+      'Un segundo antes de vencer',
+    );
   });
 
   it('la autorización se consume una vez; si la acción falla después se devuelve y se puede usar de nuevo', async () => {

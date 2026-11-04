@@ -157,7 +157,9 @@ describe('criterios 69 y 75 · lo que guarda el comprobante', () => {
       orden: { id: cuenta.ordenId, numeroLlamado: null },
     });
     expect(c.numero).toBe(`B001-${String(c.correlativo).padStart(8, '0')}`);
-    expect(c.orden!.mesas).toHaveLength(1);
+    const [mesa] = await filas('SELECT nombre FROM mesa WHERE id = $1', [cuenta.mesaId]);
+    expect(c.orden!.mesas).toEqual([mesa!.nombre]);
+    expect(c.orden!.mozo).toBe(A().personas.mozo!.respuesta.nombre);
     const porNombre = Object.fromEntries(c.lineas.map((l) => [l.descripcion, l]));
     const lomo = Object.values(porNombre).find((l) => l.descripcion.startsWith('Lomo'))!;
     expect(lomo).toMatchObject({
@@ -172,15 +174,19 @@ describe('criterios 69 y 75 · lo que guarda el comprobante', () => {
       unidad: 'NIU',
       gratuita: false,
     });
-    expect(lomo.valorUnitario).toMatch(/^\d+\.\d{10}$/);
-    expect(Math.abs(Number(lomo.valorUnitario) - 28 / 1.18)).toBeLessThan(0.01);
+    expect(lomo).toMatchObject({
+      descripcion: 'Lomo saltado [3/4]',
+      valorUnitario: '23.7288135593',
+    });
     expect(c.lineas.find((l) => l.descripcion.startsWith('Gaseosa'))).toMatchObject({
+      valorUnitario: '7.6271186441',
       neto: '9.00',
       base: '7.63',
       igv: '1.37',
     });
     expect(c.lineas.find((l) => l.descripcion.startsWith('Bolsa'))).toMatchObject({
       cantidad: 2,
+      valorUnitario: '0.0847457627',
       bruto: '0.20',
       base: '0.17',
       igv: '0.03',
@@ -188,6 +194,7 @@ describe('criterios 69 y 75 · lo que guarda el comprobante', () => {
       icbper: '1.00',
     });
     expect(c.lineas.find((l) => l.descripcion.startsWith('Mandarina'))).toMatchObject({
+      valorUnitario: '3.0000000000',
       neto: '3.00',
       base: '3.00',
       igv: '0.00',
@@ -651,5 +658,25 @@ describe('criterio 74 · fecha de emisión y día operativo', () => {
         'CONFLICTO',
       );
     }
+  });
+
+  it('la cuota del mes es la de Lima: un cobro a las 23:30 del 30 de noviembre cuenta en 2026-11 aunque en UTC ya sea diciembre', async () => {
+    const turnoId = await turno1();
+    const consumo = async (periodo: string) =>
+      Number(
+        (
+          await filas(
+            `SELECT coalesce(sum(emitidos), 0) AS n FROM consumo_comprobantes WHERE sucursal_id = $1 AND periodo = $2`,
+            [A().S1, periodo],
+          )
+        )[0]!.n,
+      );
+    const noviembre = await consumo('2026-11');
+    const diciembre = await consumo('2026-12');
+    ctx.reloj.fijar('2026-11-30T23:30:00-05:00');
+    tokenCajero = await sesionContrasena(ctx, A().personas.cajero!, A().S1);
+    await cobrar(ctx, tokenCajero, await cuentaC(ctx, A()), { turnoId, total: '69.20' });
+    expect(await consumo('2026-11')).toBe(noviembre + 1);
+    expect(await consumo('2026-12')).toBe(diciembre);
   });
 });

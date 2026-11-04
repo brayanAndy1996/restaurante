@@ -41,7 +41,7 @@ import {
   type Escenario,
   type Res,
 } from './fabrica-caja';
-import { filasAuditoria } from '../acceso/fabrica-equipos';
+import { filasAuditoria, sesionDeSoporte } from '../acceso/fabrica-equipos';
 
 vi.setConfig({ testTimeout: 180_000, hookTimeout: 300_000 });
 
@@ -158,6 +158,44 @@ describe('criterio 29 · reporte X', () => {
       { medio: 'PLIN', monto: '69.20' },
     ]);
     expect(x.cierre).toBeUndefined();
+  });
+
+  it('el X de un turno sin ventas trae los cinco medios en cero, sin tipos y con el fondo como esperado en efectivo', async () => {
+    await turnoConCobros(); // el turno del ejemplo sigue abierto: este no es el último
+    const cajas = await A().cajas();
+    const vacio = await abrirTurno(ctx, A().token.cajero2!, cajas.S1!.caja2, '50.00');
+    const res = await api(ctx, A().token.cajero2, 'get', `/turnos/${vacio}/reporte`);
+    exigirEstado(res, 200, 'X de un turno sin ventas');
+    const x = reporteCajaSchema.parse(res.body);
+    expect(x.ventas).toMatchObject({
+      total: '0.00',
+      cantidad: 0,
+      porTipo: [],
+      vueltos: '0.00',
+      redondeos: '0.00',
+    });
+    expect(x.ventas.porMedio).toEqual(
+      MEDIOS.map((medio) => ({ medio, cantidad: 0, monto: '0.00' })),
+    );
+    expect(x.movimientos).toMatchObject({ ingresos: '0.00', egresos: '0.00', lista: [] });
+    expect(x.esperado[0]).toEqual({ medio: 'EFECTIVO', monto: '50.00' });
+    const motivos = {
+      EFECTIVO: 'x',
+      TARJETA_CREDITO: 'x',
+      TARJETA_DEBITO: 'x',
+      YAPE: 'x',
+      PLIN: 'x',
+    };
+    exigirEstado(
+      await cerrarTurnoCrudo(
+        ctx,
+        A().token.cajero2!,
+        vacio,
+        conteo({ EFECTIVO: '50.00' }, motivos),
+      ),
+      200,
+      'Cerrar',
+    );
   });
 
   it('pedir el X no cambia nada y se puede repetir; el Supervisor lo ve, otro Cajero no', async () => {
@@ -366,6 +404,35 @@ describe('criterio 35 · quién cierra', () => {
   });
 });
 
+describe('criterio 35 · la sesión de soporte no cierra turnos', () => {
+  it('cerrar con una sesión de soporte responde 422 REFERENCIA_INVALIDA y el turno sigue abierto', async () => {
+    const cajas = await A().cajas();
+    const turnoId = await abrirTurno(ctx, A().token.cajero2!, cajas.S1!.caja2, '10.00');
+    const soporte = await sesionDeSoporte(ctx.app, esc.sa.token, A().id, A().S1);
+    const motivos = {
+      EFECTIVO: 'x',
+      TARJETA_CREDITO: 'x',
+      TARJETA_DEBITO: 'x',
+      YAPE: 'x',
+      PLIN: 'x',
+    };
+    esperarError(
+      await cerrarTurnoCrudo(ctx, soporte, turnoId, conteo({}, motivos)),
+      422,
+      'REFERENCIA_INVALIDA',
+    );
+    expect((await filas('SELECT estado FROM turno WHERE id = $1', [turnoId]))[0]!.estado).toBe(
+      'ABIERTO',
+    );
+    expect(await filas('SELECT 1 FROM turno_conteo WHERE turno_id = $1', [turnoId])).toEqual([]);
+    exigirEstado(
+      await cerrarTurnoCrudo(ctx, A().token.cajero2!, turnoId, conteo({}, motivos)),
+      200,
+      'Cerrar',
+    );
+  });
+});
+
 describe('criterio 33 · el último turno no se cierra con mesas abiertas', () => {
   const ordenesAbiertas = async () =>
     (
@@ -444,5 +511,41 @@ describe('criterio 33 · el último turno no se cierra con mesas abiertas', () =
       [A().S3],
     );
     expect(abiertos).toHaveLength(1);
+  });
+
+  it('bloquean ABIERTA y EN_PRECUENTA; una orden UNIDA no cuenta y `ordenes` es cuántas hay en esos dos estados', async () => {
+    const [ultimo] = await filas(
+      `SELECT id, responsable_id FROM turno WHERE estado = 'ABIERTO' AND sucursal_id = $1`,
+      [A().S3],
+    );
+    const token =
+      ultimo!.responsable_id === A().personas.cajeroS3!.id
+        ? A().token.cajeroS3!
+        : A().token.supervisorS3!;
+    const enPrecuenta = await cuentaCon(ctx, A(), 'S3', [['lomo', 1]]);
+    exigirEstado(
+      await escribir(ctx, enPrecuenta.token, 'post', `/ordenes/${enPrecuenta.ordenId}/precuentas`, {
+        id: randomUUID(),
+      }),
+      201,
+      'Pedir la pre-cuenta',
+    );
+    const principal = await cuentaCon(ctx, A(), 'S3', [['gaseosa', 1]]);
+    const absorbida = await cuentaCon(ctx, A(), 'S3', [['gaseosa', 1]]);
+    exigirEstado(
+      await escribir(ctx, principal.token, 'post', `/ordenes/${principal.ordenId}/union`, {
+        mesaIds: [absorbida.mesaId],
+      }),
+      200,
+      'Unir las mesas',
+    );
+    const esperadas = await ordenesAbiertas();
+    expect(esperadas).toBeGreaterThanOrEqual(3);
+    const res = await cierre(token, ultimo!.id as string);
+    esperarError(res, 409, 'CIERRE_BLOQUEADO');
+    expect(res.body.ordenes).toBe(esperadas);
+    expect((await filas(`SELECT estado FROM turno WHERE id = $1`, [ultimo!.id]))[0]!.estado).toBe(
+      'ABIERTO',
+    );
   });
 });

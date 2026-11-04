@@ -124,7 +124,7 @@ describe('criterios 79 a 82 · vender', () => {
     expect(cobro.comprobante).toMatchObject({
       tipo: 'BOLETA',
       estado: 'POR_ENVIAR',
-      orden: { id: venta.ordenId, mesas: [], numeroLlamado: 1 },
+      orden: { id: venta.ordenId, mesas: [], mozo: null, numeroLlamado: 1 },
     });
     // El envío de 004: una comanda por estación con ruteo (Cocina por el Lomo, Barra por el Pisco sour).
     expect(envio.comandas.map((c: Libre) => c.estacionNombre).sort()).toEqual(['Barra', 'Cocina']);
@@ -141,6 +141,11 @@ describe('criterios 79 a 82 · vender', () => {
     expect(await filas('SELECT 1 FROM orden_mesa WHERE orden_id = $1', [venta.ordenId])).toEqual(
       [],
     );
+    const [guardado] = await filas(
+      'SELECT mesas, mozo_nombre, numero_llamado FROM comprobante WHERE id = $1',
+      [cobro.comprobante.id],
+    );
+    expect(guardado).toEqual({ mesas: [], mozo_nombre: null, numero_llamado: 1 });
     // El puerto de inventario se llamó como en cualquier envío.
     expect(ctx.inventario.alEnviarLlamadas().length).toBeGreaterThan(0);
   });
@@ -159,6 +164,7 @@ describe('criterios 79 a 82 · vender', () => {
     for (const c of comandas) {
       expect(c.orden.numeroLlamado).toBe(venta.numeroLlamado);
       expect(c.orden.mesas).toEqual([]);
+      expect(c.orden.mozo).toBeNull();
     }
   });
 

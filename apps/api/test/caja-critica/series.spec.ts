@@ -9,6 +9,7 @@
 //   emisor, las series del emisor anterior ya no emiten (409 SIN_SERIE) hasta configurar series del emisor nuevo.
 // Hoy falla por "No implementado": las rutas de caja responden 500 sin `@Permiso`.
 import { cajaRespuestaSchema } from '@restaurante/contratos';
+import { filasAuditoria } from '../acceso/fabrica-equipos';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import {
   abrirTurno,
@@ -160,6 +161,67 @@ describe('criterio 5 · una serie usada no cambia', () => {
     });
     expect(reactivada.series.find((s) => s.serie === 'B502')).toMatchObject({ activa: false });
     expect(cajas.S1).toBeTruthy();
+  });
+
+  it('reactivar con un primerNumero ausente o igual no cambia nada y el siguiente comprobante sigue el último número; uno distinto es 409 CONFLICTO', async () => {
+    const nueva = (await crearCaja(ctx, admin(), A().S1, 'Caja de serie usada')).id as string;
+    exigirEstado(
+      await ponerSerie(ctx, admin(), A().S1, nueva, 'BOLETA', 'B124', 124),
+      200,
+      'Serie desde el 124',
+    );
+    const sup = A().token.supervisor!;
+    const turnoId = await abrirTurno(ctx, sup, nueva, '10.00');
+    // Se usa hasta el 126.
+    for (let i = 0; i < 3; i++)
+      await cobrar(ctx, sup, await cuentaC(ctx, A()), { turnoId, total: '69.20' });
+    expect(
+      (
+        await filas('SELECT ultimo_numero FROM serie WHERE caja_id = $1 AND serie = $2', [
+          nueva,
+          'B124',
+        ])
+      )[0]!.ultimo_numero,
+    ).toBe(126);
+    // Pasa a otra serie y B124 queda inactiva con su número.
+    exigirEstado(
+      await ponerSerie(ctx, admin(), A().S1, nueva, 'BOLETA', 'B125'),
+      200,
+      'Otra serie',
+    );
+    const auditoria = async () => (await filasAuditoria(A().id, 'configurar_serie')).length;
+    for (const primerNumero of [undefined, 124]) {
+      const res = await ponerSerie(ctx, admin(), A().S1, nueva, 'BOLETA', 'B124', primerNumero);
+      exigirEstado(res, 200, `Reactivar B124 con primerNumero ${primerNumero}`);
+      expect(res.body.series.find((x: { serie: string }) => x.serie === 'B124')).toMatchObject({
+        activa: true,
+        ultimoNumero: 126,
+      });
+      exigirEstado(
+        await ponerSerie(ctx, admin(), A().S1, nueva, 'BOLETA', 'B125'),
+        200,
+        'Volver a B125',
+      );
+    }
+    exigirEstado(
+      await ponerSerie(ctx, admin(), A().S1, nueva, 'BOLETA', 'B124'),
+      200,
+      'Reactivar B124',
+    );
+    // Un primerNumero distinto: 409 con campos.primerNumero, también al repetir el PUT de la serie activa, y nada cambia.
+    const filasAntes = await auditoria();
+    for (const intento of [1, 200]) {
+      const res = await ponerSerie(ctx, admin(), A().S1, nueva, 'BOLETA', 'B124', intento);
+      esperarError(res, 409, 'CONFLICTO');
+      expect((res.body.campos as Array<{ campo: string }>).map((c) => c.campo)).toContain(
+        'primerNumero',
+      );
+    }
+    // Repetir el PUT de la serie activa sin cambios: 200 sin fila de auditoría.
+    exigirEstado(await ponerSerie(ctx, admin(), A().S1, nueva, 'BOLETA', 'B124'), 200, 'Repetir');
+    expect(await auditoria()).toBe(filasAntes);
+    const siguiente = await cobrar(ctx, sup, await cuentaC(ctx, A()), { turnoId, total: '69.20' });
+    expect(siguiente.comprobante.numero).toBe('B124-00000127');
   });
 
   it('si la sucursal cambia de emisor, las series del emisor anterior ya no emiten: 409 SIN_SERIE hasta configurar las nuevas', async () => {
