@@ -1,8 +1,15 @@
 import { Inject, Injectable } from '@nestjs/common';
-import type { EmisorCrearEntrada, EmisorRespuesta } from '@restaurante/contratos';
+import type {
+  EmisorCrearEntrada,
+  EmisorRespuesta,
+  TasaIgvEntrada,
+  TasaIgvRespuesta,
+} from '@restaurante/contratos';
+import type { RegimenTributario } from '@restaurante/dominio';
 import { SQLSTATE, sqlstateDe } from '../../nucleo/base-de-datos';
 import { ContextoEmpresa } from '../../nucleo/contexto-empresa';
 import { ErrorAplicacion } from '../../nucleo/errores/error-aplicacion';
+import { noImplementado } from '../../nucleo/errores';
 import { MODELOS_API, type EmisorModelo, type Modelos } from './modelos';
 
 /** Fila de la tabla a la forma de `emisorRespuesta` (fechas ISO 8601). */
@@ -16,6 +23,15 @@ export function emisorARespuesta(emisor: EmisorModelo): EmisorRespuesta {
     creadoEn: emisor.creadoEn.toISOString(),
     actualizadoEn: emisor.actualizadoEn.toISOString(),
   };
+}
+
+/**
+ * Lo que un comprobante guarda del emisor y de la sucursal al emitirse (historia 006, criterio 69): la sucursal con
+ * su código de establecimiento y el emisor con su RUC, razón social y régimen.
+ */
+export interface DatosParaComprobante {
+  sucursal: { id: string; nombre: string; direccion: string; codigoEstablecimiento: string };
+  emisor: { id: string; ruc: string; razonSocial: string; regimen: RegimenTributario };
 }
 
 /**
@@ -57,5 +73,33 @@ export class EmisoresService {
       }
       throw error;
     }
+  }
+
+  /**
+   * Las tasas de IGV del emisor en orden de `desde` (historia 006, criterio 6). 404 si el emisor no es de la empresa.
+   * FIRMA de la fase A.
+   */
+  async tasasIgv(_emisorId: string): Promise<TasaIgvRespuesta[]> {
+    throw noImplementado();
+  }
+
+  /**
+   * Crea o cambia la tasa de IGV del emisor desde una fecha (criterio 6): no se puede con `desde` igual o anterior a
+   * la fecha de un comprobante ya emitido (409 `CONFLICTO`). FIRMA de la fase A.
+   */
+  async configurarTasaIgv(
+    _emisorId: string,
+    _desde: string,
+    _entrada: TasaIgvEntrada,
+  ): Promise<TasaIgvRespuesta> {
+    throw noImplementado();
+  }
+
+  /**
+   * El emisor y la sucursal tal como se guardan en el comprobante (criterio 69). Lo usa el cobro (módulo de caja).
+   * FIRMA de la fase A.
+   */
+  async datosParaComprobante(_sucursalId: string): Promise<DatosParaComprobante> {
+    throw noImplementado();
   }
 }

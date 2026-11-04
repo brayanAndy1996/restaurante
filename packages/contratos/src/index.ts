@@ -13,3 +13,5 @@ export * from './impresion';
 export * from './puente';
 export * from './carta-web';
 export * from './llamados';
+export * from './comprobantes';
+export * from './caja';

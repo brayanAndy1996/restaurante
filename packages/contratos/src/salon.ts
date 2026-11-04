@@ -22,6 +22,7 @@ import {
   CANTIDAD_MAXIMA_LINEA,
   ROLES_PARTE,
   TIPOS_COMANDA,
+  TIPOS_DESCUENTO,
   TIPOS_ORDEN,
 } from '@restaurante/dominio';
 import { z } from 'zod';
@@ -445,6 +446,27 @@ export const precuentaRespuestaSchema = z.object({
   /** "Precios con IGV incluido. No es un comprobante de pago." y, con ICBPER, "El ICBPER se suma al cobrar.". */
   nota: z.string(),
   /**
+   * Historia 006 (criterios 44 y 89): con descuentos o cortesías, cada uno con su monto; con cobros, lo pagado y lo
+   * que falta. Opcionales: sin ellos la pre-cuenta es la de 004 (y su `total` sigue siendo el de `totalOrden`).
+   */
+  descuentos: z
+    .array(
+      z.object({
+        itemId: uuidSchema.nullable(),
+        tipo: z.enum(TIPOS_DESCUENTO),
+        valor: z.string(),
+        monto: z.string(),
+      }),
+    )
+    .optional(),
+  cortesias: z
+    .array(
+      z.object({ itemId: uuidSchema, cantidad: z.number().int(), valorReferencial: z.string() }),
+    )
+    .optional(),
+  pagado: z.string().optional(),
+  porPagar: z.string().optional(),
+  /**
    * Qué pasó con el papel (criterio 102, entrega 3b): `EN_COLA` si se creó un trabajo `PRECUENTA` para la impresora
    * de caja; `SIN_IMPRESORA` si la sucursal no tiene impresora de caja (la pre-cuenta se emite igual). Solo una
    * pre-cuenta nueva crea el trabajo: devolver la vigente o una réplica devuelve el mismo valor que la primera
@@ -501,6 +523,8 @@ export const comandaKdsSchema = z.object({
     mesas: z.array(mesaRefSchema),
     mozo: personaRefSchema,
     comensales: z.number().int(),
+    /** Historia 006 (criterio 82): el número de llamado de una venta de mostrador, en lugar de la mesa. */
+    numeroLlamado: z.number().int().nullable().optional(),
   }),
   lineas: z.array(lineaKdsSchema),
 });

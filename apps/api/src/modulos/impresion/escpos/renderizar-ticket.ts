@@ -9,6 +9,7 @@ import {
   type JuegoCaracteres,
   JUEGOS_CARACTERES,
 } from '@restaurante/contratos';
+import { noImplementado } from '../../../nucleo/errores';
 import { armarColumnas, centrarCon, partirEnLineas } from './ajuste';
 import { avisoDeCorte, esAvisoDeCorte, omitidosPorAvisos } from './plantillas/presupuesto';
 import {
@@ -195,6 +196,10 @@ function escribirBloque(
         if (!escritor.linea('')) return false;
       }
       return true;
+    // Historia 006 (criterios 91 y 92): el QR (`GS ( k`) y el pulso de la gaveta (`ESC p`) los escribe la tarea T21.
+    case 'qr':
+    case 'gaveta':
+      throw noImplementado();
   }
 }
 

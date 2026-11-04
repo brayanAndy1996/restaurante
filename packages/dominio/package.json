@@ -17,6 +17,16 @@
         "default": "./dist/index.js"
       }
     },
+    "./caja": {
+      "import": {
+        "types": "./dist/caja.d.mts",
+        "default": "./dist/caja.mjs"
+      },
+      "require": {
+        "types": "./dist/caja.d.ts",
+        "default": "./dist/caja.js"
+      }
+    },
     "./llamados": {
       "import": {
         "types": "./dist/llamados.d.mts",

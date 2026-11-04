@@ -134,7 +134,7 @@ Una transacción: réplica por `id` (es el id de la orden); turno `FOR SHARE`; `
 ### PWA (108 a 119)
 
 - Todo `src/modulos/caja/` con `lazy()`; `@restaurante/dominio/caja` y `decimal.js` solo en esos bloques. En el paquete inicial entran solo el destino de la navegación y la ruta.
-- **Presupuesto:** el último `apps/app/.turbo/turbo-build.log` muestra el bloque inicial `index-*.js` en 174.08 kB gzip según Vite (kB de 1000 bytes), que son unos 170.0 kB como los mide `scripts/presupuesto.mjs` (kB de 1024): el margen es casi nulo. T1 mide la línea de base; si lo nuevo del paquete inicial no cabe, el revisor propone subir el límite con su motivo (por ejemplo a 175 kB) y el orquestador lo decide.
+- **Presupuesto:** T1 midió la línea de base el 2026-11-04 (HEAD `6ec7f79`, `pnpm --filter @restaurante/app build && pnpm --filter @restaurante/app presupuesto`): el paquete inicial pesa **156.2 kB gzip** (límite 170 kB; kB de 1024, como los mide `scripts/presupuesto.mjs`): `index-*.js` 111.0 kB, `identidad-*.js` 41.9 kB, `salon-*.js` 2.1 kB, `preload-helper-*.js` 0.8 kB y `rolldown-runtime-*.js` 0.4 kB, con 92 bloques bajo demanda. **El margen real es de 13.8 kB**, no casi nulo como se estimó con un registro viejo (174.08 kB según Vite, que mide en kB de 1000 bytes). Lo nuevo del paquete inicial es solo el destino "Caja" de la navegación, su ruta y el aviso de la guía de primeros pasos; el resto (`@restaurante/dominio/caja` y `decimal.js` incluidos) va bajo demanda. Si no cupiera, el revisor propone subir el límite con su motivo y el orquestador lo decide.
 - Los cobros usan la cola de "Pendiente de envío" de 003 con el `id` del cobro conservado hasta una respuesta final (como el envío de 004).
 - Las partes pendientes y la caja elegida se guardan en el almacenamiento del equipo por persona.
 
@@ -177,7 +177,7 @@ En este orden (6a); `down` de cada una deshace solo lo suyo. Ninguna escribe dat
 ## Riesgos
 
 - **Validación del contador** (B.19): cortesías, por consumo, 700, tasa, Nuevo RUS, redondeo, ICBPER. Mitigación: todo en funciones puras con pruebas; un cambio del contador es un cambio acotado.
-- **Presupuesto de la PWA** sin margen (ver "PWA").
+- **Presupuesto de la PWA** con un margen de 13.8 kB (156.2 de 170 kB; ver "PWA"): alcanza para la navegación y las rutas bajo demanda, no para sumar dependencias al paquete inicial.
 - **Contención de la serie y de la cuota** en horas punta: cada cobro mantiene el bloqueo de su serie y de `consumo_comprobantes` desde que numera hasta el `COMMIT` (milisegundos). Prueba de carga del tester: 50 cobros concurrentes en una sucursal en menos de 5 segundos.
 - **Complejidad de las partes iguales con bolsas y afectaciones mixtas:** cubierta por ejemplos exactos en P1 y por `cambioDeCuentaPermitido`; el ataque debe buscar descuadres de céntimos.
 - **Cambio de emisor de una sucursal con series:** cubierto por el criterio 5 (las series del emisor anterior no emiten).

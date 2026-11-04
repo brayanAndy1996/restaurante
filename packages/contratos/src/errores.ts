@@ -1,4 +1,4 @@
-import { ESTADOS_LLAMADO } from '@restaurante/dominio';
+import { ESTADOS_LLAMADO, MEDIOS_PAGO } from '@restaurante/dominio';
 import { z } from 'zod';
 import { seQuitaSchema, usadoEnSchema } from './carta';
 import { uuidSchema } from './comunes';
@@ -67,6 +67,26 @@ export const CODIGOS_ERROR = [
   'MESA_LIBRE',
   'MESA_SIN_CUENTA',
   'CARTA_WEB_SIN_CONFIGURAR',
+  // Sección "Caja, cobro y comprobantes" (historia 006, entrega 6a). 409:
+  'TURNO_YA_ABIERTO',
+  'TURNO_CERRADO',
+  'TURNO_AJENO',
+  'CIERRE_BLOQUEADO',
+  'CUENTA_CAMBIO',
+  'CUENTA_EN_COBRO',
+  'CUENTA_COBRADA_EN_PARTE',
+  'NADA_QUE_COBRAR',
+  'SIN_SERIE',
+  'SERIE_AGOTADA',
+  'TASA_IGV_NO_CONFIGURADA',
+  // 422:
+  'DIFERENCIA_SIN_MOTIVO',
+  'DESCUENTO_INVALIDO',
+  'CORTESIA_INVALIDA',
+  'PARTE_INVALIDA',
+  'PAGOS_NO_CUADRAN',
+  'COMPROBANTE_NO_PERMITIDO',
+  'CLIENTE_REQUERIDO',
 ] as const;
 
 export const codigoErrorSchema = z.enum(CODIGOS_ERROR);
@@ -92,6 +112,24 @@ export const errorRespuestaSchema = z.object({
    * (la orden a la que se unió): para que la PWA lleve a la persona ahí (criterios 11 y 29 de 004).
    */
   ordenId: uuidSchema.optional(),
+  /** Solo en `TURNO_YA_ABIERTO` (criterio 26 de 006): el turno que ya está abierto. */
+  turnoId: uuidSchema.optional(),
+  /** Solo en `CUENTA_CAMBIO` (criterios 49 y 57 de 006): la versión actual de la cuenta. */
+  version: z.number().int().optional(),
+  /** Solo en `CIERRE_BLOQUEADO` (criterio 33 de 006): cuántas órdenes siguen abiertas. */
+  ordenes: z.number().int().nonnegative().optional(),
+  /**
+   * Solo en `DIFERENCIA_SIN_MOTIVO` (criterios 31 y 32 de 006): las diferencias de cada medio, sin el esperado.
+   */
+  diferencias: z
+    .array(
+      z.object({
+        medio: z.enum(MEDIOS_PAGO),
+        contado: z.string(),
+        diferencia: z.string(),
+      }),
+    )
+    .optional(),
   /** Solo en `LLAMADO_TOMADO` (criterio 43 de 005): quién ya está atendiendo el llamado. */
   atendidoPor: z.object({ id: uuidSchema, nombre: z.string() }).optional(),
   /** Solo en `LLAMADO_CERRADO` (criterios 44 y 53 de 005): el estado en que quedó el llamado. */

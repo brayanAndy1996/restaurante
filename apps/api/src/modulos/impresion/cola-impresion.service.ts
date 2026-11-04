@@ -5,6 +5,7 @@ import { diaOperativo } from '@restaurante/dominio';
 import { QueryTypes, type Sequelize } from 'sequelize';
 import { CONEXION_API } from '../../nucleo/base-de-datos';
 import { ContextoEmpresa } from '../../nucleo/contexto-empresa';
+import { noImplementado } from '../../nucleo/errores';
 import { RELOJ, type Reloj } from '../../nucleo/reloj';
 import type {
   DestinoDeEstacion,
@@ -263,6 +264,10 @@ export class ColaImpresionService implements ImpresionPuerto {
       { bind: [sucursalId], type: QueryTypes.SELECT },
     );
     return filas[0] ?? null;
+  }
+
+  async impresoraDeLaCaja(_cajaId: string): Promise<{ id: string; gaveta: boolean } | null> {
+    throw noImplementado();
   }
 
   async trabajosDePrecuentas(

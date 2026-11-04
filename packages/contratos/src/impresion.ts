@@ -45,7 +45,17 @@ export const PUERTO_IMPRESORA_POR_DEFECTO = 9100;
 export const destinoEstacionSchema = z.enum(DESTINOS_COMANDA);
 
 /** Lo que se imprime: una comanda de estación, una pre-cuenta o la página de prueba (criterios 114 y 127). */
-export const TIPOS_TRABAJO = [...TIPOS_COMANDA, 'PRECUENTA', 'PRUEBA'] as const;
+export const TIPOS_TRABAJO = [
+  ...TIPOS_COMANDA,
+  'PRECUENTA',
+  'PRUEBA',
+  // Historia 006 (caja y comprobantes): el ticket del comprobante, los reportes X y Z del turno y el pulso solo de la
+  // gaveta (apertura con fondo y movimientos de caja).
+  'COMPROBANTE',
+  'REPORTE_X',
+  'REPORTE_Z',
+  'GAVETA',
+] as const;
 export type TipoTrabajo = (typeof TIPOS_TRABAJO)[number];
 export const tipoTrabajoSchema = z.enum(TIPOS_TRABAJO);
 
@@ -323,6 +333,8 @@ export const MAXIMO_BYTES_TICKET = 262_144;
  */
 export const MAXIMO_OMITIDOS_TICKET = 1_000_000;
 export const LARGO_TEXTO_TICKET = 200;
+/** Largo máximo del texto de un código QR del ticket (historia 006, criterio 91). */
+export const LARGO_TEXTO_QR_TICKET = 300;
 export const SANGRIA_MAXIMA_TICKET = 8;
 export const LINEAS_MAXIMAS_ESPACIO_TICKET = 10;
 
@@ -330,6 +342,15 @@ export const LINEAS_MAXIMAS_ESPACIO_TICKET = 10;
 const textoDeTicketSchema = z
   .string()
   .max(LARGO_TEXTO_TICKET)
+  .refine(sinNul, MENSAJE_NUL)
+  .refine(sinSustitutosSueltos, MENSAJE_SUSTITUTO_SUELTO)
+  .refine((t) => !/[\r\n]/.test(t), 'No puede contener saltos de línea');
+
+/** Texto de un QR: de 1 a 300 caracteres, sin NUL, sin sustitutos sueltos y sin saltos de línea. */
+const textoDeQrSchema = z
+  .string()
+  .min(1)
+  .max(LARGO_TEXTO_QR_TICKET)
   .refine(sinNul, MENSAJE_NUL)
   .refine(sinSustitutosSueltos, MENSAJE_SUSTITUTO_SUELTO)
   .refine((t) => !/[\r\n]/.test(t), 'No puede contener saltos de línea');
@@ -360,6 +381,10 @@ export type AvisoTicket = (typeof AVISOS_TICKET)[number];
  * - `marca`: un aviso destacado y centrado entre guiones ("PARA LLEVAR", "ESPERAR", "REIMPRESIÓN").
  * - `regla`: una línea de `-` o `=` de todo el ancho.
  * - `espacio`: líneas en blanco.
+ * - `qr` (historia 006): un código QR centrado con el `texto` dado (hasta 300 caracteres, una sola línea): `GS ( k`
+ *   modelo 2, corrección M. El emulador lo decodifica como `[QR] <texto>`.
+ * - `gaveta` (historia 006): el pulso que abre la gaveta (`ESC p 0 25 250`). Es una marca estructural, nunca un
+ *   texto: solo sale si la impresora tiene gaveta y solo en la primera entrega a tiempo del trabajo (criterio 94).
  */
 export const bloqueTicketSchema = z.discriminatedUnion('tipo', [
   z.strictObject({
@@ -396,6 +421,11 @@ export const bloqueTicketSchema = z.discriminatedUnion('tipo', [
     tipo: z.literal('espacio'),
     lineas: z.number().int().min(1).max(LINEAS_MAXIMAS_ESPACIO_TICKET).optional(),
   }),
+  z.strictObject({
+    tipo: z.literal('qr'),
+    texto: textoDeQrSchema,
+  }),
+  z.strictObject({ tipo: z.literal('gaveta') }),
 ]);
 
 /**

@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { uuidSchema } from '@restaurante/contratos';
+import { uuidSchema, type ObjetivoAutorizacion } from '@restaurante/contratos';
 import type { Accion } from '@restaurante/dominio';
 import { QueryTypes, type Sequelize } from 'sequelize';
 import { CONEXION_API } from '../../nucleo/base-de-datos';
@@ -20,6 +20,12 @@ export interface AutorizacionConsumida {
   solicitanteId: string;
   autorizadorId: string;
   motivo: string;
+  /**
+   * Lo que la clave autoriza (historia 006, criterio 40), normalizado: ids en minúsculas y `valor` con 2 decimales.
+   * `null` si se creó sin objetivo. Opcional hasta la fase C (la columna `autorizacion.objetivo` la agrega su
+   * migración): hoy `consumir` no lo llena.
+   */
+  objetivo?: ObjetivoAutorizacion | null;
 }
 
 /**

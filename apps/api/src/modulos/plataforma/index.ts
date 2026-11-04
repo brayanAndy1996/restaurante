@@ -8,6 +8,7 @@ export type {
 } from './plataforma-empresas.service';
 export { SucursalService } from './sucursal.service';
 export { EmisoresService } from './emisores.service';
+export type { DatosParaComprobante } from './emisores.service';
 export { SoporteService } from './soporte.service';
 export { SuperadministradoresService } from './superadministradores.service';
 export { SucursalesController } from './sucursales.controller';

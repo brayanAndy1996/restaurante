@@ -1,5 +1,5 @@
-import type { DocumentoTicket } from '@restaurante/contratos';
-import type { DestinoComanda, TipoComanda } from '@restaurante/dominio';
+import type { DocumentoTicket, TipoTrabajo } from '@restaurante/contratos';
+import type { DestinoComanda } from '@restaurante/dominio';
 
 /**
  * Puerto de impresión del módulo de pedidos (historia 004, plan "Impresión"): el envío, la marcha, la
@@ -26,7 +26,7 @@ export interface TrabajoParaEncolar {
   impresoraId: string;
   /** La estación de la comanda; `null` en la pre-cuenta. */
   estacionId: string | null;
-  tipo: TipoComanda | 'PRECUENTA' | 'PRUEBA';
+  tipo: TipoTrabajo;
   /** La comanda de la que sale el trabajo (índice único: una comanda, un trabajo); `null` en la pre-cuenta. */
   comandaId: string | null;
   /** La pre-cuenta de la que sale el trabajo; `null` en una comanda. */
@@ -40,6 +40,13 @@ export interface TrabajoParaEncolar {
   ordenId: string | null;
   /** El número del envío de una `COMANDA` o `ADICION`; `null` en los demás trabajos. */
   envioNumero: number | null;
+  /**
+   * Historia 006 (criterios 90 y 95): el comprobante de un trabajo `COMPROBANTE` y el turno de un `REPORTE_X`,
+   * `REPORTE_Z` o `GAVETA`. Opcionales hasta la fase C (la migración 7 agrega sus columnas): hoy `encolar` no los
+   * guarda.
+   */
+  comprobanteId?: string | null;
+  turnoId?: string | null;
   documento: DocumentoTicket;
 }
 
@@ -72,6 +79,12 @@ export interface ImpresionPuerto {
   encolar(trabajos: readonly TrabajoParaEncolar[]): Promise<string[]>;
   /** La impresora de caja de la sucursal (activa), donde salen las pre-cuentas (criterio 102); `null` si no hay. */
   impresoraDeCaja(sucursalId: string): Promise<{ id: string } | null>;
+  /**
+   * La impresora de una caja (historia 006, criterio 2): la suya (`caja.impresora_id`) o, si no tiene, la de caja de
+   * su sucursal (`impresoraDeCaja`); `null` si tampoco hay (el cobro se hace igual, sin imprimir). Con `gaveta` para
+   * saber si el ticket lleva el pulso. FIRMA de la fase A.
+   */
+  impresoraDeLaCaja(cajaId: string): Promise<{ id: string; gaveta: boolean } | null>;
   /**
    * De las pre-cuentas dadas, el id del trabajo `PRECUENTA` de las que lo tienen (criterio 102): devolver la
    * vigente o una réplica no crea otro trabajo, devuelve este.
