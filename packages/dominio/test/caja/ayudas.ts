@@ -194,10 +194,21 @@ export function verificarParte(parte: ParteCalculada): void {
     expect(p.cantidad).toBeGreaterThanOrEqual(0);
     expect(p.bolsas).toBeGreaterThanOrEqual(0);
   }
-  if (parte.lineas.every((l) => l.gratuita === null)) {
-    expect(
-      dosDec(new D(sumar(parte.lineas.map((l) => l.neto))).plus(sumar(parte.lineas.map((l) => l.icbper)))),
-    ).toBe(parte.totales.total);
+  // Totales de la parte (criterio 17): sumas sobre las líneas de la parte
+  const t = parte.totales;
+  expect(t.subtotal).toBe(sumar(parte.lineas.map((l) => l.bruto)));
+  expect(t.descuentos).toBe(sumar(parte.lineas.map((l) => l.descuento)));
+  expect(t.igv).toBe(sumar(parte.lineas.map((l) => l.igv)));
+  expect(t.icbper).toBe(sumar(parte.lineas.map((l) => l.icbper)));
+  expect(t.igvGratuitas).toBe(sumar(parte.lineas.map((l) => l.gratuita?.igv ?? '0.00')));
+  expect(dosDec(new D(sumar(parte.lineas.map((l) => l.neto))).plus(t.icbper))).toBe(t.total);
+  if (t.operaciones) {
+    const porAfectacion = (a: string): string =>
+      sumar(parte.lineas.filter((l) => l.afectacion === a).map((l) => l.base));
+    expect(t.operaciones.gravadas).toBe(porAfectacion('GRAVADO'));
+    expect(t.operaciones.exoneradas).toBe(porAfectacion('EXONERADO'));
+    expect(t.operaciones.inafectas).toBe(porAfectacion('INAFECTO'));
+    expect(t.operaciones.gratuitas).toBe(sumar(parte.lineas.map((l) => l.gratuita?.base ?? '0.00')));
   }
 }
 

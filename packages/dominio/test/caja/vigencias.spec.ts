@@ -59,6 +59,23 @@ describe('tasaIgvVigente · criterio 10', () => {
     },
   );
 
+  it.each(['2026-02-30', '2026-13-01', '2026-00-10', '2026-04-31', '2026-02-29', '2026-01-00'])(
+    'rechaza la fecha inexistente en el calendario %j con RangeError',
+    (fecha) => {
+      expect(() => tasaIgvVigente(unaTasa, fecha)).toThrow(RangeError);
+    },
+  );
+
+  it('acepta el 29 de febrero de un año bisiesto', () => {
+    expect(tasaIgvVigente(unaTasa, '2028-02-29')).toBe('18.00');
+  });
+
+  it('rechaza una fecha desde inexistente en el calendario con RangeError', () => {
+    expect(() => tasaIgvVigente([{ desde: '2026-02-30', tasa: '18.00' }], '2026-06-01')).toThrow(
+      RangeError,
+    );
+  });
+
   it('rechaza una fecha que no es texto con RangeError', () => {
     expect(() => tasaIgvVigente(unaTasa, 20260101 as unknown as string)).toThrow(RangeError);
   });
@@ -104,4 +121,17 @@ describe('montoIcbperVigente · criterio 10', () => {
       expect(() => montoIcbperVigente(fecha)).toThrow(RangeError);
     },
   );
+});
+
+describe('montoIcbperVigente · fechas inexistentes (criterio 8)', () => {
+  it.each(['2026-02-30', '2026-13-01', '2026-00-10', '2026-04-31', '2026-02-29'])(
+    'rechaza %j con RangeError',
+    (fecha) => {
+      expect(() => montoIcbperVigente(fecha)).toThrow(RangeError);
+    },
+  );
+
+  it('acepta el 29 de febrero de un año bisiesto', () => {
+    expect(montoIcbperVigente('2028-02-29')).toBe('0.50');
+  });
 });

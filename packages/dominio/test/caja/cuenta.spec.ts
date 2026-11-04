@@ -464,6 +464,51 @@ describe('validarDescuento · criterio 14', () => {
     });
   });
 
+  it('"0.00" en monto o en porcentaje es DESCUENTO_NULO', () => {
+    expect(validarDescuento('56.00', { tipo: 'MONTO', valor: '0.00' })).toEqual({
+      valido: false,
+      codigo: 'DESCUENTO_NULO',
+    });
+    expect(validarDescuento('56.00', { tipo: 'PORCENTAJE', valor: '0.00' })).toEqual({
+      valido: false,
+      codigo: 'DESCUENTO_NULO',
+    });
+  });
+
+  it('un porcentaje mayor que 99.99 es DESCUENTO_EXCESIVO', () => {
+    for (const valor of ['100.00', '100', '150']) {
+      expect(validarDescuento('56.00', { tipo: 'PORCENTAJE', valor })).toEqual({
+        valido: false,
+        codigo: 'DESCUENTO_EXCESIVO',
+      });
+    }
+  });
+
+  it('un porcentaje válido que redondea hasta la base es DESCUENTO_EXCESIVO (99.99 % de 0.50, 50 % de 0.01)', () => {
+    expect(validarDescuento('0.50', { tipo: 'PORCENTAJE', valor: '99.99' })).toEqual({
+      valido: false,
+      codigo: 'DESCUENTO_EXCESIVO',
+    });
+    expect(validarDescuento('0.01', { tipo: 'PORCENTAJE', valor: '50' })).toEqual({
+      valido: false,
+      codigo: 'DESCUENTO_EXCESIVO',
+    });
+  });
+
+  it('49.99 % de 0.01 redondea a 0.00: DESCUENTO_NULO', () => {
+    expect(validarDescuento('0.01', { tipo: 'PORCENTAJE', valor: '49.99' })).toEqual({
+      valido: false,
+      codigo: 'DESCUENTO_NULO',
+    });
+  });
+
+  it('con base 0.00 un monto es siempre DESCUENTO_EXCESIVO', () => {
+    expect(validarDescuento('0.00', { tipo: 'MONTO', valor: '0.01' })).toEqual({
+      valido: false,
+      codigo: 'DESCUENTO_EXCESIVO',
+    });
+  });
+
   it('rechaza entradas mal formadas con RangeError (criterio 8)', () => {
     expect(() => validarDescuento('abc', { tipo: 'MONTO', valor: '1.00' })).toThrow(RangeError);
     expect(() => validarDescuento('56.00', { tipo: 'MONTO', valor: '1.234' })).toThrow(RangeError);
@@ -637,6 +682,18 @@ describe('calcularCuenta · entradas inválidas (criterio 8)', () => {
     ).toThrow(RangeError);
     expect(() =>
       calcularCuenta(cuentaC({ descuentoCuenta: { tipo: 'PORCENTAJE', valor: 'diez' } })),
+    ).toThrow(RangeError);
+  });
+
+  it('rechaza con RangeError dos líneas con el mismo itemId', () => {
+    expect(() =>
+      calcularCuenta(cuentaC({ lineas: [lineaLomo(), lineaLomo({ precioUnitario: '30.00' })] })),
+    ).toThrow(RangeError);
+  });
+
+  it('rechaza con RangeError la cortesía en un producto con ICBPER aunque sea de una unidad', () => {
+    expect(() =>
+      calcularCuenta(cuentaC({ lineas: [lineaLomo(), lineaBolsa({ cantidad: 3, cantidadCortesia: 1 })] })),
     ).toThrow(RangeError);
   });
 

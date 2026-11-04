@@ -17,38 +17,46 @@ import {
 const noCuadra = { valido: false, codigo: 'PAGOS_NO_CUADRAN' } as const;
 
 describe('redondeoEfectivo · criterio 21', () => {
-  it('todo en efectivo, 33.34: se deja de cobrar 0.04 (a la décima hacia abajo)', () => {
-    expect(redondeoEfectivo('33.34', []).redondeo).toBe('0.04');
+  it('todo en efectivo, 33.34: se cobran 33.30 y se dejan de cobrar 0.04 (a la décima hacia abajo)', () => {
+    expect(redondeoEfectivo('33.34', [])).toEqual({ efectivo: '33.30', redondeo: '0.04' });
   });
 
   it('con Yape de 20.00 y total 34.60 el efectivo es 14.60 y el redondeo 0.00', () => {
-    expect(redondeoEfectivo('34.60', [{ monto: '20.00' }]).redondeo).toBe('0.00');
+    expect(redondeoEfectivo('34.60', [{ monto: '20.00' }])).toEqual({ efectivo: '14.60', redondeo: '0.00' });
   });
 
   it('total 69.20 todo con tarjeta: el efectivo es 0.00 y el redondeo 0.00', () => {
-    expect(redondeoEfectivo('69.20', [{ monto: '69.20' }]).redondeo).toBe('0.00');
+    expect(redondeoEfectivo('69.20', [{ monto: '69.20' }])).toEqual({ efectivo: '0.00', redondeo: '0.00' });
   });
 
-  it('el redondeo es solo de la parte en efectivo: 50.07 con Yape de 20.00 deja 0.07', () => {
-    expect(redondeoEfectivo('50.07', [{ monto: '20.00' }]).redondeo).toBe('0.07');
+  it('el redondeo es solo de la parte en efectivo: 50.07 con Yape de 20.00 deja { 30.00, 0.07 }', () => {
+    expect(redondeoEfectivo('50.07', [{ monto: '20.00' }])).toEqual({ efectivo: '30.00', redondeo: '0.07' });
+  });
+
+  it('total 20.05 con Yape de 20.00 → { 0.00, 0.05 } (validarPagos exige 0.00 si no hay efectivo)', () => {
+    expect(redondeoEfectivo('20.05', [{ monto: '20.00' }])).toEqual({ efectivo: '0.00', redondeo: '0.05' });
   });
 
   it.each([
-    ['0.04', '0.04'],
-    ['10.09', '0.09'],
-    ['10.10', '0.00'],
-    ['10.01', '0.01'],
-    ['10.05', '0.05'],
-    ['33.30', '0.00'],
-    ['0.00', '0.00'],
-  ])('todo en efectivo, total %s: redondeo %s (de 0.00 a 0.09)', (total, redondeo) => {
-    expect(redondeoEfectivo(total, []).redondeo).toBe(redondeo);
+    ['0.04', '0.00', '0.04'],
+    ['10.09', '10.00', '0.09'],
+    ['10.10', '10.10', '0.00'],
+    ['10.01', '10.00', '0.01'],
+    ['10.05', '10.00', '0.05'],
+    ['33.30', '33.30', '0.00'],
+    ['0.00', '0.00', '0.00'],
+  ])('todo en efectivo, total %s: efectivo %s y redondeo %s (de 0.00 a 0.09)', (total, efectivo, redondeo) => {
+    expect(redondeoEfectivo(total, [])).toEqual({ efectivo, redondeo });
   });
 
-  it('suma varios pagos que no son efectivo', () => {
-    expect(
-      redondeoEfectivo('100.07', [{ monto: '30.00' }, { monto: '20.00' }]).redondeo,
-    ).toBe('0.07');
+  it('efectivo + redondeo + Σ no efectivo = total', () => {
+    const r = redondeoEfectivo('100.07', [{ monto: '30.00' }, { monto: '20.00' }]);
+    expect(r).toEqual({ efectivo: '50.00', redondeo: '0.07' });
+  });
+
+  it('si los pagos que no son efectivo superan el total, RangeError', () => {
+    expect(() => redondeoEfectivo('10.00', [{ monto: '20.00' }])).toThrow(RangeError);
+    expect(() => redondeoEfectivo('10.00', [{ monto: '6.00' }, { monto: '4.01' }])).toThrow(RangeError);
   });
 
   it('rechaza montos mal formados con RangeError (criterio 8)', () => {
