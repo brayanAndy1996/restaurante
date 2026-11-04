@@ -115,8 +115,7 @@ export function cuentaUnaLinea(
   };
 }
 
-export const uuid = (n: number): string =>
-  `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
+export const uuid = (n: number): string => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
 
 export const dosDec = (x: Decimal.Value): string => new D(x).toFixed(2);
 
@@ -154,7 +153,9 @@ export function verificarInvariantes(
   const sumaIcbper = sumar(lineas.map((l) => l.icbper));
   expect(dosDec(new D(sumaNetos).plus(sumaIcbper))).toBe(totales.total);
   expect(totales.subtotal).toBe(sumar(lineas.map((l) => l.bruto)));
-  expect(totales.descuentos).toBe(sumar(lineas.flatMap((l) => [l.descuentoItem, l.descuentoCuenta])));
+  expect(totales.descuentos).toBe(
+    sumar(lineas.flatMap((l) => [l.descuentoItem, l.descuentoCuenta])),
+  );
   expect(totales.igv).toBe(sumar(lineas.map((l) => l.igv)));
   expect(totales.icbper).toBe(sumaIcbper);
   if (montoDescuentoCuenta !== undefined) {
@@ -186,7 +187,12 @@ export function verificarParte(parte: ParteCalculada): void {
       expect(new D(campo).gte(0)).toBe(true);
     }
   }
-  for (const campo of [parte.totales.total, parte.totales.igv, parte.totales.icbper, parte.totales.subtotal]) {
+  for (const campo of [
+    parte.totales.total,
+    parte.totales.igv,
+    parte.totales.icbper,
+    parte.totales.subtotal,
+  ]) {
     expect(new D(campo).gte(0)).toBe(true);
   }
   for (const p of parte.porItem) {
@@ -208,7 +214,9 @@ export function verificarParte(parte: ParteCalculada): void {
     expect(t.operaciones.gravadas).toBe(porAfectacion('GRAVADO'));
     expect(t.operaciones.exoneradas).toBe(porAfectacion('EXONERADO'));
     expect(t.operaciones.inafectas).toBe(porAfectacion('INAFECTO'));
-    expect(t.operaciones.gratuitas).toBe(sumar(parte.lineas.map((l) => l.gratuita?.base ?? '0.00')));
+    expect(t.operaciones.gratuitas).toBe(
+      sumar(parte.lineas.map((l) => l.gratuita?.base ?? '0.00')),
+    );
   }
 }
 
@@ -237,7 +245,10 @@ function descuentoAleatorio(rnd: () => number, brutoCentimos: number): Descuento
   const x = rnd();
   if (x < 0.4) return null;
   if (x < 0.7) return { tipo: 'PORCENTAJE', valor: String(entero(rnd, 5, 30)) };
-  return { tipo: 'MONTO', valor: desdeCentimos(Math.floor((brutoCentimos * entero(rnd, 1, 20)) / 100)) };
+  return {
+    tipo: 'MONTO',
+    valor: desdeCentimos(Math.floor((brutoCentimos * entero(rnd, 1, 20)) / 100)),
+  };
 }
 
 /**

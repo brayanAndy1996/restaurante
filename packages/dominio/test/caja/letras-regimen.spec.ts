@@ -26,9 +26,12 @@ describe('tiposDeComprobantePermitidos · criterio 51', () => {
     expect([...tiposDeComprobantePermitidos('NUEVO_RUS')]).toEqual(['BOLETA']);
   });
 
-  it.each(['GENERAL', 'RER', 'MYPE_TRIBUTARIO'] as const)('%s emite boletas y facturas', (regimen) => {
-    expect([...tiposDeComprobantePermitidos(regimen)].sort()).toEqual(['BOLETA', 'FACTURA']);
-  });
+  it.each(['GENERAL', 'RER', 'MYPE_TRIBUTARIO'] as const)(
+    '%s emite boletas y facturas',
+    (regimen) => {
+      expect([...tiposDeComprobantePermitidos(regimen)].sort()).toEqual(['BOLETA', 'FACTURA']);
+    },
+  );
 
   it('cubre todos los regímenes del catálogo y nadie queda sin boleta', () => {
     for (const regimen of REGIMENES_TRIBUTARIOS) {

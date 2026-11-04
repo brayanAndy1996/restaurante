@@ -110,7 +110,10 @@ describe('calcularCuenta · criterio 11 (cuenta C)', () => {
   it('las líneas inafectas suman en inafectas y no llevan IGV', () => {
     const entrada: CuentaEntrada = {
       ...cuentaC(),
-      lineas: [lineaLomo(), lineaMandarina({ itemId: ID.gaseosa, afectacion: 'INAFECTO', precioUnitario: '10.00' })],
+      lineas: [
+        lineaLomo(),
+        lineaMandarina({ itemId: ID.gaseosa, afectacion: 'INAFECTO', precioUnitario: '10.00' }),
+      ],
     };
     const r = calcularCuenta(entrada);
     expect(r.totales.operaciones).toEqual({
@@ -376,13 +379,29 @@ describe('repartirPorMayorResto · criterio 13', () => {
   });
 
   it('entre restos iguales, el céntimo que falta va a la que va primero', () => {
-    expect(repartirPorMayorResto('0.01', ['1.00', '1.00', '1.00'])).toEqual(['0.01', '0.00', '0.00']);
-    expect(repartirPorMayorResto('0.02', ['1.00', '1.00', '1.00'])).toEqual(['0.01', '0.01', '0.00']);
+    expect(repartirPorMayorResto('0.01', ['1.00', '1.00', '1.00'])).toEqual([
+      '0.01',
+      '0.00',
+      '0.00',
+    ]);
+    expect(repartirPorMayorResto('0.02', ['1.00', '1.00', '1.00'])).toEqual([
+      '0.01',
+      '0.01',
+      '0.00',
+    ]);
   });
 
   it('un peso de 0.00 recibe 0.00, aunque vaya primero y haya empate', () => {
-    expect(repartirPorMayorResto('10.00', ['0.00', '5.00', '5.00'])).toEqual(['0.00', '5.00', '5.00']);
-    expect(repartirPorMayorResto('0.01', ['0.00', '2.00', '2.00'])).toEqual(['0.00', '0.01', '0.00']);
+    expect(repartirPorMayorResto('10.00', ['0.00', '5.00', '5.00'])).toEqual([
+      '0.00',
+      '5.00',
+      '5.00',
+    ]);
+    expect(repartirPorMayorResto('0.01', ['0.00', '2.00', '2.00'])).toEqual([
+      '0.00',
+      '0.01',
+      '0.00',
+    ]);
   });
 
   it('un monto de 0.00 reparte ceros', () => {
@@ -512,7 +531,9 @@ describe('validarDescuento · criterio 14', () => {
   it('rechaza entradas mal formadas con RangeError (criterio 8)', () => {
     expect(() => validarDescuento('abc', { tipo: 'MONTO', valor: '1.00' })).toThrow(RangeError);
     expect(() => validarDescuento('56.00', { tipo: 'MONTO', valor: '1.234' })).toThrow(RangeError);
-    expect(() => validarDescuento('56.00', { tipo: 'PORCENTAJE', valor: 'diez' })).toThrow(RangeError);
+    expect(() => validarDescuento('56.00', { tipo: 'PORCENTAJE', valor: 'diez' })).toThrow(
+      RangeError,
+    );
     expect(() => validarDescuento('-56.00', { tipo: 'MONTO', valor: '1.00' })).toThrow(RangeError);
   });
 });
@@ -586,9 +607,18 @@ describe('calcularCuenta · criterio 15 (cortesías)', () => {
 
   it('la cortesía no entra en el subtotal, los descuentos, el IGV, el ICBPER ni el total', () => {
     const conCortesia = calcularCuenta(
-      cuentaC({ lineas: [lineaLomo(), lineaGaseosa({ cantidadCortesia: 1 }), lineaBolsa(), lineaMandarina()] }),
+      cuentaC({
+        lineas: [
+          lineaLomo(),
+          lineaGaseosa({ cantidadCortesia: 1 }),
+          lineaBolsa(),
+          lineaMandarina(),
+        ],
+      }),
     );
-    const sinGaseosa = calcularCuenta(cuentaC({ lineas: [lineaLomo(), lineaBolsa(), lineaMandarina()] }));
+    const sinGaseosa = calcularCuenta(
+      cuentaC({ lineas: [lineaLomo(), lineaBolsa(), lineaMandarina()] }),
+    );
     expect(conCortesia.totales.subtotal).toBe(sinGaseosa.totales.subtotal);
     expect(conCortesia.totales.igv).toBe(sinGaseosa.totales.igv);
     expect(conCortesia.totales.total).toBe(sinGaseosa.totales.total);
@@ -664,17 +694,26 @@ describe('calcularCuenta · entradas inválidas (criterio 8)', () => {
     },
   );
 
-  it.each([3, -1, 0.5, '1', null])('rechaza la cantidad de cortesía %j (cantidad 2) con RangeError', (c) => {
-    expect(() => calcularCuenta(unaLinea({ cantidadCortesia: c }))).toThrow(RangeError);
-  });
+  it.each([3, -1, 0.5, '1', null])(
+    'rechaza la cantidad de cortesía %j (cantidad 2) con RangeError',
+    (c) => {
+      expect(() => calcularCuenta(unaLinea({ cantidadCortesia: c }))).toThrow(RangeError);
+    },
+  );
 
-  it.each(['0.00', '30.01', '-18.00', 'abc', '', 18])('rechaza la tasa %j con RangeError', (tasa) => {
-    expect(() => calcularCuenta(cuentaC({ tasaIgv: tasa as string }))).toThrow(RangeError);
-  });
+  it.each(['0.00', '30.01', '-18.00', 'abc', '', 18])(
+    'rechaza la tasa %j con RangeError',
+    (tasa) => {
+      expect(() => calcularCuenta(cuentaC({ tasaIgv: tasa as string }))).toThrow(RangeError);
+    },
+  );
 
-  it.each(['abc', '0.501', '-0.50', '', 0.5])('rechaza el monto de ICBPER %j con RangeError', (m) => {
-    expect(() => calcularCuenta(cuentaC({ montoIcbper: m as string }))).toThrow(RangeError);
-  });
+  it.each(['abc', '0.501', '-0.50', '', 0.5])(
+    'rechaza el monto de ICBPER %j con RangeError',
+    (m) => {
+      expect(() => calcularCuenta(cuentaC({ montoIcbper: m as string }))).toThrow(RangeError);
+    },
+  );
 
   it('rechaza un valor de descuento mal formado con RangeError', () => {
     expect(() =>
@@ -693,7 +732,9 @@ describe('calcularCuenta · entradas inválidas (criterio 8)', () => {
 
   it('rechaza con RangeError la cortesía en un producto con ICBPER aunque sea de una unidad', () => {
     expect(() =>
-      calcularCuenta(cuentaC({ lineas: [lineaLomo(), lineaBolsa({ cantidad: 3, cantidadCortesia: 1 })] })),
+      calcularCuenta(
+        cuentaC({ lineas: [lineaLomo(), lineaBolsa({ cantidad: 3, cantidadCortesia: 1 })] }),
+      ),
     ).toThrow(RangeError);
   });
 
@@ -712,7 +753,10 @@ describe('calcularCuenta · invariantes sobre cuentas al azar (semilla fija)', (
       const entrada = generarCuenta(rnd);
       const r = calcularCuenta(entrada);
 
-      const baseCuenta = r.lineas.reduce((acc, l) => acc.plus(l.bruto).minus(l.descuentoItem), new D(0));
+      const baseCuenta = r.lineas.reduce(
+        (acc, l) => acc.plus(l.bruto).minus(l.descuentoItem),
+        new D(0),
+      );
       const dc = entrada.descuentoCuenta;
       const monto =
         dc === null
@@ -725,14 +769,20 @@ describe('calcularCuenta · invariantes sobre cuentas al azar (semilla fija)', (
       entrada.lineas.forEach((linea, j) => {
         const calc = r.lineas[j]!;
         expect(calc.cantidadCobrable).toBe(linea.cantidad - linea.cantidadCortesia);
-        expect(calc.bruto).toBe(new D(linea.precioUnitario).times(calc.cantidadCobrable).toFixed(2));
+        expect(calc.bruto).toBe(
+          new D(linea.precioUnitario).times(calc.cantidadCobrable).toFixed(2),
+        );
         const di = linea.descuento;
         const esperadoItem =
           di === null
             ? '0.00'
             : di.tipo === 'MONTO'
               ? new D(di.valor).toFixed(2)
-              : new D(calc.bruto).times(di.valor).div(100).toDecimalPlaces(2, D.ROUND_HALF_UP).toFixed(2);
+              : new D(calc.bruto)
+                  .times(di.valor)
+                  .div(100)
+                  .toDecimalPlaces(2, D.ROUND_HALF_UP)
+                  .toFixed(2);
         expect(calc.descuentoItem).toBe(esperadoItem);
         if (calc.cantidadCobrable === 0) expect(calc.descuentoCuenta).toBe('0.00');
         if (entrada.tasaIgv === null) expect(calc.igv).toBe('0.00');

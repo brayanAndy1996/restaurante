@@ -22,19 +22,31 @@ describe('redondeoEfectivo · criterio 21', () => {
   });
 
   it('con Yape de 20.00 y total 34.60 el efectivo es 14.60 y el redondeo 0.00', () => {
-    expect(redondeoEfectivo('34.60', [{ monto: '20.00' }])).toEqual({ efectivo: '14.60', redondeo: '0.00' });
+    expect(redondeoEfectivo('34.60', [{ monto: '20.00' }])).toEqual({
+      efectivo: '14.60',
+      redondeo: '0.00',
+    });
   });
 
   it('total 69.20 todo con tarjeta: el efectivo es 0.00 y el redondeo 0.00', () => {
-    expect(redondeoEfectivo('69.20', [{ monto: '69.20' }])).toEqual({ efectivo: '0.00', redondeo: '0.00' });
+    expect(redondeoEfectivo('69.20', [{ monto: '69.20' }])).toEqual({
+      efectivo: '0.00',
+      redondeo: '0.00',
+    });
   });
 
   it('el redondeo es solo de la parte en efectivo: 50.07 con Yape de 20.00 deja { 30.00, 0.07 }', () => {
-    expect(redondeoEfectivo('50.07', [{ monto: '20.00' }])).toEqual({ efectivo: '30.00', redondeo: '0.07' });
+    expect(redondeoEfectivo('50.07', [{ monto: '20.00' }])).toEqual({
+      efectivo: '30.00',
+      redondeo: '0.07',
+    });
   });
 
   it('total 20.05 con Yape de 20.00 → { 0.00, 0.05 } (validarPagos exige 0.00 si no hay efectivo)', () => {
-    expect(redondeoEfectivo('20.05', [{ monto: '20.00' }])).toEqual({ efectivo: '0.00', redondeo: '0.05' });
+    expect(redondeoEfectivo('20.05', [{ monto: '20.00' }])).toEqual({
+      efectivo: '0.00',
+      redondeo: '0.05',
+    });
   });
 
   it.each([
@@ -45,9 +57,12 @@ describe('redondeoEfectivo · criterio 21', () => {
     ['10.05', '10.00', '0.05'],
     ['33.30', '33.30', '0.00'],
     ['0.00', '0.00', '0.00'],
-  ])('todo en efectivo, total %s: efectivo %s y redondeo %s (de 0.00 a 0.09)', (total, efectivo, redondeo) => {
-    expect(redondeoEfectivo(total, [])).toEqual({ efectivo, redondeo });
-  });
+  ])(
+    'todo en efectivo, total %s: efectivo %s y redondeo %s (de 0.00 a 0.09)',
+    (total, efectivo, redondeo) => {
+      expect(redondeoEfectivo(total, [])).toEqual({ efectivo, redondeo });
+    },
+  );
 
   it('efectivo + redondeo + Σ no efectivo = total', () => {
     const r = redondeoEfectivo('100.07', [{ monto: '30.00' }, { monto: '20.00' }]);
@@ -56,7 +71,9 @@ describe('redondeoEfectivo · criterio 21', () => {
 
   it('si los pagos que no son efectivo superan el total, RangeError', () => {
     expect(() => redondeoEfectivo('10.00', [{ monto: '20.00' }])).toThrow(RangeError);
-    expect(() => redondeoEfectivo('10.00', [{ monto: '6.00' }, { monto: '4.01' }])).toThrow(RangeError);
+    expect(() => redondeoEfectivo('10.00', [{ monto: '6.00' }, { monto: '4.01' }])).toThrow(
+      RangeError,
+    );
   });
 
   it('rechaza montos mal formados con RangeError (criterio 8)', () => {
@@ -95,19 +112,31 @@ describe('validarPagos · ejemplos del criterio 21', () => {
   });
 
   it('la suma que no cuadra por un céntimo es PAGOS_NO_CUADRAN', () => {
-    expect(validarPagos('69.20', [{ medio: 'TARJETA_CREDITO', monto: '69.19' }], '0.00')).toEqual(noCuadra);
-    expect(validarPagos('69.20', [{ medio: 'TARJETA_CREDITO', monto: '69.21' }], '0.00')).toEqual(noCuadra);
+    expect(validarPagos('69.20', [{ medio: 'TARJETA_CREDITO', monto: '69.19' }], '0.00')).toEqual(
+      noCuadra,
+    );
+    expect(validarPagos('69.20', [{ medio: 'TARJETA_CREDITO', monto: '69.21' }], '0.00')).toEqual(
+      noCuadra,
+    );
   });
 
   it('vuelto con tarjeta (un monto mayor que el total) es PAGOS_NO_CUADRAN', () => {
-    expect(validarPagos('69.20', [{ medio: 'TARJETA_DEBITO', monto: '100.00' }], '0.00')).toEqual(noCuadra);
+    expect(validarPagos('69.20', [{ medio: 'TARJETA_DEBITO', monto: '100.00' }], '0.00')).toEqual(
+      noCuadra,
+    );
   });
 
   it('recibido solo existe en el efectivo: con tarjeta es PAGOS_NO_CUADRAN', () => {
     expect(
-      validarPagos('69.20', [{ medio: 'TARJETA_CREDITO', monto: '69.20', recibido: '100.00' }], '0.00'),
+      validarPagos(
+        '69.20',
+        [{ medio: 'TARJETA_CREDITO', monto: '69.20', recibido: '100.00' }],
+        '0.00',
+      ),
     ).toEqual(noCuadra);
-    expect(validarPagos('20.00', [{ medio: 'YAPE', monto: '20.00', recibido: '20.00' }], '0.00')).toEqual(noCuadra);
+    expect(
+      validarPagos('20.00', [{ medio: 'YAPE', monto: '20.00', recibido: '20.00' }], '0.00'),
+    ).toEqual(noCuadra);
   });
 
   it('total 20.05 con Yape 20.00 y redondeo 0.05 sin efectivo: PAGOS_NO_CUADRAN', () => {
@@ -125,8 +154,12 @@ describe('validarPagos · ejemplos del criterio 21', () => {
 
 describe('validarPagos · reglas de cada pago y del redondeo', () => {
   it('el redondeo debe ser exactamente el de redondeoEfectivo: uno inventado o ausente no cuadra', () => {
-    expect(validarPagos('33.34', [{ medio: 'EFECTIVO', monto: '33.34' }], '0.00')).toEqual(noCuadra);
-    expect(validarPagos('33.34', [{ medio: 'EFECTIVO', monto: '33.20' }], '0.14')).toEqual(noCuadra);
+    expect(validarPagos('33.34', [{ medio: 'EFECTIVO', monto: '33.34' }], '0.00')).toEqual(
+      noCuadra,
+    );
+    expect(validarPagos('33.34', [{ medio: 'EFECTIVO', monto: '33.20' }], '0.14')).toEqual(
+      noCuadra,
+    );
     expect(validarPagos('33.34', [{ medio: 'EFECTIVO', monto: '33.30' }], '0.04')).toEqual({
       valido: true,
       vuelto: '0.00',
@@ -134,7 +167,9 @@ describe('validarPagos · reglas de cada pago y del redondeo', () => {
   });
 
   it('el redondeo no se suma dos veces: monto 33.34 más redondeo 0.04 no cuadra con 33.34', () => {
-    expect(validarPagos('33.34', [{ medio: 'EFECTIVO', monto: '33.34' }], '0.04')).toEqual(noCuadra);
+    expect(validarPagos('33.34', [{ medio: 'EFECTIVO', monto: '33.34' }], '0.04')).toEqual(
+      noCuadra,
+    );
   });
 
   it('el redondeo solo toca el efectivo: total 50.07 con Yape 20.00 y efectivo 30.00, redondeo 0.07, vuelto 20.00', () => {
@@ -236,9 +271,15 @@ describe('validarPagos · reglas de cada pago y del redondeo', () => {
 
   it('rechaza montos mal formados con RangeError (criterio 8)', () => {
     expect(() => validarPagos('abc', [], '0.00')).toThrow(RangeError);
-    expect(() => validarPagos('10.00', [{ medio: 'YAPE', monto: '10.001' }], '0.00')).toThrow(RangeError);
-    expect(() => validarPagos('10.00', [{ medio: 'YAPE', monto: '-10.00' }], '0.00')).toThrow(RangeError);
-    expect(() => validarPagos('10.00', [{ medio: 'YAPE', monto: '10.00' }], 'x')).toThrow(RangeError);
+    expect(() => validarPagos('10.00', [{ medio: 'YAPE', monto: '10.001' }], '0.00')).toThrow(
+      RangeError,
+    );
+    expect(() => validarPagos('10.00', [{ medio: 'YAPE', monto: '-10.00' }], '0.00')).toThrow(
+      RangeError,
+    );
+    expect(() => validarPagos('10.00', [{ medio: 'YAPE', monto: '10.00' }], 'x')).toThrow(
+      RangeError,
+    );
     expect(() =>
       validarPagos('10.00', [{ medio: 'EFECTIVO', monto: '10.00', recibido: '1e2' }], '0.00'),
     ).toThrow(RangeError);
@@ -343,12 +384,22 @@ describe('esperadoDelTurno · criterio 22', () => {
   });
 
   it('rechaza montos mal formados con RangeError (criterio 8)', () => {
-    expect(() => esperadoDelTurno({ fondo: 'abc', pagos: [], movimientos: [] })).toThrow(RangeError);
+    expect(() => esperadoDelTurno({ fondo: 'abc', pagos: [], movimientos: [] })).toThrow(
+      RangeError,
+    );
     expect(() =>
-      esperadoDelTurno({ fondo: '0.00', pagos: [{ medio: 'YAPE', monto: '1.234' }], movimientos: [] }),
+      esperadoDelTurno({
+        fondo: '0.00',
+        pagos: [{ medio: 'YAPE', monto: '1.234' }],
+        movimientos: [],
+      }),
     ).toThrow(RangeError);
     expect(() =>
-      esperadoDelTurno({ fondo: '0.00', pagos: [], movimientos: [{ tipo: 'INGRESO', monto: '-5.00' }] }),
+      esperadoDelTurno({
+        fondo: '0.00',
+        pagos: [],
+        movimientos: [{ tipo: 'INGRESO', monto: '-5.00' }],
+      }),
     ).toThrow(RangeError);
   });
 });
@@ -401,12 +452,20 @@ describe('diferenciasDelArqueo · criterio 22', () => {
       ],
       MEDIOS_PAGO.map((medio) => ({ medio, monto: '0.00' })),
     );
-    expect(r[0]).toEqual({ medio: 'EFECTIVO', esperado: '-10.00', contado: '0.00', diferencia: '10.00' });
+    expect(r[0]).toEqual({
+      medio: 'EFECTIVO',
+      esperado: '-10.00',
+      contado: '0.00',
+      diferencia: '10.00',
+    });
   });
 
   it('rechaza montos mal formados con RangeError (criterio 8)', () => {
     expect(() =>
-      diferenciasDelArqueo(esperadoEjemplo(), MEDIOS_PAGO.map((medio) => ({ medio, monto: 'x' }))),
+      diferenciasDelArqueo(
+        esperadoEjemplo(),
+        MEDIOS_PAGO.map((medio) => ({ medio, monto: 'x' })),
+      ),
     ).toThrow(RangeError);
   });
 });

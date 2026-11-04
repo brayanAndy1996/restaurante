@@ -31,7 +31,8 @@ import {
   verificarParte,
 } from './ayudas';
 
-const conDescuento5 = (): CuentaEntrada => cuentaC({ descuentoCuenta: { tipo: 'MONTO', valor: '5.00' } });
+const conDescuento5 = (): CuentaEntrada =>
+  cuentaC({ descuentoCuenta: { tipo: 'MONTO', valor: '5.00' } });
 
 const parteDe = (
   cuenta: CuentaEntrada,
@@ -41,14 +42,19 @@ const parteDe = (
 ): ParteCalculada => tomar(calcularParte(cuenta, anteriores, parte, formato));
 
 const linea = (p: ParteCalculada, itemId: string | null, afectacion?: string) => {
-  const l = p.lineas.find((x) => x.itemId === itemId && (afectacion === undefined || x.afectacion === afectacion));
+  const l = p.lineas.find(
+    (x) => x.itemId === itemId && (afectacion === undefined || x.afectacion === afectacion),
+  );
   if (!l) throw new Error(`Falta la línea ${itemId} ${afectacion ?? ''}`);
   return l;
 };
 
 describe('calcularParte por ítems · criterio 17', () => {
   it('1 de los 2 Lomos con el descuento de S/ 5.00: neto 25.95 (51.89 / 2 = 25.945)', () => {
-    const p = parteDe(conDescuento5(), [], { tipo: 'ITEMS', items: [{ itemId: ID.lomo, cantidad: 1 }] });
+    const p = parteDe(conDescuento5(), [], {
+      tipo: 'ITEMS',
+      items: [{ itemId: ID.lomo, cantidad: 1 }],
+    });
     expect(p.tipo).toBe('ITEMS');
     expect(p.formato).toBe('DETALLADO');
     expect(p.lineas).toHaveLength(1);
@@ -82,7 +88,13 @@ describe('calcularParte por ítems · criterio 17', () => {
     const cuenta = conDescuento5();
     const p1 = parteDe(cuenta, [], { tipo: 'ITEMS', items: [{ itemId: ID.lomo, cantidad: 1 }] });
     const p2 = parteDe(cuenta, [p1], { tipo: 'ITEMS', items: [{ itemId: ID.lomo, cantidad: 1 }] });
-    expect(p2.lineas[0]).toMatchObject({ bruto: '28.00', descuento: '2.06', neto: '25.94', base: '21.98', igv: '3.96' });
+    expect(p2.lineas[0]).toMatchObject({
+      bruto: '28.00',
+      descuento: '2.06',
+      neto: '25.94',
+      base: '21.98',
+      igv: '3.96',
+    });
     expect(p2.totales.total).toBe('25.94');
     expect(sumar([p1.totales.total, p2.totales.total])).toBe('51.89');
     verificarParte(p2);
@@ -101,7 +113,10 @@ describe('calcularParte por ítems · criterio 17', () => {
   });
 
   it('si toma todas las unidades que faltan, el neto es exactamente el que falta', () => {
-    const p = parteDe(conDescuento5(), [], { tipo: 'ITEMS', items: [{ itemId: ID.lomo, cantidad: 2 }] });
+    const p = parteDe(conDescuento5(), [], {
+      tipo: 'ITEMS',
+      items: [{ itemId: ID.lomo, cantidad: 2 }],
+    });
     expect(p.lineas[0]).toMatchObject({ bruto: '56.00', descuento: '4.11', neto: '51.89' });
   });
 
@@ -173,10 +188,31 @@ describe('calcularParte por ítems · criterio 17', () => {
   it('TOTAL sin partes anteriores es toda la cuenta C, línea por línea, y cierra la cuenta', () => {
     const p = parteDe(cuentaC(), [], { tipo: 'TOTAL' });
     expect(p.lineas).toHaveLength(4);
-    expect(linea(p, ID.lomo)).toMatchObject({ cantidad: 2, bruto: '56.00', neto: '56.00', base: '47.46', igv: '8.54' });
-    expect(linea(p, ID.gaseosa)).toMatchObject({ cantidad: 1, neto: '9.00', base: '7.63', igv: '1.37' });
-    expect(linea(p, ID.bolsa)).toMatchObject({ cantidad: 2, neto: '0.20', bolsas: 2, icbper: '1.00' });
-    expect(linea(p, ID.mandarina)).toMatchObject({ cantidad: 1, neto: '3.00', base: '3.00', igv: '0.00' });
+    expect(linea(p, ID.lomo)).toMatchObject({
+      cantidad: 2,
+      bruto: '56.00',
+      neto: '56.00',
+      base: '47.46',
+      igv: '8.54',
+    });
+    expect(linea(p, ID.gaseosa)).toMatchObject({
+      cantidad: 1,
+      neto: '9.00',
+      base: '7.63',
+      igv: '1.37',
+    });
+    expect(linea(p, ID.bolsa)).toMatchObject({
+      cantidad: 2,
+      neto: '0.20',
+      bolsas: 2,
+      icbper: '1.00',
+    });
+    expect(linea(p, ID.mandarina)).toMatchObject({
+      cantidad: 1,
+      neto: '3.00',
+      base: '3.00',
+      igv: '0.00',
+    });
     expect(p.totales).toMatchObject({
       subtotal: '68.20',
       descuentos: '0.00',
@@ -204,7 +240,10 @@ describe('calcularParte por ítems · criterio 17', () => {
   });
 
   it('en Nuevo RUS la parte no lleva IGV', () => {
-    const p = parteDe(cuentaC({ tasaIgv: null }), [], { tipo: 'ITEMS', items: [{ itemId: ID.lomo, cantidad: 1 }] });
+    const p = parteDe(cuentaC({ tasaIgv: null }), [], {
+      tipo: 'ITEMS',
+      items: [{ itemId: ID.lomo, cantidad: 1 }],
+    });
     expect(p.lineas[0]).toMatchObject({ neto: '28.00', base: '28.00', igv: '0.00' });
     expect(p.totales.igv).toBe('0.00');
     expect(p.totales.operaciones).toBeNull();
@@ -240,7 +279,12 @@ describe('calcularParte por ítems · criterio 17', () => {
       expect(p.totales).toEqual({
         subtotal: '65.00',
         descuentos: '0.00',
-        operaciones: { gravadas: '55.08', exoneradas: '0.00', inafectas: '0.00', gratuitas: '0.00' },
+        operaciones: {
+          gravadas: '55.08',
+          exoneradas: '0.00',
+          inafectas: '0.00',
+          gratuitas: '0.00',
+        },
         igv: '9.92',
         igvGratuitas: '0.00',
         icbper: '0.00',
@@ -252,9 +296,24 @@ describe('calcularParte por ítems · criterio 17', () => {
     it('la misma parte en DETALLADO da dos líneas y cambia el IGV por céntimos, no el total', () => {
       const p = parteDe(cuentaC(), [], lomoYGaseosa, 'DETALLADO');
       expect(p.lineas).toHaveLength(2);
-      expect(linea(p, ID.lomo)).toMatchObject({ cantidad: 2, bruto: '56.00', neto: '56.00', base: '47.46', igv: '8.54' });
-      expect(linea(p, ID.gaseosa)).toMatchObject({ cantidad: 1, neto: '9.00', base: '7.63', igv: '1.37' });
-      expect(p.totales).toMatchObject({ total: '65.00', igv: '9.91', operaciones: { gravadas: '55.09' } });
+      expect(linea(p, ID.lomo)).toMatchObject({
+        cantidad: 2,
+        bruto: '56.00',
+        neto: '56.00',
+        base: '47.46',
+        igv: '8.54',
+      });
+      expect(linea(p, ID.gaseosa)).toMatchObject({
+        cantidad: 1,
+        neto: '9.00',
+        base: '7.63',
+        igv: '1.37',
+      });
+      expect(p.totales).toMatchObject({
+        total: '65.00',
+        igv: '9.91',
+        operaciones: { gravadas: '55.09' },
+      });
       verificarParte(p);
     });
 
@@ -325,7 +384,12 @@ describe('calcularParte por ítems · criterio 17', () => {
     });
 
     it('solo aparecen las afectaciones con neto mayor que cero en la parte', () => {
-      const p = parteDe(cuentaC(), [], { tipo: 'ITEMS', items: [{ itemId: ID.mandarina, cantidad: 1 }] }, 'CONSUMO');
+      const p = parteDe(
+        cuentaC(),
+        [],
+        { tipo: 'ITEMS', items: [{ itemId: ID.mandarina, cantidad: 1 }] },
+        'CONSUMO',
+      );
       expect(p.lineas).toHaveLength(1);
       expect(p.lineas[0]).toMatchObject({ itemId: null, afectacion: 'EXONERADO', neto: '3.00' });
     });
@@ -368,7 +432,12 @@ describe('calcularParte por ítems · criterio 17', () => {
   describe('cortesías', () => {
     const conCortesia = (): CuentaEntrada =>
       cuentaC({
-        lineas: [lineaLomo(), lineaGaseosa({ cantidad: 2, cantidadCortesia: 1 }), lineaBolsa(), lineaMandarina()],
+        lineas: [
+          lineaLomo(),
+          lineaGaseosa({ cantidad: 2, cantidadCortesia: 1 }),
+          lineaBolsa(),
+          lineaMandarina(),
+        ],
       });
     const lineaGratuita = {
       itemId: ID.gaseosa,
@@ -499,7 +568,12 @@ describe('calcularParte en partes iguales · criterio 18', () => {
     // se omiten las afectaciones a las que la parte no les toca nada
     for (const p of [p1, p2, p3]) {
       expect(p.lineas).toHaveLength(1);
-      expect(p.lineas[0]).toMatchObject({ itemId: null, afectacion: 'GRAVADO', bruto: p.totales.total, descuento: '0.00' });
+      expect(p.lineas[0]).toMatchObject({
+        itemId: null,
+        afectacion: 'GRAVADO',
+        bruto: p.totales.total,
+        descuento: '0.00',
+      });
     }
   });
 
@@ -535,7 +609,12 @@ describe('calcularParte en partes iguales · criterio 18', () => {
       expect(p.totales).toEqual({
         subtotal: '34.10',
         descuentos: '0.00',
-        operaciones: { gravadas: '27.62', exoneradas: '1.50', inafectas: '0.00', gratuitas: '0.00' },
+        operaciones: {
+          gravadas: '27.62',
+          exoneradas: '1.50',
+          inafectas: '0.00',
+          gratuitas: '0.00',
+        },
         igv: '4.98',
         igvGratuitas: '0.00',
         icbper: '0.50',
@@ -546,11 +625,34 @@ describe('calcularParte en partes iguales · criterio 18', () => {
         [null, 'EXONERADO'],
         [ID.bolsa, 'GRAVADO'],
       ]);
-      expect(linea(p, null, 'GRAVADO')).toMatchObject({ cantidad: 1, bruto: '32.50', descuento: '0.00', bolsas: 0, icbper: '0.00', gratuita: null });
-      expect(linea(p, null, 'EXONERADO')).toMatchObject({ cantidad: 1, bruto: '1.50', descuento: '0.00' });
-      expect(linea(p, ID.bolsa)).toMatchObject({ bruto: '0.10', descuento: '0.00', gratuita: null });
-      expect(linea(p, null, 'GRAVADO')).toMatchObject({ neto: '32.50', base: '27.54', igv: '4.96' });
-      expect(linea(p, null, 'EXONERADO')).toMatchObject({ neto: '1.50', base: '1.50', igv: '0.00' });
+      expect(linea(p, null, 'GRAVADO')).toMatchObject({
+        cantidad: 1,
+        bruto: '32.50',
+        descuento: '0.00',
+        bolsas: 0,
+        icbper: '0.00',
+        gratuita: null,
+      });
+      expect(linea(p, null, 'EXONERADO')).toMatchObject({
+        cantidad: 1,
+        bruto: '1.50',
+        descuento: '0.00',
+      });
+      expect(linea(p, ID.bolsa)).toMatchObject({
+        bruto: '0.10',
+        descuento: '0.00',
+        gratuita: null,
+      });
+      expect(linea(p, null, 'GRAVADO')).toMatchObject({
+        neto: '32.50',
+        base: '27.54',
+        igv: '4.96',
+      });
+      expect(linea(p, null, 'EXONERADO')).toMatchObject({
+        neto: '1.50',
+        base: '1.50',
+        igv: '0.00',
+      });
       expect(linea(p, ID.bolsa)).toMatchObject({
         cantidad: 1,
         neto: '0.10',
@@ -582,9 +684,22 @@ describe('calcularParte en partes iguales · criterio 18', () => {
     const p3 = parteDe(cuenta, [p1, p2], iguales(1), 'CONSUMO');
     for (const p of [p2, p3]) {
       expect(p.totales).toMatchObject({ total: '16.10', icbper: '0.50' });
-      expect(linea(p, null, 'GRAVADO')).toMatchObject({ neto: '14.00', base: '11.86', igv: '2.14' });
-      expect(linea(p, null, 'EXONERADO')).toMatchObject({ neto: '1.50', base: '1.50', igv: '0.00' });
-      expect(linea(p, ID.bolsa)).toMatchObject({ cantidad: 1, neto: '0.10', bolsas: 1, icbper: '0.50' });
+      expect(linea(p, null, 'GRAVADO')).toMatchObject({
+        neto: '14.00',
+        base: '11.86',
+        igv: '2.14',
+      });
+      expect(linea(p, null, 'EXONERADO')).toMatchObject({
+        neto: '1.50',
+        base: '1.50',
+        igv: '0.00',
+      });
+      expect(linea(p, ID.bolsa)).toMatchObject({
+        cantidad: 1,
+        neto: '0.10',
+        bolsas: 1,
+        icbper: '0.50',
+      });
     }
     expect(p2.cierraLaCuenta).toBe(false);
     expect(p3.cierraLaCuenta).toBe(true);
@@ -594,14 +709,25 @@ describe('calcularParte en partes iguales · criterio 18', () => {
     // Gravado 10.00 + exonerado 5.01 = 15.01 en 3 partes: 5.01, 5.00 y 5.00
     const cuenta: CuentaEntrada = {
       ...cuentaC(),
-      lineas: [lineaLomo({ cantidad: 1, precioUnitario: '10.00' }), lineaMandarina({ precioUnitario: '5.01' })],
+      lineas: [
+        lineaLomo({ cantidad: 1, precioUnitario: '10.00' }),
+        lineaMandarina({ precioUnitario: '5.01' }),
+      ],
     };
     const p1 = parteDe(cuenta, [], iguales(3), 'CONSUMO');
     const p2 = parteDe(cuenta, [p1], iguales(2), 'CONSUMO');
     const p3 = parteDe(cuenta, [p1, p2], iguales(1), 'CONSUMO');
     expect([p1, p2, p3].map((p) => p.totales.total)).toEqual(['5.01', '5.00', '5.00']);
-    expect([p1, p2, p3].map((p) => linea(p, null, 'GRAVADO').neto)).toEqual(['3.34', '3.33', '3.33']);
-    expect([p1, p2, p3].map((p) => linea(p, null, 'EXONERADO').neto)).toEqual(['1.67', '1.67', '1.67']);
+    expect([p1, p2, p3].map((p) => linea(p, null, 'GRAVADO').neto)).toEqual([
+      '3.34',
+      '3.33',
+      '3.33',
+    ]);
+    expect([p1, p2, p3].map((p) => linea(p, null, 'EXONERADO').neto)).toEqual([
+      '1.67',
+      '1.67',
+      '1.67',
+    ]);
     expect(sumar([p1, p2, p3].map((p) => linea(p, null, 'GRAVADO').neto))).toBe('10.00');
     expect(sumar([p1, p2, p3].map((p) => linea(p, null, 'EXONERADO').neto))).toBe('5.01');
     expect(p3.cierraLaCuenta).toBe(true);
@@ -612,7 +738,14 @@ describe('calcularParte · reglas y errores · criterio 19', () => {
   const invalida = { valida: false, codigo: 'PARTE_INVALIDA' } as const;
 
   it('un ítem que no existe en la cuenta es PARTE_INVALIDA', () => {
-    expect(calcularParte(cuentaC(), [], { tipo: 'ITEMS', items: [{ itemId: uuid(99), cantidad: 1 }] }, 'DETALLADO')).toEqual(invalida);
+    expect(
+      calcularParte(
+        cuentaC(),
+        [],
+        { tipo: 'ITEMS', items: [{ itemId: uuid(99), cantidad: 1 }] },
+        'DETALLADO',
+      ),
+    ).toEqual(invalida);
   });
 
   it('un ítem repetido en la selección es PARTE_INVALIDA', () => {
@@ -624,42 +757,99 @@ describe('calcularParte · reglas y errores · criterio 19', () => {
   });
 
   it('pedir más unidades de las que faltan es PARTE_INVALIDA', () => {
-    expect(calcularParte(cuentaC(), [], { tipo: 'ITEMS', items: [{ itemId: ID.lomo, cantidad: 3 }] }, 'DETALLADO')).toEqual(invalida);
+    expect(
+      calcularParte(
+        cuentaC(),
+        [],
+        { tipo: 'ITEMS', items: [{ itemId: ID.lomo, cantidad: 3 }] },
+        'DETALLADO',
+      ),
+    ).toEqual(invalida);
     const cuenta = cuentaC();
     const p1 = parteDe(cuenta, [], { tipo: 'ITEMS', items: [{ itemId: ID.lomo, cantidad: 1 }] });
-    expect(calcularParte(cuenta, [p1], { tipo: 'ITEMS', items: [{ itemId: ID.lomo, cantidad: 2 }] }, 'DETALLADO')).toEqual(invalida);
-    expect(calcularParte(cuenta, [p1], { tipo: 'ITEMS', items: [{ itemId: ID.lomo, cantidad: 1 }] }, 'DETALLADO')).toMatchObject({ valida: true });
+    expect(
+      calcularParte(
+        cuenta,
+        [p1],
+        { tipo: 'ITEMS', items: [{ itemId: ID.lomo, cantidad: 2 }] },
+        'DETALLADO',
+      ),
+    ).toEqual(invalida);
+    expect(
+      calcularParte(
+        cuenta,
+        [p1],
+        { tipo: 'ITEMS', items: [{ itemId: ID.lomo, cantidad: 1 }] },
+        'DETALLADO',
+      ),
+    ).toMatchObject({ valida: true });
   });
 
   it('una unidad en cortesía no se puede pedir para cobrar', () => {
     const cuenta = cuentaC({
-      lineas: [lineaLomo(), lineaGaseosa({ cantidad: 2, cantidadCortesia: 1 }), lineaBolsa(), lineaMandarina()],
+      lineas: [
+        lineaLomo(),
+        lineaGaseosa({ cantidad: 2, cantidadCortesia: 1 }),
+        lineaBolsa(),
+        lineaMandarina(),
+      ],
     });
-    expect(calcularParte(cuenta, [], { tipo: 'ITEMS', items: [{ itemId: ID.gaseosa, cantidad: 2 }] }, 'DETALLADO')).toEqual(invalida);
+    expect(
+      calcularParte(
+        cuenta,
+        [],
+        { tipo: 'ITEMS', items: [{ itemId: ID.gaseosa, cantidad: 2 }] },
+        'DETALLADO',
+      ),
+    ).toEqual(invalida);
   });
 
   it('después de una parte igual solo vale otra parte igual (por ítems y TOTAL son PARTE_INVALIDA)', () => {
     const cuenta = cuentaC();
     const p1 = parteDe(cuenta, [], { tipo: 'IGUALES', partesRestantes: 3 }, 'CONSUMO');
-    expect(calcularParte(cuenta, [p1], { tipo: 'ITEMS', items: [{ itemId: ID.mandarina, cantidad: 1 }] }, 'DETALLADO')).toEqual(invalida);
-    expect(calcularParte(cuenta, [p1], { tipo: 'ITEMS', items: [{ itemId: ID.mandarina, cantidad: 1 }] }, 'CONSUMO')).toEqual(invalida);
+    expect(
+      calcularParte(
+        cuenta,
+        [p1],
+        { tipo: 'ITEMS', items: [{ itemId: ID.mandarina, cantidad: 1 }] },
+        'DETALLADO',
+      ),
+    ).toEqual(invalida);
+    expect(
+      calcularParte(
+        cuenta,
+        [p1],
+        { tipo: 'ITEMS', items: [{ itemId: ID.mandarina, cantidad: 1 }] },
+        'CONSUMO',
+      ),
+    ).toEqual(invalida);
     expect(calcularParte(cuenta, [p1], { tipo: 'TOTAL' }, 'CONSUMO')).toEqual(invalida);
-    expect(calcularParte(cuenta, [p1], { tipo: 'IGUALES', partesRestantes: 2 }, 'CONSUMO')).toMatchObject({ valida: true });
-    expect(calcularParte(cuenta, [p1], { tipo: 'IGUALES', partesRestantes: 1 }, 'CONSUMO')).toMatchObject({ valida: true });
+    expect(
+      calcularParte(cuenta, [p1], { tipo: 'IGUALES', partesRestantes: 2 }, 'CONSUMO'),
+    ).toMatchObject({ valida: true });
+    expect(
+      calcularParte(cuenta, [p1], { tipo: 'IGUALES', partesRestantes: 1 }, 'CONSUMO'),
+    ).toMatchObject({ valida: true });
   });
 
   it('por ítems y después iguales sí vale', () => {
     const cuenta = cuentaC();
     const p1 = parteDe(cuenta, [], { tipo: 'ITEMS', items: [{ itemId: ID.lomo, cantidad: 1 }] });
-    expect(calcularParte(cuenta, [p1], { tipo: 'IGUALES', partesRestantes: 2 }, 'CONSUMO')).toMatchObject({ valida: true });
+    expect(
+      calcularParte(cuenta, [p1], { tipo: 'IGUALES', partesRestantes: 2 }, 'CONSUMO'),
+    ).toMatchObject({ valida: true });
   });
 
   it('el formato DETALLADO en partes iguales es PARTE_INVALIDA', () => {
-    expect(calcularParte(cuentaC(), [], { tipo: 'IGUALES', partesRestantes: 2 }, 'DETALLADO')).toEqual(invalida);
+    expect(
+      calcularParte(cuentaC(), [], { tipo: 'IGUALES', partesRestantes: 2 }, 'DETALLADO'),
+    ).toEqual(invalida);
   });
 
   it('una selección vacía sin cortesías pendientes es PARTE_INVALIDA', () => {
-    expect(calcularParte(cuentaC(), [], { tipo: 'ITEMS', items: [] }, 'DETALLADO')).toEqual(invalida);
+    expect(calcularParte(cuentaC(), [], { tipo: 'ITEMS', items: [] }, 'DETALLADO')).toEqual(
+      invalida,
+    );
   });
 
   it('con el saldo en 0.00 y sin unidades ni cortesías por cobrar es NADA_QUE_COBRAR', () => {
@@ -674,12 +864,16 @@ describe('calcularParte · reglas y errores · criterio 19', () => {
   it('si el consumo de una parte igual sale negativo (las bolsas pesan más que la parte), PARTE_INVALIDA', () => {
     // 10 bolsas: neto 1.00 + ICBPER 5.00 = 6.00 en 50 partes (0.12 cada una) pero cada parte lleva al menos 1 bolsa (0.60)
     const cuenta: CuentaEntrada = { ...cuentaC(), lineas: [lineaBolsa({ cantidad: 10 })] };
-    expect(calcularParte(cuenta, [], { tipo: 'IGUALES', partesRestantes: 50 }, 'CONSUMO')).toEqual(invalida);
+    expect(calcularParte(cuenta, [], { tipo: 'IGUALES', partesRestantes: 50 }, 'CONSUMO')).toEqual(
+      invalida,
+    );
   });
 
   it('rechaza con RangeError las partes restantes fuera de 1 a 50 o no enteras (criterio 8)', () => {
     for (const r of [0, 51, 2.5, -1]) {
-      expect(() => calcularParte(cuentaC(), [], { tipo: 'IGUALES', partesRestantes: r }, 'CONSUMO')).toThrow(RangeError);
+      expect(() =>
+        calcularParte(cuentaC(), [], { tipo: 'IGUALES', partesRestantes: r }, 'CONSUMO'),
+      ).toThrow(RangeError);
     }
   });
 
@@ -688,16 +882,34 @@ describe('calcularParte · reglas y errores · criterio 19', () => {
     const p1 = parteDe(cuenta, [], { tipo: 'IGUALES', partesRestantes: 1 }, 'CONSUMO');
     expect(p1.cierraLaCuenta).toBe(true);
     const nada = { valida: false, codigo: 'NADA_QUE_COBRAR' } as const;
-    expect(calcularParte(cuenta, [p1], { tipo: 'ITEMS', items: [{ itemId: ID.mandarina, cantidad: 1 }] }, 'DETALLADO')).toEqual(nada);
+    expect(
+      calcularParte(
+        cuenta,
+        [p1],
+        { tipo: 'ITEMS', items: [{ itemId: ID.mandarina, cantidad: 1 }] },
+        'DETALLADO',
+      ),
+    ).toEqual(nada);
     expect(calcularParte(cuenta, [p1], { tipo: 'TOTAL' }, 'DETALLADO')).toEqual(nada);
-    expect(calcularParte(cuenta, [p1], { tipo: 'IGUALES', partesRestantes: 1 }, 'CONSUMO')).toEqual(nada);
-    expect(calcularParte(cuenta, [p1], { tipo: 'IGUALES', partesRestantes: 2 }, 'DETALLADO')).toEqual(nada);
+    expect(calcularParte(cuenta, [p1], { tipo: 'IGUALES', partesRestantes: 1 }, 'CONSUMO')).toEqual(
+      nada,
+    );
+    expect(
+      calcularParte(cuenta, [p1], { tipo: 'IGUALES', partesRestantes: 2 }, 'DETALLADO'),
+    ).toEqual(nada);
   });
 
   it('también es NADA_QUE_COBRAR después de cobrarlo todo por ítems, antes de revisar los ítems pedidos', () => {
     const cuenta = cuentaC();
     const p1 = parteDe(cuenta, [], { tipo: 'TOTAL' });
-    expect(calcularParte(cuenta, [p1], { tipo: 'ITEMS', items: [{ itemId: uuid(99), cantidad: 1 }] }, 'DETALLADO')).toEqual({
+    expect(
+      calcularParte(
+        cuenta,
+        [p1],
+        { tipo: 'ITEMS', items: [{ itemId: uuid(99), cantidad: 1 }] },
+        'DETALLADO',
+      ),
+    ).toEqual({
       valida: false,
       codigo: 'NADA_QUE_COBRAR',
     });
@@ -710,12 +922,26 @@ describe('calcularParte · reglas y errores · criterio 19', () => {
   it('el RangeError de la entrada se revisa antes que NADA_QUE_COBRAR', () => {
     const cuenta = cuentaC();
     const p1 = parteDe(cuenta, [], { tipo: 'TOTAL' });
-    expect(() => calcularParte(cuenta, [p1], { tipo: 'ITEMS', items: [{ itemId: ID.lomo, cantidad: 0 }] }, 'DETALLADO')).toThrow(RangeError);
+    expect(() =>
+      calcularParte(
+        cuenta,
+        [p1],
+        { tipo: 'ITEMS', items: [{ itemId: ID.lomo, cantidad: 0 }] },
+        'DETALLADO',
+      ),
+    ).toThrow(RangeError);
   });
 
   it('en la selección, la cantidad 0 y la cantidad 1000 son RangeError (no PARTE_INVALIDA)', () => {
     for (const q of [0, 1000]) {
-      expect(() => calcularParte(cuentaC(), [], { tipo: 'ITEMS', items: [{ itemId: ID.lomo, cantidad: q }] }, 'DETALLADO')).toThrow(RangeError);
+      expect(() =>
+        calcularParte(
+          cuentaC(),
+          [],
+          { tipo: 'ITEMS', items: [{ itemId: ID.lomo, cantidad: q }] },
+          'DETALLADO',
+        ),
+      ).toThrow(RangeError);
     }
   });
 
@@ -729,19 +955,32 @@ describe('calcularParte · reglas y errores · criterio 19', () => {
   });
 
   it('rechaza con RangeError una línea con ICBPER y cortesía', () => {
-    const cuenta = cuentaC({ lineas: [lineaLomo(), lineaBolsa({ cantidad: 3, cantidadCortesia: 1 })] });
+    const cuenta = cuentaC({
+      lineas: [lineaLomo(), lineaBolsa({ cantidad: 3, cantidadCortesia: 1 })],
+    });
     expect(() => calcularParte(cuenta, [], { tipo: 'TOTAL' }, 'DETALLADO')).toThrow(RangeError);
   });
 
   it('rechaza con RangeError una cantidad no entera o negativa en la selección', () => {
     for (const q of [1.5, -1]) {
-      expect(() => calcularParte(cuentaC(), [], { tipo: 'ITEMS', items: [{ itemId: ID.lomo, cantidad: q }] }, 'DETALLADO')).toThrow(RangeError);
+      expect(() =>
+        calcularParte(
+          cuentaC(),
+          [],
+          { tipo: 'ITEMS', items: [{ itemId: ID.lomo, cantidad: q }] },
+          'DETALLADO',
+        ),
+      ).toThrow(RangeError);
     }
   });
 
   it('rechaza con RangeError una cuenta con montos mal formados', () => {
-    expect(() => calcularParte(cuentaC({ montoIcbper: 'x' }), [], { tipo: 'TOTAL' }, 'DETALLADO')).toThrow(RangeError);
-    expect(() => calcularParte(cuentaC({ tasaIgv: '31.00' }), [], { tipo: 'TOTAL' }, 'DETALLADO')).toThrow(RangeError);
+    expect(() =>
+      calcularParte(cuentaC({ montoIcbper: 'x' }), [], { tipo: 'TOTAL' }, 'DETALLADO'),
+    ).toThrow(RangeError);
+    expect(() =>
+      calcularParte(cuentaC({ tasaIgv: '31.00' }), [], { tipo: 'TOTAL' }, 'DETALLADO'),
+    ).toThrow(RangeError);
   });
 });
 
@@ -753,7 +992,12 @@ describe('cambioDeCuentaPermitido · criterio 20', () => {
     parteDe(cuentaC(), [], { tipo: 'ITEMS', items: [{ itemId: ID.lomo, cantidad: 1 }] });
 
   it('sin partes anteriores todo cambio es permitido', () => {
-    expect(cambioDeCuentaPermitido(cuentaC({ lineas: [lineaLomo(), lineaGaseosa({ cantidad: 3 })] }), [])).toEqual(permitido);
+    expect(
+      cambioDeCuentaPermitido(
+        cuentaC({ lineas: [lineaLomo(), lineaGaseosa({ cantidad: 3 })] }),
+        [],
+      ),
+    ).toEqual(permitido);
   });
 
   it('cuenta C sin descuento y 1 Lomo cobrado: enviar 1 Gaseosa más es permitido', () => {
@@ -777,7 +1021,10 @@ describe('cambioDeCuentaPermitido · criterio 20', () => {
 
   it('anular una unidad ya cobrada de una línea cobrada entera no es permitido', () => {
     const cuenta = cuentaC();
-    const dosLomos = parteDe(cuenta, [], { tipo: 'ITEMS', items: [{ itemId: ID.lomo, cantidad: 2 }] });
+    const dosLomos = parteDe(cuenta, [], {
+      tipo: 'ITEMS',
+      items: [{ itemId: ID.lomo, cantidad: 2 }],
+    });
     const nueva = cuentaC({
       lineas: [lineaLomo({ cantidad: 1 }), lineaGaseosa(), lineaBolsa(), lineaMandarina()],
     });
@@ -795,14 +1042,20 @@ describe('cambioDeCuentaPermitido · criterio 20', () => {
     });
     const p1 = parteDe(base, [], { tipo: 'ITEMS', items: [{ itemId: ID.lomo, cantidad: 1 }] });
     expect(p1.totales.total).toBe('25.20');
-    const nueva: CuentaEntrada = { ...base, lineas: [base.lineas[0]!, lineaGaseosa({ cantidad: 2 }), base.lineas[2]!, base.lineas[3]!] };
+    const nueva: CuentaEntrada = {
+      ...base,
+      lineas: [base.lineas[0]!, lineaGaseosa({ cantidad: 2 }), base.lineas[2]!, base.lineas[3]!],
+    };
     expect(cambioDeCuentaPermitido(nueva, [p1])).toEqual(permitido);
   });
 
   describe('con descuento por cuenta y una parte cobrada (regla b)', () => {
     const cuentaConDescuento = (): CuentaEntrada => conDescuento5();
     const lomoCobradoConDescuento = (): ParteCalculada =>
-      parteDe(cuentaConDescuento(), [], { tipo: 'ITEMS', items: [{ itemId: ID.lomo, cantidad: 1 }] });
+      parteDe(cuentaConDescuento(), [], {
+        tipo: 'ITEMS',
+        items: [{ itemId: ID.lomo, cantidad: 1 }],
+      });
 
     it('enviar 1 Gaseosa más no es permitido', () => {
       const nueva = cuentaC({
@@ -821,7 +1074,9 @@ describe('cambioDeCuentaPermitido · criterio 20', () => {
     });
 
     it('sin cambios en las líneas tampoco es permitido: con una parte cobrada y descuento por cuenta, siempre no', () => {
-      expect(cambioDeCuentaPermitido(cuentaConDescuento(), [lomoCobradoConDescuento()])).toEqual(noPermitido);
+      expect(cambioDeCuentaPermitido(cuentaConDescuento(), [lomoCobradoConDescuento()])).toEqual(
+        noPermitido,
+      );
     });
 
     it('sin partes anteriores, el descuento por cuenta no impide cambios (regla a)', () => {
@@ -840,9 +1095,14 @@ describe('cambioDeCuentaPermitido · criterio 20', () => {
   });
 
   it('rechaza con RangeError una cuenta nueva con dos líneas del mismo itemId o con cortesía en una línea con ICBPER', () => {
-    expect(() => cambioDeCuentaPermitido(cuentaC({ lineas: [lineaLomo(), lineaLomo()] }), [lomoCobrado()])).toThrow(RangeError);
     expect(() =>
-      cambioDeCuentaPermitido(cuentaC({ lineas: [lineaLomo(), lineaBolsa({ cantidad: 3, cantidadCortesia: 1 })] }), [lomoCobrado()]),
+      cambioDeCuentaPermitido(cuentaC({ lineas: [lineaLomo(), lineaLomo()] }), [lomoCobrado()]),
+    ).toThrow(RangeError);
+    expect(() =>
+      cambioDeCuentaPermitido(
+        cuentaC({ lineas: [lineaLomo(), lineaBolsa({ cantidad: 3, cantidadCortesia: 1 })] }),
+        [lomoCobrado()],
+      ),
     ).toThrow(RangeError);
     expect(() => cambioDeCuentaPermitido(cuentaC({ montoIcbper: 'x' }), [])).toThrow(RangeError);
   });
@@ -874,16 +1134,22 @@ describe('cambioDeCuentaPermitido · criterio 20', () => {
 // Propiedad: la suma de las partes es el total y ninguna parte queda negativa
 
 describe('calcularParte · propiedad con semilla fija', () => {
-  const formatoAlAzar = (rnd: () => number): FormatoComprobante => (rnd() < 0.5 ? 'DETALLADO' : 'CONSUMO');
+  const formatoAlAzar = (rnd: () => number): FormatoComprobante =>
+    rnd() < 0.5 ? 'DETALLADO' : 'CONSUMO';
 
   /** Lo común: las partes suman el total de la cuenta y reparten sus bolsas enteras; nada queda negativo. */
   function verificarReparto(cuenta: CuentaEntrada, partes: readonly ParteCalculada[]): void {
     const total = calcularCuenta(cuenta);
     for (const p of partes) verificarParte(p);
     expect(sumar(partes.map((p) => p.totales.total))).toBe(total.totales.total);
-    expect(partes.map((p) => p.cierraLaCuenta)).toEqual(partes.map((_, i) => i === partes.length - 1));
+    expect(partes.map((p) => p.cierraLaCuenta)).toEqual(
+      partes.map((_, i) => i === partes.length - 1),
+    );
     const bolsasCuenta = total.lineas.reduce((acc, l) => acc + l.bolsas, 0);
-    const bolsasPartes = partes.reduce((acc, p) => acc + p.porItem.reduce((a, i) => a + i.bolsas, 0), 0);
+    const bolsasPartes = partes.reduce(
+      (acc, p) => acc + p.porItem.reduce((a, i) => a + i.bolsas, 0),
+      0,
+    );
     expect(bolsasPartes).toBe(bolsasCuenta);
     expect(sumar(partes.map((p) => p.totales.icbper))).toBe(total.totales.icbper);
   }
@@ -916,7 +1182,10 @@ describe('calcularParte · propiedad con semilla fija', () => {
         if (ronda > 0 && rnd() < 0.4) break;
         let elegidas = disponibles.filter(() => rnd() < 0.5);
         if (elegidas.length === 0) elegidas = [disponibles[0]!];
-        const items = elegidas.map((l) => ({ itemId: l.itemId, cantidad: entero(rnd, 1, faltan.get(l.itemId)!) }));
+        const items = elegidas.map((l) => ({
+          itemId: l.itemId,
+          cantidad: entero(rnd, 1, faltan.get(l.itemId)!),
+        }));
         partes.push(parteDe(cuenta, partes, { tipo: 'ITEMS', items }, formatoAlAzar(rnd)));
         for (const it of items) faltan.set(it.itemId, faltan.get(it.itemId)! - it.cantidad);
       }
@@ -938,7 +1207,12 @@ describe('calcularParte · propiedad con semilla fija', () => {
       const cuenta = generarCuenta(rnd);
       const grande = cuenta.lineas[0]!;
       const partes: ParteCalculada[] = [
-        parteDe(cuenta, [], { tipo: 'ITEMS', items: [{ itemId: grande.itemId, cantidad: 1 }] }, formatoAlAzar(rnd)),
+        parteDe(
+          cuenta,
+          [],
+          { tipo: 'ITEMS', items: [{ itemId: grande.itemId, cantidad: 1 }] },
+          formatoAlAzar(rnd),
+        ),
       ];
       const r = entero(rnd, 1, 4);
       for (let k = r; k >= 1; k--) {
