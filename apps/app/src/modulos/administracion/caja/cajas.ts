@@ -7,6 +7,7 @@ import {
   type CajaRespuesta,
   type EmisorRespuesta,
   type SerieEntrada,
+  type SerieRespuesta,
   type TasaIgvRespuesta,
 } from '@restaurante/contratos';
 import { api, listaDe } from '../../../lib/api';
@@ -146,6 +147,21 @@ export const TIPOS: readonly TipoSerie[] = ['BOLETA', 'FACTURA'];
 /** La serie que hoy emite ese tipo en la caja, si hay. */
 export const serieActiva = (caja: CajaRespuesta, tipo: TipoSerie) =>
   caja.series.find((s) => s.tipo === tipo && s.activa);
+
+/**
+ * La serie es de un emisor anterior de la sucursal (la sucursal cambió de emisor, criterio 5 de 006): sigue activa
+ * pero ya no emite y el cobro responde `SIN_SERIE`. Sin saber el emisor de la sucursal, no se afirma nada.
+ */
+export function serieDeEmisorAnterior(
+  serie: Pick<SerieRespuesta, 'emisorId'> | undefined,
+  emisorId: string | undefined,
+): boolean {
+  return serie !== undefined && emisorId !== undefined && serie.emisorId !== emisorId;
+}
+
+/** Texto de esa serie vieja, para la etiqueta y el aviso. */
+export const textoDeSerieAnterior = (serie: string): string =>
+  `${serie}: serie de un emisor anterior, no emite`;
 
 /** Una serie de la caja (activa o no) con ese texto: reactivarla no pide "Primer número". */
 export const serieDeLaCaja = (caja: CajaRespuesta, tipo: TipoSerie, serie: string) =>

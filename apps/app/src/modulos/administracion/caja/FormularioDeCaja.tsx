@@ -8,7 +8,9 @@ import {
   TIPOS,
   accionDeSerie,
   serieActiva,
+  serieDeEmisorAnterior,
   serieEscrita,
+  textoDeSerieAnterior,
   textoDeUltimoNumero,
   type BorradorDeCaja,
   type ErroresDeCaja,
@@ -33,6 +35,8 @@ interface Props {
   children?: ReactNode;
   /** Pone el cursor en el nombre al abrir (al crear, que es lo primero que se escribe). */
   enfocarNombre?: boolean;
+  /** El emisor de la sucursal: con él se avisa de las series de un emisor anterior. */
+  emisorId?: string | undefined;
 }
 
 /**
@@ -51,6 +55,7 @@ export function FormularioDeCaja({
   onEnviar,
   children,
   enfocarNombre,
+  emisorId,
 }: Props) {
   const raiz = useRef<HTMLFormElement>(null);
   useEffect(() => {
@@ -117,6 +122,7 @@ export function FormularioDeCaja({
           borrador={borrador}
           errores={errores}
           caja={caja}
+          emisorId={emisorId}
           onCambio={onCambio}
         />
       ))}
@@ -131,11 +137,12 @@ interface PropsSerie {
   borrador: BorradorDeCaja;
   errores: ErroresDeCaja;
   caja: CajaRespuesta | undefined;
+  emisorId: string | undefined;
   onCambio: (parcial: Partial<BorradorDeCaja>) => void;
 }
 
 /** La serie de un tipo de comprobante y, solo si es una serie nueva, el número con que empieza. */
-function GrupoDeSerie({ tipo, borrador, errores, caja, onCambio }: PropsSerie) {
+function GrupoDeSerie({ tipo, borrador, errores, caja, emisorId, onCambio }: PropsSerie) {
   const { serie: campoSerie, primero: campoPrimero } = CAMPOS_DE_SERIE[tipo];
   const nombre = NOMBRE_DE_TIPO[tipo];
   const prefijo = PREFIJO_DE_TIPO[tipo];
@@ -161,6 +168,12 @@ function GrupoDeSerie({ tipo, borrador, errores, caja, onCambio }: PropsSerie) {
       <h4 className="caja__serie-titulo" id={`caja-serie-${tipo}`}>
         {nombre.plural}
       </h4>
+      {serieDeEmisorAnterior(actual, emisorId) && actual ? (
+        <Aviso tipo="alerta" titulo={textoDeSerieAnterior(actual.serie)}>
+          La sucursal cambió de emisor y esta serie ya no emite: el cobro no podrá emitir{' '}
+          {nombre.singular} hasta que escribas una serie nueva de este emisor.
+        </Aviso>
+      ) : null}
       <div className={pideNumero ? 'caja__serie-campos caja__serie-campos--dos' : ''}>
         <CampoTexto
           etiqueta={`Serie de ${nombre.singular}`}

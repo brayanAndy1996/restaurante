@@ -1,0 +1,319 @@
+/* /caja: abrir caja, mi turno, movimientos, reporte X y cierre con conteo a ciegas (006, 6a). Se carga con la pantalla. */
+
+.turno,
+.turno__abrir,
+.turno__cierre,
+.turno__conteo,
+.turno__formulario,
+.turno__movimientos,
+.turno__x,
+.turno__bloqueo,
+.turno__guia {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espacio-lg);
+  min-width: 0;
+}
+
+.turno__formulario,
+.turno__bloqueo,
+.turno__guia {
+  gap: var(--espacio-md);
+}
+
+.turno__fondo {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--espacio-sm);
+}
+
+/* ---------- Resumen del turno: un panel informativo (borde de junta, no se toca) ---------- */
+
+.turno__resumen {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espacio-sm);
+  padding: var(--espacio-md) var(--espacio-lg);
+  background: var(--color-baldosa);
+  border: 1px solid var(--color-junta);
+  border-radius: var(--radio-baldosa);
+}
+
+.turno__resumen-cabecera {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--espacio-sm) var(--espacio-md);
+}
+
+.turno__caja {
+  font-size: 1.25rem;
+  line-height: 1.625rem;
+  overflow-wrap: anywhere;
+}
+
+.turno__datos {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+}
+
+.turno__dato {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--espacio-md);
+  padding-block: var(--espacio-sm);
+  border-top: 1px solid var(--color-junta);
+}
+
+.turno__datos dt {
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+  color: var(--color-tinta-suave);
+}
+
+.turno__datos dd {
+  margin: 0;
+  font-size: 1rem;
+  line-height: 1.5rem;
+  font-weight: 600;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------- Movimientos ---------- */
+
+.turno__historial {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espacio-sm);
+}
+
+.turno__lista {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.turno__movimiento {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: var(--espacio-md);
+  padding-block: var(--espacio-md);
+  border-top: 1px solid var(--color-junta);
+}
+.turno__movimiento:first-child {
+  border-top: 0;
+}
+
+.turno__movimiento-texto {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--espacio-xs);
+  min-width: 0;
+}
+
+.turno__movimiento-motivo {
+  font-size: 1.0625rem;
+  line-height: 1.5rem;
+  overflow-wrap: anywhere;
+}
+
+.turno__movimiento-monto {
+  font-size: 1.0625rem;
+  line-height: 1.5rem;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* ---------- Reporte X / Z ---------- */
+
+.turno__x-acciones {
+  display: flex;
+}
+.turno__x-acciones > * {
+  flex: 1 1 auto;
+}
+
+.reporte {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espacio-lg);
+}
+
+.reporte__hora {
+  margin: 0;
+}
+
+.reporte__bloques {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--espacio-lg);
+}
+
+@media (min-width: 768px) {
+  .reporte__bloques {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: start;
+  }
+}
+
+.reporte__bloque {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espacio-sm);
+  min-width: 0;
+  padding: var(--espacio-md) var(--espacio-lg);
+  background: var(--color-baldosa);
+  border: 1px solid var(--color-junta);
+  border-radius: var(--radio-baldosa);
+}
+
+.reporte__titulo {
+  margin: 0;
+  font-size: 1.0625rem;
+  line-height: 1.5rem;
+  font-weight: 700;
+}
+
+.reporte__lista {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+}
+
+.reporte__fila {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--espacio-md);
+  min-height: 2.5rem;
+  padding-block: var(--espacio-sm);
+}
+.reporte__fila + .reporte__fila {
+  border-top: 1px solid var(--color-junta);
+}
+
+.reporte__etiqueta {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  font-size: 1rem;
+  line-height: 1.5rem;
+}
+
+.reporte__ayuda {
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+  color: var(--color-tinta-suave);
+}
+
+.reporte__valor {
+  margin: 0;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.reporte__fila--fuerte .reporte__valor {
+  font-size: 1.25rem;
+  line-height: 1.625rem;
+  font-weight: 700;
+}
+
+.reporte__conteo {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.reporte__medio {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espacio-xs);
+  padding-block: var(--espacio-md);
+  border-top: 1px solid var(--color-junta);
+}
+.reporte__medio:first-child {
+  border-top: 0;
+}
+
+.reporte__medio-cabecera {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--espacio-sm);
+}
+
+/* ---------- Cierre con conteo a ciegas ---------- */
+
+.turno__cerrar {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espacio-md);
+}
+
+.turno__diferencias {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.turno__diferencia {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espacio-md);
+  padding-block: var(--espacio-lg);
+  border-top: 1px solid var(--color-junta);
+}
+.turno__diferencia:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.turno__diferencia-cabecera {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--espacio-sm) var(--espacio-md);
+}
+
+.turno__diferencia-texto {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  font-size: 1.0625rem;
+  line-height: 1.5rem;
+}
+.turno__diferencia-texto .texto-ayuda {
+  font-variant-numeric: tabular-nums;
+}
+
+.turno__motivo {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espacio-md);
+}
+
+.turno__tipo {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espacio-sm);
+}
+.turno__titulo-form {
+  margin: 0;
+}

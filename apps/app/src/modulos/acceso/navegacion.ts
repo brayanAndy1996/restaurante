@@ -5,7 +5,8 @@ import { requisitoDeSesion } from './permisos';
 /** Una sesión sin lo que no hace falta para decidir la navegación (sirve igual en las pruebas). */
 type SesionDeNavegacion = Pick<SesionRespuesta, 'permisos' | 'modulos' | 'esAdministrador'>;
 
-export type IdDeDestino = 'inicio' | 'salon' | 'cocina' | 'carta' | 'disponibilidad' | 'ajustes';
+export type IdDeDestino =
+  'inicio' | 'salon' | 'caja' | 'cocina' | 'carta' | 'disponibilidad' | 'ajustes';
 
 export interface Destino {
   id: IdDeDestino;
@@ -32,26 +33,44 @@ export function veLaCocina(sesion: SesionDeNavegacion | null | undefined): boole
 }
 
 /**
- * A dónde se entra (criterio 87 de 004): "Salón" para quien atiende mesas y "Cocina" para quien solo usa
- * la pantalla de cocina. `null` si no tiene ninguna de las dos (por ejemplo, el plan no incluye el módulo):
- * entonces se queda en Inicio.
+ * "Caja": quien cobra u opera la caja (`COBRAR` u `OPERAR_CAJA`), si la sucursal tiene el módulo de Caja
+ * (criterio 108 de 006).
+ */
+export function veLaCaja(sesion: SesionDeNavegacion | null | undefined): boolean {
+  return sesion ? puede(sesion, 'COBRAR', 'CAJA') || puede(sesion, 'OPERAR_CAJA', 'CAJA') : false;
+}
+
+/**
+ * "Disponibilidad" va dentro de Cocina para el Administrador (su barra ya tiene cinco destinos, criterio 108 de
+ * 006). Si el plan no le da Cocina, vuelve a la barra: es la única puerta.
+ */
+export function disponibilidadVaEnCocina(sesion: SesionDeNavegacion | null | undefined): boolean {
+  return !!sesion?.esAdministrador && veLaCocina(sesion);
+}
+
+/**
+ * A dónde se entra (criterio 87 de 004): "Salón" para quien atiende mesas, "Cocina" para quien solo usa
+ * la pantalla de cocina y "Caja" para quien solo opera la caja. `null` si no tiene ninguna (por ejemplo, el plan
+ * no incluye el módulo): entonces se queda en Inicio.
  */
 export function destinoInicial(sesion: SesionDeNavegacion | null | undefined): string | null {
   if (veElSalon(sesion)) return '/salon';
   if (veLaCocina(sesion)) return '/cocina';
+  if (veLaCaja(sesion)) return '/caja';
   return null;
 }
 
 /**
- * Navegación por rol (criterio 87 de 004), en este orden y como máximo cinco destinos. Sale de `permisos` y
- * `modulos` de `GET /sesion`, no del nombre del rol:
+ * Navegación por rol (criterio 108 de 006, que cambia el 87 de 004), en este orden y como máximo cinco destinos.
+ * Sale de `permisos` y `modulos` de `GET /sesion`, no del nombre del rol:
  *
- * - Mozo: Salón. Cajero: Salón y Carta. Cocina/Barra: Cocina y Disponibilidad.
- * - Supervisor: Salón, Cocina y Disponibilidad.
- * - Administrador: Salón, Cocina, Carta, Disponibilidad y Ajustes.
+ * - Mozo: Salón. Cajero: Salón, Caja y Carta. Cocina/Barra: Cocina y Disponibilidad.
+ * - Supervisor: Salón, Caja, Cocina y Disponibilidad.
+ * - Administrador: Salón, Caja, Cocina, Carta y Ajustes; "Disponibilidad" es un acceso dentro de Cocina.
  *
- * "Inicio" solo aparece si la persona no tiene ni Salón ni Cocina, porque entonces es donde aterriza.
- * Las acciones que no puede hacer no aparecen (no se muestran apagadas).
+ * "Caja" solo aparece con el módulo de Caja en el plan. "Inicio" solo aparece si la persona no tiene ni Salón ni
+ * Cocina ni Caja, porque entonces es donde aterriza. Las acciones que no puede hacer no aparecen (no se muestran
+ * apagadas).
  */
 export function destinosDeNavegacion(sesion: SesionDeNavegacion | null | undefined): Destino[] {
   if (!sesion) return [];
@@ -59,13 +78,18 @@ export function destinosDeNavegacion(sesion: SesionDeNavegacion | null | undefin
   if (destinoInicial(sesion) === null)
     destinos.push({ id: 'inicio', a: '/', etiqueta: 'Inicio', fin: true });
   if (veElSalon(sesion)) destinos.push({ id: 'salon', a: '/salon', etiqueta: 'Salón', fin: false });
+  if (veLaCaja(sesion)) destinos.push({ id: 'caja', a: '/caja', etiqueta: 'Caja', fin: false });
   if (veLaCocina(sesion))
     destinos.push({ id: 'cocina', a: '/cocina', etiqueta: 'Cocina', fin: false });
   // La carta la edita quien tiene `EDITAR_CARTA` con su rol en la sucursal activa (Administrador y Cajero).
   if (requisitoDeSesion(sesion.permisos, 'EDITAR_CARTA') === 'permitido')
     destinos.push({ id: 'carta', a: '/carta', etiqueta: 'Carta', fin: false });
-  // La disponibilidad (agotados y menú del día): Cocina/Barra, Supervisor y Administrador.
-  if (requisitoDeSesion(sesion.permisos, 'GESTIONAR_DISPONIBILIDAD') === 'permitido')
+  // La disponibilidad (agotados y menú del día): Cocina/Barra, Supervisor y Administrador. El Administrador la
+  // abre desde Cocina (no cabría en su barra de cinco destinos).
+  if (
+    requisitoDeSesion(sesion.permisos, 'GESTIONAR_DISPONIBILIDAD') === 'permitido' &&
+    !disponibilidadVaEnCocina(sesion)
+  )
     destinos.push({
       id: 'disponibilidad',
       a: '/disponibilidad',

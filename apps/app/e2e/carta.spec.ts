@@ -655,7 +655,9 @@ test('a 360 px de ancho, las pantallas de la carta y de Disponibilidad no se des
   });
 
   await test.step('Disponibilidad: Agotados, su hoja y Menú del día', async () => {
-    await destino(page, 'Disponibilidad').click();
+    // El Administrador la abre desde Cocina (criterio 108 de 006): su barra ya tiene cinco destinos.
+    await destino(page, 'Cocina').click();
+    await page.getByRole('link', { name: 'Disponibilidad' }).click();
     await expect(page.getByRole('heading', { name: 'Disponibilidad', level: 1 })).toBeVisible();
     await expect(page.getByRole('switch', { name: `Agotado: ${ARROZ}` })).toBeVisible();
     await afirmarPantallaDeCelular(page, 'Disponibilidad > Agotados');

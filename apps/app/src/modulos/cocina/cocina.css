@@ -11,6 +11,26 @@
   gap: var(--espacio-sm);
 }
 
+/* Acceso a Disponibilidad (Administrador): un botón secundario; en tableta no ocupa todo el ancho */
+.cocina__acceso {
+  align-self: flex-start;
+  max-width: 100%;
+}
+.cocina__acceso-ayuda {
+  font-weight: 400;
+  font-size: 0.875rem;
+  color: var(--color-tinta-suave);
+}
+@media (max-width: 479px) {
+  .cocina__acceso {
+    align-self: stretch;
+    justify-content: center;
+  }
+  .cocina__acceso-ayuda {
+    display: none;
+  }
+}
+
 .cocina__estado {
   display: flex;
   flex-wrap: wrap;

@@ -396,6 +396,7 @@ function CajasDeSucursal({ sucursalId, selector }: { sucursalId: string; selecto
         general={fallo}
         onCambio={cambiar}
         onEnviar={() => void guardar()}
+        emisorId={emisorId}
         enfocarNombre={modo.tipo === 'nueva'}
       >
         {editando ? (
@@ -468,7 +469,7 @@ function CajasDeSucursal({ sucursalId, selector }: { sucursalId: string; selecto
               <p className="texto-ayuda" aria-live="polite">
                 {textoDeCantidad(activas, lista.length)}
               </p>
-              <ListaDeCajas cajas={lista} onElegir={abrirEditar} />
+              <ListaDeCajas cajas={lista} onElegir={abrirEditar} emisorId={emisorId} />
             </>
           )}
         </section>

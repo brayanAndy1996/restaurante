@@ -5,33 +5,72 @@ import { screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { guardarTokenDeSesion } from '../src/lib/almacen';
 import { espera } from '../src/lib/api';
-import { destinoInicial, destinosDeNavegacion } from '../src/modulos/acceso/navegacion';
+import {
+  destinoInicial,
+  destinosDeNavegacion,
+  disponibilidadVaEnCocina,
+} from '../src/modulos/acceso/navegacion';
 import { json, renderApp, servidor } from './ayudas';
+import { cocinaDe } from './ayudas-cocina';
 import { mesa, salon, sesionDeRol, uuid, zona } from './ayudas-salon';
 
-// spec: 004-salon-cocina, criterio 87 (navegación por rol y destino inicial; pruebas no protegidas).
+// spec: 006-caja-cobro, criterio 108 (navegación por rol; cambia el criterio 87 de 004) y 004-salon-cocina, criterio 87
+// (destino inicial); pruebas no protegidas.
 
 const TOKEN =
   'se.11111111-1111-4111-8111-111111111111.22222222-2222-4222-8222-222222222222.secreto';
 
+const PLAN_COMPLETO: Modulo[] = ['SALON', 'COCINA', 'CAJA'];
+
 const etiquetas = (sesion: Pick<SesionRespuesta, 'permisos' | 'modulos' | 'esAdministrador'>) =>
   destinosDeNavegacion(sesion).map((d) => d.etiqueta);
 
-const de = (rol: Rol, modulos: Modulo[] = ['SALON', 'COCINA']) => ({
+const de = (rol: Rol, modulos: Modulo[] = ['SALON', 'COCINA', 'CAJA']) => ({
   permisos: permisosDeRol(rol),
   modulos,
   esAdministrador: rol === 'ADMINISTRADOR',
 });
 
-describe('destinosDeNavegacion (criterio 87)', () => {
+describe('destinosDeNavegacion (criterio 108 de 006, que cambia el 87 de 004)', () => {
   it.each([
     ['MOZO', ['Salón']],
-    ['CAJERO', ['Salón', 'Carta']],
+    ['CAJERO', ['Salón', 'Caja', 'Carta']],
     ['COCINA_BARRA', ['Cocina', 'Disponibilidad']],
-    ['SUPERVISOR', ['Salón', 'Cocina', 'Disponibilidad']],
-    ['ADMINISTRADOR', ['Salón', 'Cocina', 'Carta', 'Disponibilidad', 'Ajustes']],
+    ['SUPERVISOR', ['Salón', 'Caja', 'Cocina', 'Disponibilidad']],
+    ['ADMINISTRADOR', ['Salón', 'Caja', 'Cocina', 'Carta', 'Ajustes']],
   ] as const)('%s ve %j', (rol, esperado) => {
     expect(etiquetas(de(rol))).toEqual(esperado);
+  });
+
+  it('sin el módulo de Caja en el plan, "Caja" no aparece y el resto queda como en 004', () => {
+    const sinCaja: Modulo[] = ['SALON', 'COCINA'];
+    expect(etiquetas(de('CAJERO', sinCaja))).toEqual(['Salón', 'Carta']);
+    expect(etiquetas(de('SUPERVISOR', sinCaja))).toEqual(['Salón', 'Cocina', 'Disponibilidad']);
+    expect(etiquetas(de('ADMINISTRADOR', sinCaja))).toEqual([
+      'Salón',
+      'Cocina',
+      'Carta',
+      'Ajustes',
+    ]);
+  });
+
+  it('el Mozo no tiene Caja aunque el plan la incluya: no cobra ni opera la caja', () => {
+    expect(etiquetas(de('MOZO'))).not.toContain('Caja');
+    expect(etiquetas(de('COCINA_BARRA'))).not.toContain('Caja');
+  });
+
+  it('"Disponibilidad" es un acceso dentro de Cocina para el Administrador; si su plan no incluye Cocina, vuelve a la barra', () => {
+    expect(disponibilidadVaEnCocina(de('ADMINISTRADOR'))).toBe(true);
+    expect(disponibilidadVaEnCocina(de('SUPERVISOR'))).toBe(false);
+    expect(disponibilidadVaEnCocina(de('COCINA_BARRA'))).toBe(false);
+    expect(disponibilidadVaEnCocina(de('ADMINISTRADOR', ['SALON', 'CAJA']))).toBe(false);
+    expect(etiquetas(de('ADMINISTRADOR', ['SALON', 'CAJA']))).toEqual([
+      'Salón',
+      'Caja',
+      'Carta',
+      'Disponibilidad',
+      'Ajustes',
+    ]);
   });
 
   it('nunca pasa de cinco destinos', () => {
@@ -42,6 +81,7 @@ describe('destinosDeNavegacion (criterio 87)', () => {
   it('sin el módulo en el plan de la sucursal, el destino no aparece', () => {
     expect(etiquetas(de('SUPERVISOR', ['SALON']))).toEqual(['Salón', 'Disponibilidad']);
     expect(etiquetas(de('SUPERVISOR', ['COCINA']))).toEqual(['Cocina', 'Disponibilidad']);
+    expect(etiquetas(de('SUPERVISOR', ['CAJA']))).toEqual(['Caja', 'Disponibilidad']);
   });
 
   it('quien no tiene ni Salón ni Cocina cae en Inicio, que solo existe para ellos', () => {
@@ -52,6 +92,8 @@ describe('destinosDeNavegacion (criterio 87)', () => {
       'Disponibilidad',
       'Ajustes',
     ]);
+    // Con solo Caja, Caja es donde aterriza (no hace falta Inicio).
+    expect(etiquetas(de('CAJERO', ['CAJA']))).toEqual(['Caja', 'Carta']);
     expect(etiquetas(de('MOZO'))).not.toContain('Inicio');
   });
 
@@ -71,6 +113,7 @@ describe('destinoInicial (criterio 87)', () => {
   });
 
   it('Cocina/Barra sin el módulo de Cocina y quien no tiene el de Salón se quedan en Inicio', () => {
+    expect(destinoInicial(de('CAJERO', ['CAJA']))).toBe('/caja');
     expect(destinoInicial(de('COCINA_BARRA', ['SALON']))).toBeNull();
     expect(destinoInicial(de('MOZO', ['COCINA']))).toBeNull();
     expect(destinoInicial(de('SUPERVISOR', ['COCINA']))).toBe('/cocina');
@@ -122,7 +165,7 @@ describe('navegación en la app', () => {
   });
 
   it('el Administrador ve los cinco destinos en su orden y entra en el Salón', async () => {
-    api(sesionDeRol('ADMINISTRADOR'));
+    api(sesionDeRol('ADMINISTRADOR', { modulos: PLAN_COMPLETO }));
     renderApp('/');
     await screen.findByRole('heading', { name: 'Salón', level: 1 });
     const nav = screen.getByRole('navigation', { name: 'Principal' });
@@ -130,11 +173,11 @@ describe('navegación en la app', () => {
       within(nav)
         .getAllByRole('link')
         .map((l) => l.textContent),
-    ).toEqual(['Salón', 'Cocina', 'Carta', 'Disponibilidad', 'Ajustes']);
+    ).toEqual(['Salón', 'Caja', 'Cocina', 'Carta', 'Ajustes']);
   });
 
-  it('el Cajero ve Salón y Carta', async () => {
-    api(sesionDeRol('CAJERO'));
+  it('el Cajero ve Salón, Caja y Carta', async () => {
+    api(sesionDeRol('CAJERO', { modulos: PLAN_COMPLETO }));
     renderApp('/');
     await screen.findByRole('heading', { name: 'Salón', level: 1 });
     const nav = screen.getByRole('navigation', { name: 'Principal' });
@@ -142,7 +185,53 @@ describe('navegación en la app', () => {
       within(nav)
         .getAllByRole('link')
         .map((l) => l.textContent),
-    ).toEqual(['Salón', 'Carta']);
+    ).toEqual(['Salón', 'Caja', 'Carta']);
+  });
+
+  it('el Supervisor ve Salón, Caja, Cocina y Disponibilidad', async () => {
+    api(sesionDeRol('SUPERVISOR', { modulos: PLAN_COMPLETO }));
+    renderApp('/');
+    await screen.findByRole('heading', { name: 'Salón', level: 1 });
+    const nav = screen.getByRole('navigation', { name: 'Principal' });
+    expect(
+      within(nav)
+        .getAllByRole('link')
+        .map((l) => l.textContent),
+    ).toEqual(['Salón', 'Caja', 'Cocina', 'Disponibilidad']);
+  });
+
+  it('el Administrador abre Disponibilidad desde un acceso en Cocina; el Supervisor la tiene en su barra y no ve el acceso', async () => {
+    const cocina = servidor({
+      'GET /sesion': () => json(200, sesionDeRol('ADMINISTRADOR', { modulos: PLAN_COMPLETO })),
+      'GET /cocina/comandas': () => json(200, cocinaDe([]), { ETag: '"1"' }),
+    });
+    renderApp('/cocina');
+    expect(await screen.findByRole('heading', { name: 'Cocina', level: 1 })).toBeInTheDocument();
+    const acceso = await screen.findByRole('link', { name: /^Disponibilidad/ });
+    expect(acceso).toHaveAttribute('href', '/disponibilidad');
+    // No está en la barra de navegación: la puerta es esta.
+    expect(
+      within(screen.getByRole('navigation', { name: 'Principal' })).queryByRole('link', {
+        name: 'Disponibilidad',
+      }),
+    ).toBeNull();
+    expect(cocina.de('GET', '/cocina/comandas').length).toBeGreaterThan(0);
+  });
+
+  it('un Supervisor ve el acceso a Disponibilidad solo en su barra, no dentro de Cocina', async () => {
+    servidor({
+      'GET /sesion': () => json(200, sesionDeRol('SUPERVISOR', { modulos: PLAN_COMPLETO })),
+      'GET /cocina/comandas': () => json(200, cocinaDe([]), { ETag: '"1"' }),
+    });
+    renderApp('/cocina');
+    expect(await screen.findByRole('heading', { name: 'Cocina', level: 1 })).toBeInTheDocument();
+    expect(screen.getAllByRole('link', { name: /Disponibilidad/ })).toHaveLength(1);
+  });
+
+  it('un Mozo no abre la Caja escribiendo la dirección: lo devuelve al Salón', async () => {
+    api(sesionDeRol('MOZO', { modulos: PLAN_COMPLETO }));
+    renderApp('/caja');
+    expect(await screen.findByRole('heading', { name: 'Salón', level: 1 })).toBeInTheDocument();
   });
 
   it('lo que el rol no ve tampoco se abre escribiendo la dirección: lo devuelve a su destino inicial', async () => {

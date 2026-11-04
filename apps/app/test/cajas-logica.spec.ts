@@ -8,6 +8,7 @@ import {
   numeroDeComprobante,
   pasosDeInicio,
   pideElPrimerNumero,
+  serieDeEmisorAnterior,
   primerNumeroEscrito,
   serieEscrita,
   tasaEscrita,
@@ -20,6 +21,7 @@ import {
 // spec: 006-caja-cobro, criterios 1 a 6 y 117 (lógica pura de Ajustes › Cajas y Emisores; pruebas no protegidas).
 
 const uuid = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
+const EMISOR_PRUEBA = uuid(900);
 const caja = (n: number, nombre: string, extra: Partial<CajaRespuesta> = {}): CajaRespuesta => ({
   id: uuid(n),
   sucursalId: uuid(1),
@@ -32,8 +34,8 @@ const caja = (n: number, nombre: string, extra: Partial<CajaRespuesta> = {}): Ca
 });
 const conSeries = caja(10, 'Caja 1', {
   series: [
-    { tipo: 'BOLETA', serie: 'B001', ultimoNumero: 130, activa: true },
-    { tipo: 'BOLETA', serie: 'B000', ultimoNumero: 3, activa: false },
+    { tipo: 'BOLETA', serie: 'B001', ultimoNumero: 130, activa: true, emisorId: EMISOR_PRUEBA },
+    { tipo: 'BOLETA', serie: 'B000', ultimoNumero: 3, activa: false, emisorId: EMISOR_PRUEBA },
   ],
 });
 
@@ -214,5 +216,18 @@ describe('validarCaja', () => {
     expect(cambiosDeCaja(con, 'Caja', uuid(50))).toEqual({});
     expect(cambiosDeCaja(con, 'Otra', uuid(50))).toEqual({ nombre: 'Otra' });
     expect(cambiosDeCaja(con, 'Caja', null)).toEqual({ impresoraId: null });
+  });
+});
+
+describe('serieDeEmisorAnterior (criterio 5)', () => {
+  it('es una serie de otro emisor cuando su emisor no es el de la sucursal', () => {
+    const serie = conSeries.series[0];
+    expect(serieDeEmisorAnterior(serie, EMISOR_PRUEBA)).toBe(false);
+    expect(serieDeEmisorAnterior(serie, uuid(901))).toBe(true);
+  });
+
+  it('sin serie o sin saber el emisor de la sucursal, no se afirma nada', () => {
+    expect(serieDeEmisorAnterior(undefined, EMISOR_PRUEBA)).toBe(false);
+    expect(serieDeEmisorAnterior(conSeries.series[0], undefined)).toBe(false);
   });
 });

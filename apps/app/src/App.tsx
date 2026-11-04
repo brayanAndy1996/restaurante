@@ -10,7 +10,7 @@ import { IngresoPagina } from './modulos/acceso/IngresoPagina';
 import { InicioPagina } from './modulos/acceso/InicioPagina';
 import { PinPagina } from './modulos/acceso/PinPagina';
 import { RecordarEquipoAutomatico } from './modulos/acceso/RecordarEquipo';
-import { veElSalon, veLaCocina } from './modulos/acceso/navegacion';
+import { veElSalon, veLaCaja, veLaCocina } from './modulos/acceso/navegacion';
 import { usePermiso } from './modulos/acceso/permisos';
 import { useSesion } from './modulos/acceso/sesion';
 import { PlataformaIngresoPagina } from './modulos/plataforma/PlataformaIngresoPagina';
@@ -114,6 +114,10 @@ const MoverCuentaPagina = lazy(() =>
 );
 const UnirMesasPagina = lazy(() =>
   import('./modulos/salon/SeleccionDeMesasPagina').then((m) => ({ default: m.UnirMesasPagina })),
+);
+// Caja (006): abrir, mi turno, movimientos, reporte X y cierre. Todo el módulo se baja al abrir la pantalla.
+const CajaPagina = lazy(() =>
+  import('./modulos/caja/CajaPagina').then((m) => ({ default: m.CajaPagina })),
 );
 const CocinaPagina = lazy(() =>
   import('./modulos/cocina/CocinaPagina').then((m) => ({ default: m.CocinaPagina })),
@@ -260,6 +264,13 @@ function RutaDeCocina() {
   return <Outlet />;
 }
 
+/** La caja la ve quien tiene `COBRAR` u `OPERAR_CAJA` con su rol en la sucursal activa y el módulo de Caja en su plan. */
+function RutaDeCaja() {
+  const { sesion } = useSesion();
+  if (!veLaCaja(sesion)) return <Navigate to="/" replace />;
+  return <Outlet />;
+}
+
 function Cargando() {
   return <PantallaDeCarga />;
 }
@@ -304,6 +315,9 @@ export function App() {
                 <Route path="/salon/ordenes/:id/agregar" element={<ComanderoPagina />} />
                 <Route path="/salon/ordenes/:id/mover" element={<MoverCuentaPagina />} />
                 <Route path="/salon/ordenes/:id/unir" element={<UnirMesasPagina />} />
+              </Route>
+              <Route element={<RutaDeCaja />}>
+                <Route path="/caja" element={<CajaPagina />} />
               </Route>
               <Route element={<RutaDeCocina />}>
                 <Route path="/cocina" element={<CocinaPagina />} />

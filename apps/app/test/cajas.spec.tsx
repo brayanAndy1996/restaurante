@@ -152,6 +152,7 @@ function api(datos: Datos = {}, respuestas: Record<string, Manejador> = {}) {
                 serie: c.serie,
                 ultimoNumero: (c.primerNumero ?? 1) - 1,
                 activa: true,
+                emisorId: EMISOR,
               },
             ];
         return { ...x, series };
@@ -218,12 +219,14 @@ describe('Ajustes › Cajas: ver (criterio 117)', () => {
         caja(1, 'Caja 2', {
           impresora: { id: uuid(201), nombre: 'Caja', gaveta: true },
           series: [
-            { tipo: 'BOLETA', serie: 'B002', ultimoNumero: 7, activa: true },
-            { tipo: 'FACTURA', serie: 'F002', ultimoNumero: 0, activa: true },
+            { tipo: 'BOLETA', serie: 'B002', ultimoNumero: 7, activa: true, emisorId: EMISOR },
+            { tipo: 'FACTURA', serie: 'F002', ultimoNumero: 0, activa: true, emisorId: EMISOR },
           ],
         }),
         caja(2, 'Caja 1', {
-          series: [{ tipo: 'BOLETA', serie: 'B001', ultimoNumero: 130, activa: true }],
+          series: [
+            { tipo: 'BOLETA', serie: 'B001', ultimoNumero: 130, activa: true, emisorId: EMISOR },
+          ],
           turnoAbierto: {
             id: uuid(300),
             responsable: { id: uuid(301), nombre: 'Ana' },
@@ -348,7 +351,9 @@ describe('Ajustes › Cajas: primeros pasos (pregunta 19)', () => {
     const s = api({
       cajas: [
         caja(1, 'Caja 1', {
-          series: [{ tipo: 'BOLETA', serie: 'B001', ultimoNumero: 0, activa: true }],
+          series: [
+            { tipo: 'BOLETA', serie: 'B001', ultimoNumero: 0, activa: true, emisorId: EMISOR },
+          ],
         }),
       ],
       tasas: [{ desde: '2020-01-01', tasa: '18.00' }],
@@ -362,7 +367,9 @@ describe('Ajustes › Cajas: primeros pasos (pregunta 19)', () => {
     api({
       cajas: [
         caja(1, 'Caja 1', {
-          series: [{ tipo: 'BOLETA', serie: 'B001', ultimoNumero: 0, activa: true }],
+          series: [
+            { tipo: 'BOLETA', serie: 'B001', ultimoNumero: 0, activa: true, emisorId: EMISOR },
+          ],
         }),
       ],
       tasas: [{ desde: '2999-01-01', tasa: '18.00' }],
@@ -379,6 +386,81 @@ describe('Ajustes › Cajas: primeros pasos (pregunta 19)', () => {
     const guia = await screen.findByRole('region', { name: /Para cobrar falta/ });
     await vi.waitFor(() => expect(within(guia).getAllByRole('listitem')).toHaveLength(2));
     expect(within(guia).queryByText(/tasa de IGV/)).toBeNull();
+  });
+});
+
+describe('Ajustes › Cajas: series de un emisor anterior (criterio 5)', () => {
+  const VIEJO = uuid(901);
+
+  it('avisa en la lista que la serie de otro emisor no emite; las del emisor de la sucursal no llevan aviso', async () => {
+    api({
+      cajas: [
+        caja(1, 'Caja 1', {
+          series: [
+            { tipo: 'BOLETA', serie: 'B001', ultimoNumero: 130, activa: true, emisorId: VIEJO },
+            { tipo: 'FACTURA', serie: 'F001', ultimoNumero: 4, activa: true, emisorId: EMISOR },
+          ],
+        }),
+        caja(2, 'Caja 2', {
+          series: [
+            { tipo: 'BOLETA', serie: 'B002', ultimoNumero: 7, activa: true, emisorId: EMISOR },
+          ],
+        }),
+      ],
+    });
+    await abrir();
+    const fila1 = await screen.findByRole('button', { name: /^Caja 1/ });
+    await vi.waitFor(() =>
+      expect(
+        within(fila1).getByText('Boletas B001: serie de un emisor anterior, no emite'),
+      ).toBeInTheDocument(),
+    );
+    expect(within(fila1).getByText('Facturas F001')).toBeInTheDocument();
+    const fila2 = screen.getByRole('button', { name: /^Caja 2/ });
+    expect(within(fila2).getByText('Boletas B002')).toBeInTheDocument();
+    expect(within(fila2).queryByText(/emisor anterior/)).toBeNull();
+  });
+
+  it('al editar la caja repite el aviso sobre la serie vieja y deja escribir la nueva', async () => {
+    api({
+      cajas: [
+        caja(1, 'Caja 1', {
+          series: [
+            { tipo: 'BOLETA', serie: 'B001', ultimoNumero: 130, activa: true, emisorId: VIEJO },
+          ],
+        }),
+      ],
+    });
+    await abrir();
+    await vi.waitFor(() => expect(screen.getByText(/emisor anterior/)).toBeInTheDocument());
+    await userEvent.click(await screen.findByRole('button', { name: /^Caja 1/ }));
+    expect(
+      await screen.findByText('B001: serie de un emisor anterior, no emite'),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/hasta que escribas una serie nueva de este emisor/),
+    ).toBeInTheDocument();
+  });
+
+  it('sin saber el emisor de la sucursal no afirma nada', async () => {
+    api(
+      {
+        cajas: [
+          caja(1, 'Caja 1', {
+            series: [
+              { tipo: 'BOLETA', serie: 'B001', ultimoNumero: 130, activa: true, emisorId: VIEJO },
+            ],
+          }),
+        ],
+      },
+      {
+        [`GET /sucursales/${ID.sucursalA}`]: () =>
+          json(500, { codigo: 'ERROR_INTERNO', mensaje: 'x' }),
+      },
+    );
+    await abrir();
+    expect(await screen.findByText('Boletas B001')).toBeInTheDocument();
+    expect(screen.queryByText(/emisor anterior/)).toBeNull();
   });
 });
 
@@ -545,8 +627,8 @@ describe('Ajustes › Cajas: editar y series (criterios 1, 3 y 5)', () => {
     caja(1, 'Caja 1', {
       impresora: { id: uuid(201), nombre: 'Caja', gaveta: false },
       series: [
-        { tipo: 'BOLETA', serie: 'B001', ultimoNumero: 130, activa: true },
-        { tipo: 'BOLETA', serie: 'B000', ultimoNumero: 40, activa: false },
+        { tipo: 'BOLETA', serie: 'B001', ultimoNumero: 130, activa: true, emisorId: EMISOR },
+        { tipo: 'BOLETA', serie: 'B000', ultimoNumero: 40, activa: false, emisorId: EMISOR },
       ],
     });
 
@@ -673,7 +755,9 @@ describe('Ajustes › Cajas: activar y desactivar (criterio 1)', () => {
     const s = api({
       cajas: [
         caja(1, 'Caja 1', {
-          series: [{ tipo: 'BOLETA', serie: 'B001', ultimoNumero: 5, activa: true }],
+          series: [
+            { tipo: 'BOLETA', serie: 'B001', ultimoNumero: 5, activa: true, emisorId: EMISOR },
+          ],
         }),
       ],
     });

@@ -1,6 +1,7 @@
 import {
   errorRespuestaSchema,
   type CampoError,
+  type DiferenciaDeArqueo,
   type SeQuita,
   type UsadoEn,
 } from '@restaurante/contratos';
@@ -26,6 +27,12 @@ export class ErrorApi extends Error {
   readonly atendidoPor: { id: string; nombre: string } | undefined;
   /** Solo en `LLAMADO_CERRADO` (005): el estado en que quedó el llamado. */
   readonly estadoDelLlamado: string | undefined;
+  /** Solo en `TURNO_YA_ABIERTO` (006): el turno que ya está abierto. */
+  readonly turnoId: string | undefined;
+  /** Solo en `CIERRE_BLOQUEADO` (006): cuántas órdenes siguen abiertas. */
+  readonly ordenes: number | undefined;
+  /** Solo en `DIFERENCIA_SIN_MOTIVO` (006): lo contado y la diferencia de cada medio, sin el esperado. */
+  readonly diferencias: DiferenciaDeArqueo[] | undefined;
 
   constructor(datos: {
     estado: number;
@@ -39,6 +46,9 @@ export class ErrorApi extends Error {
     ordenId?: string;
     atendidoPor?: { id: string; nombre: string };
     estadoDelLlamado?: string;
+    turnoId?: string;
+    ordenes?: number;
+    diferencias?: DiferenciaDeArqueo[];
   }) {
     super(datos.mensaje);
     this.name = 'ErrorApi';
@@ -52,6 +62,9 @@ export class ErrorApi extends Error {
     this.ordenId = datos.ordenId;
     this.atendidoPor = datos.atendidoPor;
     this.estadoDelLlamado = datos.estadoDelLlamado;
+    this.turnoId = datos.turnoId;
+    this.ordenes = datos.ordenes;
+    this.diferencias = datos.diferencias;
   }
 
   /** `true` si el servidor no llegó a contestar (red caída, tiempo agotado). */
@@ -78,6 +91,9 @@ export function errorDeRespuesta(estado: number, cuerpo: unknown, reintentada = 
       ...(e.ordenId === undefined ? {} : { ordenId: e.ordenId }),
       ...(e.atendidoPor === undefined ? {} : { atendidoPor: e.atendidoPor }),
       ...(e.estado === undefined ? {} : { estadoDelLlamado: e.estado }),
+      ...(e.turnoId === undefined ? {} : { turnoId: e.turnoId }),
+      ...(e.ordenes === undefined ? {} : { ordenes: e.ordenes }),
+      ...(e.diferencias === undefined ? {} : { diferencias: e.diferencias }),
       reintentada,
     });
   }

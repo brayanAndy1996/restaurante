@@ -7,19 +7,23 @@ import {
   EtiquetaDeEstado,
   Icono,
   IconoCocina,
+  IconoDisponibilidad,
   IconoImpresora,
   IconoInfo,
   IconoOk,
   Interruptor,
   Plegable,
   TarjetaKds,
+  claseBoton,
   clases,
 } from '@restaurante/ui';
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { Pagina } from '../../componentes/Pagina';
 import { AvisoPendiente } from '../../componentes/PendienteDeEnvio';
 import { useConexion } from '../../lib/conexion';
 import { useEstadoTiempoReal } from '../../lib/tiempo-real';
+import { disponibilidadVaEnCocina } from '../acceso/navegacion';
 import { useSesionActiva } from '../acceso/sesion';
 import { resumenDeImpresion, useEstadoDeImpresion } from '../impresion/estado';
 import { etiquetaDeMesas, pendientesEnOrden, recientesEnOrden } from './cocina';
@@ -58,6 +62,7 @@ export function CocinaPagina() {
 }
 
 function CocinaDeSucursal({ empresaId, sucursalId }: { empresaId: string; sucursalId: string }) {
+  const sesion = useSesionActiva();
   const tiempoReal = useEstadoTiempoReal();
   const motor = motorDeSonido();
 
@@ -206,6 +211,14 @@ function CocinaDeSucursal({ empresaId, sucursalId }: { empresaId: string; sucurs
         onKeyDownCapture={despertarSonido}
       >
         <div className="cocina__herramientas">
+          {disponibilidadVaEnCocina(sesion) ? (
+            // El Administrador no la tiene en la barra de navegación (criterio 108 de 006): su puerta es esta.
+            <Link to="/disponibilidad" className={clases(claseBoton(), 'cocina__acceso')}>
+              <Icono icono={IconoDisponibilidad} tamano={20} />
+              Disponibilidad
+              <span className="cocina__acceso-ayuda">Agotados y menú del día</span>
+            </Link>
+          ) : null}
           {filtrables.length > 1 ? (
             <div className="ui-segmentos cocina__filtros" role="group" aria-label="Estaciones">
               <FiltroDeEstacion
