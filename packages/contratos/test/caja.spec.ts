@@ -19,6 +19,7 @@ import {
   comandaKdsSchema,
   serieEntradaDeTipoSchema,
   serieEntradaSchema,
+  serieRespuestaSchema,
   tasaIgvEntradaSchema,
   ventaMostradorEntradaSchema,
 } from '../src';
@@ -37,6 +38,14 @@ function campos(resultado: {
 }
 
 describe('cajas y series (criterios 1 y 3)', () => {
+  it('serieRespuesta lleva el emisor con que se creó la serie (para avisar de las de un emisor anterior)', () => {
+    const serie = { tipo: 'BOLETA', serie: 'B001', ultimoNumero: 3, activa: true, emisorId: ID_1 };
+    expect(serieRespuestaSchema.parse(serie)).toEqual(serie);
+    const { emisorId: _quitado, ...sinEmisor } = serie;
+    expect(serieRespuestaSchema.safeParse(sinEmisor).success).toBe(false);
+    expect(serieRespuestaSchema.safeParse({ ...serie, emisorId: 'x' }).success).toBe(false);
+  });
+
   it('cajaEntrada: nombre de 1 a 40 e impresora opcional', () => {
     expect(cajaEntradaSchema.safeParse({ nombre: 'Caja 1' }).success).toBe(true);
     expect(cajaEntradaSchema.safeParse({ nombre: 'a'.repeat(40), impresoraId: ID_1 }).success).toBe(

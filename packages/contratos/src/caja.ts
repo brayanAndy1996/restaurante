@@ -125,6 +125,12 @@ export const serieRespuestaSchema = z.object({
   serie: z.string(),
   ultimoNumero: z.number().int().min(0),
   activa: z.boolean(),
+  /**
+   * El emisor con que se creó la serie. Si la sucursal cambió de emisor, las series del emisor anterior siguen
+   * `activa` pero ya no emiten (el cobro responde 409 `SIN_SERIE`): la PWA lo avisa comparando con el emisor de la
+   * sucursal.
+   */
+  emisorId: uuidSchema,
 });
 
 export const cajaRespuestaSchema = z.object({

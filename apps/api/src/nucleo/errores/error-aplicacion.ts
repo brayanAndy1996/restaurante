@@ -1,6 +1,6 @@
 import { HttpException } from '@nestjs/common';
 import type { CampoError, CodigoError, SeQuita, UsadoEn } from '@restaurante/contratos';
-import type { EstadoLlamado } from '@restaurante/dominio';
+import type { EstadoLlamado, MedioPago } from '@restaurante/dominio';
 import type { ZodError } from 'zod';
 
 /**
@@ -16,6 +16,14 @@ export interface DetalleDeError {
   atendidoPor?: { id: string; nombre: string };
   /** Solo en `LLAMADO_CERRADO` (historia 005, criterios 44 y 53): el estado en que quedó el llamado. */
   estado?: EstadoLlamado;
+  /** Solo en `TURNO_YA_ABIERTO` (historia 006, criterio 26): el turno que ya está abierto. */
+  turnoId?: string;
+  /** Solo en `CUENTA_CAMBIO` (historia 006, criterio 49): la versión actual de la cuenta. */
+  version?: number;
+  /** Solo en `CIERRE_BLOQUEADO` (historia 006, criterio 33): cuántas órdenes siguen abiertas. */
+  ordenes?: number;
+  /** Solo en `DIFERENCIA_SIN_MOTIVO` (historia 006, criterios 31 y 32): sin el esperado. */
+  diferencias?: { medio: MedioPago; contado: string; diferencia: string }[];
 }
 
 /** Opciones de un `ErrorAplicacion` que no son parte de su respuesta HTTP. */

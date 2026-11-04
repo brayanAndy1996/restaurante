@@ -165,8 +165,9 @@ export class SeriesService {
       serie: string;
       ultimo_numero: number;
       activa: boolean;
+      emisor_id: string;
     }>(
-      `SELECT caja_id, tipo, serie, ultimo_numero, activa FROM serie
+      `SELECT caja_id, tipo, serie, ultimo_numero, activa, emisor_id FROM serie
         WHERE caja_id = ANY($1::uuid[])
         ORDER BY caja_id, tipo, NOT activa, creado_en, serie`,
       { bind: [[...cajaIds]], type: QueryTypes.SELECT },
@@ -177,6 +178,7 @@ export class SeriesService {
         serie: f.serie,
         ultimoNumero: f.ultimo_numero,
         activa: f.activa,
+        emisorId: f.emisor_id,
       });
     }
     return porCaja;

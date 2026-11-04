@@ -400,9 +400,9 @@ describe('criterios 3 a 5 · series', () => {
       .parse(res.body)
       .find((c) => c.id === id)!;
     expect(vista.series).toEqual([
-      { tipo: 'BOLETA', serie: 'B811', ultimoNumero: 0, activa: true },
-      { tipo: 'BOLETA', serie: 'B810', ultimoNumero: 0, activa: false },
-      { tipo: 'FACTURA', serie: 'F810', ultimoNumero: 0, activa: true },
+      { tipo: 'BOLETA', serie: 'B811', ultimoNumero: 0, activa: true, emisorId: A().emisor1 },
+      { tipo: 'BOLETA', serie: 'B810', ultimoNumero: 0, activa: false, emisorId: A().emisor1 },
+      { tipo: 'FACTURA', serie: 'F810', ultimoNumero: 0, activa: true, emisorId: A().emisor1 },
     ]);
   });
 
