@@ -5,8 +5,8 @@
   - **Entrega 6b (facturación electrónica):** HU-27, HU-29 y HU-31; RF-57 (envío por el PSE), RF-58, RF-62, RF-63, RF-64 (PDF y WhatsApp) y RF-66. RNF que aplican: RNF-07 (credenciales del PSE cifradas), RNF-10, RNF-18 y RNF-19.
   - **Quedan para otras secciones:** RF-79 a RF-83 y HU-35 a HU-37 (reportes y exportación, sección de reportes: aquí solo quedan los datos); el registro posterior de las ventas hechas con el talonario de contingencia (pregunta 23); el cobro de pedidos de delivery (sección de delivery: el cobro de esta sección sirve igual para una orden `DELIVERY`).
   - Fuente de negocio: `fuentes.md` de esta carpeta (requerimientos rev. 45, diseño rev. 29) y las decisiones de 002 a 005 que siguen vigentes. Donde las fuentes no alcanzan, los criterios están escritos con la recomendación de cada pregunta de "Preguntas abiertas" y la citan como "pregunta N".
-- **Ruta crítica:** sí, casi toda. Propuesta del especificador (la confirma el orquestador en el paso 3): P1 a P6 en 6a y P7 a P9 en 6b. Ver "Clasificación de ruta crítica".
-- **Estado:** borrador (2026-11-04), pendiente de aprobación del usuario.
+- **Ruta crítica:** sí, casi toda, confirmada por el orquestador el 2026-11-04: P1 a P6 en 6a y P7 a P9 en 6b. Ver "Clasificación de ruta crítica".
+- **Estado:** aprobado por el usuario el 2026-11-04 con las recomendaciones de las 24 preguntas (las marcadas para el contador quedan por confirmar con él); en curso 6a.
 
 ## Objetivo
 
@@ -350,7 +350,7 @@ No se auditan (quedan en la trazabilidad de sus filas): abrir turno, movimientos
 
 ## Reglas de negocio aplicables
 
-Fuente: `fuentes.md`, las decisiones vigentes de 002 a 005 y las recomendaciones de "Preguntas abiertas", pendientes de la aprobación del usuario.
+Fuente: `fuentes.md`, las decisiones vigentes de 002 a 005 y las recomendaciones de "Preguntas abiertas", aprobadas por el usuario el 2026-11-04.
 
 - No se puede cobrar sin un turno abierto, que se abre con un fondo inicial (HU-25, RF-50). La suspensión impide abrir caja pero no corta un turno abierto (HU-04, RF-06).
 - Se cobra con uno o varios medios (efectivo, tarjeta de crédito o débito, Yape, Plin), con vuelto y con el número de operación o voucher en los no efectivos, sin conexión con el POS del banco (RF-51, HU-26, B.9). Solo al contado y en soles (B.7, B.9).
@@ -527,6 +527,8 @@ Los decide el usuario con la aprobación; se revisan después del ataque.
 - **El arqueo a ciegas se puede saltar mirando el X** (criterio 32): queda en la trazabilidad.
 
 ## Preguntas abiertas
+
+**Respondidas por el usuario el 2026-11-04: se aprueban las 24 recomendaciones.** Las que dependen del contador (4, 5, 6, 7, 8 y 21) quedan por confirmar con él; si cambian, el ajuste se limita a sus funciones puras.
 
 Cada una con mi recomendación; los criterios ya están escritos con ella. Las 20 a 24 son de 6b y se pueden responder antes de empezarla.
 

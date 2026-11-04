@@ -1,6 +1,6 @@
 # 006 · Tareas
 
-Cada tarea indica su rol y los criterios de `spec.md` que cubre. Pendiente de la aprobación del usuario y de la confirmación de la ruta crítica por el orquestador.
+Cada tarea indica su rol y los criterios de `spec.md` que cubre. Aprobado por el usuario el 2026-11-04, con la ruta crítica P1 a P9 confirmada por el orquestador.
 
 **Orden de ejecución.** Primero **6a · Caja, cobro y comprobante** completa (fases A, B, C y D, y su commit de cierre en T27); después **6b · Facturación electrónica** (sus fases se precisan antes de empezar, con el PSE elegido). La fase C se agrupa por historia: cada grupo termina con un commit propio (lo hace el documentador), en el orden indicado. Cada grupo cierra con la suite en verde, salvo las pruebas protegidas de 006 que se ponen en verde en un grupo posterior (cada tarea del tester dice cuáles pueden seguir en rojo). Las pruebas protegidas de 001 a 005 nunca quedan en rojo en un commit.
 
