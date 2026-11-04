@@ -16,6 +16,7 @@ export { montoIcbperVigente, tasaIgvVigente } from './vigencias';
 export type { TasaIgvDesde } from './vigencias';
 export { calcularParte, cambioDeCuentaPermitido } from './partes';
 export type {
+  ItemDeParte,
   LineaDeParte,
   ParteCalculada,
   ParteEntrada,

@@ -22,16 +22,26 @@ export interface PagoParaTicket {
   operacion: string | null;
 }
 
-/** Todo lo que el comprobante guarda al emitirse; el cobro lo arma con lo que recalculó en el servidor. */
+/**
+ * Todo lo que el comprobante guarda al emitirse; el cobro lo arma con lo que recalculó en el servidor. Lleva lo que
+ * facturación no puede leer de otros módulos (no lee `caja`, `turno`, `orden` ni `cobro`): la caja, el turno con su
+ * responsable, el cobro, el lugar de la parte en la orden, la orden, la impresora ya resuelta, etc.
+ */
 export interface DatosDeEmision {
   sucursalId: string;
   cajaId: string;
   turnoId: string;
+  /** El responsable del turno al emitir (se copia al comprobante: el alcance del Cajero, criterio 100). */
+  turnoResponsableId: string;
   cobroId: string;
+  /** El lugar de esta parte entre las de la orden: los `cobros` de la cuenta + 1 (1, 2, 3…). */
+  numeroParte: number;
+  /** La impresora de la caja ya resuelta (`ImpresionPuerto.impresoraDeLaCaja`); `null` si no hay: sin ticket. */
+  impresora: { id: string; gaveta: boolean } | null;
   tipo: TipoComprobante;
   formato: FormatoComprobante;
   cliente: ClienteComprobanteEntrada | null;
-  /** La parte que se cobra, calculada por `calcularParte` de `packages/dominio`. */
+  /** La parte que se cobra, calculada por `calcularParte` de `packages/dominio`; se guarda en `comprobante.detalle_parte`. */
   parte: ParteCalculada;
   /** La tasa de IGV vigente en la fecha de emisión; `null` con un emisor Nuevo RUS. */
   tasaIgv: string | null;

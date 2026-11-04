@@ -143,7 +143,11 @@ export const comprobanteRespuestaSchema = z.object({
   }),
   cajaId: uuidSchema,
   turnoId: uuidSchema,
+  /** El responsable del turno al emitir (se copia al comprobante, criterios 69 y 100). */
+  turnoResponsableId: uuidSchema,
   cobroId: uuidSchema,
+  /** Su lugar entre las partes de la orden (1, 2, 3…); `null` si no viene de una orden. */
+  numeroParte: z.number().int().min(1).nullable(),
   cliente: clienteComprobanteRespuestaSchema.nullable(),
   moneda: z.literal(MONEDA_COMPROBANTE),
   /** La tasa de IGV con la que se emitió; `null` con un emisor Nuevo RUS. */

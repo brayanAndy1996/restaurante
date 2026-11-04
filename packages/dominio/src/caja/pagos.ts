@@ -18,7 +18,10 @@ export interface RedondeoEfectivo {
   redondeo: string;
 }
 
-/** Valida los pagos contra el total y el redondeo, y calcula el vuelto (criterio 21). */
+/**
+ * Valida los pagos contra el total y el redondeo, y calcula el vuelto (criterio 21). `redondeo` debe ser exactamente
+ * el de `redondeoEfectivo`: sin pago en `EFECTIVO`, `"0.00"` (el redondeo solo se aplica a la parte en efectivo).
+ */
 export function validarPagos(
   _total: string,
   _pagos: readonly PagoEntrada[],
@@ -27,7 +30,10 @@ export function validarPagos(
   throw new Error('No implementado');
 }
 
-/** El efectivo y el redondeo que corresponden a un total pagado en parte con otros medios (criterio 21). */
+/**
+ * El efectivo y el redondeo que corresponden a un total pagado en parte con otros medios (criterio 21): con efectivo,
+ * `efectivo` = total menos los otros pagos y `redondeo` = lo que pasa de la décima; sin efectivo, `"0.00"`.
+ */
 export function redondeoEfectivo(
   _total: string,
   _pagosNoEfectivo: readonly { monto: string }[],

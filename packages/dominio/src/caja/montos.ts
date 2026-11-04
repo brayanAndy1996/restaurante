@@ -104,9 +104,9 @@ export function desglosar(
 /**
  * Reparte `monto` entre las `pesos` en proporción a cada una con el método del mayor resto (criterio 13): a cada
  * una le toca el valor truncado al céntimo y los céntimos que faltan van, de a uno, a las de mayor resto (entre
- * restos iguales, a la que va primero). Una de peso `"0.00"` recibe `"0.00"`. La suma es exactamente `monto`.
+ * restos iguales, a la que va primero). Devuelve un resultado por peso, en el mismo orden; uno de peso `"0.00"` recibe `"0.00"`. La suma es exactamente `monto`.
  */
-export function repartirPorMayorResto(_monto: string, _pesos: readonly string[]): string[] {
+export function repartirPorMayorResto(_monto: string, _pesos: string[]): string[] {
   throw new Error('No implementado');
 }
 

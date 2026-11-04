@@ -11,6 +11,7 @@ import { ContextoEmpresa } from '../../nucleo/contexto-empresa';
 import { ErrorAplicacion } from '../../nucleo/errores/error-aplicacion';
 import { noImplementado } from '../../nucleo/errores';
 import { MODELOS_API, type EmisorModelo, type Modelos } from './modelos';
+import { UltimaEmisionDeEmisor } from './ultima-emision';
 
 /** Fila de la tabla a la forma de `emisorRespuesta` (fechas ISO 8601). */
 export function emisorARespuesta(emisor: EmisorModelo): EmisorRespuesta {
@@ -43,6 +44,7 @@ export class EmisoresService {
   constructor(
     @Inject(MODELOS_API) private readonly modelos: Modelos,
     @Inject(ContextoEmpresa) private readonly contexto: ContextoEmpresa,
+    @Inject(UltimaEmisionDeEmisor) private readonly ultimaEmision: UltimaEmisionDeEmisor,
   ) {}
 
   async listar(): Promise<EmisorRespuesta[]> {
@@ -85,13 +87,16 @@ export class EmisoresService {
 
   /**
    * Crea o cambia la tasa de IGV del emisor desde una fecha (criterio 6): no se puede con `desde` igual o anterior a
-   * la fecha de un comprobante ya emitido (409 `CONFLICTO`). FIRMA de la fase A.
+   * la fecha del último comprobante emitido por el emisor (409 `CONFLICTO`). Esa fecha la da el puerto
+   * `UltimaEmisionDeEmisor`, que registra facturación (plataforma no lee `comprobante`); sin registro, 409
+   * `CONFLICTO`. FIRMA de la fase A.
    */
   async configurarTasaIgv(
     _emisorId: string,
     _desde: string,
     _entrada: TasaIgvEntrada,
   ): Promise<TasaIgvRespuesta> {
+    void this.ultimaEmision;
     throw noImplementado();
   }
 

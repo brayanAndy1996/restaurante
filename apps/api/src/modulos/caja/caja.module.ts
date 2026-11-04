@@ -9,6 +9,7 @@ import { CajasService } from './cajas.service';
 import { CobrosDePedidos } from './cobros-de-pedidos';
 import { CobrosService } from './cobros.service';
 import { CuentasController } from './cuentas.controller';
+import { ImpresoraDeCajas } from './impresora-de-cajas';
 import { MostradorController } from './mostrador.controller';
 import { MostradorService } from './mostrador.service';
 import { ReportesCaja } from './reportes-caja';
@@ -19,7 +20,7 @@ import { TurnosService } from './turnos.service';
 /**
  * Caja (historia 006, entrega 6a): dueño de `caja`, `turno`, `turno_conteo`, `movimiento_caja`, `cobro` y `pago`
  * (todavía sin tablas: migraciones 2 y 4 de la fase C). Usa pedidos (`CuentasDePedidos`, y le registra el puerto
- * `COBROS`), facturación (`EmisionService`, `FacturadoService`, `SeriesService`), plataforma (`SuscripcionService`,
+ * `COBROS`), facturación (`EmisionService`, `FacturadoService`, `SeriesService`, el resumen tributario del turno), plataforma (`SuscripcionService`,
  * `EmisoresService`, `SucursalesConsultaService`), impresión (puerto `IMPRESION`, global) y seguridad. Nunca lee
  * tablas ajenas. Pedidos y facturación no importan este módulo.
  */
@@ -32,6 +33,7 @@ import { TurnosService } from './turnos.service';
     CobrosService,
     MostradorService,
     CobrosDePedidos,
+    ImpresoraDeCajas,
     ReportesCaja,
     TicketsDeCaja,
   ],

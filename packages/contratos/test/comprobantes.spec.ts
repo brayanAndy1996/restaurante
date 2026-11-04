@@ -82,7 +82,9 @@ const comprobante = {
   sucursal: { nombre: 'Miraflores', direccion: 'Av. Larco 100', codigoEstablecimiento: '0001' },
   cajaId: ID_2,
   turnoId: ID_3,
+  turnoResponsableId: ID_1,
   cobroId: ID_3,
+  numeroParte: 1,
   cliente: null,
   moneda: 'PEN',
   tasaIgv: '18.00',
@@ -124,6 +126,7 @@ describe('comprobanteRespuesta (criterios 69 y 77)', () => {
       { ...comprobante, estado: 'PENDIENTE' },
       { ...comprobante, tipo: 'NOTA_CREDITO_BOLETA' },
       { ...comprobante, correlativo: 0 },
+      { ...comprobante, numeroParte: 0 },
       { ...comprobante, lineas: [{ ...linea, unidad: 'KGM' }] },
     ]) {
       expect(comprobanteRespuestaSchema.safeParse(malo).success, JSON.stringify(malo)).toBe(false);

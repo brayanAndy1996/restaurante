@@ -30,11 +30,27 @@ export interface LineaDeParte {
   gratuita: Gratuita | null;
 }
 
-/** Una parte válida: el detalle del comprobante, sus totales y si con ella no falta nada. */
+/**
+ * Lo que una parte toma de un ítem de la cuenta (criterio 17): las unidades cobrables, el neto y las bolsas. Hace falta
+ * aparte de `lineas` porque en el formato `CONSUMO` las líneas agrupadas no dicen el ítem.
+ */
+export interface ItemDeParte {
+  itemId: string;
+  cantidad: number;
+  neto: string;
+  bolsas: number;
+}
+
+/**
+ * Una parte válida: `lineas` es el detalle del comprobante, `porItem` lo que la parte toma de cada ítem (en
+ * `IGUALES`, solo las líneas de ICBPER), `totales` los de la parte y `cierraLaCuenta` si con ella no falta nada.
+ * Facturación la guarda en `comprobante.detalle_parte` (criterio 69) y es la `partesAnteriores` de las siguientes.
+ */
 export interface ParteCalculada {
   tipo: TipoParte;
   formato: FormatoComprobante;
   lineas: LineaDeParte[];
+  porItem: ItemDeParte[];
   totales: TotalesCuenta;
   cierraLaCuenta: boolean;
 }

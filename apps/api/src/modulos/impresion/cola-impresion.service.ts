@@ -266,7 +266,10 @@ export class ColaImpresionService implements ImpresionPuerto {
     return filas[0] ?? null;
   }
 
-  async impresoraDeLaCaja(_cajaId: string): Promise<{ id: string; gaveta: boolean } | null> {
+  async impresoraDeLaCaja(
+    _sucursalId: string,
+    _impresoraId: string | null,
+  ): Promise<{ id: string; gaveta: boolean } | null> {
     throw noImplementado();
   }
 

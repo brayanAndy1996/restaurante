@@ -4,3 +4,7 @@ export type { ConfigurarSerie } from './series.service';
 export { EmisionService } from './emision.service';
 export type { ComprobanteEmitido, DatosDeEmision, PagoParaTicket } from './emision.service';
 export { FacturadoService } from './facturado';
+export { ComprobantesService } from './comprobantes.service';
+export type { ResumenTributarioDeTurno } from './comprobantes.service';
+export { RegistroImpresoraDeCaja } from './impresora-de-caja';
+export type { ImpresoraDeCaja, ResolutorImpresoraDeCaja } from './impresora-de-caja';

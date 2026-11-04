@@ -80,11 +80,15 @@ export interface ImpresionPuerto {
   /** La impresora de caja de la sucursal (activa), donde salen las pre-cuentas (criterio 102); `null` si no hay. */
   impresoraDeCaja(sucursalId: string): Promise<{ id: string } | null>;
   /**
-   * La impresora de una caja (historia 006, criterio 2): la suya (`caja.impresora_id`) o, si no tiene, la de caja de
-   * su sucursal (`impresoraDeCaja`); `null` si tampoco hay (el cobro se hace igual, sin imprimir). Con `gaveta` para
-   * saber si el ticket lleva el pulso. FIRMA de la fase A.
+   * La impresora de un trabajo de caja (historia 006, criterios 2 y 90): `impresoraId` (la propia de la caja, que
+   * caja leyó de `caja.impresora_id`; impresión no lee `caja`) si es una impresora activa de la sucursal o, si es
+   * `null` o ya no está activa, la de caja de la sucursal (`impresoraDeCaja`). Devuelve `gaveta` para saber si el
+   * ticket lleva el pulso; `null` si tampoco hay (el cobro se hace igual, sin imprimir). FIRMA de la fase A.
    */
-  impresoraDeLaCaja(cajaId: string): Promise<{ id: string; gaveta: boolean } | null>;
+  impresoraDeLaCaja(
+    sucursalId: string,
+    impresoraId: string | null,
+  ): Promise<{ id: string; gaveta: boolean } | null>;
   /**
    * De las pre-cuentas dadas, el id del trabajo `PRECUENTA` de las que lo tienen (criterio 102): devolver la
    * vigente o una réplica no crea otro trabajo, devuelve este.

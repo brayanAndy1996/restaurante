@@ -46,3 +46,5 @@ export { PlanesController } from './planes.controller';
 export { PlataformaEmpresasController } from './plataforma-empresas.controller';
 export { PlataformaSesionesController } from './plataforma-sesiones.controller';
 export { SuscripcionesController } from './suscripciones.controller';
+export { UltimaEmisionDeEmisor } from './ultima-emision';
+export type { ConsultaUltimaEmision } from './ultima-emision';
