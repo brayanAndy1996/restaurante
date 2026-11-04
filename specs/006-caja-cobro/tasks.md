@@ -63,7 +63,7 @@ Commit propio.
 - [x] T5 · backend · `packages/dominio/src/caja/` completo hasta dejar en verde P1 (y `montoEnLetras` con pruebas del desarrollador). (criterios 8 a 23)
 - [x] T6 · backend · Migraciones 1 a 3 de `plan.md`; cajas, series y tasa de IGV con sus rutas, `@Permiso('ADMINISTRAR')`, auditoría y la impresora de la caja; `SeriesService` y `EmisionService` sin el ticket (numeración, filas, cuota). Deja en verde la parte de series de P4 (4, 5) y la RLS de esas tablas de P6. (criterios 1 a 7, 4, 5, 103 a 105 en esas tablas)
 - [x] T7 · frontend · Ajustes › Cajas (lista, formulario, series con "Primer número" al crear) y la tasa de IGV en Emisores; la guía de primeros pasos de la pregunta 19. Pruebas de componente. (criterio 117)
-- [ ] T8 · tester · Suite completa, lint, tipos, build y presupuesto. P1 en verde. Pueden seguir en rojo: P2, P3, P5, el resto de P4 y P6.
+- [x] T8 · tester · Suite completa, lint, tipos, build y presupuesto. P1 en verde. Pueden seguir en rojo: P2, P3, P5, el resto de P4 y P6.
 
 #### C2 · HU-25, HU-30, RF-50, RF-53 a RF-55: el turno
 
