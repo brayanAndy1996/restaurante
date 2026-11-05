@@ -45,6 +45,9 @@ interface FilaSerie {
   activa: boolean;
 }
 
+/** Cuántas veces se busca la serie activa al numerar si un cambio de serie la desactiva en medio (G1, ronda 2). */
+const INTENTOS_DE_NUMERACION = 5;
+
 @Injectable()
 export class SeriesService {
   constructor(
@@ -189,6 +192,13 @@ export class SeriesService {
    * transacción del cobro: si el cobro falla después, el incremento se deshace y el número no se pierde. El `UPDATE`
    * bloquea la fila hasta el `COMMIT`: dos cobros de la misma caja se turnan y dos cajas, que usan filas distintas,
    * no compiten. 409 `SIN_SERIE` (no hay serie activa del tipo para ese emisor) o `SERIE_AGOTADA`.
+   *
+   * Si el cambio de serie de la caja (`PUT`, que desactiva la serie vieja y crea la nueva en su transacción) coincide
+   * con este cobro, en READ COMMITTED el `UPDATE` espera la fila vieja, la reevalúa ya inactiva y no actualiza ninguna
+   * fila, aunque la serie nueva ya esté confirmada (la instantánea de la sentencia no la ve). Eso no es «sin serie»:
+   * se repite la búsqueda de la serie activa con una sentencia nueva (instantánea nueva) dentro de la misma
+   * transacción, unas pocas veces por si la serie cambia otra vez; `SIN_SERIE` solo si tras eso sigue sin haber
+   * ninguna. No cambia el orden de bloqueos (la fila de la serie sigue siendo el último bloqueo del cobro).
    */
   async tomarNumero(
     cajaId: string,
@@ -196,15 +206,23 @@ export class SeriesService {
     emisorId: string,
   ): Promise<NumeroTomado> {
     try {
-      const filas = await this.conexion.query<{ id: string; serie: string; ultimo_numero: number }>(
-        `UPDATE serie SET ultimo_numero = ultimo_numero + 1, actualizado_en = $4
-          WHERE caja_id = $1 AND tipo = $2 AND activa AND emisor_id = $3
-          RETURNING id, serie, ultimo_numero`,
-        { bind: [cajaId, tipo, emisorId, this.reloj.ahora()], type: QueryTypes.SELECT },
-      );
-      const fila = filas[0];
-      if (fila === undefined) throw sinSerie();
-      return { serieId: fila.id, serie: fila.serie, numero: fila.ultimo_numero };
+      for (let intento = 1; intento <= INTENTOS_DE_NUMERACION; intento++) {
+        const filas = await this.conexion.query<{
+          id: string;
+          serie: string;
+          ultimo_numero: number;
+        }>(
+          `UPDATE serie SET ultimo_numero = ultimo_numero + 1, actualizado_en = $4
+            WHERE caja_id = $1 AND tipo = $2 AND activa AND emisor_id = $3
+            RETURNING id, serie, ultimo_numero`,
+          { bind: [cajaId, tipo, emisorId, this.reloj.ahora()], type: QueryTypes.SELECT },
+        );
+        const fila = filas[0];
+        if (fila !== undefined) {
+          return { serieId: fila.id, serie: fila.serie, numero: fila.ultimo_numero };
+        }
+      }
+      throw sinSerie();
     } catch (error) {
       if (sqlstateDe(error) === SQLSTATE_CHECK && restriccionDe(error) === CHECK_ULTIMO_NUMERO) {
         throw serieAgotada();
