@@ -459,6 +459,18 @@ describe('criterios 36 y 37 · la cuenta', () => {
     expect(vista.mozo).toMatchObject({ id: A().personas.mozo!.id });
   });
 
+  it('un emisor sin tasa de IGV: la cuenta se lee sin desglose de IGV (sin inventar una tasa) y sin 500', async () => {
+    const cuenta = await cuentaC(ctx, A(), 'S4');
+    const res = await api(ctx, A().token.supervisorS4!, 'get', `/cuentas/${cuenta.ordenId}`);
+    exigirEstado(res, 200, 'La cuenta de un emisor sin tasa');
+    const vista = cuentaRespuestaSchema.parse(res.body);
+    expect(vista.parametros).toMatchObject({ tasaIgv: null, regimen: 'GENERAL' });
+    expect(vista.totales.operaciones).toBeNull();
+    expect(vista.totales.igv).toBe('0.00');
+    expect(vista.totales.total).toBe('69.20');
+    for (const linea of vista.lineas) expect(linea.neto).toBe(linea.bruto);
+  });
+
   it('una orden de otra sucursal o de otra empresa responde 404', async () => {
     const cuenta = await cuentaC(ctx, A());
     expect((await api(ctx, esc.B.token.cajero, 'get', `/cuentas/${cuenta.ordenId}`)).status).toBe(

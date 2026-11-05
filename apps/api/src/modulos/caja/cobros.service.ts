@@ -18,13 +18,6 @@ import { RELOJ, type Reloj } from '../../nucleo/reloj';
 import { CuentasDePedidos, type CuentaParaCobrar } from '../pedidos';
 import { EmisoresService } from '../plataforma';
 
-/**
- * Tasa con la que la consulta de la cuenta desglosa el IGV de un emisor general que todavía no configuró ninguna
- * (solo informativa: `parametros.tasaIgv` sigue `null` y el cobro responde 409 `TASA_IGV_NO_CONFIGURADA`, criterio 51).
- * Es la tasa general del Perú; los totales de la cuenta no dependen de ella (los precios incluyen IGV).
- */
-const TASA_IGV_DE_REFERENCIA = '18.00';
-
 /** Los parámetros tributarios de la sucursal con los que se calcula una cuenta (criterio 36). */
 type Parametros = CuentaRespuesta['parametros'];
 
@@ -160,10 +153,9 @@ function entradaDeCalculo(cuenta: CuentaParaCobrar, parametros: Parametros): Cue
       cuenta.descuentoCuenta === null
         ? null
         : { tipo: cuenta.descuentoCuenta.tipo, valor: cuenta.descuentoCuenta.valor },
-    tasaIgv:
-      parametros.tasaIgv === null && parametros.regimen !== 'NUEVO_RUS'
-        ? TASA_IGV_DE_REFERENCIA
-        : parametros.tasaIgv,
+    // Sin tasa vigente (Nuevo RUS o un emisor que no configuró ninguna) la cuenta no desglosa IGV: `operaciones`
+    // `null` e `igv` `"0.00"`. La tasa no tiene valor por defecto; el cobro responde 409 `TASA_IGV_NO_CONFIGURADA`.
+    tasaIgv: parametros.tasaIgv,
     montoIcbper: parametros.montoIcbper,
   };
 }
