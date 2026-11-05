@@ -16,6 +16,7 @@ import {
 import { QueryTypes, type Sequelize } from 'sequelize';
 import { CONEXION_API } from '../../nucleo/base-de-datos';
 import { ContextoEmpresa } from '../../nucleo/contexto-empresa';
+import { conMontosConsistentes } from '../../nucleo/errores/montos-inconsistentes';
 import { RELOJ, type Reloj } from '../../nucleo/reloj';
 import { SucursalesConsultaService } from '../plataforma';
 import { MesasConsultaService } from '../salon';
@@ -30,7 +31,12 @@ import {
   type DatosDeCuenta,
 } from './cuenta-de-orden';
 import { EnviosService } from './envios.service';
-import { idDeClienteReutilizado, operacionConcurrente, ordenNoEncontrada } from './errores-pedidos';
+import {
+  idDeClienteReutilizado,
+  montosInconsistentes,
+  operacionConcurrente,
+  ordenNoEncontrada,
+} from './errores-pedidos';
 import { EventosPedidos } from './eventos-pedidos';
 import { LlamadosMostrador } from './llamados-mostrador';
 import { mesasVigentesDeOrden } from './mesas-de-orden';
@@ -224,8 +230,16 @@ export class CuentasDePedidos {
       // Criterio 45a: ninguna ruta responde 500 por un `RangeError` de `calcularCuenta`. Las escrituras no dejan una
       // cuenta así (cada una valida antes); si una lectura sin bloqueo vio las tablas en instantes distintos de una
       // escritura en curso, es un 409 que se repite.
-      if (descuentoQueNoSeAdmite(cuentaDeDatos(cuenta))) throw operacionConcurrente();
-      const respuestas = respuestasDeCuenta(cuenta, nombres);
+      // Cualquier otro `RangeError` de los montos (un cobrado que pasa de la cuenta, un monto fuera de rango) es
+      // también un 409, con el detalle en el log.
+      const respuestas = conMontosConsistentes(
+        `la cuenta de la orden ${fila.id}`,
+        montosInconsistentes,
+        () => {
+          if (descuentoQueNoSeAdmite(cuentaDeDatos(cuenta))) throw operacionConcurrente();
+          return respuestasDeCuenta(cuenta, nombres);
+        },
+      );
       return {
         ordenId: fila.id,
         sucursalId: fila.sucursal_id,

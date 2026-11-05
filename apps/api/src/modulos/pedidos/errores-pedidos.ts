@@ -154,6 +154,17 @@ export const ordenSinConsumo = (): ErrorAplicacion =>
 export const operacionConcurrente = (): ErrorAplicacion =>
   new ErrorAplicacion(409, 'CONFLICTO', MENSAJE_OPERACION_CONCURRENTE);
 
+/**
+ * 409 `CONFLICTO` de una lectura o una pre-cuenta cuyos montos no cuadran (un saldo negativo u otro dato que el
+ * dominio rechaza con `RangeError`, historia 006, criterio 45a): nunca un 500. El detalle va al log.
+ */
+export const montosInconsistentes = (): ErrorAplicacion =>
+  new ErrorAplicacion(
+    409,
+    'CONFLICTO',
+    'Los montos de la cuenta no cuadran: avisa al administrador antes de cobrarla',
+  );
+
 /** 400 `DATOS_INVALIDOS` (criterio 45): una orden con varias mesas necesita saber cuál se mueve. */
 export const mesaOrigenRequerida = (): ErrorAplicacion =>
   new ErrorAplicacion(400, 'DATOS_INVALIDOS', 'Indica cuál de las mesas de la orden se mueve', [

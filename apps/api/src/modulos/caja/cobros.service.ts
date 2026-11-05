@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import type {
   CobroEntradaValidada,
   CobroRespuesta,
@@ -27,6 +27,7 @@ import {
 import { QueryTypes, type Sequelize } from 'sequelize';
 import { CONEXION_API } from '../../nucleo/base-de-datos';
 import { ContextoEmpresa } from '../../nucleo/contexto-empresa';
+import { conMontosConsistentes } from '../../nucleo/errores/montos-inconsistentes';
 import { jsonCanonico } from '../../nucleo/idempotencia';
 import { RELOJ, type Reloj } from '../../nucleo/reloj';
 import { ComprobantesService, EmisionService, FacturadoService } from '../facturacion';
@@ -37,6 +38,7 @@ import {
   clienteRequerido,
   comprobanteNoPermitido,
   cuentaCambio,
+  cuentaInconsistente,
   idDeClienteReutilizado,
   montoFueraDeRango,
   nadaQueCobrar,
@@ -199,7 +201,15 @@ export class CobrosService {
       soloAbiertas: false,
     });
     const parametros = await this.parametros.de(cuenta.sucursalId);
-    const calculada = calcularCuenta(entradaDeCalculo(cuenta, parametros));
+    // Criterio 45a: un saldo negativo (o un monto que el dominio rechaza) es un 409, nunca un 500.
+    const { calculada, saldo } = conMontosConsistentes(
+      `la cuenta de la orden ${cuenta.ordenId}`,
+      cuentaInconsistente,
+      () => {
+        const calculada = calcularCuenta(entradaDeCalculo(cuenta, parametros));
+        return { calculada, saldo: restarMontos(calculada.totales.total, cuenta.cobrado) };
+      },
+    );
     return {
       ordenId: cuenta.ordenId,
       tipo: cuenta.tipo,
@@ -231,7 +241,7 @@ export class CobrosService {
       cortesias: cuenta.cortesias,
       totales: calculada.totales,
       cobrado: cuenta.cobrado,
-      saldo: restarMontos(calculada.totales.total, cuenta.cobrado),
+      saldo,
       modo: cuenta.modo,
       cobros: await this.cobrosDe(cuenta.ordenId),
       parametros,
@@ -245,7 +255,14 @@ export class CobrosService {
     // Una sola sucursal: los parámetros son los mismos para todas.
     const parametros = await this.parametros.de(abiertas[0]!.sucursalId);
     return abiertas.map((cuenta) => {
-      const total = calcularCuenta(entradaDeCalculo(cuenta, parametros)).totales.total;
+      const { total, saldo } = conMontosConsistentes(
+        `la cuenta de la orden ${cuenta.ordenId}`,
+        cuentaInconsistente,
+        () => {
+          const total = calcularCuenta(entradaDeCalculo(cuenta, parametros)).totales.total;
+          return { total, saldo: restarMontos(total, cuenta.cobrado) };
+        },
+      );
       return {
         ordenId: cuenta.ordenId,
         tipo: cuenta.tipo,
@@ -254,7 +271,7 @@ export class CobrosService {
         abiertaEn: cuenta.abiertaEn.toISOString(),
         estado: cuenta.estado,
         total,
-        saldo: restarMontos(total, cuenta.cobrado),
+        saldo,
         modo: cuenta.modo,
       };
     });
@@ -403,7 +420,13 @@ export class CobrosService {
       );
     } catch (error) {
       // Las partes ya cobradas no cuadran con la cuenta (cambió sin pasar por el puerto `COBROS`): se recarga.
-      if (error instanceof RangeError) throw cuentaCambio(cuenta.version);
+      if (error instanceof RangeError) {
+        Logger.error(
+          `Montos inconsistentes al calcular la parte de la orden ${ordenId}: ${error.message}`,
+          CobrosService.name,
+        );
+        throw cuentaCambio(cuenta.version);
+      }
       throw error;
     }
     if (!resultado.valida) {
@@ -419,7 +442,7 @@ export class CobrosService {
 
     // Emisión: numera con la serie de la caja del turno y guarda el comprobante con el detalle de la parte.
     const impresora = await this.impresoras.deLaCaja(turno.caja_id);
-    const emitido = await this.emision.emitir({
+    const emitido = await this.emitirOCuentaCambio(cuenta.version, {
       sucursalId,
       cajaId: turno.caja_id,
       turnoId: turno.id,
@@ -468,9 +491,16 @@ export class CobrosService {
       cierraLaCuenta: parte.cierraLaCuenta,
       ahora: cobradoEn,
     });
-    const totalCuenta = calcularCuenta(entradaCuenta).totales.total;
-    const cobrado = sumarMontos([cuenta.cobrado, parte.totales.total]);
-    const saldo = parte.cierraLaCuenta ? '0.00' : restarMontos(totalCuenta, cobrado);
+    // El saldo que queda, con lo cobrado de la orden. Si no cuadra (un saldo negativo) se revierte todo: 409.
+    const saldo = conMontosConsistentes(
+      `el cobro de la orden ${ordenId}`,
+      () => cuentaCambio(cuenta.version),
+      () => {
+        const totalCuenta = calcularCuenta(entradaCuenta).totales.total;
+        const cobrado = sumarMontos([cuenta.cobrado, parte.totales.total]);
+        return parte.cierraLaCuenta ? '0.00' : restarMontos(totalCuenta, cobrado);
+      },
+    );
 
     const respuesta: CobroRespuesta = {
       id,
@@ -494,6 +524,26 @@ export class CobrosService {
     await this.guardar(respuesta, huella, parte.tipo, normal, cobradoEn);
     this.eventos.turnoCambio(sucursalId, turno.id, turno.caja_id);
     return respuesta;
+  }
+
+  /**
+   * La emisión del comprobante; un `RangeError` del dominio (los precios unitarios de una línea, por ejemplo) es una
+   * cuenta que no cuadra: 409 `CUENTA_CAMBIO` y la transacción entera se revierte (criterio 45a).
+   */
+  private async emitirOCuentaCambio(
+    version: number,
+    datos: Parameters<EmisionService['emitir']>[0],
+  ): ReturnType<EmisionService['emitir']> {
+    try {
+      return await this.emision.emitir(datos);
+    } catch (error) {
+      if (!(error instanceof RangeError)) throw error;
+      Logger.error(
+        `Montos inconsistentes al emitir el comprobante de la orden ${datos.orden?.id ?? datos.cobroId}: ${error.message}`,
+        CobrosService.name,
+      );
+      throw cuentaCambio(version);
+    }
   }
 
   /** La réplica por `id` (criterio 55): el cobro ya hecho, sin efectos, o 422 si el mismo `id` es otra petición. */

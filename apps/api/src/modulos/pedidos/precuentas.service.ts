@@ -10,12 +10,18 @@ import {
 import { QueryTypes, type Sequelize } from 'sequelize';
 import { CONEXION_API } from '../../nucleo/base-de-datos';
 import { ContextoEmpresa } from '../../nucleo/contexto-empresa';
+import { conMontosConsistentes } from '../../nucleo/errores/montos-inconsistentes';
 import { RELOJ, type Reloj } from '../../nucleo/reloj';
 import { MesasConsultaService } from '../salon';
 import { SesionActual, UsuariosConsultaService } from '../seguridad';
 import { bloquearOrden, exigirOrdenAbierta } from './bloqueos-orden';
 import { cuentaDeDatos, leerDatosDeCuenta, montosDeDescuentos } from './cuenta-de-orden';
-import { idDeClienteReutilizado, montoFueraDeRango, ordenSinConsumo } from './errores-pedidos';
+import {
+  idDeClienteReutilizado,
+  montoFueraDeRango,
+  montosInconsistentes,
+  ordenSinConsumo,
+} from './errores-pedidos';
 import { EventosPedidos } from './eventos-pedidos';
 import { IMPRESION, type ImpresionPuerto } from './impresion';
 import { mesasVigentesDeOrden } from './mesas-de-orden';
@@ -163,8 +169,16 @@ export class PrecuentasService {
       datosCuenta.cortesias.length > 0
     ) {
       const cuenta = cuentaDeDatos(datosCuenta);
-      total = calcularCuenta(cuenta).totales.total;
-      const montos = montosDeDescuentos(cuenta);
+      // Criterio 45a: un monto que el dominio rechaza es un 409, nunca un 500.
+      const { totalCalculado, montos } = conMontosConsistentes(
+        `la pre-cuenta de la orden ${orden.id}`,
+        montosInconsistentes,
+        () => ({
+          totalCalculado: calcularCuenta(cuenta).totales.total,
+          montos: montosDeDescuentos(cuenta),
+        }),
+      );
+      total = totalCalculado;
       const delItem = datosCuenta.descuentosDeItem.map((d) => ({
         itemId: d.itemId,
         tipo: d.tipo,
@@ -184,14 +198,19 @@ export class PrecuentasService {
             ];
       descuentos = [...delItem, ...deCuenta];
       if (descuentos.length === 0) descuentos = null;
-      cortesias = datosCuenta.cortesias.map((c) => ({
-        itemId: c.itemId,
-        cantidad: c.cantidad,
-        valorReferencial: multiplicarMonto(
-          datosCuenta.items.find((i) => i.id === c.itemId)!.precioUnitario,
-          c.cantidad,
-        ),
-      }));
+      cortesias = conMontosConsistentes(
+        `las cortesías de la pre-cuenta de la orden ${orden.id}`,
+        montosInconsistentes,
+        () =>
+          datosCuenta.cortesias.map((c) => ({
+            itemId: c.itemId,
+            cantidad: c.cantidad,
+            valorReferencial: multiplicarMonto(
+              datosCuenta.items.find((i) => i.id === c.itemId)!.precioUnitario,
+              c.cantidad,
+            ),
+          })),
+      );
       if (cortesias.length === 0) cortesias = null;
     }
     // No debería pasar: el envío ya impide que el total de la orden pase el tope (criterio 21).
@@ -291,15 +310,22 @@ export class PrecuentasService {
     ordenId: string,
   ): Promise<{ pagado: string; porPagar: string }> {
     const datos = await leerDatosDeCuenta(this.conexion, ordenId);
-    const calculada = calcularCuenta(
-      cuentaDeDatos(datos, {
-        tasaIgv: null,
-        montoIcbper: montoIcbperVigente(fechaLima(this.reloj.ahora())),
-      }),
+    // Criterio 45a: un saldo negativo (más cobrado que la cuenta) es un 409, nunca un 500.
+    return conMontosConsistentes(
+      `el pagado y por pagar de la orden ${ordenId}`,
+      montosInconsistentes,
+      () => {
+        const calculada = calcularCuenta(
+          cuentaDeDatos(datos, {
+            tasaIgv: null,
+            montoIcbper: montoIcbperVigente(fechaLima(this.reloj.ahora())),
+          }),
+        );
+        const saldo = restarMontos(calculada.totales.total, orden.monto_cobrado);
+        const icbperPendiente = restarMontos(calculada.totales.icbper, orden.icbper_cobrado);
+        return { pagado: orden.monto_cobrado, porPagar: restarMontos(saldo, icbperPendiente) };
+      },
     );
-    const saldo = restarMontos(calculada.totales.total, orden.monto_cobrado);
-    const icbperPendiente = restarMontos(calculada.totales.icbper, orden.icbper_cobrado);
-    return { pagado: orden.monto_cobrado, porPagar: restarMontos(saldo, icbperPendiente) };
   }
 
   /**

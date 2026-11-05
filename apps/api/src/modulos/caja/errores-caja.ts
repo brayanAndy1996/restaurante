@@ -69,6 +69,17 @@ export const turnoAjeno = (): ErrorAplicacion =>
     'Este turno es de otra persona: solo su responsable, un Supervisor o el Administrador pueden hacerlo',
   );
 
+/**
+ * 409 `CONFLICTO` de una lectura de la cuenta cuyos montos no cuadran (un saldo negativo u otro dato que el dominio
+ * rechaza con `RangeError`, criterio 45a): nunca un 500. El detalle va al log, no a la respuesta.
+ */
+export const cuentaInconsistente = (): ErrorAplicacion =>
+  new ErrorAplicacion(
+    409,
+    'CONFLICTO',
+    'Los montos de la cuenta no cuadran: avisa al administrador antes de cobrarla',
+  );
+
 /** 409 `CONFLICTO`: la caja está desactivada (criterio 24). */
 export const cajaInactiva = (): ErrorAplicacion =>
   new ErrorAplicacion(409, 'CONFLICTO', 'La caja está desactivada');
