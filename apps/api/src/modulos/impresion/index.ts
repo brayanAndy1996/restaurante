@@ -24,3 +24,9 @@ export type {
   PrecuentaParaTicket,
 } from './escpos';
 export { OrdenesVigentes } from './ordenes-vigentes';
+export { AlcanceDeReimpresion } from './alcance-de-reimpresion';
+export type {
+  ComprobadorDeReimpresion,
+  TipoDeTrabajoDeCaja,
+  TrabajoPorReimprimir,
+} from './alcance-de-reimpresion';

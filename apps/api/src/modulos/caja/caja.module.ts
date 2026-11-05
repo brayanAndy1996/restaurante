@@ -10,6 +10,7 @@ import { CobrosDePedidos } from './cobros-de-pedidos';
 import { CobrosService } from './cobros.service';
 import { CuentasController } from './cuentas.controller';
 import { EventosCaja } from './eventos-caja';
+import { AlcanceDeReimpresionDeReportes } from './alcance-de-reimpresion-de-reportes';
 import { AlcanceDeTurnosDeCaja } from './alcance-de-turnos-de-caja';
 import { ImpresoraDeCajas } from './impresora-de-cajas';
 import { ParametrosDeCuenta } from './parametros-de-cuenta';
@@ -38,6 +39,7 @@ import { TurnosService } from './turnos.service';
     CobrosDePedidos,
     ParametrosDeCuenta,
     AlcanceDeTurnosDeCaja,
+    AlcanceDeReimpresionDeReportes,
     EventosCaja,
     ImpresoraDeCajas,
     ReportesCaja,

@@ -38,7 +38,7 @@ export { SesionActual } from './sesion-actual';
 export { AutorizacionService, autorizacionInvalida } from './autorizacion.service';
 export { exigirObjetivo, normalizarValor } from './objetivo-autorizacion';
 export { ClaveSupervisorService } from './clave-supervisor.service';
-export { PermisoInterceptor } from './permiso.interceptor';
+export { PermisoInterceptor, requisitoDeLaPeticion } from './permiso.interceptor';
 export { ClaveDiferidaInterceptor } from './clave-diferida.interceptor';
 export type { ValidacionPrevia } from './clave-diferida.interceptor';
 export type { AutorizacionConsumida, ConsumirAutorizacion } from './autorizacion.service';

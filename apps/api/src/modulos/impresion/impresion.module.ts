@@ -4,6 +4,7 @@ import { AuditoriaModule } from '../auditoria';
 import { CartaModule } from '../carta';
 import { IMPRESION } from '../pedidos/impresion';
 import { SeguridadModule } from '../seguridad';
+import { AlcanceDeReimpresion } from './alcance-de-reimpresion';
 import { AutenticacionPuenteService } from './autenticacion-puente.service';
 import { ColaImpresionService } from './cola-impresion.service';
 import { DestinosController } from './destinos.controller';
@@ -46,6 +47,7 @@ import { TrabajosService } from './trabajos.service';
     DestinosService,
     EventosImpresion,
     OrdenesVigentes,
+    AlcanceDeReimpresion,
     ColaImpresionService,
     { provide: IMPRESION, useExisting: ColaImpresionService },
     AutenticacionPuenteService,
@@ -57,6 +59,6 @@ import { TrabajosService } from './trabajos.service';
     PuenteGuard,
     VinculacionGuard,
   ],
-  exports: [IMPRESION, VALIDADOR_DE_PUENTE, OrdenesVigentes],
+  exports: [IMPRESION, VALIDADOR_DE_PUENTE, OrdenesVigentes, AlcanceDeReimpresion],
 })
 export class ImpresionModule {}

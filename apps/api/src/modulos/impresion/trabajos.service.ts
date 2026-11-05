@@ -19,6 +19,7 @@ import type { PuenteAutenticado } from '../../nucleo/principal';
 import { RELOJ, horaLocal, type Reloj } from '../../nucleo/reloj';
 import { SucursalesConsultaService } from '../plataforma';
 import { SesionActual } from '../seguridad';
+import { AlcanceDeReimpresion, esTrabajoDeCaja } from './alcance-de-reimpresion';
 import { ColaImpresionService } from './cola-impresion.service';
 import {
   conMarcas,
@@ -112,6 +113,7 @@ export class TrabajosService {
     @Inject(SucursalesConsultaService) private readonly sucursales: SucursalesConsultaService,
     @Inject(ColaImpresionService) private readonly cola: ColaImpresionService,
     @Inject(OrdenesVigentes) private readonly ordenes: OrdenesVigentes,
+    @Inject(AlcanceDeReimpresion) private readonly alcance: AlcanceDeReimpresion,
   ) {}
 
   // ---- El puente ----------------------------------------------------------------------------------
@@ -441,6 +443,14 @@ export class TrabajosService {
     const original = filas[0];
     if (original === undefined) throw noEncontrado('El trabajo');
     if (original.tipo === 'GAVETA') throw gavetaNoSeReimprime();
+    // Los documentos de caja siguen el permiso y el alcance de caja (historia 006, criterio 90): 403 antes de copiar.
+    if (esTrabajoDeCaja(original.tipo)) {
+      await this.alcance.exigir({
+        tipo: original.tipo,
+        comprobanteId: original.comprobante_id,
+        turnoId: original.turno_id,
+      });
+    }
 
     // Una impresora que pasó a Bluetooth no imprime en 3b (decisión 12): se trata como una inactiva. Si tampoco hay
     // otra de red activa para la estación (o la caja), 409 sin crear el trabajo (ronda 2 del ataque, F4).

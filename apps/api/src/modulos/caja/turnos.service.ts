@@ -24,7 +24,7 @@ import { RELOJ, type Reloj } from '../../nucleo/reloj';
 import { AuditoriaService } from '../auditoria';
 import { PedidosConsultaService } from '../pedidos';
 import { SucursalesConsultaService, SuscripcionService } from '../plataforma';
-import { SesionActual, UsuariosConsultaService } from '../seguridad';
+import { SesionActual, UsuariosConsultaService, requisitoDeLaPeticion } from '../seguridad';
 import {
   cajaInactiva,
   cierreBloqueado,
@@ -278,6 +278,16 @@ export class TurnosService {
   async reporte(turnoId: string): Promise<ReporteCaja> {
     const turno = await this.turnoVisible(turnoId);
     return this.reportes.armar(turno.id);
+  }
+
+  /**
+   * La reimpresión de 004 de un trabajo `REPORTE_X` o `REPORTE_Z` (criterio 90): el mismo permiso (`OPERAR_CAJA`) y
+   * alcance que `reporte` (403 `PROHIBIDO` si no lo tiene o es un Cajero con el turno de otro; 404 si no es de la
+   * sucursal).
+   */
+  async exigirReimpresion(turnoId: string): Promise<void> {
+    if (requisitoDeLaPeticion('OPERAR_CAJA') !== 'permitido') throw turnoDeOtro();
+    await this.turnoVisible(turnoId);
   }
 
   /**

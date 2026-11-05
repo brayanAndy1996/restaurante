@@ -12,7 +12,7 @@ import { ErrorAplicacion } from '../../nucleo/errores/error-aplicacion';
 import { horaLocal } from '../../nucleo/reloj';
 import { conMarcas, documentoDeComprobante } from '../impresion';
 import { IMPRESION, type ImpresionPuerto } from '../pedidos/impresion';
-import { SesionActual } from '../seguridad';
+import { SesionActual, requisitoDeLaPeticion } from '../seguridad';
 import { RegistroAlcanceDeTurnos, veTodosLosTurnos } from './alcance-de-turnos';
 import { comprobanteDeOtro, comprobanteNoEncontrado } from './errores-facturacion';
 import { RegistroImpresoraDeCaja, RegistroPagosDeCobro } from './impresora-de-caja';
@@ -58,6 +58,16 @@ export class ComprobantesService {
     const comprobante = await leerComprobante(this.conexion, id.toLowerCase());
     if (comprobante === null) throw comprobanteNoEncontrado();
     return comprobante;
+  }
+
+  /**
+   * La reimpresión de 004 de un trabajo `COMPROBANTE` (criterio 90): el mismo permiso (`COBRAR`) y el mismo alcance que
+   * `POST /comprobantes/:id/impresiones`: 403 `PROHIBIDO` para quien no tiene el permiso o es un Cajero que pide el
+   * comprobante del turno de otro; 404 si es de otra sucursal.
+   */
+  async exigirReimpresion(id: string): Promise<void> {
+    if (requisitoDeLaPeticion('COBRAR') !== 'permitido') throw comprobanteDeOtro();
+    await this.exigirVisible(id);
   }
 
   /**

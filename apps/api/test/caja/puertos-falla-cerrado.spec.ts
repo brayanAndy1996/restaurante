@@ -2,6 +2,7 @@
 // un módulo registra al arrancar en otro cuando la dependencia iría al revés (plan, "Dependencias"): sin registro,
 // fallan cerrado en lugar de aceptar lo que no pueden comprobar.
 import { describe, expect, it } from 'vitest';
+import { AlcanceDeReimpresion } from '../../src/modulos/impresion';
 import { RegistroAlcanceDeTurnos, RegistroImpresoraDeCaja } from '../../src/modulos/facturacion';
 import { RegistroDeCobros } from '../../src/modulos/pedidos';
 import { UltimaEmisionDeEmisor } from '../../src/modulos/plataforma';
@@ -65,5 +66,35 @@ describe('RegistroAlcanceDeTurnos (facturación ← caja)', () => {
     registro.registrar(async (turnoId) => (turnoId === 'mio' ? 'usuario' : null));
     expect(await registro.responsableDe('mio')).toBe('usuario');
     expect(await registro.responsableDe('otro')).toBeNull();
+  });
+});
+
+describe('AlcanceDeReimpresion (impresión ← caja y facturación)', () => {
+  it('sin registro, reimprimir un documento de caja responde 403 PROHIBIDO (falla cerrado)', async () => {
+    const puerto = new AlcanceDeReimpresion();
+    for (const tipo of ['COMPROBANTE', 'REPORTE_X', 'REPORTE_Z'] as const) {
+      const error = await puerto
+        .exigir({ tipo, comprobanteId: 'c', turnoId: 't' })
+        .catch((e: unknown) => e);
+      expect(error).toBeInstanceOf(ErrorAplicacion);
+      expect([(error as ErrorAplicacion).getStatus(), (error as ErrorAplicacion).codigo]).toEqual([
+        403,
+        'PROHIBIDO',
+      ]);
+    }
+  });
+
+  it('con registro, llama al comprobador del tipo y deja pasar lo que no lanza', async () => {
+    const puerto = new AlcanceDeReimpresion();
+    const vistos: string[] = [];
+    puerto.registrar(['REPORTE_X'], async (t) => {
+      vistos.push(t.tipo);
+    });
+    await puerto.exigir({ tipo: 'REPORTE_X', comprobanteId: null, turnoId: 't' });
+    expect(vistos).toEqual(['REPORTE_X']);
+    const otro = await puerto
+      .exigir({ tipo: 'REPORTE_Z', comprobanteId: null, turnoId: 't' })
+      .catch((e: unknown) => e);
+    expect(otro).toBeInstanceOf(ErrorAplicacion);
   });
 });

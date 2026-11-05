@@ -3,6 +3,7 @@ import { AuditoriaModule } from '../auditoria';
 import { PlataformaModule } from '../plataforma';
 import { SeguridadModule } from '../seguridad';
 import { RegistroAlcanceDeTurnos } from './alcance-de-turnos';
+import { AlcanceDeReimpresionDeComprobantes } from './alcance-de-reimpresion-de-comprobantes';
 import { ComprobantesController } from './comprobantes.controller';
 import { ComprobantesService } from './comprobantes.service';
 import { EmisionService } from './emision.service';
@@ -32,6 +33,7 @@ import { UltimaEmisionDeComprobantes } from './ultima-emision-de-comprobantes';
     RegistroPagosDeCobro,
     RegistroAlcanceDeTurnos,
     UltimaEmisionDeComprobantes,
+    AlcanceDeReimpresionDeComprobantes,
   ],
   exports: [
     SeriesService,
