@@ -3,7 +3,15 @@ import { expect } from '@playwright/test';
 import { SimuladorPuente, type EmuladorEscPos } from '../../api/test/soporte/puente';
 import { llamarApi, tokenDeSesion } from './ayudas';
 import type { Escritura } from './ayudas-carta';
-import { destino, type EscenarioDeSalon } from './ayudas-salon';
+import {
+  CARTA,
+  abrirElComandero,
+  baldosaDeMesa,
+  destino,
+  elegirProducto,
+  esperarLaCuenta,
+  type EscenarioDeSalon,
+} from './ayudas-salon';
 
 /**
  * Preparación y atajos del E2E de la caja, el cobro y los comprobantes (historia 006, entrega 6a, tarea T23). La
@@ -171,4 +179,67 @@ export async function esperarPulsosDeGaveta(emulador: EmuladorEscPos, n: number)
   await expect
     .poll(() => pulsosDeGaveta(emulador), { message: 'pulsos de gaveta', timeout: 10_000 })
     .toBeGreaterThanOrEqual(n);
+}
+
+/** Un producto de la carta de la prueba con su precio (como lo muestra la PWA) y su familia. */
+export interface Plato {
+  nombre: string;
+  precio: string;
+  familia: 'fondos' | 'bebidas';
+}
+export const PLATOS = {
+  lomo: { nombre: CARTA.lomo, precio: 'S/ 28.00', familia: 'fondos' },
+  ceviche: { nombre: CARTA.ceviche, precio: 'S/ 38.00', familia: 'fondos' },
+  gaseosa: { nombre: CARTA.gaseosa, precio: 'S/ 6.00', familia: 'bebidas' },
+} as const satisfies Record<string, Plato>;
+
+/** El Mozo agrega al borrador del comandero cada plato (en ese orden) y lo envía; devuelve cuando la cuenta se ve. */
+export async function comandarEnLaCuenta(
+  page: Page,
+  titulo: string,
+  platos: readonly Plato[],
+): Promise<void> {
+  await abrirElComandero(page, titulo);
+  for (const plato of platos) {
+    await page
+      .getByRole('group', { name: 'Familias de la carta' })
+      .getByRole('button', { name: CARTA.familias[plato.familia] })
+      .click();
+    const hoja = await elegirProducto(page, plato.nombre, plato.precio);
+    await hoja.getByRole('button', { name: `Agregar · ${plato.precio}` }).click();
+    await expect(hoja).toBeHidden();
+  }
+  const respuesta = page.waitForResponse(
+    (r) =>
+      r.request().method() === 'POST' &&
+      /^\/ordenes\/[^/]+\/envios$/.test(new URL(r.url()).pathname),
+  );
+  await page.getByRole('button', { name: 'Enviar', exact: true }).click();
+  expect((await respuesta).status(), 'la comanda se envió').toBe(201);
+  await esperarLaCuenta(page, titulo);
+}
+
+/** El Mozo abre la mesa (con los comensales que propone la hoja) y comanda; devuelve el id de la cuenta. */
+export async function abrirMesaYComandar(
+  page: Page,
+  mesa: string,
+  platos: readonly Plato[],
+): Promise<string> {
+  await irAlSalon(page);
+  await baldosaDeMesa(page, mesa).click();
+  const hoja = page.getByRole('dialog', { name: `Abrir mesa ${mesa}` });
+  await expect(hoja).toBeVisible();
+  await page.waitForTimeout(400); // la hoja termina de subir
+  await hoja.getByRole('button', { name: 'Abrir mesa', exact: true }).click();
+  const ordenId = await esperarLaCuenta(page, `Mesa ${mesa}`);
+  await comandarEnLaCuenta(page, `Mesa ${mesa}`, platos);
+  return ordenId;
+}
+
+/** El mapa de mesas. El Mozo no tiene barra de navegación (solo tiene el Salón): vuelve por la dirección. */
+export async function irAlSalon(page: Page): Promise<void> {
+  const enlace = destino(page, 'Salón');
+  if ((await enlace.count()) > 0) await enlace.click();
+  else await page.goto('/salon');
+  await expect(page).toHaveURL(/\/salon$/);
 }

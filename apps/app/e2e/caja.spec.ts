@@ -6,13 +6,19 @@ import {
   type BrowserContextOptions,
   type Page,
 } from '@playwright/test';
+import { writeFileSync } from 'node:fs';
 import { EmuladorEscPos, type SimuladorPuente } from '../../api/test/soporte/puente';
 import { CELULAR, fechaDeLima } from './ayudas';
 import {
   CARPETA_DE_CAPTURAS,
   IMPRESORA_DE_CAJA,
+  PLATOS,
   abrirCajaConFondo,
+  abrirElCobroDeLaMesa,
+  abrirMesaYComandar,
+  botonDeCobrar,
   esperarPulsosDeGaveta,
+  irAlSalon,
   pulsosDeGaveta,
   irAAjustes,
   prepararImpresionDeCaja,
@@ -22,7 +28,9 @@ import { afirmarPantallaDeCelular, entrarEnCelular } from './ayudas-carta';
 import { crearSalonPorApi } from './ayudas-impresion';
 import {
   afirmarClavesDelSalon,
+  afirmarEstadoDeMesa,
   crearEscenarioDeSalon,
+  tarjetaDeCocina,
   type EscenarioDeSalon,
 } from './ayudas-salon';
 
@@ -55,6 +63,10 @@ interface Persona {
 let admin: Persona;
 let cajero: Persona;
 let supervisor: Persona;
+let mozo: Persona;
+let cocina: Persona;
+/** El ticket del primer comprobante, tal como lo decodifica el emulador. */
+let texto = '';
 
 test.beforeAll(async ({ request }) => {
   e = await crearEscenarioDeSalon(request);
@@ -158,4 +170,94 @@ test('el Cajero abre su caja con fondo y la gaveta se abre; el Supervisor abre l
   });
 
   afirmarClavesDelSalon(cajero.escrituras, [['POST', /^\/turnos$/]]);
+});
+
+test('el Mozo abre la mesa 1 y comanda; el Cajero cobra con efectivo (con vuelto) y Yape y la mesa queda libre', async ({
+  browser,
+}) => {
+  [mozo, cocina] = [await entrar(browser, e.mozo), await entrar(browser, e.cocina)];
+
+  await test.step('el Mozo abre la mesa 1 y comanda dos lomos y una gaseosa (S/ 62.00); Cocina recibe la comanda', async () => {
+    await abrirMesaYComandar(mozo.page, '1', [PLATOS.lomo, PLATOS.lomo, PLATOS.gaseosa]);
+    await expect(tarjetaDeCocina(cocina.page, 'Comanda', 'Mesa 1', 'Cocina')).toBeVisible();
+  });
+
+  const { page } = cajero;
+  await test.step('el Cajero ve la mesa 1 en «Por cobrar» y abre su cobro', async () => {
+    await abrirElCobroDeLaMesa(page, '1');
+    await expect(botonDeCobrar(page)).toHaveText('Cobrar S/\u00a062.00');
+  });
+
+  await test.step('paga S/ 20.00 con Yape y el resto en efectivo con S/ 50.00', async () => {
+    await page.getByRole('button', { name: 'Agregar otro pago' }).click();
+    await page.getByLabel('Monto del pago 2').fill('20');
+    await page.getByLabel('Número de operación').fill('YAPE-0001');
+    await page.getByRole('textbox', { name: 'Recibido' }).fill('50');
+    await expect(page.getByText('Vuelto').first()).toBeVisible();
+    await page.screenshot({ path: captura('03-cobro-dos-medios-360'), fullPage: true });
+    await afirmarPantallaDeCelular(page, 'Caja › Cobro con dos medios');
+    emulador.limpiar();
+    const respuesta = page.waitForResponse(
+      (r) =>
+        r.request().method() === 'POST' &&
+        /^\/cuentas\/[^/]+\/cobros$/.test(new URL(r.url()).pathname),
+    );
+    await botonDeCobrar(page).click();
+    const cobro = await respuesta;
+    expect(cobro.status(), 'el cobro se aceptó').toBe(201);
+    expect(cobro.request().headers()['idempotency-key']).toMatch(/\S/);
+    const cuerpo = (await cobro.json()) as { impresion: string; vuelto: string };
+    expect(cuerpo.impresion).toBe('EN_COLA');
+    expect(cuerpo.vuelto).toBe('8.00');
+  });
+
+  await test.step('el resultado dice el comprobante, el vuelto, que imprime en la caja y que la mesa quedó libre', async () => {
+    await expect(page.getByText('Boleta · B001-00000001')).toBeVisible();
+    await expect(page.getByText('Vuelto', { exact: true })).toBeVisible();
+    await expect(page.locator('.resultado__vuelto')).toContainText('S/ 8.00');
+    await expect(page.getByText(`Imprimiendo en ${IMPRESORA_DE_CAJA}`)).toBeVisible();
+    await expect(page.getByText('Mesa 1 libre')).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Imprimir otra vez' })).toBeEnabled();
+    await page.screenshot({ path: captura('04-resultado-imprimiendo-360'), fullPage: true });
+    await afirmarPantallaDeCelular(page, 'Caja › Resultado del cobro');
+  });
+
+  await test.step('el ticket del comprobante llega al emulador con el QR y el pulso de la gaveta', async () => {
+    const ticket = await emulador.esperarTicket(10_000);
+    expect(ticket.texto).toContain('BOLETA DE VENTA ELECTRÓNICA');
+    expect(ticket.texto).toContain('B001-00000001');
+    expect(ticket.texto).toContain('Lomo saltado');
+    expect(ticket.texto).toContain('Yape');
+    expect(ticket.texto).toContain('Vuelto');
+    expect(ticket.texto).not.toContain('REIMPRESIÓN');
+    expect(ticket.qrs).toHaveLength(1);
+    expect(ticket.qrs[0]).toContain('|03|B001|00000001|');
+    expect(ticket.pulsosGaveta).toBe(1);
+    expect(ticket.corte).not.toBeNull();
+    texto = ticket.texto;
+    // El ticket tal como lo decodifica el emulador, para revisarlo a ojo.
+    writeFileSync(`${CARPETA_DE_CAPTURAS}/06-ticket-del-comprobante.txt`, `${ticket.marcado}\n`);
+  });
+
+  await test.step('la mesa queda libre para el Mozo y la comanda sigue en Cocina', async () => {
+    await irAlSalon(mozo.page);
+    await afirmarEstadoDeMesa(mozo.page, '1', 'libre');
+  });
+
+  await test.step('«Imprimir otra vez» saca una copia con la marca REIMPRESIÓN y sin abrir la gaveta', async () => {
+    await page.getByRole('button', { name: 'Imprimir otra vez' }).click();
+    await expect(page.getByText(`Imprimiendo otra copia en ${IMPRESORA_DE_CAJA}`)).toBeVisible();
+    const copia = await emulador.esperarTicket(10_000);
+    expect(copia.texto).toContain('REIMPRESIÓN');
+    expect(copia.texto).toContain('B001-00000001');
+    expect(copia.pulsosGaveta).toBe(0);
+    expect(copia.qrs).toHaveLength(1);
+    await page.screenshot({ path: captura('05-reimpresion-360'), fullPage: true });
+  });
+
+  afirmarClavesDelSalon(cajero.escrituras, [
+    ['POST', /\/cuentas\/[^/]+\/cobros$/],
+    ['POST', /\/comprobantes\/[^/]+\/impresiones$/],
+  ]);
+  void texto;
 });
