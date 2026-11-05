@@ -270,6 +270,23 @@ export class EmisionService {
   }
 }
 
+/** El largo máximo de la descripción de una línea (CHECK de `comprobante_linea.descripcion`, criterio 90). */
+export const LARGO_MAXIMO_DESCRIPCION = 250;
+
+/**
+ * Recorta la descripción de una línea a 250 caracteres con «…» al final (nombre con modificadores puede pasar del
+ * límite de la columna). No parte un par sustituto ni deja espacios antes de los puntos suspensivos; el resultado
+ * mide a lo más 250 unidades tanto para JavaScript como para `char_length`. Lo que ya cabe no se toca.
+ */
+export function recortarDescripcion(descripcion: string): string {
+  if (descripcion.length <= LARGO_MAXIMO_DESCRIPCION) return descripcion;
+  let corte = LARGO_MAXIMO_DESCRIPCION - 1;
+  const ultima = descripcion.charCodeAt(corte - 1);
+  if (ultima >= 0xd800 && ultima <= 0xdbff) corte -= 1; // la mitad alta de un par sustituto
+  const recortada = descripcion.slice(0, corte).trimEnd();
+  return `${recortada === '' ? descripcion.slice(0, 1) : recortada}…`;
+}
+
 /**
  * Los 19 valores de una línea, en el orden de sus parámetros: del 1 al 17 las columnas desde `posicion` (sin el
  * precio ni el valor unitario, que salen del 18 y el 19: lo que se divide y la cantidad). Un ítem sin descripción es
@@ -277,10 +294,11 @@ export class EmisionService {
  */
 function valoresDeLinea(linea: LineaDeParte, posicion: number, datos: DatosDeEmision): unknown[] {
   const gratuita = linea.gratuita;
-  const descripcion = linea.itemId === null ? 'Por consumo' : datos.descripciones.get(linea.itemId);
-  if (descripcion === undefined) {
+  const completa = linea.itemId === null ? 'Por consumo' : datos.descripciones.get(linea.itemId);
+  if (completa === undefined) {
     throw new Error(`Falta la descripción del ítem ${linea.itemId} para el comprobante`);
   }
+  const descripcion = recortarDescripcion(completa);
   const cantidad = gratuita?.cantidad ?? linea.cantidad;
   return [
     posicion,
