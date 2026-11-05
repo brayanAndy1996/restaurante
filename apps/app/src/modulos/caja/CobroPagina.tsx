@@ -10,7 +10,7 @@ import {
   claseBoton,
 } from '@restaurante/ui';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocation, useParams } from 'react-router-dom';
 import { Pagina } from '../../componentes/Pagina';
 import { AvisoPendiente } from '../../componentes/PendienteDeEnvio';
@@ -158,6 +158,11 @@ function Cobro({ ordenId, empresaId, usuarioId, sucursalId, atras }: PropsCobro)
   const [fallo, setFallo] = useState<FalloMostrado | null>(null);
   const [hecho, setHecho] = useState<Hecho | null>(null);
   const enviando = useRef(false);
+  const alertaDeFallo = useRef<HTMLDivElement>(null);
+  // Quien toca «Cobrar» está abajo: si falla, el aviso se trae a la vista.
+  useEffect(() => {
+    if (fallo) alertaDeFallo.current?.scrollIntoView?.({ block: 'start' });
+  }, [fallo]);
   const [cobrando, setCobrando] = useState(false);
 
   // --- Lo que se cobra ---------------------------------------------------------------------------------
@@ -238,7 +243,7 @@ function Cobro({ ordenId, empresaId, usuarioId, sucursalId, atras }: PropsCobro)
 
   if (hecho) {
     return (
-      <Pagina titulo={`Cobrar · ${titulo}`}>
+      <Pagina titulo="Cobro">
         <ResultadoDeCobro
           respuesta={hecho.respuesta}
           titulo={hecho.titulo}
@@ -307,8 +312,6 @@ function Cobro({ ordenId, empresaId, usuarioId, sucursalId, atras }: PropsCobro)
   }
 
   // --- Cobrar ------------------------------------------------------------------------------------------------
-  const listo =
-    parte?.ok === true && clienteValidado.ok && resumen.pagos !== null && !cobrando && !!turno;
   const etiquetaDelBoton = !parte?.ok
     ? 'Cobrar'
     : `${estado.enCurso && fallo?.repetir ? 'Reintentar el cobro' : modoVigente === 'IGUALES' ? `Cobrar la parte ${(plan?.numeros.length ?? 0) + 1} de ${plan?.partes ?? partesElegidas}` : 'Cobrar'} ${modoVigente === 'IGUALES' ? '· ' : ''}${montoEnSoles(parte.total) ?? ''}`;
@@ -411,7 +414,7 @@ function Cobro({ ordenId, empresaId, usuarioId, sucursalId, atras }: PropsCobro)
       pie={
         <div className="cobro__pie">
           {motivo ? (
-            <p className="cobro__pie-motivo" role="status">
+            <p id="cobro-motivo" className="cobro__pie-motivo" role="status">
               {motivo}
             </p>
           ) : null}
@@ -421,7 +424,7 @@ function Cobro({ ordenId, empresaId, usuarioId, sucursalId, atras }: PropsCobro)
             cargando={cobrando}
             textoCargando={envio.pendiente ? 'Pendiente de envío' : 'Cobrando…'}
             disabled={!parte?.ok}
-            aria-disabled={!listo || undefined}
+            {...(motivo ? { 'aria-describedby': 'cobro-motivo' } : {})}
             onClick={() => void intentarCobrar()}
           >
             {etiquetaDelBoton}
@@ -446,7 +449,7 @@ function Cobro({ ordenId, empresaId, usuarioId, sucursalId, atras }: PropsCobro)
         ) : null}
         <AvisoPendiente pendiente={envio.pendiente} />
         {fallo ? (
-          <div role="alert">
+          <div role="alert" ref={alertaDeFallo}>
             <Aviso
               tipo={fallo.cuentaCambio ? 'alerta' : 'error'}
               titulo={fallo.cuentaCambio ? 'La cuenta cambió' : 'No se pudo cobrar'}
@@ -558,7 +561,9 @@ function DesgloseDeLaParte({
     <section className="cobro__bloque cobro__bloque--junta">
       {t ? (
         <dl className="desglose" aria-label="Desglose de la parte">
-          <Fila etiqueta="Subtotal" valor={montoEnSoles(t.subtotal)} />
+          {!montoEsCero(t.descuentos) || !montoEsCero(t.icbper) ? (
+            <Fila etiqueta="Subtotal" valor={montoEnSoles(t.subtotal)} />
+          ) : null}
           {!montoEsCero(t.descuentos) ? (
             <Fila etiqueta="Descuentos" valor={`−${montoEnSoles(t.descuentos) ?? ''}`} />
           ) : null}

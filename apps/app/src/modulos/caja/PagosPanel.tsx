@@ -158,7 +158,7 @@ export function PagosPanel({ filas, onFilas, resumen, verProblemas }: Props) {
                     }
                     autoComplete="off"
                     autoCapitalize="characters"
-                    ayuda="El de la voucher o de la constancia."
+                    ayuda="Lo ves en el voucher o en la constancia de la app."
                   />
                 )}
 
