@@ -461,10 +461,12 @@ test('el Cajero cierra a ciegas con una diferencia y su motivo y la Z sale impre
     await afirmarPantallaDeCelular(page, 'Caja › Cerrar caja (conteo a ciegas)');
   });
 
-  await test.step('faltan S/ 1.20 de efectivo: sin motivo no cierra; con el motivo cierra', async () => {
+  await test.step('faltan S/ 1.20 de efectivo: sin motivo no cierra y solo dice «No cuadra»; con el motivo cierra', async () => {
     const primero = await cerrarConZ(page);
     expect(primero.status(), 'sin motivo, la API pide el de la diferencia').toBe(422);
-    await expect(page.getByText('Faltan S/ 1.20')).toBeVisible();
+    await expect(page.getByText('No cuadra')).toBeVisible();
+    // La diferencia exacta se ve recién en la Z cerrada: ahora no hay ningún monto de más o de menos.
+    await expect(page.getByText(/Faltan S\/|Sobran S\/|Esperado/)).toHaveCount(0);
     await page
       .getByRole('textbox', { name: 'Motivo de la diferencia en efectivo' })
       .fill('Un vuelto mal dado');

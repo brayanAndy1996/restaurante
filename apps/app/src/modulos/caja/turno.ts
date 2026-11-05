@@ -339,9 +339,12 @@ export function cuerpoDeCierre(
   };
 }
 
-/** Los medios que tienen diferencia (distinta de "0.00"), con su motivo todavía por escribir. */
+/**
+ * Los medios que no cuadran, con su motivo todavía por escribir. La API ya manda solo esos (criterio 32), sin esperado,
+ * contado ni diferencia: la pantalla de cierre no puede dejar adivinar lo que hay en caja.
+ */
 export const mediosConDiferencia = (diferencias: readonly DiferenciaDeArqueo[]): MedioPago[] =>
-  diferencias.filter((d) => !montoEsCero(d.diferencia)).map((d) => d.medio);
+  diferencias.map((d) => d.medio);
 
 /** Motivos que faltan: un error por cada medio con diferencia y sin motivo escrito. */
 export function motivosQueFaltan(

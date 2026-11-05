@@ -30,6 +30,7 @@ const caja = (n: number, extra: Partial<CajaRespuesta> = {}): CajaRespuesta => (
   impresora: null,
   series: [],
   turnoAbierto: null,
+  parametros: { regimen: 'GENERAL', tiposComprobante: ['BOLETA', 'FACTURA'] },
   ...extra,
 });
 const ocupada = (n: number) =>
@@ -188,12 +189,8 @@ describe('el conteo del cierre (criterios 31 y 116)', () => {
     ).toBe(true);
   });
 
-  it('pide el motivo solo de los medios con diferencia', () => {
-    const diferencias = [
-      { medio: 'EFECTIVO' as const, contado: '295.00', diferencia: '-12.00' },
-      { medio: 'TARJETA_CREDITO' as const, contado: '69.20', diferencia: '0.00' },
-      { medio: 'YAPE' as const, contado: '30.00', diferencia: '0.80' },
-    ];
+  it('pide el motivo de cada medio que la API dice que no cuadra (solo trae el medio, sin montos)', () => {
+    const diferencias = [{ medio: 'EFECTIVO' as const }, { medio: 'YAPE' as const }];
     expect(mediosConDiferencia(diferencias)).toEqual(['EFECTIVO', 'YAPE']);
     expect(motivosQueFaltan(diferencias, { ...CONTEO_VACIO, YAPE: 'Sobró' })).toEqual({
       EFECTIVO: 'Escribe el motivo de esta diferencia',

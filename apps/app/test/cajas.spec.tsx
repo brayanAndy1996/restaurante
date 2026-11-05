@@ -36,6 +36,7 @@ const caja = (n: number, nombre: string, extra: Partial<CajaRespuesta> = {}): Ca
   impresora: null,
   series: [],
   turnoAbierto: null,
+  parametros: { regimen: 'GENERAL', tiposComprobante: ['BOLETA', 'FACTURA'] },
   ...extra,
 });
 

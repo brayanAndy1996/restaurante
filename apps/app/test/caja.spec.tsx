@@ -31,6 +31,7 @@ const caja = (n: number, nombre: string, extra: Partial<CajaRespuesta> = {}): Ca
   impresora: null,
   series: [{ tipo: 'BOLETA', serie: 'B001', ultimoNumero: 0, activa: true, emisorId: EMISOR }],
   turnoAbierto: null,
+  parametros: { regimen: 'GENERAL', tiposComprobante: ['BOLETA', 'FACTURA'] },
   ...extra,
 });
 
@@ -628,13 +629,7 @@ describe('Cerrar caja: conteo a ciegas, diferencias y bloqueo (criterios 31 a 35
         if (!conteo.some((c) => c.motivo)) {
           return conflicto('DIFERENCIA_SIN_MOTIVO', 'Falta el motivo', 422, {
             campos: [{ campo: 'conteo.0.motivo', mensaje: 'Falta el motivo' }],
-            diferencias: [
-              { medio: 'EFECTIVO', contado: '295.00', diferencia: '-12.00' },
-              { medio: 'TARJETA_CREDITO', contado: '69.20', diferencia: '0.00' },
-              { medio: 'TARJETA_DEBITO', contado: '0.00', diferencia: '0.00' },
-              { medio: 'YAPE', contado: '30.00', diferencia: '0.80' },
-              { medio: 'PLIN', contado: '0.00', diferencia: '0.00' },
-            ],
+            diferencias: [{ medio: 'EFECTIVO' }, { medio: 'YAPE' }],
           });
         }
         return json(
@@ -707,14 +702,16 @@ describe('Cerrar caja: conteo a ciegas, diferencias y bloqueo (criterios 31 a 35
       (cuerpos[0] as { conteo: { motivo?: string }[] }).conteo.every((c) => c.motivo === undefined),
     ).toBe(true);
 
-    // Ahora sí: cada diferencia con su monto en palabras, sin el esperado.
+    // Ahora sí: solo los medios que no cuadran, marcados «No cuadra» y sin ningún monto de diferencia (decisión del
+    // usuario, criterio 32): ni lo esperado, ni de cuánto falta o sobra.
     expect(
       await screen.findByRole('heading', { name: 'Escribe el motivo de cada diferencia' }),
     ).toBeInTheDocument();
-    expect(screen.getByText('Faltan S/ 12.00')).toBeInTheDocument();
-    expect(screen.getByText('Sobran S/ 0.80')).toBeInTheDocument();
-    expect(screen.getAllByText('Cuadra')).toHaveLength(3);
-    expect(document.body.textContent).not.toMatch(/esperado|307\.00|29\.20/i);
+    expect(screen.getAllByText('No cuadra')).toHaveLength(2);
+    expect(screen.queryByText('Cuadra')).toBeNull();
+    expect(document.body.textContent).not.toMatch(
+      /esperado|faltan|sobran|307\.00|29\.20|12\.00|0\.80/i,
+    );
     // Solo los medios con diferencia piden motivo.
     expect(screen.getAllByLabelText(/Motivo de la diferencia en/)).toHaveLength(2);
 
@@ -860,11 +857,7 @@ describe('Cerrar caja: conteo a ciegas, diferencias y bloqueo (criterios 31 a 35
       turno: turno(),
       cierre: () =>
         conflicto('DIFERENCIA_SIN_MOTIVO', 'Falta', 422, {
-          diferencias: MEDIOS.map((medio) => ({
-            medio,
-            contado: '0.00',
-            diferencia: medio === 'EFECTIVO' ? '-5.00' : '0.00',
-          })),
+          diferencias: [{ medio: 'EFECTIVO' }],
         }),
     });
     await aCerrar();

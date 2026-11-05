@@ -10,7 +10,6 @@ import {
   EtiquetaDeEstado,
   Icono,
   IconoDerecha,
-  IconoOk,
   ListaDeFilas,
   Segmentos,
   claseFila,
@@ -23,7 +22,6 @@ import { AvisoPendiente } from '../../componentes/PendienteDeEnvio';
 import { nuevaClaveDeIdempotencia } from '../../lib/api';
 import { useEnvioPendiente } from '../../lib/envios';
 import { ErrorApi } from '../../lib/errores';
-import { montoEsCero } from '../../lib/monto';
 import { rutaDeCuenta } from './cuenta';
 import {
   ATAJOS_DE_MOTIVO,
@@ -41,7 +39,6 @@ import {
   motivosQueFaltan,
   soles,
   textoDeCuentasAbiertas,
-  textoDeDiferencia,
   validarConteo,
   type ConteoEscrito,
   type MotivosEscritos,
@@ -282,51 +279,41 @@ export function CerrarCaja({ turno, onCerrada }: Props) {
               Escribe el motivo de cada diferencia
             </h2>
             <p className="texto-ayuda">
-              Hay medios que no cuadran con lo que registró el sistema. Di qué pasó para que quede
-              en el cierre.
+              Hay medios que no cuadran con lo que registró el sistema. No te decimos de cuánto: la
+              diferencia exacta la verás en la Z, ya cerrada. Di qué pasó para que quede en el
+              cierre.
             </p>
             <ul className="turno__diferencias">
-              {(diferencias ?? []).map((d) => {
-                const cuadra = montoEsCero(d.diferencia);
-                return (
-                  <li key={d.medio} className="turno__diferencia">
-                    <div className="turno__diferencia-cabecera">
-                      <span className="turno__diferencia-texto">
-                        <b>{NOMBRE_DE_MEDIO[d.medio]}</b>
-                        <span className="texto-ayuda">{`Contaste ${soles(d.contado)}`}</span>
-                      </span>
-                      {cuadra ? (
-                        <EtiquetaDeEstado tono="ok" icono={IconoOk}>
-                          Cuadra
-                        </EtiquetaDeEstado>
-                      ) : (
-                        <EtiquetaDeEstado tono="alerta">
-                          {textoDeDiferencia(d.diferencia)}
-                        </EtiquetaDeEstado>
-                      )}
-                    </div>
-                    {cuadra ? null : (
-                      <div className="turno__motivo">
-                        <Segmentos
-                          etiqueta={`Motivos frecuentes: ${NOMBRE_DE_MEDIO[d.medio]}`}
-                          opciones={ATAJOS_DE_MOTIVO.map((a) => ({ valor: a, etiqueta: a }))}
-                          valor={motivos[d.medio]}
-                          onCambio={(valor) => ponerMotivo(d.medio, valor)}
-                        />
-                        <CampoTexto
-                          etiqueta={`Motivo de la diferencia en ${NOMBRE_DE_MEDIO[d.medio].toLowerCase()}`}
-                          value={motivos[d.medio]}
-                          onChange={(e) => ponerMotivo(d.medio, e.target.value)}
-                          error={erroresDeMotivo[d.medio]}
-                          maxLength={300}
-                          autoComplete="off"
-                          disabled={enviando}
-                        />
-                      </div>
-                    )}
-                  </li>
-                );
-              })}
+              {(diferencias ?? []).map((d) => (
+                <li key={d.medio} className="turno__diferencia">
+                  <div className="turno__diferencia-cabecera">
+                    <span className="turno__diferencia-texto">
+                      <b>{NOMBRE_DE_MEDIO[d.medio]}</b>
+                      {conteo.ok ? (
+                        <span className="texto-ayuda">{`Contaste ${soles(conteo.contado[d.medio])}`}</span>
+                      ) : null}
+                    </span>
+                    <EtiquetaDeEstado tono="alerta">No cuadra</EtiquetaDeEstado>
+                  </div>
+                  <div className="turno__motivo">
+                    <Segmentos
+                      etiqueta={`Motivos frecuentes: ${NOMBRE_DE_MEDIO[d.medio]}`}
+                      opciones={ATAJOS_DE_MOTIVO.map((a) => ({ valor: a, etiqueta: a }))}
+                      valor={motivos[d.medio]}
+                      onCambio={(valor) => ponerMotivo(d.medio, valor)}
+                    />
+                    <CampoTexto
+                      etiqueta={`Motivo de la diferencia en ${NOMBRE_DE_MEDIO[d.medio].toLowerCase()}`}
+                      value={motivos[d.medio]}
+                      onChange={(e) => ponerMotivo(d.medio, e.target.value)}
+                      error={erroresDeMotivo[d.medio]}
+                      maxLength={300}
+                      autoComplete="off"
+                      disabled={enviando}
+                    />
+                  </div>
+                </li>
+              ))}
             </ul>
             <Boton onClick={volverAContar} disabled={enviando}>
               Volver a contar
