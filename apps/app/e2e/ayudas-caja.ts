@@ -285,13 +285,8 @@ export async function esperarTicketCon(
   fragmento: string,
 ): Promise<TicketEmulado> {
   const buscar = () => emulador.tickets.find((t) => t.texto.includes(fragmento));
-  const recibidos = () =>
-    emulador.tickets.map((t) => t.texto.split('\n').slice(0, 3).join(' / ')).join(' | ');
   await expect
-    .poll(() => buscar() !== undefined, {
-      message: () => `ticket con «${fragmento}»; llegaron: ${recibidos()}`,
-      timeout: 10_000,
-    })
+    .poll(() => buscar() !== undefined, { message: `ticket con «${fragmento}»`, timeout: 10_000 })
     .toBe(true);
   return buscar() as TicketEmulado;
 }
