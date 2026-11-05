@@ -25,6 +25,7 @@ import {
 import { Credenciales } from './credenciales';
 import { bloqueoTemporal } from './errores-acceso';
 import { HorarioService } from './horario.service';
+import { normalizarObjetivo } from './objetivo-autorizacion';
 import { SesionActual } from './sesion-actual';
 
 const MINUTO_MS = 60_000;
@@ -63,6 +64,20 @@ interface FilaAutorizador {
  * su horario, de otra empresa o del propio solicitante): quien ataca no distingue por qué (criterio 45).
  */
 const claveInvalida = () => new ErrorAplicacion(403, 'CLAVE_INVALIDA', 'La clave no es válida');
+
+/**
+ * Historia 006, criterio 40: el `objetivo` solo acompaña a las acciones que ata (un descuento a `APLICAR_DESCUENTO` y
+ * una cortesía a `APLICAR_CORTESIA`); otra combinación es una entrada incoherente: 400 sin contar fallo.
+ */
+function exigirObjetivoCoherente(entrada: AutorizacionEntrada): void {
+  if (entrada.objetivo === undefined) return;
+  const esperada = entrada.objetivo.tipo === 'DESCUENTO' ? 'APLICAR_DESCUENTO' : 'APLICAR_CORTESIA';
+  if (entrada.accion !== esperada) {
+    throw new ErrorAplicacion(400, 'DATOS_INVALIDOS', 'Los datos enviados no son válidos', [
+      { campo: 'objetivo', mensaje: `El objetivo ${entrada.objetivo.tipo} solo vale para ${esperada}` },
+    ]);
+  }
+}
 
 /**
  * Clave de supervisor, primera mitad (HU-03, RF-12, criterios 44 a 47, 52, 53 y 110): `POST /autorizaciones`.
@@ -118,6 +133,8 @@ export class ClaveSupervisorService {
     if (principal.usuarioId === null || principal.sesionId === null) {
       throw new ErrorAplicacion(403, 'PROHIBIDO', 'No tienes permiso para realizar esta operación');
     }
+
+    exigirObjetivoCoherente(entrada);
 
     const resultado = await this.contexto.ejecutar(
       principal.empresaId,
@@ -308,11 +325,12 @@ export class ClaveSupervisorService {
       await this.bloqueos.reiniciar('CLAVE_EQUIPO', principal.equipoId, ahora);
 
     const expiraEn = new Date(ahora.getTime() + MINUTOS_VIGENCIA_AUTORIZACION * MINUTO_MS);
+    const objetivo = entrada.objetivo === undefined ? null : normalizarObjetivo(entrada.objetivo);
     const filas = await this.conexion.query<{ id: string }>(
       `INSERT INTO autorizacion
          (empresa_id, sesion_id, solicitante_id, autorizador_id, sucursal_id, equipo_id, accion, motivo,
-          expira_en, creado_en, actualizado_en)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $10)
+          expira_en, objetivo, creado_en, actualizado_en)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $11::jsonb, $10, $10)
        RETURNING id`,
       {
         bind: [
@@ -326,6 +344,7 @@ export class ClaveSupervisorService {
           entrada.motivo,
           expiraEn,
           ahora,
+          objetivo === null ? null : JSON.stringify(objetivo),
         ],
         type: QueryTypes.SELECT,
       },
@@ -344,6 +363,7 @@ export class ClaveSupervisorService {
         autorizadorId: autorizador.id,
         equipoId: principal.equipoId,
         expiraEn: expiraEn.toISOString(),
+        ...(objetivo === null ? {} : { objetivo }),
       },
     });
     return {
@@ -351,6 +371,7 @@ export class ClaveSupervisorService {
       accion: entrada.accion,
       autorizadoPor: { id: autorizador.id, nombre: autorizador.nombre },
       expiraEn: expiraEn.toISOString(),
+      ...(objetivo === null ? {} : { objetivo }),
     };
   }
 
