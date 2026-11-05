@@ -27,5 +27,13 @@ export { redondeoEfectivo, validarPagos } from './pagos';
 export type { PagoEntrada, RedondeoEfectivo, ResultadoPagos } from './pagos';
 export { diferenciasDelArqueo, esperadoDelTurno } from './turno';
 export type { DiferenciaDelArqueo, EntradaEsperadoDelTurno, MontoPorMedio } from './turno';
+export {
+  compararMontos,
+  multiplicarMonto,
+  preciosUnitarios,
+  restarMontos,
+  sumarMontos,
+} from './aritmetica';
+export type { PreciosUnitarios } from './aritmetica';
 export { montoEnLetras } from './letras';
 export { tiposDeComprobantePermitidos } from '../regimen';
