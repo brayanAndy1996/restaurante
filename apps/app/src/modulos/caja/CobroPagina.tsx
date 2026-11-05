@@ -1,4 +1,5 @@
 import type { CobroRespuesta, CuentaRespuesta } from '@restaurante/contratos';
+import { MAXIMO_PARTES_IGUALES } from '@restaurante/dominio';
 import {
   Aviso,
   Boton,
@@ -29,6 +30,7 @@ import {
   cobrar,
   falloDeCobro,
   huellaDeCobro,
+  partesCobradas,
   resumirPagos,
   rutaDeCobro,
   validarCliente,
@@ -40,15 +42,7 @@ import {
 } from './cobro';
 import { ComprobantePanel } from './ComprobantePanel';
 import { claveDeCuenta, leerCuenta, rutaDeCuenta, sePuedeAjustar, tituloDeCuenta } from './cuenta';
-import {
-  COBRO_VACIO,
-  anterioresConocidas,
-  claveDeCobro,
-  guardarEstadoDeCobro,
-  igualesCobradas,
-  leerEstadoDeCobro,
-  type EstadoDeCobro,
-} from './partes';
+import { claveDeCobro, guardarEstadoDeCobro, leerEstadoDeCobro } from './partes';
 import { PagosPanel, pagoNuevo } from './PagosPanel';
 import { PartePanel, type ModoDeCobro, type PlanDeIguales } from './PartePanel';
 import { ResultadoDeCobro } from './ResultadoDeCobro';
@@ -141,15 +135,17 @@ function Cobro({ ordenId, empresaId, usuarioId, sucursalId, atras }: PropsCobro)
   const cuenta = consulta.data;
   const turno = turnoConsulta.data ?? null;
 
-  const [estado, setEstadoLocal] = useState<EstadoDeCobro>(() => leerEstadoDeCobro(claveEstado));
-  const guardar = (nuevo: EstadoDeCobro) => {
-    setEstadoLocal(nuevo);
-    guardarEstadoDeCobro(claveEstado, nuevo);
+  // El `id` del cobro que se mandó y aún no tiene respuesta final: es lo único que este equipo recuerda del cobro.
+  const [enCurso, setEnCursoLocal] = useState(() => leerEstadoDeCobro(claveEstado).enCurso);
+  const recordarEnCurso = (nuevo: { id: string; huella: string } | null) => {
+    setEnCursoLocal(nuevo);
+    guardarEstadoDeCobro(claveEstado, { enCurso: nuevo });
   };
 
-  const [modo, setModo] = useState<ModoDeCobro>(() => (estado.iguales ? 'IGUALES' : 'TOTAL'));
+  const [modo, setModo] = useState<ModoDeCobro>('TOTAL');
   const [unidades, setUnidades] = useState<Record<string, number>>({});
-  const [partesElegidas, setPartesElegidas] = useState(2);
+  // Cuántas partes iguales faltan, contando la que se cobra; `null` hasta que la persona lo cambie.
+  const [partesFaltan, setPartesFaltan] = useState<number | null>(null);
   const [tipo, setTipo] = useState<'BOLETA' | 'FACTURA'>('BOLETA');
   const [formato, setFormato] = useState<FormatoDeCobro>('DETALLADO');
   const [cliente, setCliente] = useState<ClienteEscrito>(CLIENTE_VACIO);
@@ -166,40 +162,36 @@ function Cobro({ ordenId, empresaId, usuarioId, sucursalId, atras }: PropsCobro)
   const [cobrando, setCobrando] = useState(false);
 
   // --- Lo que se cobra ---------------------------------------------------------------------------------
-  const anteriores = cuenta ? anterioresConocidas(cuenta.cobros, estado) : [];
-  const hechas = cuenta ? igualesCobradas(cuenta.cobros, estado) : 0;
-  const planGuardado = estado.iguales && hechas > 0 && hechas < estado.iguales.partes;
-  const plan: PlanDeIguales | null =
-    planGuardado && cuenta && estado.iguales
-      ? {
-          partes: estado.iguales.partes,
-          numeros: estado.iguales.cobroIds
-            .map((id) => cuenta.cobros.find((c) => c.id.toLowerCase() === id.toLowerCase()))
-            .filter((c): c is NonNullable<typeof c> => c !== undefined)
-            .map((c) => c.comprobante.numero),
-        }
-      : null;
-  const sePuedeDividir =
-    cuenta !== undefined && anteriores !== null && (cuenta.modo !== 'IGUALES' || plan !== null);
-  const modoVigente: ModoDeCobro = !sePuedeDividir ? 'TOTAL' : plan ? 'IGUALES' : modo;
-  const partesRestantes = plan ? plan.partes - plan.numeros.length : partesElegidas;
+  // Todo sale de la cuenta que dice la API: cada cobro trae su `detalleParte`, así que se divide desde cualquier equipo.
+  const anteriores = useMemo(() => (cuenta ? partesCobradas(cuenta) : []), [cuenta]);
+  const plan: PlanDeIguales = {
+    pagadas:
+      cuenta?.cobros
+        .filter((c) => c.detalleParte.tipo === 'IGUALES')
+        .map((c) => c.comprobante.numero) ?? [],
+  };
+  // Después de partes iguales solo siguen partes iguales; «lo que falta» es la última (1 restante).
+  const soloIguales = cuenta?.modo === 'IGUALES';
+  const minimoDePartes = plan.pagadas.length > 0 ? 1 : 2;
+  const partesRestantes = Math.min(
+    MAXIMO_PARTES_IGUALES,
+    Math.max(minimoDePartes, partesFaltan ?? minimoDePartes),
+  );
+  const modoVigente: ModoDeCobro = soloIguales ? 'IGUALES' : modo;
   const seleccion: Seleccion =
     modoVigente === 'IGUALES'
       ? { tipo: 'IGUALES', partesRestantes }
       : modoVigente === 'ITEMS'
         ? { tipo: 'ITEMS', unidades }
         : { tipo: 'TOTAL' };
-  const soloConsumo = modoVigente === 'IGUALES' || cuenta?.modo === 'IGUALES';
+  const soloConsumo = modoVigente === 'IGUALES';
   const formatoVigente: FormatoDeCobro = soloConsumo ? 'CONSUMO' : formato;
 
   const parte = useMemo(
-    () =>
-      cuenta
-        ? calcularLaParte(cuenta, sePuedeDividir ? anteriores : null, seleccion, formatoVigente)
-        : null,
+    () => (cuenta ? calcularLaParte(cuenta, anteriores, seleccion, formatoVigente) : null),
     // `seleccion` se reconstruye cada vez: lo que cuenta es lo que la compone.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [cuenta, estado, modoVigente, unidades, partesRestantes, formatoVigente, sePuedeDividir],
+    [cuenta, anteriores, modoVigente, unidades, partesRestantes, formatoVigente],
   );
   const totalDeLaParte = parte?.ok ? parte.total : TOTAL_VACIO;
   const clienteValidado = validarCliente(tipo, totalDeLaParte, cliente);
@@ -249,8 +241,8 @@ function Cobro({ ordenId, empresaId, usuarioId, sucursalId, atras }: PropsCobro)
           titulo={hecho.titulo}
           parteIgual={hecho.parteIgual}
           textoDeSeguir={
-            estado.iguales && hechas < estado.iguales.partes
-              ? `Cobrar la parte ${hechas + 1} de ${estado.iguales.partes}`
+            hecho.parteIgual && hecho.parteIgual.numero < hecho.parteIgual.de
+              ? `Cobrar la parte ${hecho.parteIgual.numero + 1} de ${hecho.parteIgual.de}`
               : 'Cobrar lo que falta'
           }
           onSeguir={() => {
@@ -261,7 +253,13 @@ function Cobro({ ordenId, empresaId, usuarioId, sucursalId, atras }: PropsCobro)
             setCliente(CLIENTE_VACIO);
             setTipo('BOLETA');
             setFilas([pagoNuevo('EFECTIVO')]);
-            setModo(estado.iguales ? 'IGUALES' : 'TOTAL');
+            // Tras una parte igual siguen las demás: faltan una menos.
+            if (hecho.parteIgual) {
+              setModo('IGUALES');
+              setPartesFaltan(Math.max(1, hecho.parteIgual.de - hecho.parteIgual.numero));
+            } else {
+              setModo('TOTAL');
+            }
           }}
           volverA="/caja?ver=por-cobrar"
         />
@@ -314,7 +312,7 @@ function Cobro({ ordenId, empresaId, usuarioId, sucursalId, atras }: PropsCobro)
   // --- Cobrar ------------------------------------------------------------------------------------------------
   const etiquetaDelBoton = !parte?.ok
     ? 'Cobrar'
-    : `${estado.enCurso && fallo?.repetir ? 'Reintentar el cobro' : modoVigente === 'IGUALES' ? `Cobrar la parte ${(plan?.numeros.length ?? 0) + 1} de ${plan?.partes ?? partesElegidas}` : 'Cobrar'} ${modoVigente === 'IGUALES' ? '· ' : ''}${montoEnSoles(parte.total) ?? ''}`;
+    : `${enCurso && fallo?.repetir ? 'Reintentar el cobro' : modoVigente === 'IGUALES' ? `Cobrar la parte ${plan.pagadas.length + 1} de ${plan.pagadas.length + partesRestantes}` : 'Cobrar'} ${modoVigente === 'IGUALES' ? '· ' : ''}${montoEnSoles(parte.total) ?? ''}`;
   const motivo = !parte?.ok
     ? null
     : !clienteValidado.ok
@@ -347,9 +345,9 @@ function Cobro({ ordenId, empresaId, usuarioId, sucursalId, atras }: PropsCobro)
     };
     // El mismo cobro conserva su `id` hasta una respuesta final; otro cobro (otros datos), otro `id`.
     const huella = huellaDeCobro(base);
-    const actual = leerEstadoDeCobro(claveEstado);
-    const id = actual.enCurso?.huella === huella ? actual.enCurso.id : nuevaClaveDeIdempotencia();
-    guardar({ ...actual, enCurso: { id, huella } });
+    const guardado = leerEstadoDeCobro(claveEstado).enCurso;
+    const id = guardado?.huella === huella ? guardado.id : nuevaClaveDeIdempotencia();
+    recordarEnCurso({ id, huella });
     try {
       const respuesta = await envio.enviar(
         (extra) =>
@@ -358,19 +356,7 @@ function Cobro({ ordenId, empresaId, usuarioId, sucursalId, atras }: PropsCobro)
         undefined,
         id,
       );
-      const despues = leerEstadoDeCobro(claveEstado);
-      const cobradas = parte.calculada
-        ? [...despues.cobradas, { cobroId: respuesta.id, parte: parte.calculada }]
-        : despues.cobradas;
-      const iguales =
-        parte.entrada.tipo === 'IGUALES'
-          ? {
-              partes: despues.iguales?.partes ?? parte.entrada.partesRestantes,
-              cobroIds: [...(despues.iguales?.cobroIds ?? []), respuesta.id],
-            }
-          : despues.iguales;
-      const cerrada = respuesta.cuenta.estado === 'CERRADA';
-      guardar(cerrada ? COBRO_VACIO : { cobradas, iguales, enCurso: null });
+      recordarEnCurso(null);
       void clientes.invalidateQueries({ queryKey: CLAVES_TIEMPO_REAL.orden(ordenId) });
       void clientes.invalidateQueries({ queryKey: CLAVES_TIEMPO_REAL.salon });
       void clientes.invalidateQueries({ queryKey: CLAVES_TIEMPO_REAL.turno });
@@ -378,8 +364,11 @@ function Cobro({ ordenId, empresaId, usuarioId, sucursalId, atras }: PropsCobro)
         respuesta,
         titulo: tituloDeCuenta(cuenta),
         parteIgual:
-          parte.entrada.tipo === 'IGUALES' && iguales
-            ? { numero: iguales.cobroIds.length, de: iguales.partes }
+          parte.entrada.tipo === 'IGUALES'
+            ? {
+                numero: plan.pagadas.length + 1,
+                de: plan.pagadas.length + parte.entrada.partesRestantes,
+              }
             : null,
       });
     } catch (error) {
@@ -391,7 +380,7 @@ function Cobro({ ordenId, empresaId, usuarioId, sucursalId, atras }: PropsCobro)
         !error.sinConexion &&
         error.estado < 500;
       // Una respuesta final (la API contestó que no) suelta el `id`; un corte o un 5xx lo conserva para «Reintentar».
-      if (final) guardar({ ...leerEstadoDeCobro(claveEstado), enCurso: null });
+      if (final) recordarEnCurso(null);
       if (traducido.cuentaCambio || traducido.cuentaCerrada) {
         void clientes.invalidateQueries({ queryKey: claveDeCuenta(ordenId) });
         void clientes.invalidateQueries({ queryKey: CLAVES_TIEMPO_REAL.salon });
@@ -489,14 +478,13 @@ function Cobro({ ordenId, empresaId, usuarioId, sucursalId, atras }: PropsCobro)
 
         <PartePanel
           cuenta={cuenta}
-          sePuedeDividir={sePuedeDividir}
-          porItems={cuenta.modo !== 'IGUALES' && plan === null}
+          porItems={!soloIguales}
           modo={modoVigente}
           onModo={setModo}
           unidades={unidades}
           onUnidades={setUnidades}
-          partesElegidas={partesElegidas}
-          onPartesElegidas={setPartesElegidas}
+          partesElegidas={partesRestantes}
+          onPartesElegidas={setPartesFaltan}
           plan={plan}
           parte={parte ?? { ok: false, motivo: 'VACIA' }}
         />

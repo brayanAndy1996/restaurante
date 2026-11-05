@@ -5,11 +5,14 @@ import type {
   CuentaRespuesta,
   TurnoRespuesta,
 } from '@restaurante/contratos';
+import { calcularParte, type ParteCalculada, type ParteEntrada } from '@restaurante/dominio/caja';
 import { screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { guardarTokenDeSesion } from '../src/lib/almacen';
 import { espera } from '../src/lib/api';
+import { montoEnSoles } from '../src/lib/monto';
+import { entradaDeCuenta } from '../src/modulos/caja/cobro';
 import { claveDeBorrador } from '../src/modulos/salon/borrador';
 import { ID, json, renderApp, servidor } from './ayudas';
 import { detalleDeParte } from './ayudas-caja';
@@ -28,6 +31,7 @@ const BOLSA = uuid(1003);
 const TURNO = uuid(300);
 const RUTA = `/caja/cuentas/${ORDEN}/cobrar`;
 const API_COBROS = `/cuentas/${ORDEN}/cobros`;
+type DetalleParte = ParteCalculada;
 const PERSONA = { id: ID.usuario, nombre: 'Marta Pérez' };
 
 beforeEach(() => {
@@ -385,6 +389,87 @@ describe('Comprobante y cliente (criterio 51)', () => {
   });
 });
 
+describe('Boleta con RUC (criterio 51, pregunta 15)', () => {
+  it('la boleta ofrece DNI, carné, pasaporte y RUC; con RUC pide 11 dígitos válidos y manda el RUC sin dirección', async () => {
+    const s = montar({
+      extra: {
+        [`POST ${API_COBROS}`]: ({ cuerpo }) => json(201, respuestaDe(cuerpo as CobroEntrada)),
+      },
+    });
+    renderApp(RUTA);
+    await screen.findByRole('button', { name: 'Cobrar S/\u00a068.50' });
+    await userEvent.click(boton('Agregar datos del cliente'));
+    const grupo = screen.getByRole('group', { name: 'Documento del cliente' });
+    expect(
+      within(grupo)
+        .getAllByRole('button')
+        .map((b) => b.textContent),
+    ).toEqual(['DNI', 'Carné de extranjería', 'Pasaporte', 'RUC']);
+    await userEvent.click(within(grupo).getByRole('button', { name: 'RUC' }));
+    // Es boleta: el campo se llama «Número de RUC», se pide el nombre y no la dirección fiscal.
+    expect(screen.queryByLabelText('Dirección fiscal')).toBeNull();
+    await userEvent.type(screen.getByLabelText('Número de RUC'), '20100070971');
+    await userEvent.type(
+      screen.getByLabelText('Nombre del cliente'),
+      'Supermercados Peruanos S.A.',
+    );
+    await userEvent.click(boton('Cobrar S/\u00a068.50'));
+    expect(cobros(s)).toHaveLength(0);
+    expect(await screen.findByText('Escribe un RUC válido de 11 dígitos')).toBeVisible();
+
+    await userEvent.clear(screen.getByLabelText('Número de RUC'));
+    await userEvent.type(screen.getByLabelText('Número de RUC'), '20100070970');
+    await userEvent.click(boton('Cobrar S/\u00a068.50'));
+    await screen.findByText(/Boleta · /);
+    expect(entradaDe(s).comprobante).toEqual({
+      tipo: 'BOLETA',
+      formato: 'DETALLADO',
+      cliente: {
+        tipoDocumento: 'RUC',
+        numero: '20100070970',
+        nombre: 'Supermercados Peruanos S.A.',
+      },
+    });
+  });
+
+  it('una boleta de más de S/ 700 también se emite con RUC, y la factura sigue sin elegir documento', async () => {
+    const grande = cuenta({
+      lineas: [linea(LOMO, 'Banquete', '700.01', 1, '700.01')],
+      totales: { ...cuenta().totales, subtotal: '700.01', icbper: '0.00', total: '700.01' },
+      saldo: '700.01',
+    });
+    const s = montar({
+      cuenta: () => grande,
+      extra: {
+        [`POST ${API_COBROS}`]: ({ cuerpo }) => json(201, respuestaDe(cuerpo as CobroEntrada)),
+      },
+    });
+    renderApp(RUTA);
+    await screen.findByRole('button', { name: /Cobrar S\/\s700\.01/ });
+    await userEvent.click(boton('RUC'));
+    await userEvent.type(screen.getByLabelText('Número de RUC'), '20100070970');
+    await userEvent.type(screen.getByLabelText('Nombre del cliente'), 'Banquetes del Sur S.A.C.');
+    await userEvent.click(boton(/Cobrar S\/\s700\.01/));
+    await screen.findByText(/Boleta · /);
+    expect(entradaDe(s).comprobante.cliente).toEqual({
+      tipoDocumento: 'RUC',
+      numero: '20100070970',
+      nombre: 'Banquetes del Sur S.A.C.',
+    });
+    // La factura sigue exigiendo RUC, razón social y dirección, sin elegir el documento.
+  });
+
+  it('en factura no se elige el documento: es RUC y pide dirección', async () => {
+    montar();
+    renderApp(RUTA);
+    await screen.findByRole('button', { name: 'Cobrar S/\u00a068.50' });
+    await userEvent.click(screen.getByRole('button', { name: 'Factura' }));
+    expect(screen.queryByRole('group', { name: 'Documento del cliente' })).toBeNull();
+    expect(screen.getByLabelText('RUC')).toBeVisible();
+    expect(screen.getByLabelText('Dirección fiscal')).toBeVisible();
+  });
+});
+
 describe('Dividir la cuenta (criterios 64 a 68 y 113)', () => {
   it('por ítems: la parte muestra su total al momento y manda esas unidades', async () => {
     const s = montar({
@@ -487,35 +572,141 @@ describe('Dividir la cuenta (criterios 64 a 68 y 113)', () => {
     expect(screen.getByText('Mesa 4 libre')).toBeVisible();
   });
 
-  it('con cobros hechos desde otro equipo solo se cobra lo que falta, con el saldo de la API', async () => {
-    const s = montar({
-      cuenta: () =>
-        cuenta({
-          version: 5,
-          cobrado: '38.50',
-          saldo: '30.00',
-          cobros: [
-            {
-              id: uuid(8000),
-              comprobante: { id: uuid(8001), tipo: 'BOLETA', numero: 'B001-00000007' },
-              total: '38.50',
-              cobradoEn: '2026-11-06T00:10:00.000Z',
-              cobradoPor: PERSONA,
-              detalleParte: detalleDeParte('38.50', 'ITEMS'),
-            },
-          ],
-        }),
+  it('no recuerda partes en el equipo: de lo cobrado solo queda el id del cobro en curso, y se borra al terminar', async () => {
+    montar({
       extra: {
-        [`POST ${API_COBROS}`]: ({ cuerpo }) => json(201, respuestaDe(cuerpo as CobroEntrada)),
+        [`POST ${API_COBROS}`]: ({ cuerpo }) =>
+          json(201, respuestaDe(cuerpo as CobroEntrada, { estado: 'ABIERTA', saldo: '31.50' })),
       },
     });
     renderApp(RUTA);
-    expect(await screen.findByRole('button', { name: 'Cobrar S/\u00a030.00' })).toBeVisible();
-    expect(screen.getByText('Esta cuenta se cobró en parte desde otro equipo')).toBeVisible();
-    expect(screen.queryByRole('button', { name: 'Por ítems' })).toBeNull();
-    await userEvent.click(boton('Cobrar S/\u00a030.00'));
-    await screen.findByText(/Boleta · /);
-    expect(entradaDe(s)).toMatchObject({ total: '30.00', parte: { tipo: 'TOTAL' }, version: 5 });
+    await screen.findByRole('button', { name: 'Cobrar S/\u00a068.50' });
+    await userEvent.click(screen.getByRole('button', { name: 'Por ítems' }));
+    await userEvent.click(
+      screen.getByRole('button', { name: 'Agregar una unidad de Lomo saltado' }),
+    );
+    await userEvent.click(boton('Cobrar S/\u00a028.00'));
+    await screen.findByText('Falta cobrar S/ 31.50');
+    expect(Object.keys(localStorage).filter((k) => k.startsWith('restaurante.cobro.'))).toEqual([]);
+  });
+
+  describe('dividir desde cualquier equipo: los cobros de la cuenta traen su detalle', () => {
+    const OTRA = { id: uuid(801), nombre: 'Luis Soto' };
+    const cobroDe = (n: number, detalle: DetalleParte, numero: string, por = OTRA) => ({
+      id: uuid(8000 + n),
+      comprobante: { id: uuid(8100 + n), tipo: 'BOLETA' as const, numero },
+      total: detalle.totales.total,
+      cobradoEn: '2026-11-06T00:10:00.000Z',
+      cobradoPor: por,
+      detalleParte: detalle,
+    });
+    /** La parte tal como la calcula el dominio, la misma que la API guarda con el cobro. */
+    const parteDe = (
+      c: CuentaRespuesta,
+      anteriores: DetalleParte[],
+      parte: ParteEntrada,
+      formato: 'DETALLADO' | 'CONSUMO',
+    ): DetalleParte => {
+      const r = calcularParte(entradaDeCuenta(c), anteriores, parte, formato);
+      if (!r.valida) throw new Error('Se esperaba una parte válida');
+      const { valida: _valida, ...detalle } = r;
+      return detalle;
+    };
+
+    it('por ítems: un cobro de otro equipo no cierra la división y la parte siguiente es la del dominio', async () => {
+      const base = cuenta();
+      const hecha = parteDe(
+        base,
+        [],
+        { tipo: 'ITEMS', items: [{ itemId: LOMO, cantidad: 1 }] },
+        'DETALLADO',
+      );
+      const conCobro = cuenta({
+        version: 5,
+        cobrado: hecha.totales.total,
+        saldo: '40.50',
+        modo: 'ITEMS',
+        lineas: base.lineas.map((l) => (l.itemId === LOMO ? { ...l, cantidadFacturada: 1 } : l)),
+        cobros: [cobroDe(0, hecha, 'B001-00000007')],
+      });
+      const esperada = parteDe(
+        conCobro,
+        [hecha],
+        { tipo: 'ITEMS', items: [{ itemId: GASEOSA, cantidad: 1 }] },
+        'DETALLADO',
+      );
+      const s = montar({
+        cuenta: () => conCobro,
+        extra: {
+          [`POST ${API_COBROS}`]: ({ cuerpo }) =>
+            json(201, respuestaDe(cuerpo as CobroEntrada, { estado: 'ABIERTA', saldo: '31.50' })),
+        },
+      });
+      renderApp(RUTA);
+      expect(await screen.findByRole('button', { name: 'Cobrar S/\u00a040.50' })).toBeVisible();
+      // Ya no hay aviso de «otro equipo» ni se degrada a «solo lo que falta».
+      expect(screen.queryByText(/desde otro equipo/)).toBeNull();
+      await userEvent.click(screen.getByRole('button', { name: 'Por ítems' }));
+      await userEvent.click(
+        screen.getByRole('button', { name: 'Agregar una unidad de Gaseosa 1 L' }),
+      );
+      const total = montoEnSoles(esperada.totales.total) ?? '';
+      await userEvent.click(await screen.findByRole('button', { name: `Cobrar ${total}` }));
+      await screen.findByText('Falta cobrar S/ 31.50');
+      expect(entradaDe(s)).toMatchObject({
+        total: esperada.totales.total,
+        version: 5,
+        parte: { tipo: 'ITEMS', items: [{ itemId: GASEOSA, cantidad: 1 }] },
+      });
+    });
+
+    it('en partes iguales: la parte 1 se cobró en otro equipo y aquí siguen las que faltan', async () => {
+      const base = cuenta();
+      const primera = parteDe(base, [], { tipo: 'IGUALES', partesRestantes: 3 }, 'CONSUMO');
+      const saldo = (68.5 - Number(primera.totales.total)).toFixed(2);
+      const conCobro = cuenta({
+        version: 4,
+        cobrado: primera.totales.total,
+        saldo,
+        modo: 'IGUALES',
+        cobros: [cobroDe(0, primera, 'B001-00000124')],
+      });
+      const esperada = parteDe(
+        conCobro,
+        [primera],
+        { tipo: 'IGUALES', partesRestantes: 2 },
+        'CONSUMO',
+      );
+      const s = montar({
+        cuenta: () => conCobro,
+        extra: {
+          [`POST ${API_COBROS}`]: ({ cuerpo }) =>
+            json(201, respuestaDe(cuerpo as CobroEntrada, { estado: 'ABIERTA', saldo })),
+        },
+      });
+      renderApp(RUTA);
+      // «Lo que falta» es la última parte (1 restante): hasta que se diga cuántas faltan, es todo el saldo.
+      await screen.findByRole('button', { name: /Cobrar la parte 2 de 2/ });
+      expect(screen.queryByText(/desde otro equipo/)).toBeNull();
+      expect(screen.queryByRole('button', { name: 'Por ítems' })).toBeNull();
+      const lista = screen.getByRole('list', { name: 'Partes de la cuenta' });
+      expect(within(lista).getByText('Pagada · B001-00000124')).toBeVisible();
+      // Faltan dos: la parte siguiente es la del dominio.
+      await userEvent.click(
+        screen.getByRole('button', { name: 'Agregar uno a partes que faltan' }),
+      );
+      const total = montoEnSoles(esperada.totales.total) ?? '';
+      const boton3 = await screen.findByRole('button', { name: /Cobrar la parte 2 de 3/ });
+      expect(boton3).toHaveTextContent(total.replace('\u00a0', ' '));
+      await userEvent.click(boton3);
+      await screen.findByText('Parte 2 de 3 de Mesa 4.');
+      expect(entradaDe(s)).toMatchObject({
+        total: esperada.totales.total,
+        version: 4,
+        parte: { tipo: 'IGUALES', partesRestantes: 2 },
+        comprobante: { formato: 'CONSUMO' },
+      });
+    });
   });
 });
 

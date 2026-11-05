@@ -62,6 +62,10 @@ export function entradaDeCuenta(cuenta: CuentaRespuesta): CuentaEntrada {
   };
 }
 
+/** Los detalles de las partes ya cobradas de la cuenta, en orden: las `partesAnteriores` de `calcularParte`. */
+export const partesCobradas = (cuenta: CuentaRespuesta): ParteCalculada[] =>
+  cuenta.cobros.map((c) => c.detalleParte);
+
 /** Unidades de una línea que todavía no se cobran en ninguna parte (las vigentes, sin cortesía ni facturadas). */
 export const unidadesPorCobrar = (linea: CuentaRespuesta['lineas'][number]): number =>
   Math.max(0, linea.cantidad - linea.cantidadCortesia - linea.cantidadFacturada);
@@ -83,8 +87,8 @@ export type ParteDePantalla =
       entrada: CobroEntrada['parte'];
       /** El total de la parte con ICBPER (lo que vio la persona y se manda como `total`). */
       total: string;
-      /** El detalle calculado; `null` cuando solo se conoce el saldo (cobros hechos desde otro equipo). */
-      calculada: ParteCalculada | null;
+      /** El detalle calculado por `calcularParte`. */
+      calculada: ParteCalculada;
     }
   | { ok: false; motivo: 'VACIA' | 'INVALIDA' | 'NADA_QUE_COBRAR' | 'DESCUADRADA' };
 
@@ -101,26 +105,16 @@ export function parteDeSeleccion(seleccion: Seleccion): ParteEntrada | null {
 }
 
 /**
- * Calcula la parte con `calcularParte` sobre la cuenta de la API y las partes que este equipo conoce. Si hay cobros que
- * este equipo no conoce (`anteriores` es `null`), solo se puede cobrar lo que falta: el total es el saldo de la API
- * (con el ICBPER), y el formato lo decide la persona.
+ * Calcula la parte con `calcularParte` sobre la cuenta de la API y el detalle de cada cobro que ya trae (`detalleParte`,
+ * en el orden de las partes): sirve desde cualquier equipo, sin recordar nada de lo cobrado antes.
  */
 export function calcularLaParte(
   cuenta: CuentaRespuesta,
-  anteriores: readonly ParteCalculada[] | null,
+  anteriores: readonly ParteCalculada[],
   seleccion: Seleccion,
   formato: FormatoDeCobro,
 ): ParteDePantalla {
   const parte = parteDeSeleccion(seleccion);
-  if (anteriores === null) {
-    // Sin el detalle de lo cobrado no se divide; con partes iguales previas lo que falta es la última parte.
-    if (seleccion.tipo === 'ITEMS') {
-      return { ok: false, motivo: 'INVALIDA' };
-    }
-    const entrada: CobroEntrada['parte'] =
-      cuenta.modo === 'IGUALES' ? { tipo: 'IGUALES', partesRestantes: 1 } : { tipo: 'TOTAL' };
-    return { ok: true, entrada, total: cuenta.saldo, calculada: null };
-  }
   if (parte === null) return { ok: false, motivo: 'VACIA' };
   try {
     const resultado = calcularParte(entradaDeCuenta(cuenta), anteriores, parte, formato);

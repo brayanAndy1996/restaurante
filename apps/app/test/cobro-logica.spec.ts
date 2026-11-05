@@ -1,20 +1,17 @@
 import type { CuentaRespuesta } from '@restaurante/contratos';
+import { calcularParte } from '@restaurante/dominio/caja';
 import { describe, expect, it } from 'vitest';
-import {
-  anterioresConocidas,
-  claveDeCobro,
-  guardarEstadoDeCobro,
-  igualesCobradas,
-  leerEstadoDeCobro,
-} from '../src/modulos/caja/partes';
+import { claveDeCobro, guardarEstadoDeCobro, leerEstadoDeCobro } from '../src/modulos/caja/partes';
 import {
   billetesQueAlcanzan,
   boletaExigeCliente,
   calcularLaParte,
   CLIENTE_VACIO,
   falloDeCobro,
+  entradaDeCuenta,
   huellaDeCobro,
   indiceDelResto,
+  partesCobradas,
   resumirPagos,
   validarCliente,
   type PagoEscrito,
@@ -244,26 +241,91 @@ describe('la parte que se cobra (criterios 64 a 66)', () => {
     ).toEqual({ ok: false, motivo: 'INVALIDA' });
   });
 
-  it('con cobros hechos en otro equipo solo se cobra lo que falta, con el saldo de la API', () => {
-    const c = cuentaC({ saldo: '30.00', cobrado: '38.50', modo: null });
-    expect(calcularLaParte(c, null, { tipo: 'TOTAL' }, 'DETALLADO')).toMatchObject({
-      ok: true,
-      total: '30.00',
-      entrada: { tipo: 'TOTAL' },
-      calculada: null,
+  it('con cobros hechos desde otro equipo se divide igual: los detalles de la cuenta son las partes anteriores', () => {
+    const base = cuentaC();
+    const primera = calcularParte(
+      entradaDeCuenta(base),
+      [],
+      { tipo: 'ITEMS', items: [{ itemId: LOMO, cantidad: 1 }] },
+      'DETALLADO',
+    );
+    if (!primera.valida) throw new Error('Se esperaba una parte');
+    const { valida: _valida, ...detalleParte } = primera;
+    const c = cuentaC({
+      cobrado: detalleParte.totales.total,
+      saldo: '40.50',
+      modo: 'ITEMS',
+      cobros: [
+        {
+          id: uuid(8000),
+          comprobante: { id: uuid(8001), tipo: 'BOLETA', numero: 'B001-00000007' },
+          total: detalleParte.totales.total,
+          cobradoEn: '2026-11-06T00:10:00.000Z',
+          cobradoPor: { id: uuid(800), nombre: 'Ana Ríos' },
+          detalleParte,
+        },
+      ],
     });
-    // Tras partes iguales, lo que falta es la última parte igual.
+    expect(partesCobradas(c)).toEqual([detalleParte]);
+
+    // Por ítems: lo que sigue es lo que calcula el dominio con esa parte anterior.
+    const esperada = calcularParte(
+      entradaDeCuenta(c),
+      [detalleParte],
+      { tipo: 'ITEMS', items: [{ itemId: GASEOSA, cantidad: 1 }] },
+      'DETALLADO',
+    );
+    if (!esperada.valida) throw new Error('Se esperaba una parte');
     expect(
       calcularLaParte(
-        cuentaC({ saldo: '30.00', modo: 'IGUALES' }),
-        null,
-        { tipo: 'TOTAL' },
-        'CONSUMO',
+        c,
+        partesCobradas(c),
+        { tipo: 'ITEMS', unidades: { [GASEOSA]: 1 } },
+        'DETALLADO',
       ),
-    ).toMatchObject({ ok: true, entrada: { tipo: 'IGUALES', partesRestantes: 1 } });
+    ).toMatchObject({ ok: true, total: esperada.totales.total, calculada: { tipo: 'ITEMS' } });
+
+    // Lo que falta (todo) y partes iguales también siguen, con el saldo que queda.
+    expect(calcularLaParte(c, partesCobradas(c), { tipo: 'TOTAL' }, 'DETALLADO')).toMatchObject({
+      ok: true,
+      total: '40.50',
+    });
     expect(
-      calcularLaParte(c, null, { tipo: 'ITEMS', unidades: { [LOMO]: 1 } }, 'DETALLADO'),
-    ).toMatchObject({ ok: false });
+      calcularLaParte(c, partesCobradas(c), { tipo: 'IGUALES', partesRestantes: 2 }, 'CONSUMO'),
+    ).toMatchObject({ ok: true, total: '20.25', entrada: { tipo: 'IGUALES', partesRestantes: 2 } });
+  });
+
+  it('después de partes iguales solo siguen partes iguales: «lo que falta» es la última', () => {
+    const primera = calcularLaParte(
+      cuentaC(),
+      [],
+      { tipo: 'IGUALES', partesRestantes: 3 },
+      'CONSUMO',
+    );
+    if (!primera.ok) throw new Error('Se esperaba una parte');
+    const c = cuentaC({
+      cobrado: primera.total,
+      saldo: '45.66',
+      modo: 'IGUALES',
+      cobros: [
+        {
+          id: uuid(8000),
+          comprobante: { id: uuid(8001), tipo: 'BOLETA', numero: 'B001-00000007' },
+          total: primera.total,
+          cobradoEn: '2026-11-06T00:10:00.000Z',
+          cobradoPor: null,
+          detalleParte: primera.calculada,
+        },
+      ],
+    });
+    const anteriores = partesCobradas(c);
+    expect(calcularLaParte(c, anteriores, { tipo: 'TOTAL' }, 'CONSUMO')).toEqual({
+      ok: false,
+      motivo: 'INVALIDA',
+    });
+    expect(
+      calcularLaParte(c, anteriores, { tipo: 'IGUALES', partesRestantes: 1 }, 'CONSUMO'),
+    ).toMatchObject({ ok: true, total: c.saldo });
   });
 });
 
@@ -305,6 +367,33 @@ describe('el cliente del comprobante (criterio 51, pregunta 15)', () => {
     });
   });
 
+  it('la boleta acepta RUC como documento, con la misma validación que la factura', () => {
+    const boleta = (numero: string) =>
+      validarCliente('BOLETA', '700.01', {
+        tipoDocumento: 'RUC',
+        numero,
+        nombre: 'Supermercados Peruanos S.A.',
+        direccion: '',
+      });
+    expect(boleta('20100070970')).toEqual({
+      ok: true,
+      cliente: {
+        tipoDocumento: 'RUC',
+        numero: '20100070970',
+        nombre: 'Supermercados Peruanos S.A.',
+      },
+    });
+    // Dígito verificador mal, y menos de 11 dígitos: el mismo mensaje que en la factura.
+    for (const mal of ['20100070971', '2010007097']) {
+      expect(boleta(mal)).toMatchObject({
+        ok: false,
+        errores: { numero: 'Escribe un RUC válido de 11 dígitos' },
+      });
+    }
+    // En boleta la dirección no se pide.
+    expect(boleta('20100070970')).toMatchObject({ ok: true });
+  });
+
   it('la factura exige RUC válido, razón social y dirección', () => {
     const vacio = validarCliente('FACTURA', '10.00', CLIENTE_VACIO);
     expect(vacio).toMatchObject({
@@ -342,7 +431,7 @@ describe('el cliente del comprobante (criterio 51, pregunta 15)', () => {
   });
 });
 
-describe('el id del cobro y lo que recuerda el equipo (criterios 55 y 113)', () => {
+describe('el id del cobro y lo que recuerda el equipo (criterio 55)', () => {
   const entrada = {
     turnoId: uuid(5),
     parte: { tipo: 'TOTAL' as const },
@@ -359,36 +448,17 @@ describe('el id del cobro y lo que recuerda el equipo (criterios 55 y 113)', () 
     ).not.toBe(a);
   });
 
-  it('guarda y lee el estado por persona y orden; vacío lo borra', () => {
+  it('de lo cobrado solo recuerda el id del cobro en curso; sin cobro en curso borra la clave', () => {
     const clave = claveDeCobro('e', 'u', 'o');
-    expect(leerEstadoDeCobro(clave).cobradas).toEqual([]);
-    guardarEstadoDeCobro(clave, {
-      cobradas: [],
-      iguales: { partes: 3, cobroIds: [uuid(7)] },
-      enCurso: { id: uuid(9), huella: 'h' },
-    });
-    expect(leerEstadoDeCobro(clave)).toMatchObject({
-      iguales: { partes: 3 },
-      enCurso: { id: uuid(9) },
-    });
-    guardarEstadoDeCobro(clave, { cobradas: [], iguales: null, enCurso: null });
+    expect(leerEstadoDeCobro(clave).enCurso).toBeNull();
+    guardarEstadoDeCobro(clave, { enCurso: { id: uuid(9), huella: 'h' } });
+    expect(leerEstadoDeCobro(clave)).toEqual({ enCurso: { id: uuid(9), huella: 'h' } });
+    // Un estado viejo con partes guardadas se lee sin ellas.
+    localStorage.setItem(clave, JSON.stringify({ cobradas: [{ cobroId: 'x' }], enCurso: null }));
+    expect(leerEstadoDeCobro(clave)).toEqual({ enCurso: null });
+    guardarEstadoDeCobro(clave, { enCurso: { id: uuid(9), huella: 'h' } });
+    guardarEstadoDeCobro(clave, { enCurso: null });
     expect(localStorage.getItem(clave)).toBeNull();
-  });
-
-  it('conoce las partes anteriores solo si todas las hizo este equipo', () => {
-    const calculada = calcularLaParte(cuentaC(), [], { tipo: 'TOTAL' }, 'DETALLADO');
-    if (!calculada.ok || !calculada.calculada) throw new Error('Se esperaba una parte');
-    const parte = calculada.calculada;
-    const estado = {
-      cobradas: [{ cobroId: uuid(7), parte }],
-      iguales: { partes: 2, cobroIds: [uuid(7)] },
-      enCurso: null,
-    };
-    expect(anterioresConocidas([], estado)).toEqual([]);
-    expect(anterioresConocidas([{ id: uuid(7) }], estado)).toEqual([parte]);
-    expect(anterioresConocidas([{ id: uuid(7) }, { id: uuid(8) }], estado)).toBeNull();
-    expect(igualesCobradas([{ id: uuid(7) }], estado)).toBe(1);
-    expect(igualesCobradas([], estado)).toBe(0);
   });
 });
 

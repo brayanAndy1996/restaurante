@@ -23,6 +23,7 @@ const DOCUMENTOS_DE_BOLETA: readonly OpcionDeSegmento<TipoDeDocumento>[] = [
   { valor: 'DNI', etiqueta: NOMBRE_DE_DOCUMENTO.DNI },
   { valor: 'CE', etiqueta: NOMBRE_DE_DOCUMENTO.CE },
   { valor: 'PASAPORTE', etiqueta: NOMBRE_DE_DOCUMENTO.PASAPORTE },
+  { valor: 'RUC', etiqueta: NOMBRE_DE_DOCUMENTO.RUC },
 ];
 
 interface Props {
