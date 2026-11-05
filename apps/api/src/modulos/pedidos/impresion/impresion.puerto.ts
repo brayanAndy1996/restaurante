@@ -42,11 +42,16 @@ export interface TrabajoParaEncolar {
   envioNumero: number | null;
   /**
    * Historia 006 (criterios 90 y 95): el comprobante de un trabajo `COMPROBANTE` y el turno de un `REPORTE_X`,
-   * `REPORTE_Z` o `GAVETA`. Opcionales hasta la fase C (la migración 7 agrega sus columnas): hoy `encolar` no los
-   * guarda.
+   * `REPORTE_Z` o `GAVETA` (migración 7 de 006; el tipo y la columna deben coincidir). Opcionales: los demás trabajos
+   * no los llevan.
    */
   comprobanteId?: string | null;
   turnoId?: string | null;
+  /**
+   * El trabajo del que es reimpresión (historia 006, criterio 90): la reimpresión de un comprobante lleva el id del
+   * trabajo de su emisión. Nunca abre la gaveta ni entra en los únicos de la emisión (criterios 94 y 95).
+   */
+  reimpresionDeId?: string | null;
   documento: DocumentoTicket;
 }
 
@@ -111,4 +116,12 @@ export interface ImpresionPuerto {
    * vigente o una réplica no crea otro trabajo, devuelve este.
    */
   trabajosDePrecuentas(precuentaIds: readonly string[]): Promise<ReadonlyMap<string, string>>;
+  /**
+   * El trabajo `COMPROBANTE` de la emisión de un comprobante con su documento (criterio 90): facturación lo copia, con
+   * la marca de reimpresión, para reimprimir el ticket tal como salió. `null` si el comprobante se emitió sin
+   * impresora.
+   */
+  trabajoDeComprobante(
+    comprobanteId: string,
+  ): Promise<{ id: string; documento: DocumentoTicket } | null>;
 }

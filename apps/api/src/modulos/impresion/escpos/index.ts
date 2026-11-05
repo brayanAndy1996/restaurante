@@ -31,14 +31,22 @@
  * - Incompleto (`esIncompleto(documento)`): `true` si a una plantilla no le cupo todo (un caso extremo) y el ticket
  *   termina con "Ticket incompleto: faltan N líneas. Revisa la cuenta en la app."; el trabajo se guarda marcado.
  *
- * Los tipos de documento son `COMANDA`, `ADICION`, `MARCHAR`, `ANULACION`, `PRECUENTA` y `PRUEBA`; el tipo del
- * documento es el del trabajo.
+ * Los tipos de documento son `COMANDA`, `ADICION`, `MARCHAR`, `ANULACION`, `PRECUENTA` y `PRUEBA` (3b) y, desde la
+ * historia 006, `COMPROBANTE` (`documentoDeComprobante`, con el QR y el pulso de la gaveta), `REPORTE_X` y `REPORTE_Z`
+ * (`documentoDeReporteCaja`) y `GAVETA` (`documentoDeGaveta`: solo el pulso, sin avance ni corte); el tipo del
+ * documento es el del trabajo. El bloque `gaveta` solo manda el pulso si el renderizador recibe `pulsoGaveta: true`
+ * (lo decide la entrega del trabajo: criterio 94).
  */
 export { renderizarTicket, renderizarTicketDetallado } from './renderizar-ticket';
 export type { ImpresoraParaRenderizar, TicketRenderizado } from './renderizar-ticket';
 export { documentoDeComanda } from './plantillas/comanda';
 export type { ComandaParaTicket, ContextoDeComanda, LineaDeComanda } from './plantillas/comanda';
 export { documentoDePrecuenta } from './plantillas/precuenta';
+export { documentoDeComprobante, textoDelQr } from './plantillas/comprobante';
+export type { ComprobanteParaTicket, ContextoDeComprobante } from './plantillas/comprobante';
+export { documentoDeReporteCaja } from './plantillas/reporte-caja';
+export type { ContextoDeReporteCaja, ReporteParaTicket } from './plantillas/reporte-caja';
+export { documentoDeGaveta } from './plantillas/gaveta';
 export type { ContextoDePrecuenta, PrecuentaParaTicket } from './plantillas/precuenta';
 export { MUESTRA_DE_CARACTERES, documentoDePrueba } from './plantillas/prueba';
 export type { ImpresoraDePrueba } from './plantillas/prueba';

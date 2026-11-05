@@ -7,7 +7,7 @@ import { ComprobantesController } from './comprobantes.controller';
 import { ComprobantesService } from './comprobantes.service';
 import { EmisionService } from './emision.service';
 import { FacturadoService } from './facturado';
-import { RegistroImpresoraDeCaja } from './impresora-de-caja';
+import { RegistroImpresoraDeCaja, RegistroPagosDeCobro } from './impresora-de-caja';
 import { SeriesService } from './series.service';
 import { UltimaEmisionDeComprobantes } from './ultima-emision-de-comprobantes';
 
@@ -29,6 +29,7 @@ import { UltimaEmisionDeComprobantes } from './ultima-emision-de-comprobantes';
     FacturadoService,
     ComprobantesService,
     RegistroImpresoraDeCaja,
+    RegistroPagosDeCobro,
     RegistroAlcanceDeTurnos,
     UltimaEmisionDeComprobantes,
   ],
@@ -38,6 +39,7 @@ import { UltimaEmisionDeComprobantes } from './ultima-emision-de-comprobantes';
     FacturadoService,
     ComprobantesService,
     RegistroImpresoraDeCaja,
+    RegistroPagosDeCobro,
     RegistroAlcanceDeTurnos,
   ],
 })

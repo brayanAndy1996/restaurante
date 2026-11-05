@@ -1,7 +1,12 @@
 import { Inject, Injectable, OnModuleInit } from '@nestjs/common';
 import { QueryTypes, type Sequelize } from 'sequelize';
 import { CONEXION_API } from '../../nucleo/base-de-datos';
-import { RegistroImpresoraDeCaja, type ImpresoraDeCaja } from '../facturacion';
+import {
+  RegistroImpresoraDeCaja,
+  RegistroPagosDeCobro,
+  type ImpresoraDeCaja,
+  type PagosDeUnCobro,
+} from '../facturacion';
 import { IMPRESION, type ImpresionPuerto } from '../pedidos/impresion';
 
 /**
@@ -14,12 +19,30 @@ import { IMPRESION, type ImpresionPuerto } from '../pedidos/impresion';
 export class ImpresoraDeCajas implements OnModuleInit {
   constructor(
     @Inject(RegistroImpresoraDeCaja) private readonly registro: RegistroImpresoraDeCaja,
+    @Inject(RegistroPagosDeCobro) private readonly registroPagos: RegistroPagosDeCobro,
     @Inject(CONEXION_API) private readonly conexion: Sequelize,
     @Inject(IMPRESION) private readonly impresion: ImpresionPuerto,
   ) {}
 
   onModuleInit(): void {
     this.registro.registrar((cajaId) => this.deLaCaja(cajaId));
+    this.registroPagos.registrar((cobroId) => this.pagosDelCobro(cobroId));
+  }
+
+  /** Cómo se pagó un cobro (para reimprimir el ticket de un comprobante que se emitió sin impresora), o `null`. */
+  async pagosDelCobro(cobroId: string): Promise<PagosDeUnCobro | null> {
+    const cobros = await this.conexion.query<{ vuelto: string; redondeo: string }>(
+      'SELECT vuelto::text AS vuelto, redondeo::text AS redondeo FROM cobro WHERE id = $1',
+      { bind: [cobroId], type: QueryTypes.SELECT },
+    );
+    const cobro = cobros[0];
+    if (cobro === undefined) return null;
+    const pagos = await this.conexion.query<PagosDeUnCobro['pagos'][number]>(
+      `SELECT medio, monto::text AS monto, recibido::text AS recibido FROM pago
+        WHERE cobro_id = $1 ORDER BY creado_en, id`,
+      { bind: [cobroId], type: QueryTypes.SELECT },
+    );
+    return { pagos, vuelto: cobro.vuelto, redondeo: cobro.redondeo };
   }
 
   /** La impresora para el ticket de esa caja, o `null` si ni la caja ni la sucursal tienen una activa (criterio 96). */

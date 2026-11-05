@@ -8,11 +8,14 @@ import type {
 import { TIPOS_COMPROBANTE, type TipoComprobante } from '@restaurante/dominio';
 import { QueryTypes, type Sequelize } from 'sequelize';
 import { CONEXION_API } from '../../nucleo/base-de-datos';
-import { noImplementado } from '../../nucleo/errores';
+import { ErrorAplicacion } from '../../nucleo/errores/error-aplicacion';
+import { horaLocal } from '../../nucleo/reloj';
+import { conMarcas, documentoDeComprobante } from '../impresion';
+import { IMPRESION, type ImpresionPuerto } from '../pedidos/impresion';
 import { SesionActual } from '../seguridad';
 import { RegistroAlcanceDeTurnos, veTodosLosTurnos } from './alcance-de-turnos';
 import { comprobanteDeOtro, comprobanteNoEncontrado } from './errores-facturacion';
-import { RegistroImpresoraDeCaja } from './impresora-de-caja';
+import { RegistroImpresoraDeCaja, RegistroPagosDeCobro } from './impresora-de-caja';
 import { leerComprobante, textoDelNumero } from './lectura-comprobante';
 
 /**
@@ -39,6 +42,8 @@ export interface ResumenTributarioDeTurno {
 export class ComprobantesService {
   constructor(
     @Inject(RegistroImpresoraDeCaja) private readonly impresoras: RegistroImpresoraDeCaja,
+    @Inject(RegistroPagosDeCobro) private readonly pagos: RegistroPagosDeCobro,
+    @Inject(IMPRESION) private readonly impresion: ImpresionPuerto,
     @Inject(CONEXION_API) private readonly conexion: Sequelize,
     @Inject(SesionActual) private readonly sesion: SesionActual,
     @Inject(RegistroAlcanceDeTurnos) private readonly turnos: RegistroAlcanceDeTurnos,
@@ -55,11 +60,24 @@ export class ComprobantesService {
     return comprobante;
   }
 
-  /** 404 si el comprobante es de otra sucursal, de otra empresa o no existe; 403 si es del turno de otro Cajero. */
-  private async exigirVisible(id: string): Promise<void> {
-    const filas = await this.conexion.query<{ sucursal_id: string; turno_responsable_id: string }>(
-      'SELECT sucursal_id, turno_responsable_id FROM comprobante WHERE id = $1',
-      { bind: [id.toLowerCase()], type: QueryTypes.SELECT },
+  /**
+   * 404 si el comprobante es de otra sucursal, de otra empresa o no existe; 403 si es del turno de otro Cajero.
+   * Devuelve la caja y el cobro del comprobante.
+   */
+  private async exigirVisible(
+    id: string,
+  ): Promise<{ sucursalId: string; cajaId: string; cobroId: string }> {
+    const filas = await this.conexion.query<{
+      sucursal_id: string;
+      turno_responsable_id: string;
+      caja_id: string;
+      cobro_id: string;
+    }>(
+      'SELECT sucursal_id, turno_responsable_id, caja_id, cobro_id FROM comprobante WHERE id = $1',
+      {
+        bind: [id.toLowerCase()],
+        type: QueryTypes.SELECT,
+      },
     );
     const fila = filas[0];
     if (fila === undefined || fila.sucursal_id !== this.sesion.sucursalActiva()) {
@@ -69,6 +87,7 @@ export class ComprobantesService {
     if (!veTodosLosTurnos(principal) && fila.turno_responsable_id !== principal.usuarioId) {
       throw comprobanteDeOtro();
     }
+    return { sucursalId: fila.sucursal_id, cajaId: fila.caja_id, cobroId: fila.cobro_id };
   }
 
   /**
@@ -160,14 +179,66 @@ export class ComprobantesService {
   }
 
   /**
-   * Reimprime el ticket con la marca "REIMPRESIÓN" en la impresora de la caja del comprobante, que le da el módulo
-   * de caja por `RegistroImpresoraDeCaja`. 409 `SIN_IMPRESORA` si no hay impresora de caja.
+   * Criterio 90: reimprime el ticket con la marca "REIMPRESIÓN" en la impresora de la caja del comprobante, que le da el
+   * módulo de caja por `RegistroImpresoraDeCaja`. Copia el documento del ticket de la emisión (sin el pulso de la
+   * gaveta: criterio 94) y, si el comprobante se emitió sin impresora, lo arma de nuevo con los pagos del cobro.
+   * 409 `SIN_IMPRESORA` si no hay impresora de caja ni de la sucursal.
    */
   async imprimir(id: string): Promise<ImpresionDeCajaRespuesta> {
-    // El alcance (404 y 403) se comprueba ya; el trabajo de reimpresión llega con la tarea T21.
-    await this.exigirVisible(id);
-    void this.impresoras;
-    throw noImplementado();
+    const visible = await this.exigirVisible(id);
+    const comprobanteId = id.toLowerCase();
+    const impresora = await this.impresoras.deLaCaja(visible.cajaId);
+    if (impresora === null) {
+      throw new ErrorAplicacion(
+        409,
+        'SIN_IMPRESORA',
+        'No hay una impresora activa donde reimprimir este ticket',
+      );
+    }
+    const comprobante = await leerComprobante(this.conexion, comprobanteId);
+    if (comprobante === null) throw comprobanteNoEncontrado();
+    const original = await this.impresion.trabajoDeComprobante(comprobanteId);
+    let documento;
+    if (original !== null) {
+      const sinPulso = original.documento.bloques.filter((b) => b.tipo !== 'gaveta');
+      documento = conMarcas({ ...original.documento, bloques: sinPulso }, { reimpresion: true });
+    } else {
+      const cobro = await this.pagos.deCobro(visible.cobroId);
+      documento = conMarcas(
+        documentoDeComprobante(comprobante, {
+          hora: horaLocal(new Date(comprobante.emitidoEn)),
+          pagos: cobro?.pagos ?? [],
+          vuelto: cobro?.vuelto ?? '0.00',
+          redondeo: cobro?.redondeo ?? '0.00',
+          abreGaveta: false,
+        }),
+        { reimpresion: true },
+      );
+    }
+    const orden = comprobante.orden;
+    const [trabajoId] = await this.impresion.encolar([
+      {
+        sucursalId: visible.sucursalId,
+        impresoraId: impresora.id,
+        estacionId: null,
+        tipo: 'COMPROBANTE',
+        comandaId: null,
+        precuentaId: null,
+        comprobanteId,
+        turnoId: null,
+        reimpresionDeId: original?.id ?? null,
+        mesa:
+          orden === null
+            ? null
+            : orden.numeroLlamado !== null
+              ? `Llamado ${orden.numeroLlamado}`
+              : orden.mesas.join(', '),
+        ordenId: orden?.id ?? null,
+        envioNumero: null,
+        documento,
+      },
+    ]);
+    return { trabajoId: trabajoId ?? null, impresion: 'EN_COLA' };
   }
 
   /**

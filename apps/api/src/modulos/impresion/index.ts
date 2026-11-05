@@ -4,13 +4,20 @@ export { PuenteGuard, VinculacionGuard } from './puente.guard';
 export {
   conMarcas,
   documentoDeComanda,
+  documentoDeComprobante,
+  documentoDeGaveta,
   documentoDePrecuenta,
+  documentoDeReporteCaja,
   documentoDePrueba,
   renderizarTicket,
 } from './escpos';
 export type {
   ComandaParaTicket,
+  ComprobanteParaTicket,
   ContextoDeComanda,
+  ContextoDeComprobante,
+  ContextoDeReporteCaja,
+  ReporteParaTicket,
   ContextoDePrecuenta,
   ImpresoraParaRenderizar,
   LineaDeComanda,

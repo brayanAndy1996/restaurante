@@ -19,7 +19,6 @@ import { QueryTypes, type Sequelize } from 'sequelize';
 import { CONEXION_API, SQLSTATE, restriccionDe, sqlstateDe } from '../../nucleo/base-de-datos';
 import { ContextoEmpresa } from '../../nucleo/contexto-empresa';
 import { ErrorAplicacion } from '../../nucleo/errores/error-aplicacion';
-import { noImplementado } from '../../nucleo/errores';
 import { jsonCanonico } from '../../nucleo/idempotencia';
 import { RELOJ, type Reloj } from '../../nucleo/reloj';
 import { AuditoriaService } from '../auditoria';
@@ -46,6 +45,7 @@ import {
   type FilaTurno,
 } from './lectura-turno';
 import { ReportesCaja } from './reportes-caja';
+import { TicketsDeCaja } from './tickets-de-caja';
 
 const sha256 = (texto: string): Buffer => createHash('sha256').update(texto, 'utf8').digest();
 
@@ -87,6 +87,7 @@ export class TurnosService {
     @Inject(PedidosConsultaService) private readonly pedidos: PedidosConsultaService,
     @Inject(ReportesCaja) private readonly reportes: ReportesCaja,
     @Inject(EventosCaja) private readonly eventos: EventosCaja,
+    @Inject(TicketsDeCaja) private readonly tickets: TicketsDeCaja,
   ) {}
 
   /**
@@ -163,6 +164,8 @@ export class TurnosService {
       }
       throw error;
     }
+    // Un fondo mayor que cero abre la gaveta (criterio 93); la réplica ya devolvió arriba, sin trabajo.
+    if (fondo !== '0.00') await this.tickets.encolarGaveta({ sucursalId, cajaId, turnoId: id });
     this.eventos.turnoCambio(sucursalId, id, cajaId);
     return this.respuestaDe(id);
   }
@@ -246,6 +249,11 @@ export class TurnosService {
         type: QueryTypes.SELECT,
       },
     );
+    await this.tickets.encolarGaveta({
+      sucursalId,
+      cajaId: turno.caja_id,
+      turnoId: turno.id,
+    });
     this.eventos.turnoCambio(sucursalId, turno.id, turno.caja_id);
     return this.movimientoARespuesta(filas[0]!);
   }
@@ -256,11 +264,18 @@ export class TurnosService {
     return this.reportes.armar(turno.id);
   }
 
-  /** Encola un trabajo `REPORTE_X` en la impresora de la caja (tarea T21). */
+  /**
+   * Criterios 30 y 95: encola un trabajo `REPORTE_X` con el reporte de ahora en la impresora de la caja del turno (con
+   * el alcance del criterio 100). Sin impresora, 201 con `SIN_IMPRESORA`.
+   */
   async imprimirReporteX(turnoId: string): Promise<ImpresionDeCajaRespuesta> {
-    // El alcance del Cajero (criterio 100) se comprueba ya; el trabajo `REPORTE_X` llega con la tarea T21.
-    await this.turnoVisible(turnoId);
-    throw noImplementado();
+    const turno = await this.turnoVisible(turnoId);
+    return this.tickets.encolarReporte('REPORTE_X', {
+      sucursalId: turno.sucursal_id,
+      cajaId: turno.caja_id,
+      turnoId: turno.id,
+      reporte: await this.reportes.armar(turno.id),
+    });
   }
 
   /**
@@ -361,8 +376,16 @@ export class TurnosService {
       entidadId: previo.id,
       detalle: { turnoId: previo.id, cajaId: previo.caja_id, conteo: guardados },
     });
+    // La Z se encola en la misma transacción del cierre (criterio 95: un solo `REPORTE_Z` por turno).
+    const z = await this.reportes.armar(previo.id);
+    await this.tickets.encolarReporte('REPORTE_Z', {
+      sucursalId,
+      cajaId: previo.caja_id,
+      turnoId: previo.id,
+      reporte: z,
+    });
     this.eventos.turnoCambio(sucursalId, previo.id, previo.caja_id);
-    return this.reportes.armar(previo.id);
+    return z;
   }
 
   // ---- Ayudas ---------------------------------------------------------------------------------

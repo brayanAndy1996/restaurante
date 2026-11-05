@@ -13,7 +13,9 @@ import {
 import { QueryTypes, type Sequelize } from 'sequelize';
 import { CONEXION_API } from '../../nucleo/base-de-datos';
 import { ContextoEmpresa } from '../../nucleo/contexto-empresa';
-import { RELOJ, type Reloj } from '../../nucleo/reloj';
+import { RELOJ, horaLocal, type Reloj } from '../../nucleo/reloj';
+import { documentoDeComprobante } from '../impresion';
+import { IMPRESION, type ImpresionPuerto } from '../pedidos/impresion';
 import { EmisoresService, SucursalesConsultaService, SuscripcionService } from '../plataforma';
 import { leerComprobante } from './lectura-comprobante';
 import { SeriesService } from './series.service';
@@ -22,8 +24,9 @@ import { SeriesService } from './series.service';
  * Emisión de un comprobante (historia 006, criterios 69 a 76 y 90; ruta crítica P4). Se llama dentro de la
  * transacción del cobro: toma el número de la serie de la caja con `UPDATE serie SET ultimo_numero = ultimo_numero + 1
  * … RETURNING` (sin saltos: una reversión deshace el incremento), guarda el comprobante y sus líneas, llama a
- * `SuscripcionService.registrarComprobanteEmitido` una vez y encola el ticket (el ticket llega con la tarea T21:
- * hasta entonces `trabajoId` es `null`).
+ * `SuscripcionService.registrarComprobanteEmitido` una vez y encola el ticket del comprobante (criterios 90 a 92), todo
+ * en la misma transacción: si encolar falla, el cobro entero se revierte, el número incluido (criterio 71). Sin
+ * impresora de caja ni de la sucursal no hay ticket (`trabajoId` `null`, `impresion` `SIN_IMPRESORA`, criterio 96).
  */
 
 export interface PagoParaTicket {
@@ -88,6 +91,7 @@ export class EmisionService {
     @Inject(EmisoresService) private readonly emisores: EmisoresService,
     @Inject(SucursalesConsultaService) private readonly sucursales: SucursalesConsultaService,
     @Inject(SuscripcionService) private readonly suscripciones: SuscripcionService,
+    @Inject(IMPRESION) private readonly impresion: ImpresionPuerto,
   ) {}
 
   /**
@@ -179,7 +183,55 @@ export class EmisionService {
     await this.suscripciones.registrarComprobanteEmitido(datos.sucursalId, instante);
     const comprobante = await leerComprobante(this.conexion, comprobanteId);
     if (comprobante === null) throw new Error('El comprobante recién emitido no se puede leer');
-    return { comprobante, trabajoId: null, impresion: 'SIN_IMPRESORA' };
+    const trabajoId = await this.encolarTicket(comprobante, datos);
+    return {
+      comprobante,
+      trabajoId,
+      impresion: trabajoId === null ? 'SIN_IMPRESORA' : 'EN_COLA',
+    };
+  }
+
+  /**
+   * El trabajo `COMPROBANTE` en la impresora de la caja, o `null` si no hay. El ticket empieza con el pulso de la
+   * gaveta si algún pago es en efectivo y la impresora tiene gaveta (criterio 92); si el cobro es una cuenta toda en
+   * cortesía (sin pagos), no hay pulso.
+   */
+  private async encolarTicket(
+    comprobante: ComprobanteRespuesta,
+    datos: DatosDeEmision,
+  ): Promise<string | null> {
+    const impresora = datos.impresora;
+    if (impresora === null) return null;
+    const hayEfectivo = datos.pagos.some((p) => p.medio === 'EFECTIVO' && p.monto !== '0.00');
+    const orden = datos.orden;
+    const [trabajoId] = await this.impresion.encolar([
+      {
+        sucursalId: datos.sucursalId,
+        impresoraId: impresora.id,
+        estacionId: null,
+        tipo: 'COMPROBANTE',
+        comandaId: null,
+        precuentaId: null,
+        comprobanteId: comprobante.id,
+        turnoId: null,
+        mesa:
+          orden === null
+            ? null
+            : orden.numeroLlamado !== null
+              ? `Llamado ${orden.numeroLlamado}`
+              : orden.mesas.join(', '),
+        ordenId: orden?.id ?? null,
+        envioNumero: null,
+        documento: documentoDeComprobante(comprobante, {
+          hora: horaLocal(datos.instante),
+          pagos: datos.pagos.map((p) => ({ medio: p.medio, monto: p.monto, recibido: p.recibido })),
+          vuelto: datos.vuelto,
+          redondeo: datos.redondeo,
+          abreGaveta: impresora.gaveta && hayEfectivo,
+        }),
+      },
+    ]);
+    return trabajoId ?? null;
   }
 
   /**
