@@ -700,7 +700,9 @@ describe('Anular y unir con un descuento que la cuenta ya no admite (criterio 45
       /Quita o vuelve a pedir el descuento antes de anular\./,
     );
     expect(aviso).toBeVisible();
-    expect(aviso).toHaveTextContent('Quita el descuento en «Descuentos y cortesías» de la cuenta');
+    expect(aviso).toHaveTextContent(
+      'Lo encuentras en «Descuentos y cortesías», en la cuenta de la mesa.',
+    );
   });
 
   it('el 409 CONFLICTO por una cortesía muestra el motivo, no el mensaje genérico', async () => {

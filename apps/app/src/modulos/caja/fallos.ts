@@ -66,7 +66,7 @@ export function falloDeCuenta(
       const sinBase = campo('descuento');
       if (sinBase !== undefined) {
         return {
-          texto: `${sinBase.replace(/\.?$/, '.')} Quita el descuento en «Descuentos y cortesías» de la cuenta y, si hace falta, vuelve a pedirlo con la clave del supervisor.`,
+          texto: `${sinBase.replace(/\.?$/, '.')} Lo encuentras en «Descuentos y cortesías», en la cuenta de la mesa.`,
         };
       }
       const codigo = /DESCUENTO_NULO/.test(error.message)
