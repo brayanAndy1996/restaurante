@@ -17,9 +17,11 @@ import {
   abrirElCobroDeLaMesa,
   abrirMesaYComandar,
   botonDeCobrar,
+  darClaveDeSupervisor,
   cobrarYEsperar,
   elegirParteDelCobro,
   esperarPulsosDeGaveta,
+  esperarTicketCon,
   irAlSalon,
   pulsosDeGaveta,
   irAAjustes,
@@ -31,7 +33,9 @@ import { crearSalonPorApi } from './ayudas-impresion';
 import {
   afirmarClavesDelSalon,
   afirmarEstadoDeMesa,
+  baldosaDeMesa,
   crearEscenarioDeSalon,
+  esperarLaCuenta,
   tarjetaDeCocina,
   type EscenarioDeSalon,
 } from './ayudas-salon';
@@ -310,5 +314,43 @@ test('la cuenta de la mesa 2 se divide por ítems con el Cajero y en partes igua
     await expect(page.getByText('Mesa 2 libre')).toBeVisible();
     await irAlSalon(mozo.page);
     await afirmarEstadoDeMesa(mozo.page, '2', 'libre');
+  });
+});
+
+test('el Cajero aplica un descuento por ítem con la clave del Supervisor y cobra con el descuento', async () => {
+  const { page } = cajero;
+  await abrirMesaYComandar(mozo.page, '3', [PLATOS.lomo]);
+
+  await test.step('el Cajero abre la cuenta de la mesa 3 y elige «Descuento a Lomo saltado»', async () => {
+    await irAlSalon(page);
+    await baldosaDeMesa(page, '3').click();
+    await esperarLaCuenta(page, 'Mesa 3');
+    await page.getByRole('link', { name: 'Descuentos y cortesías' }).click();
+    await page.getByRole('button', { name: 'Descuento a Lomo saltado' }).click();
+    const hoja = page.getByRole('dialog', { name: 'Descuento' });
+    await hoja.getByLabel('Porcentaje del descuento').fill('10');
+    await hoja.getByRole('button', { name: 'Cliente frecuente' }).click();
+    await page.waitForTimeout(400); // la hoja termina de subir
+    await page.screenshot({ path: captura('09-descuento-hoja-360') });
+    await hoja.getByRole('button', { name: 'Pedir clave de supervisor' }).click();
+  });
+
+  await test.step('la ventana pide la clave de un Supervisor; con la suya el descuento queda aplicado', async () => {
+    await darClaveDeSupervisor(page, e.supervisor.pin);
+    await expect(page.getByText(/2\.80 · Cliente frecuente/)).toBeVisible();
+    const desglose = page.getByLabel('Desglose de la cuenta');
+    await expect(desglose).toContainText('S/ 25.20');
+    await page.screenshot({ path: captura('10-descuento-aplicado-360'), fullPage: true });
+    await afirmarPantallaDeCelular(page, 'Caja › Cuenta con descuento');
+  });
+
+  await test.step('cobra S/ 25.20 en efectivo; la boleta sale con el descuento', async () => {
+    await page.getByRole('link', { name: /^Cobrar S\/\s?25\.20$/ }).click();
+    await expect(botonDeCobrar(page)).toHaveText('Cobrar S/\u00a025.20');
+    const cobro = await cobrarYEsperar(page);
+    expect(cobro.comprobante.numero).toBe('B001-00000004');
+    await expect(page.getByText('Mesa 3 libre')).toBeVisible();
+    const ticket = await esperarTicketCon(emulador, 'B001-00000004');
+    expect(ticket.texto).toMatch(/Descuento/i);
   });
 });

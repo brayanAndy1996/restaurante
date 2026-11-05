@@ -1,6 +1,10 @@
 import type { APIRequestContext, Locator, Page } from '@playwright/test';
 import { expect } from '@playwright/test';
-import { SimuladorPuente, type EmuladorEscPos } from '../../api/test/soporte/puente';
+import {
+  SimuladorPuente,
+  type EmuladorEscPos,
+  type TicketEmulado,
+} from '../../api/test/soporte/puente';
 import { llamarApi, tokenDeSesion } from './ayudas';
 import type { Escritura } from './ayudas-carta';
 import {
@@ -273,4 +277,16 @@ export async function cobrarYEsperar(page: Page) {
     cuenta: { estado: string; saldo: string };
     impresion: string;
   };
+}
+
+/** El primer ticket recibido por el emulador cuyo texto trae `fragmento` (espera hasta 10 s a que llegue). */
+export async function esperarTicketCon(
+  emulador: EmuladorEscPos,
+  fragmento: string,
+): Promise<TicketEmulado> {
+  const buscar = () => emulador.tickets.find((t) => t.texto.includes(fragmento));
+  await expect
+    .poll(() => buscar() !== undefined, { message: `ticket con «${fragmento}»`, timeout: 10_000 })
+    .toBe(true);
+  return buscar() as TicketEmulado;
 }
