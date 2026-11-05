@@ -296,7 +296,7 @@ export class CajasService {
    */
   private async exigirCupo(sucursalId: string): Promise<void> {
     await this.conexion.query('SELECT pg_advisory_xact_lock(hashtextextended($1::text, 0))', {
-      bind: [`cajas:${sucursalId}`],
+      bind: [`${this.contexto.empresaActual()}:cajas:${sucursalId}`],
       type: QueryTypes.SELECT,
     });
     const filas = await this.conexion.query<{ n: number }>(

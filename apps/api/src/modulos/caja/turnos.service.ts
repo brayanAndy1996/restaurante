@@ -500,10 +500,13 @@ export class TurnosService {
     };
   }
 
-  /** Cerrojo de la transacción por una clave de texto: las peticiones con la misma clave se turnan. */
+  /**
+   * Cerrojo de la transacción por una clave de texto: las peticiones con la misma clave se turnan. La clave lleva la
+   * empresa (`<empresaId>:<clave>`): el espacio de cerrojos es de toda la base y una empresa nunca debe esperar a otra.
+   */
   private async turnarPor(clave: string): Promise<void> {
     await this.conexion.query('SELECT pg_advisory_xact_lock(hashtextextended($1::text, 0))', {
-      bind: [clave],
+      bind: [`${this.contexto.empresaActual()}:${clave}`],
       type: QueryTypes.SELECT,
     });
   }
