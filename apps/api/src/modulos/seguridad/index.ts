@@ -36,7 +36,7 @@ export type { TokenPuente, TokenVinculacion } from './tokens';
 export { ResolutorEmpresaSesion, actorDePrincipal } from './resolutor-empresa-sesion';
 export { SesionActual } from './sesion-actual';
 export { AutorizacionService, autorizacionInvalida } from './autorizacion.service';
-export { exigirObjetivo } from './objetivo-autorizacion';
+export { exigirObjetivo, normalizarValor } from './objetivo-autorizacion';
 export { ClaveSupervisorService } from './clave-supervisor.service';
 export { PermisoInterceptor } from './permiso.interceptor';
 export { ClaveDiferidaInterceptor } from './clave-diferida.interceptor';

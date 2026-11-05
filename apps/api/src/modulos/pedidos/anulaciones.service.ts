@@ -22,9 +22,12 @@ import { AuditoriaService } from '../auditoria';
 import { MesasConsultaService } from '../salon';
 import { SesionActual } from '../seguridad';
 import { bloquearOrden, exigirOrdenAbierta } from './bloqueos-orden';
+import { leerDatosDeCuenta, problemaAlAnular } from './cuenta-de-orden';
 import { guardarComandas, type ComandaGuardada, type ParteParaGuardar } from './comandas';
 import {
   cantidadMayorQueLaVigente,
+  conflictoDeCuenta,
+  descuentoNoAdmitido,
   idDeClienteReutilizado,
   itemNoAnulable,
   itemNoEncontrado,
@@ -156,6 +159,20 @@ export class AnulacionesService {
     const vigente = item.cantidad - item.cantidad_anulada;
     if (vigente === 0) throw itemNoAnulable();
     if (entrada.cantidad > vigente) throw cantidadMayorQueLaVigente(vigente);
+
+    // Criterio 45a: si la cuenta que queda no admite el descuento o la cortesía, la anulación se rechaza sin
+    // anular nada (y la reversión devuelve la clave); el descuento nunca se recorta ni se quita solo.
+    const problema = problemaAlAnular(
+      await leerDatosDeCuenta(this.conexion, orden.id),
+      item.id,
+      entrada.cantidad,
+    );
+    if (problema === 'DESCUENTO_NO_ADMITIDO') throw descuentoNoAdmitido('anular');
+    if (problema === 'CORTESIA_SUPERA_LA_CANTIDAD') {
+      throw conflictoDeCuenta(
+        'La cortesía del ítem es mayor que lo que quedaría: quítala antes de anular',
+      );
+    }
 
     const ahora = this.reloj.ahora();
     const autorizacion = this.sesion.autorizacionConsumida();

@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import type {
   CortesiaRespuesta,
   DescuentoRespuesta,
@@ -6,7 +6,19 @@ import type {
   LineaEnvioEntradaValidada,
 } from '@restaurante/contratos';
 import type { AfectacionIgv, EstadoOrden, ModoCobro, TipoOrden } from '@restaurante/dominio';
+import { QueryTypes, type Sequelize } from 'sequelize';
+import { CONEXION_API } from '../../nucleo/base-de-datos';
 import { noImplementado } from '../../nucleo/errores';
+import { MesasConsultaService } from '../salon';
+import { SesionActual, UsuariosConsultaService } from '../seguridad';
+import { bloquearOrden, exigirOrdenAbierta } from './bloqueos-orden';
+import {
+  leerDatosDeCuentas,
+  personasDeCuenta,
+  respuestasDeCuenta,
+  type DatosDeCuenta,
+} from './cuenta-de-orden';
+import { ordenNoEncontrada } from './errores-pedidos';
 
 /**
  * Lo que la caja necesita de las órdenes (historia 006, "Interfaces de la API"). Pedidos es dueño de las órdenes, los
@@ -48,8 +60,10 @@ export interface CuentaParaCobrar {
   lineas: LineaParaCobrar[];
   descuentoCuenta: DescuentoRespuesta | null;
   cortesias: CortesiaRespuesta[];
-  /** Suma de lo cobrado en partes anteriores. */
+  /** Suma de lo cobrado en partes anteriores (`orden.monto_cobrado`). */
   cobrado: string;
+  /** El ICBPER de lo ya cobrado (`orden.icbper_cobrado`, criterio 89). */
+  icbperCobrado: string;
   /** Cantidad de cobros de la orden (`orden.cobros`). */
   cobros: number;
   modo: ModoCobro | null;
@@ -86,23 +100,136 @@ export interface MostradorAbierto {
   envio: EnvioRespuesta;
 }
 
+interface FilaOrdenDeCuenta {
+  id: string;
+  sucursal_id: string;
+  tipo: TipoOrden;
+  estado: EstadoOrden;
+  mozo_id: string | null;
+  numero_llamado: number | null;
+  version: number;
+  abierta_en: Date;
+  monto_cobrado: string;
+  icbper_cobrado: string;
+  cobros: number;
+  modo_cobro: ModoCobro | null;
+  unida_a_orden_id: string | null;
+}
+
+const COLUMNAS_ORDEN = `id, sucursal_id, tipo, estado, mozo_id, numero_llamado, version, abierta_en,
+       monto_cobrado::text AS monto_cobrado, icbper_cobrado::text AS icbper_cobrado, cobros, modo_cobro,
+       unida_a_orden_id`;
+
 @Injectable()
 export class CuentasDePedidos {
+  constructor(
+    @Inject(CONEXION_API) private readonly conexion: Sequelize,
+    @Inject(SesionActual) private readonly sesion: SesionActual,
+    @Inject(UsuariosConsultaService) private readonly usuarios: UsuariosConsultaService,
+    @Inject(MesasConsultaService) private readonly mesas: MesasConsultaService,
+  ) {}
+
   /**
    * La cuenta de la orden. Con `bloquear`, la toma con `FOR UPDATE` (el mismo bloqueo que los envíos). 404 si es de
    * otra sucursal, de otra empresa o no existe; 409 `ORDEN_NO_ABIERTA` (con `ordenId` de la principal si está
-   * `UNIDA`).
+   * `UNIDA`) salvo con `soloAbiertas: false`, que la devuelve en cualquier estado (la consulta de la cuenta).
    */
   async cuentaParaCobrar(
-    _ordenId: string,
-    _opciones: { bloquear: boolean },
+    ordenId: string,
+    opciones: { bloquear: boolean; soloAbiertas?: boolean },
   ): Promise<CuentaParaCobrar> {
-    throw noImplementado();
+    const sucursalId = this.sesion.sucursalActiva();
+    if (opciones.bloquear) {
+      const orden = await bloquearOrden(this.conexion, ordenId, sucursalId);
+      if (opciones.soloAbiertas !== false) exigirOrdenAbierta(orden);
+    }
+    const filas = await this.conexion.query<FilaOrdenDeCuenta>(
+      `SELECT ${COLUMNAS_ORDEN} FROM orden WHERE id = $1 AND sucursal_id = $2`,
+      { bind: [ordenId, sucursalId], type: QueryTypes.SELECT },
+    );
+    const fila = filas[0];
+    if (fila === undefined) throw ordenNoEncontrada();
+    if (!opciones.bloquear && opciones.soloAbiertas !== false) {
+      exigirOrdenAbierta({
+        id: fila.id,
+        sucursalId: fila.sucursal_id,
+        estado: fila.estado,
+        comensales: 0,
+        unidaA: fila.unida_a_orden_id,
+      });
+    }
+    return (await this.armar([fila]))[0]!;
   }
 
   /** Las órdenes abiertas de la sucursal activa con su cuenta, de la más antigua a la más nueva. */
   async cuentasAbiertas(): Promise<CuentaParaCobrar[]> {
-    throw noImplementado();
+    const sucursalId = this.sesion.sucursalActiva();
+    const filas = await this.conexion.query<FilaOrdenDeCuenta>(
+      `SELECT ${COLUMNAS_ORDEN} FROM orden
+        WHERE sucursal_id = $1 AND estado IN ('ABIERTA', 'EN_PRECUENTA')
+        ORDER BY abierta_en, creado_en, id`,
+      { bind: [sucursalId], type: QueryTypes.SELECT },
+    );
+    return this.armar(filas);
+  }
+
+  /** Arma las cuentas de varias órdenes con un número fijo de consultas. */
+  private async armar(filas: readonly FilaOrdenDeCuenta[]): Promise<CuentaParaCobrar[]> {
+    const ids = filas.map((f) => f.id);
+    const datos = await leerDatosDeCuentas(this.conexion, ids);
+    const vigentes = await this.conexion.query<{ orden_id: string; mesa_id: string }>(
+      `SELECT orden_id, mesa_id FROM orden_mesa
+        WHERE orden_id = ANY($1::uuid[]) AND hasta IS NULL ORDER BY desde, id`,
+      { bind: [ids], type: QueryTypes.SELECT },
+    );
+    const nombresMesas = await this.mesas.nombres(vigentes.map((v) => v.mesa_id));
+    const personas = [
+      ...filas.flatMap((f) => (f.mozo_id === null ? [] : [f.mozo_id])),
+      ...[...datos.values()].flatMap((d: DatosDeCuenta) => personasDeCuenta(d)),
+    ];
+    const nombres = await this.usuarios.nombres(personas);
+
+    return filas.map((fila) => {
+      const cuenta = datos.get(fila.id)!;
+      const respuestas = respuestasDeCuenta(cuenta, nombres);
+      return {
+        ordenId: fila.id,
+        sucursalId: fila.sucursal_id,
+        tipo: fila.tipo,
+        estado: fila.estado,
+        mesas: vigentes
+          .filter((v) => v.orden_id === fila.id)
+          .map((v) => ({ id: v.mesa_id, nombre: nombresMesas.get(v.mesa_id) ?? '' })),
+        mozo:
+          fila.mozo_id === null
+            ? null
+            : { id: fila.mozo_id, nombre: nombres.get(fila.mozo_id) ?? '' },
+        numeroLlamado: fila.numero_llamado,
+        version: fila.version,
+        lineas: cuenta.items.map((i) => ({
+          itemId: i.id,
+          nombre: i.nombre,
+          modificadores: i.modificadores,
+          precioUnitario: i.precioUnitario,
+          cantidad: i.cantidad,
+          cantidadCortesia: Math.min(
+            cuenta.cortesias.find((c) => c.itemId === i.id)?.cantidad ?? 0,
+            i.cantidad,
+          ),
+          cantidadFacturada: i.cantidadFacturada,
+          afectacion: i.afectacion,
+          aplicaIcbper: i.aplicaIcbper,
+          descuento: respuestas.descuentoDeItem.get(i.id) ?? null,
+        })),
+        descuentoCuenta: respuestas.descuentoCuenta,
+        cortesias: respuestas.cortesias,
+        cobrado: fila.monto_cobrado,
+        icbperCobrado: fila.icbper_cobrado,
+        cobros: fila.cobros,
+        modo: fila.modo_cobro,
+        abiertaEn: new Date(fila.abierta_en),
+      };
+    });
   }
 
   /**

@@ -90,3 +90,25 @@ export const huellaDeAnulacionDeOrden = (entrada: {
       destinoStock: entrada.destinoStock,
     }),
   );
+
+/**
+ * Huella de un descuento (historia 006, criterio 46): el ítem (o la cuenta), el tipo y el valor normalizado a 2
+ * decimales. El mismo `id` con otro ítem, otro tipo u otro valor es otra petición (422); con lo mismo, la misma. El
+ * motivo no cuenta (texto libre que se puede reescribir al reintentar) y la orden se compara aparte.
+ */
+export const huellaDeDescuento = (entrada: {
+  itemId: string | null;
+  tipo: string;
+  valor: string;
+}): Buffer =>
+  sha256(
+    jsonCanonico({
+      itemId: entrada.itemId === null ? null : entrada.itemId.toLowerCase(),
+      tipo: entrada.tipo,
+      valor: entrada.valor,
+    }),
+  );
+
+/** Huella de una cortesía: el ítem y la cantidad. */
+export const huellaDeCortesia = (entrada: { itemId: string; cantidad: number }): Buffer =>
+  sha256(jsonCanonico({ itemId: entrada.itemId.toLowerCase(), cantidad: entrada.cantidad }));

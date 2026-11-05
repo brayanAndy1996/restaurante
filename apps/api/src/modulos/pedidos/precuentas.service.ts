@@ -1,6 +1,7 @@
 import { Inject, Injectable } from '@nestjs/common';
 import type { PrecuentaEntrada, PrecuentaRespuesta } from '@restaurante/contratos';
 import { excedeMontoMaximo, totalOrden, totalVigenteLinea } from '@restaurante/dominio';
+import { calcularCuenta } from '@restaurante/dominio/caja';
 import { QueryTypes, type Sequelize } from 'sequelize';
 import { CONEXION_API } from '../../nucleo/base-de-datos';
 import { ContextoEmpresa } from '../../nucleo/contexto-empresa';
@@ -8,6 +9,12 @@ import { RELOJ, type Reloj } from '../../nucleo/reloj';
 import { MesasConsultaService } from '../salon';
 import { SesionActual, UsuariosConsultaService } from '../seguridad';
 import { bloquearOrden, exigirOrdenAbierta } from './bloqueos-orden';
+import {
+  cuentaDeDatos,
+  leerDatosDeCuenta,
+  montosDeDescuentos,
+  multiplicarMonto,
+} from './cuenta-de-orden';
 import { idDeClienteReutilizado, montoFueraDeRango, ordenSinConsumo } from './errores-pedidos';
 import { EventosPedidos } from './eventos-pedidos';
 import { IMPRESION, type ImpresionPuerto } from './impresion';
@@ -34,6 +41,10 @@ interface LineaGuardada {
   aplicaIcbper: boolean;
 }
 
+/** Un descuento tal como lo muestra la pre-cuenta (historia 006, criterio 44). */
+type DescuentoGuardadoEnPrecuenta = NonNullable<PrecuentaRespuesta['descuentos']>[number];
+type CortesiaGuardadaEnPrecuenta = NonNullable<PrecuentaRespuesta['cortesias']>[number];
+
 interface FilaPrecuenta {
   id: string;
   orden_id: string;
@@ -41,6 +52,9 @@ interface FilaPrecuenta {
   lineas: LineaGuardada[];
   total: string;
   emitida_en: Date;
+  /** Los descuentos y las cortesías vigentes al emitirla, o `null` si no había (la pre-cuenta de 004). */
+  descuentos: DescuentoGuardadoEnPrecuenta[] | null;
+  cortesias: CortesiaGuardadaEnPrecuenta[] | null;
 }
 
 interface FilaItemVigente {
@@ -53,7 +67,7 @@ interface FilaItemVigente {
   linea: { modificadores?: { nombre: string }[] };
 }
 
-const COLUMNAS = 'id, orden_id, numero, lineas, total, emitida_en';
+const COLUMNAS = 'id, orden_id, numero, lineas, total, emitida_en, descuentos, cortesias';
 
 /**
  * Pre-cuenta (historia 004, criterios 50 a 54). Bloquea la orden (serializa los envíos, las anulaciones, las
@@ -131,13 +145,55 @@ export class PrecuentasService {
       total: totalVigenteLinea(i.precio_unitario, i.cantidad, i.cantidad_anulada),
       aplicaIcbper: i.aplica_icbper,
     }));
-    const total = totalOrden(
+    let total = totalOrden(
       items.map((i) => ({
         precioUnitario: i.precio_unitario,
         cantidad: i.cantidad,
         cantidadAnulada: i.cantidad_anulada,
       })),
     );
+    // Con descuentos o cortesías (historia 006, criterio 44) el total es el de `calcularCuenta` sin ICBPER y la
+    // pre-cuenta muestra cada uno con su monto; sin ellos sigue siendo el `totalOrden` de 004.
+    const datosCuenta = await leerDatosDeCuenta(this.conexion, orden.id);
+    let descuentos: DescuentoGuardadoEnPrecuenta[] | null = null;
+    let cortesias: CortesiaGuardadaEnPrecuenta[] | null = null;
+    if (
+      datosCuenta.descuentoCuenta !== null ||
+      datosCuenta.descuentosDeItem.length > 0 ||
+      datosCuenta.cortesias.length > 0
+    ) {
+      const cuenta = cuentaDeDatos(datosCuenta);
+      total = calcularCuenta(cuenta).totales.total;
+      const montos = montosDeDescuentos(cuenta);
+      const delItem = datosCuenta.descuentosDeItem.map((d) => ({
+        itemId: d.itemId,
+        tipo: d.tipo,
+        valor: d.valor,
+        monto: montos.porItem.get(d.itemId!) ?? '0.00',
+      }));
+      const deCuenta =
+        datosCuenta.descuentoCuenta === null
+          ? []
+          : [
+              {
+                itemId: null,
+                tipo: datosCuenta.descuentoCuenta.tipo,
+                valor: datosCuenta.descuentoCuenta.valor,
+                monto: montos.cuenta,
+              },
+            ];
+      descuentos = [...delItem, ...deCuenta];
+      if (descuentos.length === 0) descuentos = null;
+      cortesias = datosCuenta.cortesias.map((c) => ({
+        itemId: c.itemId,
+        cantidad: c.cantidad,
+        valorReferencial: multiplicarMonto(
+          datosCuenta.items.find((i) => i.id === c.itemId)!.precioUnitario,
+          c.cantidad,
+        ),
+      }));
+      if (cortesias.length === 0) cortesias = null;
+    }
     // No debería pasar: el envío ya impide que el total de la orden pase el tope (criterio 21).
     if (excedeMontoMaximo(total)) {
       throw montoFueraDeRango([{ campo: 'total', mensaje: 'El total supera el máximo permitido' }]);
@@ -149,8 +205,8 @@ export class PrecuentasService {
     );
     const insertada = await this.conexion.query<FilaPrecuenta>(
       `INSERT INTO precuenta (id, empresa_id, orden_id, numero, lineas, total, emitida_en, version_orden,
-                              creado_en, actualizado_en)
-       VALUES ($1, $2, $3, $4, $5::jsonb, $6::numeric, $7, $8, $7, $7)
+                              descuentos, cortesias, creado_en, actualizado_en)
+       VALUES ($1, $2, $3, $4, $5::jsonb, $6::numeric, $7, $8, $9::jsonb, $10::jsonb, $7, $7)
        ON CONFLICT (empresa_id, id) DO NOTHING
        RETURNING ${COLUMNAS}`,
       {
@@ -163,6 +219,8 @@ export class PrecuentasService {
           total,
           ahora,
           versionActual,
+          descuentos === null ? null : JSON.stringify(descuentos),
+          cortesias === null ? null : JSON.stringify(cortesias),
         ],
         type: QueryTypes.SELECT,
       },
@@ -265,6 +323,8 @@ export class PrecuentasService {
       })),
       total: fila.total,
       nota: conIcbper ? `${NOTA_PRECUENTA} ${NOTA_ICBPER}` : NOTA_PRECUENTA,
+      ...(fila.descuentos === null ? {} : { descuentos: fila.descuentos }),
+      ...(fila.cortesias === null ? {} : { cortesias: fila.cortesias }),
       impresion: trabajoId === null ? 'SIN_IMPRESORA' : 'EN_COLA',
       trabajoId,
     };
