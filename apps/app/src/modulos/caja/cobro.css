@@ -148,8 +148,8 @@
   color: var(--color-exito-oscuro);
 }
 .pago__vuelto > b {
-  font-size: 2rem;
-  line-height: 2.25rem;
+  font-size: 2.5rem;
+  line-height: 2.75rem;
   font-variant-numeric: tabular-nums;
 }
 .pago__problema {
