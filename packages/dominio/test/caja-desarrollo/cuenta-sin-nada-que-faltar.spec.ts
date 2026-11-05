@@ -7,7 +7,15 @@ import {
   type CuentaEntrada,
   type ParteCalculada,
 } from '../../src';
-import { ID, cuentaC, lineaBolsa, lineaGaseosa, lineaLomo, lineaMandarina, tomar } from './ayudas';
+import {
+  ID,
+  cuentaC,
+  lineaBolsa,
+  lineaGaseosa,
+  lineaLomo,
+  lineaMandarina,
+  tomar,
+} from '../caja/ayudas';
 
 const dosLomosCobrados = (): ParteCalculada =>
   tomar(
