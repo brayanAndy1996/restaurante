@@ -94,7 +94,7 @@ Commit propio. Es el corazón de P2 y P4.
 Commit propio.
 
 - [x] T18 · backend · `contador_llamado` y `CuentasDePedidos.abrirYEnviarMostrador` (orden `MOSTRADOR`, número de llamado, el envío de 004 con el número en las comandas y en `comandaKds`); `MostradorService` y `POST /ventas-mostrador` según "Venta de mostrador" de `plan.md`. Deja en verde `mostrador.spec.ts`. (criterios 79 a 85)
-- [ ] T19 · frontend · Mostrador: el comandero en modo mostrador, el cobro en la misma pantalla, "Cobrar y enviar" y "Llamado 23"; el KDS con "Llamado 23". Pruebas de componente. (criterio 115)
+- [x] T19 · frontend · Mostrador: el comandero en modo mostrador, el cobro en la misma pantalla, "Cobrar y enviar" y "Llamado 23"; el KDS con "Llamado 23". Pruebas de componente. (criterio 115)
 - [ ] T20 · tester · Suite completa, lint, tipos, build y presupuesto. Puede seguir en rojo: `gaveta.spec.ts`.
 
 #### C6 · RF-56, RF-64 (ticket): impresión y gaveta
