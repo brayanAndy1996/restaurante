@@ -16,6 +16,8 @@ import { noEncontrado } from './errores-caja';
 
 /** Lo que los cobros del turno aportan al reporte: sumas por medio, redondeos y vueltos. */
 interface SumasDeCobros {
+  /** Cada pago del turno tal como se guardó (lo que `esperadoDelTurno` espera: montos de hasta 8 enteros). */
+  pagos: { medio: MedioPago; monto: string }[];
   porMedio: { medio: MedioPago; cantidad: number; monto: string }[];
   redondeos: string;
   vueltos: string;
@@ -66,7 +68,7 @@ export class ReportesCaja {
     const cobros = await this.sumasDeCobros(turnoId);
     const esperado = esperadoDelTurno({
       fondo: fila.fondo,
-      pagos: cobros.porMedio.map((m) => ({ medio: m.medio, monto: m.monto })),
+      pagos: cobros.pagos,
       movimientos: movimientos.map((m) => ({ tipo: m.tipo, monto: m.monto })),
     });
     const nombres = await this.usuarios.nombres(
@@ -137,14 +139,19 @@ export class ReportesCaja {
   }
 
   /**
-   * Los cobros del turno por medio, con los redondeos y los vueltos: dos consultas de sumas en `NUMERIC`, sin importar
-   * cuántos cobros tenga el turno. `cantidad` es la de pagos del medio; los cinco medios salen siempre, en cero si no
+   * Los cobros del turno por medio, con los redondeos y los vueltos: tres consultas (sumas en `NUMERIC` y los pagos
+   * uno por uno para el esperado), sin importar cuántos cobros tenga el turno. `cantidad` es la de pagos del medio; los cinco medios salen siempre, en cero si no
    * hubo ninguno. El efectivo cuenta lo que quedó en la caja (`pago.monto`, sin el vuelto).
    */
   private async sumasDeCobros(turnoId: string): Promise<SumasDeCobros> {
     const pagos = await this.conexion.query<{ medio: MedioPago; cantidad: number; monto: string }>(
       `SELECT medio, count(*)::int AS cantidad, sum(monto)::numeric(14, 2)::text AS monto
          FROM pago WHERE turno_id = $1 GROUP BY medio`,
+      { bind: [turnoId], type: QueryTypes.SELECT },
+    );
+    // El esperado suma pago por pago (cada monto cabe en 8 enteros); la suma de un medio puede pasar de 99 999 999.99.
+    const individuales = await this.conexion.query<{ medio: MedioPago; monto: string }>(
+      'SELECT medio, monto::text AS monto FROM pago WHERE turno_id = $1',
       { bind: [turnoId], type: QueryTypes.SELECT },
     );
     const [totales] = await this.conexion.query<{ redondeos: string; vueltos: string }>(
@@ -154,6 +161,7 @@ export class ReportesCaja {
       { bind: [turnoId], type: QueryTypes.SELECT },
     );
     return {
+      pagos: individuales,
       porMedio: MEDIOS_PAGO.map((medio) => {
         const fila = pagos.find((p) => p.medio === medio);
         return { medio, cantidad: fila?.cantidad ?? 0, monto: fila?.monto ?? '0.00' };
