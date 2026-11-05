@@ -2,6 +2,8 @@ import type { CortesiaRespuesta, DescuentoRespuesta } from '@restaurante/contrat
 import type { AfectacionIgv } from '@restaurante/dominio';
 import {
   calcularCuenta,
+  multiplicarMonto,
+  sumarMontos,
   validarDescuento,
   type CuentaEntrada,
   type DescuentoEntrada as DescuentoDeCuenta,
@@ -226,29 +228,6 @@ export function cuentaDeDatos(
     tasaIgv: parametros.tasaIgv,
     montoIcbper: parametros.montoIcbper,
   };
-}
-
-// ---------------------------------------------------------------------------------------------------
-// Montos en céntimos (enteros: sin coma flotante)
-// ---------------------------------------------------------------------------------------------------
-
-const centimos = (monto: string): bigint => BigInt(monto.replace('.', ''));
-const comoMonto = (c: bigint): string => `${c / 100n}.${(c % 100n).toString().padStart(2, '0')}`;
-
-/** La suma de montos no negativos con 2 decimales. */
-export function sumarMontos(montos: readonly string[]): string {
-  return comoMonto(montos.reduce((suma, m) => suma + centimos(m), 0n));
-}
-
-/** `a − b` de montos con 2 decimales, sin bajar de cero. */
-export function restarMontos(a: string, b: string): string {
-  const resta = centimos(a) - centimos(b);
-  return comoMonto(resta < 0n ? 0n : resta);
-}
-
-/** `monto × cantidad`, con 2 decimales. */
-export function multiplicarMonto(monto: string, cantidad: number): string {
-  return comoMonto(centimos(monto) * BigInt(cantidad));
 }
 
 // ---------------------------------------------------------------------------------------------------

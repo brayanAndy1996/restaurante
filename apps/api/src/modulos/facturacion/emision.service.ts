@@ -4,6 +4,7 @@ import {
   diaOperativo,
   fechaLima,
   montoEnLetras,
+  preciosUnitarios,
   type FormatoComprobante,
   type LineaDeParte,
   type MedioPago,
@@ -235,29 +236,20 @@ export class EmisionService {
   }
 
   /**
-   * Las líneas del comprobante (criterio 69), de una vez. El precio unitario es el bruto entre la cantidad (exacto:
-   * el bruto es precio × cantidad); en una gratuita, el valor referencial entre la cantidad. El valor unitario sin IGV
-   * se calcula con `NUMERIC` en la base, con 10 decimales y redondeo de la mitad hacia arriba, a partir de ese precio.
+   * Las líneas del comprobante (criterio 69), de una vez. El precio unitario y el valor unitario sin IGV (10
+   * decimales, la mitad hacia arriba) los calcula `preciosUnitarios` de `packages/dominio`; aquí solo se guardan.
    */
   private async insertarLineas(comprobanteId: string, datos: DatosDeEmision): Promise<void> {
     const lineas = datos.parte.lineas;
     if (lineas.length === 0) throw new Error('Un comprobante necesita al menos una línea');
-    const bind: unknown[] = [
-      this.contexto.empresaActual(),
-      comprobanteId,
-      datos.tasaIgv,
-      this.reloj.ahora(),
-    ];
+    const bind: unknown[] = [this.contexto.empresaActual(), comprobanteId, this.reloj.ahora()];
     const filas = lineas.map((linea, indice) => {
       const desde = bind.length;
       bind.push(...valoresDeLinea(linea, indice + 1, datos));
       const p = (n: number) => `$${desde + n}`;
-      const precio = `round(${p(18)}::numeric / ${p(19)}::numeric, 2)`;
-      const tieneIgv = linea.afectacion === 'GRAVADO' && datos.tasaIgv !== null;
-      const valorUnitario = `round(${precio} / (1 + COALESCE($3::numeric, 0) / 100 * ${tieneIgv ? 1 : 0}), 10)`;
-      return `($1, $2, ${p(1)}, ${p(2)}, ${p(3)}, ${p(4)}, ${p(5)}, ${precio}, ${valorUnitario}, ${p(6)}, ${p(7)},
-               ${p(8)}, ${p(9)}, ${p(10)}, ${p(11)}, ${p(12)}, ${p(13)}, ${p(14)}, ${p(15)}, ${p(16)}, ${p(17)},
-               $4, $4)`;
+      return `($1, $2, ${p(1)}, ${p(2)}, ${p(3)}, ${p(4)}, ${p(5)}, ${p(18)}::numeric, ${p(19)}::numeric, ${p(6)},
+               ${p(7)}, ${p(8)}, ${p(9)}, ${p(10)}, ${p(11)}, ${p(12)}, ${p(13)}, ${p(14)}, ${p(15)}, ${p(16)}, ${p(17)},
+               $3, $3)`;
     });
     await this.conexion.query(
       `INSERT INTO comprobante_linea (
@@ -289,7 +281,7 @@ export function recortarDescripcion(descripcion: string): string {
 
 /**
  * Los 19 valores de una línea, en el orden de sus parámetros: del 1 al 17 las columnas desde `posicion` (sin el
- * precio ni el valor unitario, que salen del 18 y el 19: lo que se divide y la cantidad). Un ítem sin descripción es
+ * precio ni el valor unitario) y el 18 y el 19, el precio y el valor unitario que calcula el dominio. Un ítem sin descripción es
  * un error de quien arma los datos: el comprobante no se inventa un nombre.
  */
 function valoresDeLinea(linea: LineaDeParte, posicion: number, datos: DatosDeEmision): unknown[] {
@@ -300,6 +292,12 @@ function valoresDeLinea(linea: LineaDeParte, posicion: number, datos: DatosDeEmi
   }
   const descripcion = recortarDescripcion(completa);
   const cantidad = gratuita?.cantidad ?? linea.cantidad;
+  const { precioUnitario, valorUnitario } = preciosUnitarios({
+    base: gratuita === null ? linea.bruto : gratuita.valorReferencial,
+    cantidad,
+    afectacion: linea.afectacion,
+    tasaIgv: datos.tasaIgv,
+  });
   return [
     posicion,
     linea.itemId,
@@ -318,7 +316,7 @@ function valoresDeLinea(linea: LineaDeParte, posicion: number, datos: DatosDeEmi
     gratuita?.valorReferencial ?? null,
     gratuita?.base ?? null,
     gratuita?.igv ?? null,
-    gratuita === null ? linea.bruto : gratuita.valorReferencial,
-    cantidad,
+    precioUnitario,
+    valorUnitario,
   ];
 }

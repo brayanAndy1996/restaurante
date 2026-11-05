@@ -1,5 +1,6 @@
 import { Inject, Injectable } from '@nestjs/common';
 import type { CortesiaEntrada, CortesiaRespuesta } from '@restaurante/contratos';
+import { multiplicarMonto } from '@restaurante/dominio/caja';
 import { QueryTypes, type Sequelize } from 'sequelize';
 import { CONEXION_API } from '../../nucleo/base-de-datos';
 import { ContextoEmpresa } from '../../nucleo/contexto-empresa';
@@ -12,7 +13,6 @@ import {
   cuentaDeDatos,
   descuentoQueNoSeAdmite,
   leerDatosDeCuenta,
-  multiplicarMonto,
   personasDeCuenta,
   respuestasDeCuenta,
   type CortesiaGuardada,

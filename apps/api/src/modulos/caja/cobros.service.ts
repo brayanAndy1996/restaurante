@@ -14,6 +14,9 @@ import {
 import {
   calcularCuenta,
   calcularParte,
+  compararMontos,
+  restarMontos,
+  sumarMontos,
   validarPagos,
   type CuentaEntrada,
   type ParteEntrada,
@@ -47,18 +50,6 @@ import { ImpresoraDeCajas } from './impresora-de-cajas';
 import { ParametrosDeCuenta, type Parametros } from './parametros-de-cuenta';
 
 const sha256 = (texto: string): Buffer => createHash('sha256').update(texto, 'utf8').digest();
-
-/** Los montos de céntimos (enteros: sin coma flotante). */
-const centimos = (m: string): bigint => BigInt(m.replace('.', ''));
-const comoMonto = (c: bigint): string => `${c / 100n}.${(c % 100n).toString().padStart(2, '0')}`;
-
-/** `a − b` de montos con 2 decimales, sin bajar de cero (el saldo de una cuenta). */
-function restarMontos(a: string, b: string): string {
-  const resta = centimos(a) - centimos(b);
-  return comoMonto(resta < 0n ? 0n : resta);
-}
-
-const sumarMontos = (a: string, b: string): string => comoMonto(centimos(a) + centimos(b));
 
 /** Un monto de texto (`"100"`, `"100.5"`) con exactamente 2 decimales. */
 function dosDecimales(monto: string): string {
@@ -468,7 +459,7 @@ export class CobrosService {
       ahora: instante,
     });
     const totalCuenta = calcularCuenta(entradaCuenta).totales.total;
-    const cobrado = sumarMontos(cuenta.cobrado, parte.totales.total);
+    const cobrado = sumarMontos([cuenta.cobrado, parte.totales.total]);
     const saldo = parte.cierraLaCuenta ? '0.00' : restarMontos(totalCuenta, cobrado);
 
     const respuesta: CobroRespuesta = {
@@ -569,7 +560,7 @@ export class CobrosService {
       }
       return;
     }
-    if (cliente === undefined && centimos(total) > centimos(MONTO_BOLETA_SIN_DOCUMENTO)) {
+    if (cliente === undefined && compararMontos(total, MONTO_BOLETA_SIN_DOCUMENTO) > 0) {
       throw clienteRequerido(
         `Una boleta de más de S/ ${MONTO_BOLETA_SIN_DOCUMENTO} necesita el documento y el nombre del cliente`,
       );
