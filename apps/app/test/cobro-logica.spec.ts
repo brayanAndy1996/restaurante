@@ -1,7 +1,12 @@
 import type { CuentaRespuesta } from '@restaurante/contratos';
 import { calcularParte } from '@restaurante/dominio/caja';
 import { describe, expect, it } from 'vitest';
-import { claveDeCobro, guardarEstadoDeCobro, leerEstadoDeCobro } from '../src/modulos/caja/partes';
+import {
+  claveDeCobro,
+  guardarEstadoDeCobro,
+  leerEstadoDeCobro,
+  recordarEnCobro,
+} from '../src/modulos/caja/partes';
 import {
   billetesQueAlcanzan,
   boletaExigeCliente,
@@ -448,16 +453,34 @@ describe('el id del cobro y lo que recuerda el equipo (criterio 55)', () => {
     ).not.toBe(a);
   });
 
-  it('de lo cobrado solo recuerda el id del cobro en curso; sin cobro en curso borra la clave', () => {
+  it('recuerda el id del cobro en curso y en cuántas partes iguales se dividió; sin nada que recordar, borra la clave', () => {
     const clave = claveDeCobro('e', 'u', 'o');
-    expect(leerEstadoDeCobro(clave).enCurso).toBeNull();
-    guardarEstadoDeCobro(clave, { enCurso: { id: uuid(9), huella: 'h' } });
-    expect(leerEstadoDeCobro(clave)).toEqual({ enCurso: { id: uuid(9), huella: 'h' } });
-    // Un estado viejo con partes guardadas se lee sin ellas.
+    expect(leerEstadoDeCobro(clave)).toEqual({ enCurso: null, partesTotales: null });
+    guardarEstadoDeCobro(clave, {
+      enCurso: { id: uuid(9), huella: 'h' },
+      partesTotales: null,
+    });
+    expect(leerEstadoDeCobro(clave)).toEqual({
+      enCurso: { id: uuid(9), huella: 'h' },
+      partesTotales: null,
+    });
+    // Cada dato se cambia sin tocar el otro.
+    recordarEnCobro(clave, { partesTotales: 3 });
+    expect(leerEstadoDeCobro(clave)).toEqual({
+      enCurso: { id: uuid(9), huella: 'h' },
+      partesTotales: 3,
+    });
+    recordarEnCobro(clave, { enCurso: null });
+    expect(leerEstadoDeCobro(clave)).toEqual({ enCurso: null, partesTotales: 3 });
+    // Un estado viejo con partes cobradas se lee sin ellas; un total fuera de 2 a 50 no se cree.
     localStorage.setItem(clave, JSON.stringify({ cobradas: [{ cobroId: 'x' }], enCurso: null }));
-    expect(leerEstadoDeCobro(clave)).toEqual({ enCurso: null });
-    guardarEstadoDeCobro(clave, { enCurso: { id: uuid(9), huella: 'h' } });
-    guardarEstadoDeCobro(clave, { enCurso: null });
+    expect(leerEstadoDeCobro(clave)).toEqual({ enCurso: null, partesTotales: null });
+    for (const raro of [1, 51, 2.5, '3', null]) {
+      localStorage.setItem(clave, JSON.stringify({ enCurso: null, partesTotales: raro }));
+      expect(leerEstadoDeCobro(clave).partesTotales).toBeNull();
+    }
+    recordarEnCobro(clave, { partesTotales: 4 });
+    recordarEnCobro(clave, { partesTotales: null });
     expect(localStorage.getItem(clave)).toBeNull();
   });
 });

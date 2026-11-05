@@ -1,6 +1,13 @@
 import type { CuentaRespuesta } from '@restaurante/contratos';
 import { MAXIMO_PARTES_IGUALES } from '@restaurante/dominio';
-import { ContadorGrande, SelectorDeCantidad, Segmentos, EtiquetaDeEstado } from '@restaurante/ui';
+import {
+  Aviso,
+  Boton,
+  ContadorGrande,
+  EtiquetaDeEstado,
+  SelectorDeCantidad,
+  Segmentos,
+} from '@restaurante/ui';
 import { montoEnSoles } from '../../lib/monto';
 import { unidadesPorCobrar, type ParteDePantalla } from './cobro';
 
@@ -27,6 +34,11 @@ interface Props {
   onPartesElegidas: (partes: number) => void;
   plan: PlanDeIguales;
   parte: ParteDePantalla;
+  /**
+   * Hay partes iguales ya cobradas y este equipo no sabe en cuántas se dividió la cuenta (se siguió desde otro): se
+   * pide confirmar el total antes de cobrar, sin proponer el saldo completo.
+   */
+  porConfirmar: { total: number; onTotal: (total: number) => void; onConfirmar: () => void } | null;
 }
 
 const MENSAJE_DE_PARTE: Record<Extract<ParteDePantalla, { ok: false }>['motivo'], string> = {
@@ -35,6 +47,7 @@ const MENSAJE_DE_PARTE: Record<Extract<ParteDePantalla, { ok: false }>['motivo']
   NADA_QUE_COBRAR: 'No queda nada por cobrar en esta cuenta.',
   DESCUADRADA:
     'Los cobros anteriores ya no cuadran con la cuenta. Actualiza la pantalla o cobra lo que falta.',
+  PARTES_SIN_CONFIRMAR: 'Confirma en cuántas partes se dividió la cuenta para cobrar la que sigue.',
 };
 
 /** «Qué cobras» (criterios 64 a 68 y 113): toda la cuenta, unidades elegidas por ítem o partes iguales. */
@@ -49,6 +62,7 @@ export function PartePanel({
   onPartesElegidas,
   plan,
   parte,
+  porConfirmar,
 }: Props) {
   const conCobros = cuenta.cobros.length > 0;
   // Después de partes iguales solo siguen partes iguales («Lo que falta» es la última), sin elegir el modo.
@@ -103,7 +117,46 @@ export function PartePanel({
         </ul>
       ) : null}
 
-      {modo === 'IGUALES' ? (
+      {modo === 'IGUALES' && porConfirmar ? (
+        <div className="cobro__bloque">
+          <Aviso
+            tipo="alerta"
+            titulo={
+              plan.pagadas.length === 1
+                ? 'Ya se cobró 1 parte igual de esta cuenta'
+                : `Ya se cobraron ${plan.pagadas.length} partes iguales de esta cuenta`
+            }
+          >
+            Este equipo no sabe en cuántas partes se dividió. Confírmalo antes de cobrar la que
+            sigue.
+          </Aviso>
+          <ul className="cobro__lista" aria-label="Partes ya cobradas">
+            {plan.pagadas.map((numero, i) => (
+              <li key={numero}>
+                <div className="cobro__fila">
+                  <span className="cobro__fila-texto">
+                    <b>{`Parte ${i + 1}`}</b>
+                  </span>
+                  <EtiquetaDeEstado tono="ok">{`Pagada · ${numero}`}</EtiquetaDeEstado>
+                </div>
+              </li>
+            ))}
+          </ul>
+          <ContadorGrande
+            nombre="partes en total"
+            unidad="partes en total"
+            valor={porConfirmar.total}
+            minimo={plan.pagadas.length + 1}
+            maximo={MAXIMO_PARTES_IGUALES}
+            onCambio={porConfirmar.onTotal}
+          />
+          <Boton variante="secundario" bloque onClick={porConfirmar.onConfirmar}>
+            {`Se dividió en ${porConfirmar.total} partes`}
+          </Boton>
+        </div>
+      ) : null}
+
+      {modo === 'IGUALES' && !porConfirmar ? (
         <div className="cobro__bloque">
           {plan.pagadas.length > 0 ? (
             <ul className="cobro__lista" aria-label="Partes de la cuenta">

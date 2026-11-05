@@ -90,7 +90,10 @@ export type ParteDePantalla =
       /** El detalle calculado por `calcularParte`. */
       calculada: ParteCalculada;
     }
-  | { ok: false; motivo: 'VACIA' | 'INVALIDA' | 'NADA_QUE_COBRAR' | 'DESCUADRADA' };
+  | {
+      ok: false;
+      motivo: 'VACIA' | 'INVALIDA' | 'NADA_QUE_COBRAR' | 'DESCUADRADA' | 'PARTES_SIN_CONFIRMAR';
+    };
 
 /** La parte de dominio de una selección de la pantalla. */
 export function parteDeSeleccion(seleccion: Seleccion): ParteEntrada | null {

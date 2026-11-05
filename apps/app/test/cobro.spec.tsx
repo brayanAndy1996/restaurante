@@ -578,25 +578,7 @@ describe('Dividir la cuenta (criterios 64 a 68 y 113)', () => {
     expect(screen.getByText('Mesa 4 libre')).toBeVisible();
   });
 
-  it('no recuerda partes en el equipo: de lo cobrado solo queda el id del cobro en curso, y se borra al terminar', async () => {
-    montar({
-      extra: {
-        [`POST ${API_COBROS}`]: ({ cuerpo }) =>
-          json(201, respuestaDe(cuerpo as CobroEntrada, { estado: 'ABIERTA', saldo: '31.50' })),
-      },
-    });
-    renderApp(RUTA);
-    await screen.findByRole('button', { name: 'Cobrar S/\u00a068.50' });
-    await userEvent.click(screen.getByRole('button', { name: 'Por ítems' }));
-    await userEvent.click(
-      screen.getByRole('button', { name: 'Agregar una unidad de Lomo saltado' }),
-    );
-    await userEvent.click(boton('Cobrar S/\u00a028.00'));
-    await screen.findByText('Falta cobrar S/ 31.50');
-    expect(Object.keys(localStorage).filter((k) => k.startsWith('restaurante.cobro.'))).toEqual([]);
-  });
-
-  describe('dividir desde cualquier equipo: los cobros de la cuenta traen su detalle', () => {
+  describe('dividir en partes: los cobros de la cuenta traen su detalle y el equipo recuerda el total de partes', () => {
     const OTRA = { id: uuid(801), nombre: 'Luis Soto' };
     const cobroDe = (n: number, detalle: DetalleParte, numero: string, por = OTRA) => ({
       id: uuid(8000 + n),
@@ -618,6 +600,139 @@ describe('Dividir la cuenta (criterios 64 a 68 y 113)', () => {
       const { valida: _valida, ...detalle } = r;
       return detalle;
     };
+
+    const CLAVE_LOCAL = () =>
+      Object.keys(localStorage).filter((k) => k.startsWith('restaurante.cobro.'));
+
+    it('por ítems no deja nada en el equipo: la clave del cobro solo guarda el cobro en curso y la división en partes iguales', async () => {
+      montar({
+        extra: {
+          [`POST ${API_COBROS}`]: ({ cuerpo }) =>
+            json(201, respuestaDe(cuerpo as CobroEntrada, { estado: 'ABIERTA', saldo: '31.50' })),
+        },
+      });
+      renderApp(RUTA);
+      await screen.findByRole('button', { name: 'Cobrar S/\u00a068.50' });
+      await userEvent.click(screen.getByRole('button', { name: 'Por ítems' }));
+      await userEvent.click(
+        screen.getByRole('button', { name: 'Agregar una unidad de Lomo saltado' }),
+      );
+      await userEvent.click(boton('Cobrar S/\u00a028.00'));
+      await screen.findByText('Falta cobrar S/ 31.50');
+      expect(CLAVE_LOCAL()).toEqual([]);
+    });
+
+    it('en partes iguales el equipo recuerda en cuántas se dividió (criterios 65 y 113) y lo borra al cerrar la cuenta', async () => {
+      const base = cuenta();
+      const primera = parteDe(base, [], { tipo: 'IGUALES', partesRestantes: 3 }, 'CONSUMO');
+      const c1 = cuenta({
+        version: 4,
+        cobrado: primera.totales.total,
+        saldo: '45.67',
+        modo: 'IGUALES',
+        cobros: [cobroDe(0, primera, 'B001-00000124')],
+      });
+      const segunda = parteDe(c1, [primera], { tipo: 'IGUALES', partesRestantes: 2 }, 'CONSUMO');
+      const c2 = cuenta({
+        version: 5,
+        cobrado: '45.66',
+        saldo: '22.84',
+        modo: 'IGUALES',
+        cobros: [cobroDe(0, primera, 'B001-00000124'), cobroDe(1, segunda, 'B001-00000125')],
+      });
+      let hechas = 0;
+      const s = montar({
+        cuenta: () => (hechas === 0 ? base : hechas === 1 ? c1 : c2),
+        extra: {
+          [`POST ${API_COBROS}`]: ({ cuerpo }) => {
+            hechas += 1;
+            return json(
+              201,
+              respuestaDe(cuerpo as CobroEntrada, {
+                estado: hechas === 3 ? 'CERRADA' : 'ABIERTA',
+                saldo: hechas === 1 ? '45.67' : hechas === 2 ? '22.84' : '0.00',
+              }),
+            );
+          },
+        },
+      });
+      renderApp(RUTA);
+      await screen.findByRole('button', { name: 'Cobrar S/\u00a068.50' });
+      await userEvent.click(screen.getByRole('button', { name: 'Partes iguales' }));
+      await userEvent.click(screen.getByRole('button', { name: 'Agregar uno a partes' }));
+      // Elegir cuántas partes ya lo guarda, aunque todavía no se cobre nada.
+      const clave = CLAVE_LOCAL();
+      expect(clave).toHaveLength(1);
+      expect(JSON.parse(localStorage.getItem(clave[0]!) ?? '{}')).toMatchObject({
+        partesTotales: 3,
+      });
+      await userEvent.click(await screen.findByRole('button', { name: /Cobrar la parte 1 de 3/ }));
+      await screen.findByText('Parte 1 de 3 de Mesa 4.');
+      await userEvent.click(screen.getByRole('button', { name: 'Cobrar la parte 2 de 3' }));
+      await userEvent.click(
+        await screen.findByRole('button', { name: /Cobrar la parte 2 de 3 ·/ }),
+      );
+      await screen.findByText('Parte 2 de 3 de Mesa 4.');
+      expect(JSON.parse(localStorage.getItem(clave[0]!) ?? '{}')).toMatchObject({
+        partesTotales: 3,
+      });
+      await userEvent.click(screen.getByRole('button', { name: 'Cobrar la parte 3 de 3' }));
+      await userEvent.click(
+        await screen.findByRole('button', { name: /Cobrar la parte 3 de 3 ·/ }),
+      );
+      await screen.findByText('Parte 3 de 3 de Mesa 4.');
+      expect(entradaDe(s, 2)).toMatchObject({ parte: { tipo: 'IGUALES', partesRestantes: 1 } });
+      expect(CLAVE_LOCAL()).toEqual([]);
+    });
+
+    it('si se recarga la pantalla entre partes, propone las que faltan según el total recordado y no el saldo entero', async () => {
+      const base = cuenta();
+      const primera = parteDe(base, [], { tipo: 'IGUALES', partesRestantes: 3 }, 'CONSUMO');
+      const c1 = cuenta({
+        version: 4,
+        cobrado: primera.totales.total,
+        saldo: '45.67',
+        modo: 'IGUALES',
+        cobros: [cobroDe(0, primera, 'B001-00000124')],
+      });
+      const esperada = parteDe(c1, [primera], { tipo: 'IGUALES', partesRestantes: 2 }, 'CONSUMO');
+      let hechas = 0;
+      const s = montar({
+        cuenta: () => (hechas === 0 ? base : c1),
+        extra: {
+          [`POST ${API_COBROS}`]: ({ cuerpo }) => {
+            hechas += 1;
+            return json(
+              201,
+              respuestaDe(cuerpo as CobroEntrada, { estado: 'ABIERTA', saldo: '45.67' }),
+            );
+          },
+        },
+      });
+      const primeraVez = renderApp(RUTA);
+      await screen.findByRole('button', { name: 'Cobrar S/\u00a068.50' });
+      await userEvent.click(screen.getByRole('button', { name: 'Partes iguales' }));
+      await userEvent.click(screen.getByRole('button', { name: 'Agregar uno a partes' }));
+      await userEvent.click(await screen.findByRole('button', { name: /Cobrar la parte 1 de 3/ }));
+      await screen.findByText('Parte 1 de 3 de Mesa 4.');
+      // El equipo se recarga: la pantalla se arma de nuevo con lo que dice la API y lo que el equipo recordó.
+      primeraVez.unmount();
+      renderApp(RUTA);
+      const siguiente = await screen.findByRole('button', { name: /Cobrar la parte 2 de 3/ });
+      expect(siguiente).toHaveTextContent(
+        (montoEnSoles(esperada.totales.total) ?? '').replace('\u00a0', ' '),
+      );
+      expect(screen.queryByText(/Ya se cobró 1 parte igual/)).toBeNull();
+      const lista = screen.getByRole('list', { name: 'Partes de la cuenta' });
+      expect(within(lista).getByText('Pagada · B001-00000124')).toBeVisible();
+      expect(within(lista).getByText('Parte 3 de 3')).toBeVisible();
+      await userEvent.click(siguiente);
+      await screen.findByText('Parte 2 de 3 de Mesa 4.');
+      expect(entradaDe(s, 1)).toMatchObject({
+        total: esperada.totales.total,
+        parte: { tipo: 'IGUALES', partesRestantes: 2 },
+      });
+    });
 
     it('por ítems: un cobro de otro equipo no cierra la división y la parte siguiente es la del dominio', async () => {
       const base = cuenta();
@@ -666,7 +781,7 @@ describe('Dividir la cuenta (criterios 64 a 68 y 113)', () => {
       });
     });
 
-    it('en partes iguales: la parte 1 se cobró en otro equipo y aquí siguen las que faltan', async () => {
+    it('en partes iguales: la parte 1 se cobró en otro equipo y aquí se confirma en cuántas se dividió antes de cobrar', async () => {
       const base = cuenta();
       const primera = parteDe(base, [], { tipo: 'IGUALES', partesRestantes: 3 }, 'CONSUMO');
       const saldo = (68.5 - Number(primera.totales.total)).toFixed(2);
@@ -691,19 +806,24 @@ describe('Dividir la cuenta (criterios 64 a 68 y 113)', () => {
         },
       });
       renderApp(RUTA);
-      // «Lo que falta» es la última parte (1 restante): hasta que se diga cuántas faltan, es todo el saldo.
-      await screen.findByRole('button', { name: /Cobrar la parte 2 de 2/ });
-      expect(screen.queryByText(/desde otro equipo/)).toBeNull();
+      // Este equipo no sabe en cuántas partes se dividió: lo dice y pide confirmarlo; no propone cobrar el saldo entero.
+      expect(await screen.findByText('Ya se cobró 1 parte igual de esta cuenta')).toBeVisible();
+      expect(screen.queryByRole('button', { name: /Cobrar la parte/ })).toBeNull();
+      expect(boton('Cobrar')).toBeDisabled();
+      expect(screen.getByText('Confirma en cuántas partes se dividió la cuenta.')).toBeVisible();
       expect(screen.queryByRole('button', { name: 'Por ítems' })).toBeNull();
-      const lista = screen.getByRole('list', { name: 'Partes de la cuenta' });
-      expect(within(lista).getByText('Pagada · B001-00000124')).toBeVisible();
-      // Faltan dos: la parte siguiente es la del dominio.
-      await userEvent.click(
-        screen.getByRole('button', { name: 'Agregar uno a partes que faltan' }),
-      );
+      const cobradas = screen.getByRole('list', { name: 'Partes ya cobradas' });
+      expect(within(cobradas).getByText('Pagada · B001-00000124')).toBeVisible();
+      expect(CLAVE_LOCAL()).toEqual([]);
+      // La persona dice que fueron 3 en total (el contador no parte del saldo entero: arranca en 3).
+      await userEvent.click(boton('Se dividió en 3 partes'));
       const total = montoEnSoles(esperada.totales.total) ?? '';
       const boton3 = await screen.findByRole('button', { name: /Cobrar la parte 2 de 3/ });
       expect(boton3).toHaveTextContent(total.replace('\u00a0', ' '));
+      expect(screen.queryByText('Ya se cobró 1 parte igual de esta cuenta')).toBeNull();
+      expect(JSON.parse(localStorage.getItem(CLAVE_LOCAL()[0]!) ?? '{}')).toMatchObject({
+        partesTotales: 3,
+      });
       await userEvent.click(boton3);
       await screen.findByText('Parte 2 de 3 de Mesa 4.');
       expect(entradaDe(s)).toMatchObject({

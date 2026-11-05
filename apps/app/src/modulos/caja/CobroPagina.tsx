@@ -42,7 +42,7 @@ import {
 } from './cobro';
 import { ComprobantePanel } from './ComprobantePanel';
 import { claveDeCuenta, leerCuenta, rutaDeCuenta, sePuedeAjustar, tituloDeCuenta } from './cuenta';
-import { claveDeCobro, guardarEstadoDeCobro, leerEstadoDeCobro } from './partes';
+import { claveDeCobro, leerEstadoDeCobro, recordarEnCobro } from './partes';
 import { PagosPanel, pagoNuevo } from './PagosPanel';
 import { PartePanel, type ModoDeCobro, type PlanDeIguales } from './PartePanel';
 import { ResultadoDeCobro } from './ResultadoDeCobro';
@@ -135,18 +135,28 @@ function Cobro({ ordenId, empresaId, usuarioId, sucursalId, atras }: PropsCobro)
   const cuenta = consulta.data;
   const turno = turnoConsulta.data ?? null;
 
-  // El `id` del cobro que se mandó y aún no tiene respuesta final: es lo único que este equipo recuerda del cobro.
+  // Este equipo recuerda del cobro dos cosas (criterios 55 y 65): el `id` del cobro que se mandó y aún no tiene respuesta
+  // final, y en cuántas partes iguales se dividió la cuenta.
   const [enCurso, setEnCursoLocal] = useState(() => leerEstadoDeCobro(claveEstado).enCurso);
   const recordarEnCurso = (nuevo: { id: string; huella: string } | null) => {
     setEnCursoLocal(nuevo);
-    guardarEstadoDeCobro(claveEstado, { enCurso: nuevo });
+    recordarEnCobro(claveEstado, { enCurso: nuevo });
   };
 
   const [modo, setModo] = useState<ModoDeCobro>('TOTAL');
   const [unidades, setUnidades] = useState<Record<string, number>>({});
-  // En cuántas partes iguales se divide la cuenta; `null` hasta que la persona lo cambie. Se guarda el total (no las que
-  // faltan) para que, si otro equipo cobra una parte, las que faltan aquí se ajusten solas.
-  const [partesTotales, setPartesTotales] = useState<number | null>(null);
+  // En cuántas partes iguales se divide la cuenta, contando las ya cobradas; `null` si este equipo no lo sabe. Se guarda
+  // el total (no las que faltan) en el equipo para que, al recargar o si otro equipo cobra una parte, las que faltan
+  // aquí se ajusten solas.
+  const [partesTotales, setPartesTotalesLocal] = useState<number | null>(
+    () => leerEstadoDeCobro(claveEstado).partesTotales,
+  );
+  const setPartesTotales = (total: number | null) => {
+    setPartesTotalesLocal(total);
+    recordarEnCobro(claveEstado, { partesTotales: total });
+  };
+  // El total que se propone al confirmar cuando este equipo no lo sabe (no es el saldo completo: eso sería adivinar).
+  const [totalPorConfirmar, setTotalPorConfirmar] = useState<number | null>(null);
   const [tipo, setTipo] = useState<'BOLETA' | 'FACTURA'>('BOLETA');
   const [formato, setFormato] = useState<FormatoDeCobro>('DETALLADO');
   const [cliente, setCliente] = useState<ClienteEscrito>(CLIENTE_VACIO);
@@ -161,6 +171,13 @@ function Cobro({ ordenId, empresaId, usuarioId, sucursalId, atras }: PropsCobro)
     if (fallo) alertaDeFallo.current?.scrollIntoView?.({ block: 'start' });
   }, [fallo]);
   const [cobrando, setCobrando] = useState(false);
+  // Una cuenta que ya no está abierta no necesita recordar su división.
+  const cuentaAbierta = cuenta
+    ? cuenta.estado === 'ABIERTA' || cuenta.estado === 'EN_PRECUENTA'
+    : null;
+  useEffect(() => {
+    if (cuentaAbierta === false) recordarEnCobro(claveEstado, { partesTotales: null });
+  }, [cuentaAbierta, claveEstado]);
 
   // --- Lo que se cobra ---------------------------------------------------------------------------------
   // Todo sale de la cuenta que dice la API: cada cobro trae su `detalleParte`, así que se divide desde cualquier equipo.
@@ -173,15 +190,19 @@ function Cobro({ ordenId, empresaId, usuarioId, sucursalId, atras }: PropsCobro)
   };
   // Después de partes iguales solo siguen partes iguales; «lo que falta» es la última (1 restante).
   const soloIguales = cuenta?.modo === 'IGUALES';
-  const minimoDePartes = plan.pagadas.length > 0 ? 1 : 2;
+  const pagadas = plan.pagadas.length;
+  const minimoDePartes = pagadas > 0 ? 1 : 2;
+  // El total solo vale si deja al menos una parte por pagar; si no (la cuenta creció después de la última parte, o el
+  // total guardado quedó viejo), se vuelve a preguntar.
+  const totalConocido = partesTotales !== null && partesTotales > pagadas ? partesTotales : null;
+  // Con partes ya cobradas y sin total, no se propone nada: antes de cobrar la persona confirma en cuántas se dividió.
+  const sinConfirmar = pagadas > 0 && totalConocido === null;
   const partesRestantes = Math.min(
     MAXIMO_PARTES_IGUALES,
-    Math.max(
-      minimoDePartes,
-      partesTotales === null ? minimoDePartes : partesTotales - plan.pagadas.length,
-    ),
+    Math.max(minimoDePartes, totalConocido === null ? minimoDePartes : totalConocido - pagadas),
   );
   const modoVigente: ModoDeCobro = soloIguales ? 'IGUALES' : modo;
+  const porConfirmar = modoVigente === 'IGUALES' && sinConfirmar;
   const seleccion: Seleccion =
     modoVigente === 'IGUALES'
       ? { tipo: 'IGUALES', partesRestantes }
@@ -192,10 +213,15 @@ function Cobro({ ordenId, empresaId, usuarioId, sucursalId, atras }: PropsCobro)
   const formatoVigente: FormatoDeCobro = soloConsumo ? 'CONSUMO' : formato;
 
   const parte = useMemo(
-    () => (cuenta ? calcularLaParte(cuenta, anteriores, seleccion, formatoVigente) : null),
+    () =>
+      !cuenta
+        ? null
+        : porConfirmar
+          ? ({ ok: false, motivo: 'PARTES_SIN_CONFIRMAR' } as const)
+          : calcularLaParte(cuenta, anteriores, seleccion, formatoVigente),
     // `seleccion` se reconstruye cada vez: lo que cuenta es lo que la compone.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [cuenta, anteriores, modoVigente, unidades, partesRestantes, formatoVigente],
+    [cuenta, anteriores, modoVigente, unidades, partesRestantes, formatoVigente, porConfirmar],
   );
   const totalDeLaParte = parte?.ok ? parte.total : TOTAL_VACIO;
   const clienteValidado = validarCliente(tipo, totalDeLaParte, cliente);
@@ -318,7 +344,9 @@ function Cobro({ ordenId, empresaId, usuarioId, sucursalId, atras }: PropsCobro)
     ? 'Cobrar'
     : `${enCurso && fallo?.repetir ? 'Reintentar el cobro' : modoVigente === 'IGUALES' ? `Cobrar la parte ${plan.pagadas.length + 1} de ${plan.pagadas.length + partesRestantes}` : 'Cobrar'} ${modoVigente === 'IGUALES' ? '· ' : ''}${montoEnSoles(parte.total) ?? ''}`;
   const motivo = !parte?.ok
-    ? null
+    ? parte?.motivo === 'PARTES_SIN_CONFIRMAR'
+      ? 'Confirma en cuántas partes se dividió la cuenta.'
+      : null
     : !clienteValidado.ok
       ? 'Faltan los datos del cliente.'
       : resumen.problema === null
@@ -352,6 +380,10 @@ function Cobro({ ordenId, empresaId, usuarioId, sucursalId, atras }: PropsCobro)
     const guardado = leerEstadoDeCobro(claveEstado).enCurso;
     const id = guardado?.huella === huella ? guardado.id : nuevaClaveDeIdempotencia();
     recordarEnCurso({ id, huella });
+    // Lo que se cobra como parte igual fija la división: la siguiente (aquí, tras recargar o en otro turno) sigue en ella.
+    if (parte.entrada.tipo === 'IGUALES') {
+      setPartesTotales(plan.pagadas.length + parte.entrada.partesRestantes);
+    }
     try {
       const respuesta = await envio.enviar(
         (extra) =>
@@ -361,6 +393,9 @@ function Cobro({ ordenId, empresaId, usuarioId, sucursalId, atras }: PropsCobro)
         id,
       );
       recordarEnCurso(null);
+      if (respuesta.cuenta.estado !== 'ABIERTA' && respuesta.cuenta.estado !== 'EN_PRECUENTA') {
+        setPartesTotales(null);
+      }
       void clientes.invalidateQueries({ queryKey: CLAVES_TIEMPO_REAL.orden(ordenId) });
       void clientes.invalidateQueries({ queryKey: CLAVES_TIEMPO_REAL.salon });
       void clientes.invalidateQueries({ queryKey: CLAVES_TIEMPO_REAL.turno });
@@ -491,6 +526,18 @@ function Cobro({ ordenId, empresaId, usuarioId, sucursalId, atras }: PropsCobro)
           onPartesElegidas={(faltan) => setPartesTotales(plan.pagadas.length + faltan)}
           plan={plan}
           parte={parte ?? { ok: false, motivo: 'VACIA' }}
+          porConfirmar={
+            porConfirmar
+              ? {
+                  total: totalPorConfirmar ?? Math.min(MAXIMO_PARTES_IGUALES, pagadas + 2),
+                  onTotal: setTotalPorConfirmar,
+                  onConfirmar: () =>
+                    setPartesTotales(
+                      totalPorConfirmar ?? Math.min(MAXIMO_PARTES_IGUALES, pagadas + 2),
+                    ),
+                }
+              : null
+          }
         />
 
         <DesgloseDeLaParte cuenta={cuenta} parte={parte} />
