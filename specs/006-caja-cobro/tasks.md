@@ -71,7 +71,7 @@ Commit propio.
 
 - [x] T9 · backend · Migración 2 (si no entró en T6) y lo que falte de `caja`; `TurnosService` según "Turno y cierre" de `plan.md`: apertura con `exigirAperturaDeCaja`, réplica por `id`, índices únicos, movimientos, X con `reportes-caja.ts`, cierre con los bloqueos, el arqueo a ciegas, `turno_conteo`, `cerrar_turno` en la auditoría y `turno.cambio`; rutas con `OPERAR_CAJA` y `CAJA`; agregar `modulos/caja/turnos.service.ts` a `PERMITIDOS` en `apps/api/test/suscripciones/suspension.spec.ts` (no protegida). Sin impresión todavía. Deja en verde P3 salvo lo que depende de cobros (el X con cobros y el cobro contra el cierre). (criterios 24 a 35, 97 en `turno.cambio`)
 - [x] T10 · frontend · `/caja` sin turno y con turno: cajas, "Abrir caja" con fondo, "Movimientos", "Reporte X" en pantalla y "Cerrar caja" con el conteo a ciegas, los motivos y `CIERRE_BLOQUEADO` con la lista; la navegación del criterio 108. Bajo demanda. Pruebas de componente. (criterios 108 a 110, 116)
-- [ ] T11 · tester · Suite completa, lint, tipos, build y presupuesto. Pueden seguir en rojo: P2, P5, el resto de P3, P4 y P6.
+- [x] T11 · tester · Suite completa, lint, tipos, build y presupuesto. Pueden seguir en rojo: P2, P5, el resto de P3, P4 y P6.
 
 #### C3 · RF-33, HU-03: descuentos y cortesías con clave atada
 
