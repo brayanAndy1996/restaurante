@@ -110,7 +110,7 @@ export function textoDelQr(c: ComprobanteParaTicket): string {
     cliente === null ? '-' : cliente.numero,
     '',
   ]
-    .map((parte) => limpiarTexto(parte).replace(/\|/g, ' '))
+    .map((parte) => limpiarTexto(parte.replace(/\|/g, ' ')))
     .join('|');
   return Array.from(texto).slice(0, LARGO_TEXTO_QR_TICKET).join('');
 }
