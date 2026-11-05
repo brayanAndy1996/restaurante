@@ -5,16 +5,19 @@ import type {
   EnvioRespuesta,
   LineaEnvioEntradaValidada,
 } from '@restaurante/contratos';
-import type {
-  AfectacionIgv,
-  EstadoOrden,
-  ModoCobro,
-  TipoOrden,
-  TipoParte,
+import {
+  diaOperativo,
+  type AfectacionIgv,
+  type EstadoOrden,
+  type ModoCobro,
+  type TipoOrden,
+  type TipoParte,
 } from '@restaurante/dominio';
 import { QueryTypes, type Sequelize } from 'sequelize';
 import { CONEXION_API } from '../../nucleo/base-de-datos';
-import { noImplementado } from '../../nucleo/errores';
+import { ContextoEmpresa } from '../../nucleo/contexto-empresa';
+import { RELOJ, type Reloj } from '../../nucleo/reloj';
+import { SucursalesConsultaService } from '../plataforma';
 import { MesasConsultaService } from '../salon';
 import { SesionActual, UsuariosConsultaService } from '../seguridad';
 import { bloquearOrden, exigirOrdenAbierta } from './bloqueos-orden';
@@ -26,10 +29,17 @@ import {
   respuestasDeCuenta,
   type DatosDeCuenta,
 } from './cuenta-de-orden';
-import { operacionConcurrente, ordenNoEncontrada } from './errores-pedidos';
+import { EnviosService } from './envios.service';
+import {
+  idDeClienteReutilizado,
+  operacionConcurrente,
+  ordenNoEncontrada,
+} from './errores-pedidos';
 import { EventosPedidos } from './eventos-pedidos';
+import { LlamadosMostrador } from './llamados-mostrador';
 import { mesasVigentesDeOrden } from './mesas-de-orden';
 import { invalidarPrecuentaVigente } from './precuenta-invalidacion';
+import { VistaOrdenService } from './vista-orden';
 
 /**
  * Lo que la caja necesita de las órdenes (historia 006, "Interfaces de la API"). Pedidos es dueño de las órdenes, los
@@ -144,6 +154,12 @@ export class CuentasDePedidos {
     @Inject(UsuariosConsultaService) private readonly usuarios: UsuariosConsultaService,
     @Inject(MesasConsultaService) private readonly mesas: MesasConsultaService,
     @Inject(EventosPedidos) private readonly eventos: EventosPedidos,
+    @Inject(ContextoEmpresa) private readonly contexto: ContextoEmpresa,
+    @Inject(RELOJ) private readonly reloj: Reloj,
+    @Inject(SucursalesConsultaService) private readonly sucursales: SucursalesConsultaService,
+    @Inject(LlamadosMostrador) private readonly llamados: LlamadosMostrador,
+    @Inject(EnviosService) private readonly envios: EnviosService,
+    @Inject(VistaOrdenService) private readonly vista: VistaOrdenService,
   ) {}
 
   /**
@@ -322,7 +338,8 @@ export class CuentasDePedidos {
       if (antes.estado === 'EN_PRECUENTA') {
         await invalidarPrecuentaVigente(this.conexion, cobro.ordenId, cobro.ahora);
       }
-      this.eventos.salonCambio(antes.sucursal_id, cobro.ordenId, mesaIds);
+      // La venta de mostrador no tiene mesas: no hay mapa que refrescar.
+      if (mesaIds.length > 0) this.eventos.salonCambio(antes.sucursal_id, cobro.ordenId, mesaIds);
     }
     this.eventos.ordenCambio(antes.sucursal_id, cobro.ordenId);
     return { estado: despues!.estado, version: despues!.version };
@@ -331,9 +348,54 @@ export class CuentasDePedidos {
   /**
    * Crea la orden `MOSTRADOR` (canal `SALON`, sin mesa ni mozo, 1 comensal), toma su número de llamado y corre el
    * envío de 004 con sus validaciones, su puerto de inventario y sus comandas con el número de llamado
-   * (criterios 80 a 82).
+   * (criterios 80 a 82). Todo dentro de la transacción de quien llama: si algo lanza después (los pagos, el total, el
+   * turno), la orden, el envío, las comandas, el número de llamado y la llamada al inventario se revierten juntos.
+   * El `id` de la venta es el de la orden y el del envío; la réplica por `id` la resuelve quien llama antes de
+   * abrir nada, así que un `id` que ya es de otra orden es 422 `CLAVE_IDEMPOTENCIA_REUTILIZADA`.
    */
-  async abrirYEnviarMostrador(_datos: MostradorParaAbrir): Promise<MostradorAbierto> {
-    throw noImplementado();
+  async abrirYEnviarMostrador(datos: MostradorParaAbrir): Promise<MostradorAbierto> {
+    const sucursalId = this.sesion.sucursalActiva();
+    const empresaId = this.contexto.empresaActual();
+    const id = datos.id.toLowerCase();
+    const ahora = this.reloj.ahora();
+    const horaCorte = await this.sucursales.horaCorte(sucursalId);
+    const dia = diaOperativo(ahora, horaCorte ?? '00:00');
+    const numeroLlamado = await this.llamados.siguiente(sucursalId, dia);
+
+    const insertada = await this.conexion.query<{ id: string }>(
+      `INSERT INTO orden (id, empresa_id, sucursal_id, tipo, canal, estado, mozo_id, comensales, abierta_en,
+                          sin_consumo, version, numero_llamado, dia_operativo_llamado, creado_en, actualizado_en)
+       VALUES ($1, $2, $3, 'MOSTRADOR', 'SALON', 'ABIERTA', NULL, 1, $4, false, 1, $5, $6::date, $4, $4)
+       ON CONFLICT DO NOTHING
+       RETURNING id`,
+      {
+        bind: [id, empresaId, sucursalId, ahora, numeroLlamado, dia],
+        type: QueryTypes.SELECT,
+      },
+    );
+    // El `id` ya es de otra orden (de la empresa): no es una réplica de esta venta.
+    if (insertada.length === 0) throw idDeClienteReutilizado();
+
+    const envio = await this.envios.enviar(id, { id, lineas: [...datos.lineas] });
+    return { ordenId: id, numeroLlamado, envio };
+  }
+
+  /**
+   * La venta de mostrador ya hecha con ese `id`, tal como salió (la réplica, criterio 83): su número de llamado y su
+   * envío. `undefined` si la orden no existe, no es de mostrador o es de otra sucursal.
+   */
+  async mostradorDe(ordenId: string): Promise<MostradorAbierto | undefined> {
+    const sucursalId = this.sesion.sucursalActiva();
+    const filas = await this.conexion.query<{ numero_llamado: number | null }>(
+      `SELECT numero_llamado FROM orden WHERE id = $1 AND sucursal_id = $2 AND tipo = 'MOSTRADOR'`,
+      { bind: [ordenId, sucursalId], type: QueryTypes.SELECT },
+    );
+    const numeroLlamado = filas[0]?.numero_llamado;
+    if (numeroLlamado === undefined || numeroLlamado === null) return undefined;
+    return {
+      ordenId,
+      numeroLlamado,
+      envio: await this.vista.armarEnvio(ordenId, sucursalId),
+    };
   }
 }

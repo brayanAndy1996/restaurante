@@ -67,7 +67,7 @@ function dosDecimales(monto: string): string {
 }
 
 /** El cliente del comprobante de la entrada, tal como se compara y se guarda. */
-interface ClienteNormalizado {
+export interface ClienteNormalizado {
   tipoDocumento: 'DNI' | 'CE' | 'PASAPORTE' | 'RUC';
   numero: string;
   nombre: string;
@@ -75,7 +75,7 @@ interface ClienteNormalizado {
 }
 
 /** La entrada de un cobro normalizada: ids en minúsculas y montos con 2 decimales. Es lo que se compara y se guarda. */
-interface EntradaNormalizada {
+export interface EntradaNormalizada {
   ordenId: string;
   turnoId: string;
   total: string;
@@ -89,7 +89,7 @@ interface EntradaNormalizada {
   redondeo: string;
 }
 
-function normalizar(ordenId: string, entrada: CobroEntradaValidada): EntradaNormalizada {
+export function normalizar(ordenId: string, entrada: CobroEntradaValidada): EntradaNormalizada {
   const parte: CobroRespuesta['parte'] =
     entrada.parte.tipo === 'ITEMS'
       ? {
@@ -150,7 +150,7 @@ function huellaDe(e: EntradaNormalizada): Buffer {
 }
 
 /** 422 `MONTO_FUERA_DE_RANGO` si el total, un pago o un recibido pasa de `99999999.99` (criterio 62). */
-function exigirMontosEnRango(e: EntradaNormalizada): void {
+export function exigirMontosEnRango(e: EntradaNormalizada): void {
   if (excedeMontoMaximo(e.total)) throw montoFueraDeRango('total');
   e.pagos.forEach((p, i) => {
     if (excedeMontoMaximo(p.monto)) throw montoFueraDeRango(`pagos.${i}.monto`);
@@ -160,7 +160,7 @@ function exigirMontosEnRango(e: EntradaNormalizada): void {
   });
 }
 
-interface FilaTurnoDeCobro {
+export interface FilaTurnoDeCobro {
   id: string;
   caja_id: string;
   responsable_id: string;
@@ -334,6 +334,27 @@ export class CobrosService {
     const turno = await this.turnoParaCobrar(normal.turnoId, sucursalId);
     const instante = this.reloj.ahora();
     const parametros = await this.parametros.de(sucursalId, instante);
+    this.exigirComprobantePermitido(normal, parametros);
+
+    return this.liquidar({
+      id,
+      ordenId,
+      sucursalId,
+      cuenta,
+      turno,
+      normal,
+      huella,
+      parametros,
+      instante,
+      alCambiarElTotal: () => cuentaCambio(cuenta.version),
+    });
+  }
+
+  /**
+   * El tipo y el formato del comprobante contra los parámetros del emisor y la tasa de IGV (criterios 50 y 70): 409
+   * `COMPROBANTE_NO_PERMITIDO` o `TASA_IGV_NO_CONFIGURADA`, antes de numerar nada. Lo comparte la venta de mostrador.
+   */
+  exigirComprobantePermitido(normal: EntradaNormalizada, parametros: Parametros): void {
     if (!parametros.tiposPermitidos.includes(normal.comprobante.tipo)) {
       throw comprobanteNoPermitido(
         'El emisor solo puede emitir boletas de venta',
@@ -349,7 +370,27 @@ export class CobrosService {
     if (parametros.regimen !== 'NUEVO_RUS' && parametros.tasaIgv === null) {
       throw tasaIgvNoConfigurada();
     }
+  }
 
+  /**
+   * Los pasos 5 a 9 del cobro (plan "Flujo del cobro"), compartidos con la venta de mostrador: la parte con
+   * `packages/dominio`, el cliente, los pagos, la emisión del comprobante, lo que pedidos anota en la orden y el
+   * cobro con sus pagos. La orden ya está bloqueada y el turno tomado por quien llama. `alCambiarElTotal` da el error
+   * de un `total` distinto del calculado (cada ruta lo informa a su manera).
+   */
+  async liquidar(d: {
+    id: string;
+    ordenId: string;
+    sucursalId: string;
+    cuenta: CuentaParaCobrar;
+    turno: FilaTurnoDeCobro;
+    normal: EntradaNormalizada;
+    huella: Buffer;
+    parametros: Parametros;
+    instante: Date;
+    alCambiarElTotal: (totalCalculado: string) => Error;
+  }): Promise<CobroRespuesta> {
+    const { id, ordenId, sucursalId, cuenta, turno, normal, huella, parametros, instante } = d;
     // La parte: lo que falta de la cuenta menos lo que tomaron las partes anteriores (comprobantes de la orden).
     const entradaCuenta = entradaDeCalculo(cuenta, parametros);
     const anteriores = await this.facturado.facturadoDeOrden(ordenId);
@@ -370,7 +411,7 @@ export class CobrosService {
       throw resultado.codigo === 'NADA_QUE_COBRAR' ? nadaQueCobrar() : parteInvalida();
     }
     const parte = resultado;
-    if (parte.totales.total !== normal.total) throw cuentaCambio(cuenta.version);
+    if (parte.totales.total !== normal.total) throw d.alCambiarElTotal(parte.totales.total);
     if (excedeMontoMaximo(parte.totales.total)) throw montoFueraDeRango('total');
 
     // Cliente, pagos y redondeo, antes de numerar.
@@ -454,7 +495,7 @@ export class CobrosService {
   }
 
   /** La réplica por `id` (criterio 55): el cobro ya hecho, sin efectos, o 422 si el mismo `id` es otra petición. */
-  private async replica(
+  async replica(
     id: string,
     sucursalId: string,
     ordenId: string,
@@ -483,7 +524,7 @@ export class CobrosService {
    * `FOR UPDATE` (criterio 59). 404 si no es de la sucursal activa; 409 `TURNO_AJENO` si no es del que cobra ni este es
    * Supervisor o Administrador; 409 `TURNO_CERRADO`.
    */
-  private async turnoParaCobrar(turnoId: string, sucursalId: string): Promise<FilaTurnoDeCobro> {
+  async turnoParaCobrar(turnoId: string, sucursalId: string): Promise<FilaTurnoDeCobro> {
     const filas = await this.conexion.query<FilaTurnoDeCobro>(
       `SELECT id, caja_id, responsable_id, estado FROM turno
         WHERE id = $1 AND sucursal_id = $2 FOR SHARE`,
@@ -502,7 +543,7 @@ export class CobrosService {
   }
 
   /** Una factura exige un cliente con RUC y dirección; una boleta de más de S/ 700 exige documento y nombre (criterio 51). */
-  private exigirCliente(normal: EntradaNormalizada, total: string): void {
+  exigirCliente(normal: EntradaNormalizada, total: string): void {
     const cliente = normal.comprobante.cliente;
     if (normal.comprobante.tipo === 'FACTURA') {
       if (
@@ -527,7 +568,7 @@ export class CobrosService {
    * Los pagos contra el total y el redondeo con `validarPagos` (criterio 50). Devuelve el vuelto; 422
    * `PAGOS_NO_CUADRAN` si no cuadran (también un redondeo que no es el que corresponde al efectivo).
    */
-  private validarPagos(normal: EntradaNormalizada): string {
+  validarPagos(normal: EntradaNormalizada): string {
     const pagos: PagoEntrada[] = normal.pagos.map((p) => ({
       medio: p.medio,
       monto: p.monto,
@@ -595,7 +636,7 @@ export class CobrosService {
   }
 
   /** Cerrojo de la transacción por una clave de texto: las peticiones con la misma clave se turnan. */
-  private async turnarPor(clave: string): Promise<void> {
+  async turnarPor(clave: string): Promise<void> {
     await this.conexion.query('SELECT pg_advisory_xact_lock(hashtextextended($1::text, 0))', {
       bind: [clave],
       type: QueryTypes.SELECT,

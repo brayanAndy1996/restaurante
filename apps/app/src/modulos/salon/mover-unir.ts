@@ -130,7 +130,7 @@ export function fraseDeUnion(
     destino.length === 1
       ? `la cuenta de la ${nombreAccesibleDeMesa(destino[0] ?? '').toLowerCase()}`
       : `la cuenta de las mesas ${listaDeNombres(destino)}`;
-  return `Unir ${listaDeNombres(elegidas.map((m) => m.nombre))} a ${dondeVa}: la venta queda a nombre de ${orden.mozo.nombre}.`;
+  return `Unir ${listaDeNombres(elegidas.map((m) => m.nombre))} a ${dondeVa}: la venta queda a nombre de ${orden.mozo?.nombre ?? ''}.`;
 }
 
 /**
@@ -172,5 +172,5 @@ export function fraseDeMovimiento(
   destino: string,
   orden: Pick<OrdenRespuesta, 'mozo'>,
 ): string {
-  return `La cuenta pasa de la ${nombreAccesibleDeMesa(origen).toLowerCase()} a la ${nombreAccesibleDeMesa(destino).toLowerCase()}. Sigue a cargo de ${orden.mozo.nombre}.`;
+  return `La cuenta pasa de la ${nombreAccesibleDeMesa(origen).toLowerCase()} a la ${nombreAccesibleDeMesa(destino).toLowerCase()}. Sigue a cargo de ${orden.mozo?.nombre ?? ''}.`;
 }

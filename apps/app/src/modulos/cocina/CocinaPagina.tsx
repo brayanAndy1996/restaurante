@@ -183,7 +183,7 @@ function CocinaDeSucursal({ empresaId, sucursalId }: { empresaId: string; sucurs
         <TarjetaKds
           tipo={c.tipo}
           mesa={mesa}
-          mozo={c.orden.mozo.nombre}
+          mozo={c.orden.mozo?.nombre ?? ''}
           comensales={c.orden.comensales}
           estacion={c.estacion.nombre}
           creadaEn={c.creadaEn}

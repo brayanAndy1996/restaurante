@@ -89,7 +89,7 @@ describe('criterio 9 · abrir una mesa', () => {
       precuentaVigente: null,
     });
     expect(orden.mesas).toEqual([{ id: mesa.id, nombre: mesa.nombre }]);
-    expect(orden.mozo.id).toBe(e.A.mozo.id);
+    expect(orden.mozo!.id).toBe(e.A.mozo.id);
     // La hora sale del reloj de la API.
     expect(orden.abiertaEn).toBe(antes.toISOString());
     const guardada = (await filasDe(admin, 'orden', 'id = $1', [id]))[0]!;

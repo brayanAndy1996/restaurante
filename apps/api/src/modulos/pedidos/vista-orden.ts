@@ -373,10 +373,10 @@ export class VistaOrdenService {
       canal: orden.canal,
       estado: orden.estado,
       mesas: mesaIds.map((id) => ({ id, nombre: nombresMesas.get(id) ?? '' })),
-      mozo: {
-        id: orden.mozo_id ?? '',
-        nombre: orden.mozo_id === null ? '' : (nombresPersonas.get(orden.mozo_id) ?? ''),
-      },
+      mozo:
+        orden.mozo_id === null
+          ? null
+          : { id: orden.mozo_id, nombre: nombresPersonas.get(orden.mozo_id) ?? '' },
       comensales: orden.comensales,
       abiertaEn: iso(orden.abierta_en),
       anuladaEn: orden.anulada_en === null ? null : iso(orden.anulada_en),

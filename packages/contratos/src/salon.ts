@@ -293,7 +293,8 @@ export const ordenRespuestaSchema = z.object({
   canal: canalOrdenSchema,
   estado: estadoOrdenSchema,
   mesas: z.array(mesaRefSchema),
-  mozo: personaRefSchema,
+  /** `null` en la venta de mostrador (historia 006, criterio 82): no tiene mozo. */
+  mozo: personaRefSchema.nullable(),
   comensales: z.number().int(),
   abiertaEn: instanteSchema,
   anuladaEn: instanteSchema.nullable(),
@@ -521,7 +522,8 @@ export const comandaKdsSchema = z.object({
   orden: z.object({
     id: uuidSchema,
     mesas: z.array(mesaRefSchema),
-    mozo: personaRefSchema,
+    /** `null` en la venta de mostrador (historia 006, criterio 82). */
+    mozo: personaRefSchema.nullable(),
     comensales: z.number().int(),
     /** Historia 006 (criterio 82): el número de llamado de una venta de mostrador, en lugar de la mesa. */
     numeroLlamado: z.number().int().nullable().optional(),

@@ -84,7 +84,7 @@ export const estaAbierta = (orden: Pick<OrdenRespuesta, 'estado'>): boolean =>
 export function resumenDeCuenta(orden: OrdenRespuesta, ahoraMs: number): string {
   const comensales = `${orden.comensales} ${orden.comensales === 1 ? 'comensal' : 'comensales'}`;
   const tiempo = `Abierta hace ${textoDeDuracion(minutosAbierta(orden.abiertaEn, ahoraMs))}`;
-  return [orden.mozo.nombre, comensales, tiempo].join(' · ');
+  return [orden.mozo?.nombre ?? '', comensales, tiempo].join(' · ');
 }
 
 /** Los ítems enviados de un mismo envío, con quién los comandó y a qué hora. */

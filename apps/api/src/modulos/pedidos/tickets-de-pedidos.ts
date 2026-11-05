@@ -45,11 +45,15 @@ export class TicketsDePedidos {
     const mesaIds = await mesasVigentesDeOrden(this.conexion, entrada.ordenId);
     const nombresMesas = await this.mesas.nombres(mesaIds);
     const mesas = mesaIds.map((id) => nombresMesas.get(id) ?? '');
-    const [orden] = await this.conexion.query<{ mozo_id: string | null }>(
-      'SELECT mozo_id FROM orden WHERE id = $1',
-      { bind: [entrada.ordenId], type: QueryTypes.SELECT },
-    );
+    const [orden] = await this.conexion.query<{
+      mozo_id: string | null;
+      numero_llamado: number | null;
+    }>('SELECT mozo_id, numero_llamado FROM orden WHERE id = $1', {
+      bind: [entrada.ordenId],
+      type: QueryTypes.SELECT,
+    });
     const mozoId = orden?.mozo_id ?? null;
+    const numeroLlamado = orden?.numero_llamado ?? null;
     const mozos = await this.usuarios.nombres(mozoId === null ? [] : [mozoId]);
     const mozo = mozoId === null ? '' : (mozos.get(mozoId) ?? '');
     const estaciones = await this.carta.nombres(aImprimir.map((c) => c.estacionId));
@@ -80,7 +84,7 @@ export class TicketsDePedidos {
         tipo: c.tipo,
         comandaId: c.id,
         precuentaId: null,
-        mesa: mesas.join(', '),
+        mesa: numeroLlamado === null ? mesas.join(', ') : `Llamado ${numeroLlamado}`,
         ordenId: entrada.ordenId,
         envioNumero:
           c.tipo === 'COMANDA' || c.tipo === 'ADICION' ? (entrada.envioNumero ?? null) : null,
@@ -89,6 +93,7 @@ export class TicketsDePedidos {
           mozo,
           hora,
           envioNumero: entrada.envioNumero ?? null,
+          numeroLlamado,
         }),
       };
     });

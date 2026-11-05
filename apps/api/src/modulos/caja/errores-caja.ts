@@ -162,3 +162,15 @@ export const montoFueraDeRango = (campo: string): ErrorAplicacion =>
   new ErrorAplicacion(422, 'MONTO_FUERA_DE_RANGO', 'El monto supera el máximo permitido', [
     { campo, mensaje: 'El monto supera el máximo permitido' },
   ]);
+
+/**
+ * 409 `CUENTA_CAMBIO` de la venta de mostrador (historia 006, criterio 84): el total que vio el cajero no es el que da la
+ * carta vigente. `campos.total` lleva el total nuevo; no hay `version` porque la orden todavía no existía.
+ */
+export const ventaCambio = (totalNuevo: string): ErrorAplicacion =>
+  new ErrorAplicacion(
+    409,
+    'CUENTA_CAMBIO',
+    'Los precios cambiaron desde que armaste la venta: revísala y vuelve a cobrar',
+    [{ campo: 'total', mensaje: `El total ahora es S/ ${totalNuevo}` }] satisfies CampoError[],
+  );

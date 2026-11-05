@@ -325,7 +325,7 @@ function ElegirMesas({
       const hecho =
         modo === 'mover'
           ? `La cuenta pasó a la ${nombreAccesibleDeMesa(destino?.nombre ?? '').toLowerCase()}. La ${nombreAccesibleDeMesa(origenNombre).toLowerCase()} quedó libre.`
-          : `Se unieron ${listaDeNombres(nombresElegidos)} a esta cuenta. La venta queda a nombre de ${orden?.mozo.nombre ?? ''}.`;
+          : `Se unieron ${listaDeNombres(nombresElegidos)} a esta cuenta. La venta queda a nombre de ${orden?.mozo?.nombre ?? ''}.`;
       navegar(rutaDeOrden(ordenId), { replace: true, state: { hecho } });
     } catch (error) {
       void clientes.invalidateQueries({ queryKey: CLAVES_TIEMPO_REAL.salon });
@@ -370,7 +370,7 @@ function ElegirMesas({
           </p>
           <p className="seleccion__mozo">
             {modo === 'mover' ? 'Sigue a cargo de ' : 'La venta queda a nombre de '}
-            <b>{orden.mozo.nombre}</b>
+            <b>{orden.mozo?.nombre}</b>
             {modo === 'unir' ? ', el mozo de esta cuenta' : ''}.
           </p>
         </div>
