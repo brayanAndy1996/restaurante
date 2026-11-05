@@ -48,9 +48,26 @@ export class ReportesCaja {
     @Inject(UsuariosConsultaService) private readonly usuarios: UsuariosConsultaService,
   ) {}
 
+  /**
+   * El reporte de un turno desde una sola instantánea (revisión M10). El reporte lee de varias tablas y de otro módulo
+   * (los comprobantes), y la guarda de la API no admite elegir el nivel de aislamiento ni un `SAVEPOINT`, así que no
+   * hay una sola sentencia que lo cubra. En un turno abierto se toma su fila con `FOR NO KEY UPDATE` antes de leer:
+   * choca con el `FOR SHARE` de los cobros y los movimientos, que esperan a que termine esta petición y los que ya
+   * estaban en curso terminan antes de que se lea nada. Con eso ningún cobro se cuela entre una consulta y la
+   * siguiente, y todos los totales (esperado, por medio, por tipo) son del mismo instante. Un turno cerrado ya no
+   * cambia y no se bloquea; el cierre ya tiene el turno con `FOR UPDATE`.
+   */
   async armar(turnoId: string): Promise<ReporteCaja> {
-    const fila = await buscarTurno(this.conexion, turnoId);
+    let fila = await buscarTurno(this.conexion, turnoId);
     if (fila === undefined) throw noEncontrado('El turno');
+    if (fila.estado === 'ABIERTO') {
+      await this.conexion.query('SELECT id FROM turno WHERE id = $1 FOR NO KEY UPDATE', {
+        bind: [turnoId],
+        type: QueryTypes.SELECT,
+      });
+      // Se vuelve a leer con el turno bloqueado: pudo cerrarse mientras se esperaba.
+      fila = (await buscarTurno(this.conexion, turnoId)) ?? fila;
+    }
     const movimientos = await this.conexion.query<FilaMovimiento>(
       `SELECT id, tipo, monto::text AS monto, motivo, creado_en, creado_por_usuario_id
          FROM movimiento_caja WHERE turno_id = $1 ORDER BY creado_en, id`,

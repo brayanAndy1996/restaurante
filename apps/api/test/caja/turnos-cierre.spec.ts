@@ -12,9 +12,11 @@ import {
   type ParteCalculada,
 } from '@restaurante/dominio';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+import { abrirCliente } from '../utilidades';
 import { EmisionService, type DatosDeEmision } from '../../src/modulos/facturacion';
 import { ContextoEmpresa } from '../../src/nucleo/contexto-empresa';
 import { filasAuditoria } from '../acceso/fabrica-equipos';
+import { enTransaccion } from '../aislamiento/fabrica';
 import {
   abrirTurno,
   api,
@@ -228,6 +230,33 @@ describe('criterio 28 · réplica de un movimiento y dueño del turno (M11)', ()
     exigirEstado(replica, 201, 'Réplica del Supervisor');
     expect(replica.body).toEqual(hecho.body);
     exigirEstado(await cerrar(A().token.cajero!, t, { EFECTIVO: '15.00' }), 200, 'Cerrar');
+  });
+});
+
+describe('criterio 29 · el reporte X sale de una sola instantánea (M10)', () => {
+  it('con un cobro en curso (el turno tomado con FOR SHARE) el reporte espera a que termine y lee después de él', async () => {
+    const cajas = await A().cajas();
+    const t = await abrirTurno(ctx, A().token.cajero!, cajas.S1!.caja2, '10.00');
+    const cliente = await abrirCliente('api');
+    try {
+      let terminado = false;
+      let reporte: ReturnType<typeof api> | undefined;
+      await enTransaccion(cliente, A().id, async () => {
+        await cliente.query('SELECT id FROM turno WHERE id = $1 FOR SHARE', [t]);
+        reporte = api(ctx, A().token.cajero, 'get', `/turnos/${t}/reporte`);
+        void reporte.then(() => {
+          terminado = true;
+        });
+        await new Promise((resolver) => setTimeout(resolver, 800));
+        expect(terminado).toBe(false);
+      });
+      const res = await reporte!;
+      exigirEstado(res, 200, 'El reporte después del cobro en curso');
+      expect(terminado).toBe(true);
+    } finally {
+      await cliente.end();
+    }
+    exigirEstado(await cerrar(A().token.cajero!, t, { EFECTIVO: '10.00' }), 200, 'Cerrar');
   });
 });
 
