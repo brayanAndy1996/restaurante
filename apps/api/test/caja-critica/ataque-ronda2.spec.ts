@@ -312,7 +312,13 @@ describe('G1 · un cobro durante el cambio de serie de su caja no responde SIN_S
       `${emitido[0]!.serie}-${String(emitido[0]!.numero).padStart(8, '0')}`,
     );
     const series = await numeracionSana(1);
-    expect(series.filter((s) => s.activa).map((s) => s.serie)).toEqual(['B0Z2']);
+    // Un PUT de BOLETA solo toca las series de boleta (criterio 3): la de factura de la caja sigue como estaba.
+    expect(series.filter((s) => s.tipo === 'BOLETA' && s.activa).map((s) => s.serie)).toEqual([
+      'B0Z2',
+    ]);
+    expect(
+      series.filter((s) => s.tipo === 'FACTURA').map((s) => [s.serie, s.activa, s.ultimo]),
+    ).toEqual([['F002', true, 0]]);
   });
 
   it('varios cobros concurrentes con un cambio de serie: todos 201 y numeración sin huecos ni repetidos', async () => {
@@ -347,7 +353,13 @@ describe('G1 · un cobro durante el cambio de serie de su caja no responde SIN_S
       'ningún número repetido',
     ).toBe(4);
     for (const f of emitidos) expect(['B0Z2', 'B0Y2']).toContain(f.serie);
-    expect(series.filter((s) => s.activa).map((s) => s.serie)).toEqual(['B0Y2']);
+    // Un PUT de BOLETA solo toca las series de boleta (criterio 3): la de factura de la caja sigue como estaba.
+    expect(series.filter((s) => s.tipo === 'BOLETA' && s.activa).map((s) => s.serie)).toEqual([
+      'B0Y2',
+    ]);
+    expect(
+      series.filter((s) => s.tipo === 'FACTURA').map((s) => [s.serie, s.activa, s.ultimo]),
+    ).toEqual([['F002', true, 0]]);
   });
 
   it('cobros continuos mientras la serie cambia varias veces (B0Y2, B0Z2, B002): todos 201 y sin huecos', async () => {

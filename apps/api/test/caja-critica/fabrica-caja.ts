@@ -1001,6 +1001,8 @@ export async function cuentasPorCobrar(ctx: AppP5, token: string): Promise<Libre
 
 export interface NumeracionDeSerie {
   serie: string;
+  /** El tipo de comprobante de la serie (`serie.tipo`). */
+  tipo: string;
   activa: boolean;
   ultimo: number;
   numeros: number[];
@@ -1011,7 +1013,7 @@ export interface NumeracionDeSerie {
 /** La numeración de todas las series de una caja y de los comprobantes emitidos con cada una. */
 export async function numeracionDeLaCaja(cajaId: string): Promise<NumeracionDeSerie[]> {
   const series = await filas(
-    'SELECT serie, activa, ultimo_numero, primer_numero FROM serie WHERE caja_id = $1 ORDER BY serie',
+    'SELECT serie, tipo, activa, ultimo_numero, primer_numero FROM serie WHERE caja_id = $1 ORDER BY serie',
     [cajaId],
   );
   const resultado: NumeracionDeSerie[] = [];
@@ -1030,6 +1032,7 @@ export async function numeracionDeLaCaja(cajaId: string): Promise<NumeracionDeSe
     );
     resultado.push({
       serie: s.serie as string,
+      tipo: s.tipo as string,
       activa: s.activa as boolean,
       ultimo,
       numeros,
