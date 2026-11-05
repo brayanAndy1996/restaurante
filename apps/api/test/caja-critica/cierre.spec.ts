@@ -4,7 +4,8 @@
 // - 29: el reporte X de un turno con cobros en los cinco medios, redondeos, vueltos, ingresos y egresos, con montos
 //   exactos y el esperado de `esperadoDelTurno`; no cambia nada ni cierra el turno;
 // - 31 y 32: el cierre Z guarda esperado, contado, diferencia y motivo por medio; toda diferencia exige motivo (422
-//   DIFERENCIA_SIN_MOTIVO con las diferencias de los cinco medios y sin el esperado, arqueo a ciegas);
+//   DIFERENCIA_SIN_MOTIVO con `diferencias: [{ medio }]` solo de los medios que no cuadran y sin ningún monto: ni
+//   esperado, ni contado, ni diferencia; arqueo a ciegas; el ataque de contar 0.00 en los cinco medios no revela el esperado);
 // - 33: el último turno abierto de la sucursal no se cierra con órdenes abiertas (409 CIERRE_BLOQUEADO con `ordenes`);
 //   con otro turno abierto sí; dos cierres simultáneos de los dos últimos: exactamente uno se cierra;
 // - 34: la Z es definitiva y su réplica devuelve lo guardado; 35: cierra su responsable, un Supervisor o el
@@ -224,21 +225,47 @@ describe('criterios 31 y 32 · cierre con Z y arqueo a ciegas', () => {
     PLIN: '69.20',
   };
 
-  it('una diferencia sin motivo responde 422 con las diferencias de los cinco medios y sin el esperado, y no cierra', async () => {
+  it('una diferencia sin motivo responde 422 con solo el medio que no cuadra, sin ningún monto, y no cierra', async () => {
     const turnoId = await turnoConCobros();
     const res = await cerrarTurnoCrudo(ctx, A().token.cajero!, turnoId, conteo(contado));
     esperarError(res, 422, 'DIFERENCIA_SIN_MOTIVO');
-    expect(res.body.diferencias).toEqual(
-      MEDIOS.map((medio) => ({
-        medio,
-        contado: contado[medio],
-        diferencia: medio === 'EFECTIVO' ? '-0.50' : '0.00',
-      })),
-    );
-    expect(res.text).not.toMatch(/esperado|307\.00/i);
-    expect((res.body.campos as Array<{ campo: string }>).map((c) => c.campo)).toContain(
+    // Solo el efectivo no cuadra (esperado 307.00, contado 306.50); la forma es `[{ medio }]` y nada más.
+    expect(res.body.diferencias).toEqual([{ medio: 'EFECTIVO' }]);
+    for (const d of res.body.diferencias as Array<Record<string, unknown>>) {
+      expect(Object.keys(d)).toEqual(['medio']);
+    }
+    expect(res.text).not.toMatch(/esperado|307\.00|-0\.50/i);
+    expect((res.body.campos as Array<{ campo: string }>).map((c) => c.campo)).toEqual([
       'conteo.0.motivo',
+    ]);
+    expect((await filas('SELECT estado FROM turno WHERE id = $1', [turnoId]))[0]!.estado).toBe(
+      'ABIERTO',
     );
+    expect(await filas('SELECT 1 FROM turno_conteo WHERE turno_id = $1', [turnoId])).toEqual([]);
+  });
+
+  it('ataque: contar 0.00 en los cinco medios sin motivos responde 422 sin ningún monto del esperado ni de las diferencias, solo los medios', async () => {
+    const turnoId = await turnoConCobros();
+    const ceros = Object.fromEntries(MEDIOS.map((m) => [m, '0.00']));
+    const res = await cerrarTurnoCrudo(ctx, A().token.cajero!, turnoId, conteo(ceros));
+    esperarError(res, 422, 'DIFERENCIA_SIN_MOTIVO');
+    // Los cinco medios tenían esperado mayor que cero: los cinco no cuadran, en el orden de MEDIOS_PAGO.
+    expect(res.body.diferencias).toEqual(MEDIOS.map((medio) => ({ medio })));
+    for (const d of res.body.diferencias as Array<Record<string, unknown>>) {
+      expect(Object.keys(d)).toEqual(['medio']);
+    }
+    expect((res.body.campos as Array<{ campo: string }>).map((c) => c.campo)).toEqual(
+      MEDIOS.map((_, i) => `conteo.${i}.motivo`),
+    );
+    // El cuerpo completo (mensaje, campos y diferencias): ningún monto del esperado (307.00, 69.20, 40.00, 29.20) ni
+    // su negativo (la diferencia de contar 0), ni nada más que el "0.00" que el cajero escribió.
+    for (const monto of ['307.00', '69.20', '40.00', '29.20']) {
+      expect(res.text, `el cuerpo no trae ${monto}`).not.toContain(monto);
+      expect(res.text, `el cuerpo no trae -${monto}`).not.toContain(`-${monto}`);
+    }
+    const montos = res.text.match(/(?<![\d.])-?\d+\.\d{2}(?!\d)/g) ?? [];
+    expect(montos.filter((m) => m !== '0.00')).toEqual([]);
+    expect(res.text).not.toMatch(/esperado/i);
     expect((await filas('SELECT estado FROM turno WHERE id = $1', [turnoId]))[0]!.estado).toBe(
       'ABIERTO',
     );
