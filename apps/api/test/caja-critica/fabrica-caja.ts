@@ -918,4 +918,125 @@ export async function autorizar(
   return res.body as { autorizacionId: string; expiraEn: string };
 }
 
+// ------------------------------------------------------------------------------------------------
+// Ronda 2 del ataque: peticiones en curso, retenciones deterministas y lecturas de la cuenta
+// ------------------------------------------------------------------------------------------------
+
+/** Lanza la petición ya (supertest es perezoso: no envía hasta que alguien espera el resultado). */
+export const enCurso = <T>(p: PromiseLike<T>): Promise<T> =>
+  new Promise<T>((resolver, rechazar) => {
+    p.then(resolver, rechazar);
+  });
+
+/**
+ * Una retención de PostgreSQL hecha por un cliente administrador, para ensanchar a voluntad la ventana de una
+ * operación de la API sin depender de tiempos: mientras no se libera, lo que choque con ella queda esperando.
+ */
+export class Retencion {
+  private liberada = false;
+  private constructor(private readonly cliente: Client) {}
+
+  /** Bloquea la tabla `auditoria` en modo SHARE: toda operación que deba dejar una fila de auditoría queda esperando. */
+  static async deAuditoria(): Promise<Retencion> {
+    const c = await abrirCliente('admin');
+    await c.query('BEGIN');
+    await c.query('LOCK TABLE auditoria IN SHARE MODE');
+    return new Retencion(c);
+  }
+
+  /** Bloquea la fila de la serie activa de ese tipo en la caja: el cobro que numere con ella queda esperando. */
+  static async deSerieActiva(
+    cajaId: string,
+    tipo: 'BOLETA' | 'FACTURA' = 'BOLETA',
+  ): Promise<Retencion> {
+    const c = await abrirCliente('admin');
+    await c.query('BEGIN');
+    await c.query('SELECT id FROM serie WHERE caja_id = $1 AND tipo = $2 AND activa FOR UPDATE', [
+      cajaId,
+      tipo,
+    ]);
+    return new Retencion(c);
+  }
+
+  /** Confirma y suelta la retención (se puede llamar más de una vez). */
+  async liberar(): Promise<void> {
+    if (this.liberada) return;
+    this.liberada = true;
+    try {
+      await this.cliente.query('COMMIT');
+    } finally {
+      await this.cliente.end();
+    }
+  }
+}
+
+/** Anula unidades de un ítem enviado (004, criterio 35) con la sesión del supervisor. */
+export const anularUnidades = (
+  ctx: AppP5,
+  token: string,
+  ordenId: string,
+  itemId: string,
+  cantidad: number,
+): Promise<Res> =>
+  escribir(ctx, token, 'post', `/ordenes/${ordenId}/items/${itemId}/anulaciones`, {
+    id: randomUUID(),
+    cantidad,
+    motivo: 'Error de toma',
+    destinoStock: 'VUELVE',
+  });
+
+/** `GET /cuentas/:ordenId` (exige 200). */
+export async function cuentaDe(ctx: AppP5, token: string, ordenId: string): Promise<Libre> {
+  const res = await api(ctx, token, 'get', `/cuentas/${ordenId}`);
+  exigirEstado(res, 200, 'GET /cuentas/:ordenId (006, criterio 36)');
+  return res.body as Libre;
+}
+
+/** `GET /cuentas` (exige 200): las cuentas por cobrar de la sucursal activa. */
+export async function cuentasPorCobrar(ctx: AppP5, token: string): Promise<Libre[]> {
+  const res = await api(ctx, token, 'get', '/cuentas');
+  exigirEstado(res, 200, 'GET /cuentas (006, criterio 37)');
+  return res.body as Libre[];
+}
+
+export interface NumeracionDeSerie {
+  serie: string;
+  activa: boolean;
+  ultimo: number;
+  numeros: number[];
+  /** Los números emitidos van de `primer_numero` a `ultimo_numero` sin saltos ni repetidos. */
+  consecutivos: boolean;
+}
+
+/** La numeración de todas las series de una caja y de los comprobantes emitidos con cada una. */
+export async function numeracionDeLaCaja(cajaId: string): Promise<NumeracionDeSerie[]> {
+  const series = await filas(
+    'SELECT serie, activa, ultimo_numero, primer_numero FROM serie WHERE caja_id = $1 ORDER BY serie',
+    [cajaId],
+  );
+  const resultado: NumeracionDeSerie[] = [];
+  for (const s of series) {
+    const numeros = (
+      await filas(
+        'SELECT numero FROM comprobante WHERE caja_id = $1 AND serie = $2 ORDER BY numero',
+        [cajaId, s.serie],
+      )
+    ).map((f) => Number(f.numero));
+    const primero = Number(s.primer_numero);
+    const ultimo = Number(s.ultimo_numero);
+    const esperados = Array.from(
+      { length: Math.max(0, ultimo - primero + 1) },
+      (_, i) => primero + i,
+    );
+    resultado.push({
+      serie: s.serie as string,
+      activa: s.activa as boolean,
+      ultimo,
+      numeros,
+      consecutivos: JSON.stringify(numeros) === JSON.stringify(esperados),
+    });
+  }
+  return resultado;
+}
+
 export { sesionContrasena, sesionPin, equipoDe };
