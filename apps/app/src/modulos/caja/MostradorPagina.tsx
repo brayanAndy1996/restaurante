@@ -57,15 +57,12 @@ import {
 } from './mostrador';
 import { PagosPanel, pagoNuevo } from './PagosPanel';
 import { ResultadoDeCobro } from './ResultadoDeCobro';
-import { claveTurnoMio, leerTurnoMio } from './turno';
+import { claveCajasDeTurno, claveTurnoMio, leerTurnoMio, listarCajasActivas } from './turno';
 import '../salon/comandero.css';
 import './cobro.css';
 import './mostrador.css';
 
 type Panel = 'carta' | 'venta';
-
-/** El mostrador vende estos dos comprobantes; el régimen del emisor lo decide la API (`COMPROBANTE_NO_PERMITIDO`). */
-const TIPOS = ['BOLETA', 'FACTURA'] as const;
 
 /**
  * `/caja/mostrador`: la venta de mostrador (criterios 79 a 85 y 115 de 006). El comandero de 004 sin mesa ni mozo, y en la
@@ -127,6 +124,13 @@ function Mostrador({
     queryFn: ({ signal }) => leerTurnoMio(signal),
     refetchInterval: sondeo,
   });
+  // Los tipos de comprobante que el régimen del emisor permite salen de la caja del turno (criterio 115): la PWA no
+  // lleva una lista propia.
+  const cajasConsulta = useQuery({
+    queryKey: claveCajasDeTurno(sucursalId),
+    queryFn: ({ signal }) => listarCajasActivas(signal),
+    enabled: turnoConsulta.data != null,
+  });
   const ancha = useCoincide(CONSULTA_TABLET);
 
   const [panel, setPanel] = useState<Panel>(borrador.envioId !== null ? 'venta' : 'carta');
@@ -136,7 +140,7 @@ function Mostrador({
   } | null>(null);
   const [anuncio, setAnuncio] = useState('');
   const [sinProducto, setSinProducto] = useState<string | null>(null);
-  const [tipo, setTipo] = useState<'BOLETA' | 'FACTURA'>('BOLETA');
+  const [tipoElegido, setTipo] = useState<'BOLETA' | 'FACTURA'>('BOLETA');
   const [formato, setFormato] = useState<FormatoDeCobro>('DETALLADO');
   const [cliente, setCliente] = useState<ClienteEscrito>(CLIENTE_VACIO);
   const [filas, setFilas] = useState(() => [pagoNuevo('EFECTIVO')]);
@@ -159,6 +163,13 @@ function Mostrador({
   }, [fallo]);
 
   const turno = turnoConsulta.data ?? null;
+  const permitidos =
+    cajasConsulta.data?.find((c) => c.id === turno?.caja.id)?.parametros.tiposComprobante ?? null;
+  // Si lo elegido no lo permite el régimen, se usa el primero que sí.
+  const tipo =
+    permitidos === null || permitidos.includes(tipoElegido)
+      ? tipoElegido
+      : (permitidos[0] ?? tipoElegido);
   const carta = consultaCarta.data?.vista;
   const familias = useMemo(() => familiasParaVender(carta?.familias ?? []), [carta]);
   const bloqueado = borrador.envioId !== null;
@@ -203,7 +214,7 @@ function Mostrador({
 
   async function intentarVender() {
     if (enviando.current || !turno || borrador.lineas.length === 0) return;
-    const listo = venta?.ok && clienteValidado.ok && resumen.pagos !== null;
+    const listo = venta?.ok && clienteValidado.ok && resumen.pagos !== null && permitidos !== null;
     // Un reintento manda lo que se guardó con el `id`; solo uno nuevo exige que el formulario esté bien.
     if (!listo && !enCurso) {
       setIntentado(true);
@@ -316,19 +327,23 @@ function Mostrador({
   const motivo =
     !hayLineas || enCurso
       ? null
-      : !venta
-        ? 'Cargando la carta para calcular el total.'
-        : !venta.ok
-          ? venta.motivo === 'FUERA_DE_CARTA'
-            ? `${venta.nombres.join(', ')} ya no ${venta.nombres.length === 1 ? 'está' : 'están'} en la carta. Quita ${venta.nombres.length === 1 ? 'la línea' : 'las líneas'} para cobrar.`
-            : null
-          : !clienteValidado.ok
-            ? 'Faltan los datos del cliente.'
-            : resumen.problema === null
-              ? null
-              : intentado
-                ? 'Revisa los pagos marcados.'
-                : resumen.problema;
+      : permitidos === null
+        ? cajasConsulta.isError
+          ? 'No pudimos leer los comprobantes que emite esta caja.'
+          : 'Cargando los comprobantes que emite esta caja.'
+        : !venta
+          ? 'Cargando la carta para calcular el total.'
+          : !venta.ok
+            ? venta.motivo === 'FUERA_DE_CARTA'
+              ? `${venta.nombres.join(', ')} ya no ${venta.nombres.length === 1 ? 'está' : 'están'} en la carta. Quita ${venta.nombres.length === 1 ? 'la línea' : 'las líneas'} para cobrar.`
+              : null
+            : !clienteValidado.ok
+              ? 'Faltan los datos del cliente.'
+              : resumen.problema === null
+                ? null
+                : intentado
+                  ? 'Revisa los pagos marcados.'
+                  : resumen.problema;
   const etiquetaDelBoton = `${bloqueado && !vendiendo ? 'Reintentar la venta' : 'Cobrar y enviar'} · ${montoEnSoles(totalDelPie) ?? ''}`;
   const verCarta = ancha || panel === 'carta';
   const verVenta = ancha || panel === 'venta';
@@ -485,18 +500,20 @@ function Mostrador({
                   </div>
                 </section>
 
-                <ComprobantePanel
-                  permitidos={TIPOS}
-                  tipo={tipo}
-                  onTipo={setTipo}
-                  formato={formato}
-                  onFormato={setFormato}
-                  soloConsumo={false}
-                  total={total}
-                  cliente={cliente}
-                  onCliente={setCliente}
-                  errores={intentado && !clienteValidado.ok ? clienteValidado.errores : null}
-                />
+                {permitidos ? (
+                  <ComprobantePanel
+                    permitidos={permitidos}
+                    tipo={tipo}
+                    onTipo={setTipo}
+                    formato={formato}
+                    onFormato={setFormato}
+                    soloConsumo={false}
+                    total={total}
+                    cliente={cliente}
+                    onCliente={setCliente}
+                    errores={intentado && !clienteValidado.ok ? clienteValidado.errores : null}
+                  />
+                ) : null}
                 <section
                   className="cobro__bloque cobro__bloque--junta"
                   aria-labelledby="mostrador-pagos"

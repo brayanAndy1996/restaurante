@@ -1,4 +1,5 @@
 import type {
+  CajaRespuesta,
   CobroRespuesta,
   ComprobanteRespuesta,
   TurnoRespuesta,
@@ -128,9 +129,27 @@ function ventaDe(entrada: VentaMostradorEntrada, numeroLlamado = 23): VentaMostr
   };
 }
 
+/** La caja del turno, con los parámetros del emisor que la API le da (criterio 115). */
+const cajaDelTurno = (
+  parametros: CajaRespuesta['parametros'] = {
+    regimen: 'GENERAL',
+    tiposComprobante: ['BOLETA', 'FACTURA'],
+  },
+): CajaRespuesta => ({
+  id: turno.caja.id,
+  sucursalId: ID.sucursalA,
+  nombre: 'Caja 1',
+  activa: true,
+  impresora: null,
+  series: [],
+  turnoAbierto: null,
+  parametros,
+});
+
 function montar(
   opciones: {
     turno?: TurnoRespuesta | null;
+    parametros?: CajaRespuesta['parametros'];
     carta?: () => { cuerpo: ReturnType<typeof cartaDeEjemplo>; etag: string };
     extra?: Record<string, Manejador>;
   } = {},
@@ -142,6 +161,7 @@ function montar(
       opciones.turno === null
         ? json(404, { codigo: 'NO_ENCONTRADO', mensaje: 'No hay turno' })
         : json(200, opciones.turno ?? turno),
+    'GET /cajas': () => json(200, [cajaDelTurno(opciones.parametros)]),
     'GET /carta/sucursal': ({ cabeceras }) =>
       cabeceras.get('If-None-Match') === estado.etag
         ? json(304)
@@ -217,6 +237,47 @@ describe('Mostrador: la venta (criterios 79, 80 y 115)', () => {
     await userEvent.click(boton('Nueva venta'));
     expect(await screen.findByRole('button', { name: /^Lomo saltado/ })).toBeVisible();
     expect(screen.queryByText('Llamado 23')).toBeNull();
+  });
+
+  it('ofrece los tipos de comprobante de la caja: un emisor general, Boleta y Factura', async () => {
+    montar();
+    renderApp(RUTA);
+    await armarLaVenta();
+    const tipos = screen.getByRole('group', { name: 'Tipo de comprobante' });
+    expect(within(tipos).getByRole('button', { name: 'Boleta' })).toBeVisible();
+    expect(within(tipos).getByRole('button', { name: 'Factura' })).toBeVisible();
+  });
+
+  it('con un emisor Nuevo RUS solo ofrece Boleta, lo dice, y el total sale sin una tasa propia de la PWA (criterio 115)', async () => {
+    const s = montar({
+      parametros: { regimen: 'NUEVO_RUS', tiposComprobante: ['BOLETA'] },
+      extra: { [`POST ${API_VENTAS}`]: ({ cuerpo }) => vende(cuerpo) },
+    });
+    renderApp(RUTA);
+    await armarLaVenta();
+    expect(screen.queryByRole('group', { name: 'Tipo de comprobante' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Factura' })).toBeNull();
+    expect(screen.getByText(/solo emite boletas/)).toBeVisible();
+    // Sin IGV de por medio, el total es el mismo: el precio ya lo incluye.
+    expect(screen.getByText('Total a cobrar').nextSibling).toHaveTextContent('S/ 37.00');
+    await userEvent.click(screen.getByRole('button', { name: 'S/\u00a050' }));
+    await userEvent.click(boton('Cobrar y enviar · S/\u00a037.00'));
+    expect(await screen.findByText('Llamado 23')).toBeVisible();
+    expect(entradaDe(s)).toMatchObject({ total: '37.00', comprobante: { tipo: 'BOLETA' } });
+  });
+
+  it('mientras no llegan los datos de la caja no cobra: no adivina qué comprobantes emite', async () => {
+    const s = montar({
+      extra: {
+        'GET /cajas': () => json(500, { codigo: 'ERROR_INTERNO', mensaje: 'Falló' }),
+        [`POST ${API_VENTAS}`]: ({ cuerpo }) => vende(cuerpo),
+      },
+    });
+    renderApp(RUTA);
+    await armarLaVenta();
+    expect(await screen.findByText(/No pudimos leer los comprobantes/)).toBeVisible();
+    await userEvent.click(boton('Cobrar y enviar · S/\u00a037.00'));
+    expect(ventas(s)).toHaveLength(0);
   });
 
   it('el efectivo se redondea a la décima y el Yape lleva su número de operación', async () => {

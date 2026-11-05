@@ -70,9 +70,10 @@ function productosPorId(familias: readonly FamiliaDeVenta[]): Map<string, Produc
 }
 
 /**
- * El total de la venta con `calcularParte` (una parte `TOTAL` sin descuentos ni cortesías, criterio 85). La tasa de IGV
- * no cambia el total (el precio ya la incluye; solo reparte base e IGV) y esta pantalla no muestra IGV: lo emite la API
- * con la tasa del emisor. El ICBPER es el vigente hoy en Lima, el mismo que usa la API.
+ * El total de la venta con `calcularParte` (una parte `TOTAL` sin descuentos ni cortesías, criterio 85). El precio ya
+ * incluye el IGV: la tasa solo reparte base e IGV y no cambia el total, y esta pantalla no muestra IGV (lo emite la API
+ * con la tasa del emisor). Por eso se calcula con `tasaIgv: null`, sin una tasa propia de la PWA. El ICBPER es el
+ * vigente hoy en Lima, el mismo que usa la API.
  */
 export function totalDeLaVenta(
   lineas: readonly LineaBorrador[],
@@ -98,7 +99,7 @@ export function totalDeLaVenta(
       };
     }),
     descuentoCuenta: null,
-    tasaIgv: '18.00',
+    tasaIgv: null,
     montoIcbper: montoIcbperVigente(fechaLima(new Date(ahoraMs))),
   };
   const resultado = calcularParte(cuenta, [], { tipo: 'TOTAL' }, formato);
