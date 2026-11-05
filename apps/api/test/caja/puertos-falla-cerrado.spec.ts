@@ -2,7 +2,8 @@
 // un módulo registra al arrancar en otro cuando la dependencia iría al revés (plan, "Dependencias"): sin registro,
 // fallan cerrado en lugar de aceptar lo que no pueden comprobar.
 import { describe, expect, it } from 'vitest';
-import { RegistroImpresoraDeCaja } from '../../src/modulos/facturacion';
+import { RegistroAlcanceDeTurnos, RegistroImpresoraDeCaja } from '../../src/modulos/facturacion';
+import { RegistroDeCobros } from '../../src/modulos/pedidos';
 import { UltimaEmisionDeEmisor } from '../../src/modulos/plataforma';
 import { ErrorAplicacion } from '../../src/nucleo/errores/error-aplicacion';
 
@@ -32,5 +33,37 @@ describe('RegistroImpresoraDeCaja (facturación ← caja)', () => {
     registro.registrar(async (cajaId) => (cajaId === 'caja' ? { id: 'imp', gaveta: true } : null));
     expect(await registro.deLaCaja('caja')).toEqual({ id: 'imp', gaveta: true });
     expect(await registro.deLaCaja('otra')).toBeNull();
+  });
+});
+
+describe('RegistroDeCobros (pedidos ← caja)', () => {
+  const cuenta = { lineas: [], descuentoCuenta: null, tasaIgv: null, montoIcbper: '0.50' };
+
+  it('sin registro, rechaza todo cambio de una cuenta con cobros (falla cerrado)', async () => {
+    const registro = new RegistroDeCobros();
+    expect(await registro.validarCambio('orden', cuenta)).toEqual({
+      permitido: false,
+      codigo: 'CUENTA_COBRADA_EN_PARTE',
+    });
+  });
+
+  it('con registro, delega en quien se registró', async () => {
+    const registro = new RegistroDeCobros();
+    registro.registrar({ validarCambio: async () => ({ permitido: true }) });
+    expect(await registro.validarCambio('orden', cuenta)).toEqual({ permitido: true });
+  });
+});
+
+describe('RegistroAlcanceDeTurnos (facturación ← caja)', () => {
+  it('sin registro, nadie es responsable de ningún turno (un Cajero no ve nada)', async () => {
+    const registro = new RegistroAlcanceDeTurnos();
+    expect(await registro.responsableDe('turno')).toBeNull();
+  });
+
+  it('con registro, devuelve el responsable que dice caja', async () => {
+    const registro = new RegistroAlcanceDeTurnos();
+    registro.registrar(async (turnoId) => (turnoId === 'mio' ? 'usuario' : null));
+    expect(await registro.responsableDe('mio')).toBe('usuario');
+    expect(await registro.responsableDe('otro')).toBeNull();
   });
 });

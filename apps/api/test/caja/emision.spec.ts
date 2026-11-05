@@ -403,10 +403,15 @@ describe('criterios 70 y 71 · numeración sin saltos', () => {
   it('toma el número siguiente de la serie de la caja; una reversión después de numerar no pierde el número', async () => {
     const caja = await cajaNueva('S1', { boleta: ['B650', 40] });
     const consumo = await consumoDe('S1', '2026-11');
-    const antes = (await filas('SELECT count(*)::int AS n FROM comprobante'))[0]!.n;
+    // Solo los de esta caja: otros archivos de prueba cobran a la vez en la misma base.
+    const delaCaja = async () =>
+      (
+        await filas('SELECT count(*)::int AS n FROM comprobante WHERE caja_id = $1', [caja.cajaId])
+      )[0]!.n;
+    const antes = await delaCaja();
     await expect(emitirYFallar(datosDe(caja))).rejects.toThrow('falla a propósito');
     expect(await ultimoNumero(caja.cajaId), 'la serie sigue donde estaba').toBe(39);
-    expect((await filas('SELECT count(*)::int AS n FROM comprobante'))[0]!.n).toBe(antes);
+    expect(await delaCaja()).toBe(antes);
     expect(await consumoDe('S1', '2026-11'), 'la cuota también se revierte').toBe(consumo);
     const primero = await emitir(datosDe(caja));
     expect(primero.comprobante.numero).toBe('B650-00000040');
