@@ -308,7 +308,9 @@ export async function venderBorrador({
   };
 
   try {
+    // Como en el cobro, la clave de idempotencia es el `id` de la venta: la misma venta, la misma clave.
     const respuesta = await enviarSinPerder((extra) => venderEnMostrador(entrada, extra), {
+      clave: id,
       alCambiar: (pendiente) =>
         cambiarEstadoDeEnvio(clave, { fase: pendiente ? 'esperando-red' : 'enviando' }),
     });

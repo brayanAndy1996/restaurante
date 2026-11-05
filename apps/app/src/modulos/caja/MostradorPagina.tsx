@@ -26,6 +26,7 @@ import { useVistaDeSucursal } from '../disponibilidad/useVistaDeSucursal';
 import {
   borrarBorrador,
   claveDeBorrador,
+  leerEstadoDeEnvio,
   totalDelBorrador,
   unidadesDelBorrador,
   useBorrador,
@@ -239,8 +240,12 @@ function Mostrador({
         borrarBorrador(clave);
         guardarVentaEnCurso(claveDeVenta, null);
         setHecha({ respuesta: resultado.respuesta });
-      } else if (resultado.resultado === 'cambio' || resultado.resultado === 'rechazada') {
+      } else if (resultado.resultado === 'cambio') {
         setFallo(resultado.fallo);
+        setIntentado(true);
+      } else if (resultado.resultado === 'rechazada') {
+        // Si las líneas rechazadas ya llevan su aviso en «La venta», no se dice dos veces.
+        if (leerEstadoDeEnvio(clave).aviso === null) setFallo(resultado.fallo);
         setIntentado(true);
       } else if (resultado.resultado === 'fallo') {
         setIntentado(true);
