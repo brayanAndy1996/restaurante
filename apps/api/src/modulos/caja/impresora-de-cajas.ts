@@ -37,9 +37,14 @@ export class ImpresoraDeCajas implements OnModuleInit {
     );
     const cobro = cobros[0];
     if (cobro === undefined) return null;
+    // Los pagos en el orden en que se cobraron: el de `cobro.respuesta`. Los de la tabla `pago` se guardan todos con el
+    // mismo `creado_en` (el de la transacción), así que no tienen un orden propio.
     const pagos = await this.conexion.query<PagosDeUnCobro['pagos'][number]>(
-      `SELECT medio, monto::text AS monto, recibido::text AS recibido FROM pago
-        WHERE cobro_id = $1 ORDER BY creado_en, id`,
+      `SELECT t.p ->> 'medio' AS medio, t.p ->> 'monto' AS monto, t.p ->> 'recibido' AS recibido
+         FROM cobro c
+        CROSS JOIN LATERAL jsonb_array_elements(c.respuesta -> 'pagos') WITH ORDINALITY AS t(p, n)
+        WHERE c.id = $1
+        ORDER BY t.n`,
       { bind: [cobroId], type: QueryTypes.SELECT },
     );
     return { pagos, vuelto: cobro.vuelto, redondeo: cobro.redondeo };

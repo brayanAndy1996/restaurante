@@ -410,7 +410,13 @@ describe('sin impresora de caja ni de la sucursal (S1)', () => {
     const cobro = await cobrar(ctx, cajeroS1(), cuenta, {
       turnoId,
       total: '28.00',
-      pagos: [yape('8.00'), efectivo('20.00', '50.00')],
+      // Cuatro medios en un orden que no es el alfabético ni el de la base: el ticket rearmado lo conserva (M8).
+      pagos: [
+        tarjeta('7.00'),
+        yape('7.00'),
+        { medio: 'PLIN' as const, monto: '4.00', operacion: 'PL-0001' },
+        efectivo('10.00', '50.00'),
+      ],
     });
     expect(cobro.trabajoId).toBeNull();
 
@@ -430,8 +436,12 @@ describe('sin impresora de caja ni de la sucursal (S1)', () => {
     const ticket = await impresora.emulador.esperarTicket(5_000);
     expect(ticket.texto).toContain('REIMPRESIÓN');
     expect(ticket.texto).toContain(cobro.comprobante.numero);
-    expect(ticket.texto).toContain('Yape');
     expect(ticket.texto).toContain('Vuelto');
+    const lugares = ['Tarjeta de crédito', 'Yape', 'Plin', 'Efectivo'].map((m) =>
+      ticket.texto.indexOf(m),
+    );
+    expect(lugares.every((l) => l >= 0)).toBe(true);
+    expect([...lugares].sort((a, b) => a - b)).toEqual(lugares);
     expect(ticket.qrs).toHaveLength(1);
     expect(ticket.pulsosGaveta).toBe(0);
     void api;
