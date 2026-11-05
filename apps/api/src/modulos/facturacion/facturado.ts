@@ -10,6 +10,15 @@ import { CONEXION_API } from '../../nucleo/base-de-datos';
  * falta" y para que el puerto `COBROS` aplique `cambioDeCuentaPermitido`. No hay otra fuente de verdad para lo
  * cobrado; en 6b, si una nota de crédito anula partes, este es el único lugar que cambia.
  */
+/**
+ * La `ParteCalculada` sin la marca `valida` que `calcularParte` agrega a su resultado. Facturación guarda la parte sin
+ * ella; esto también limpia las filas que se hubieran guardado con la marca.
+ */
+export function sinMarcaDeValida(guardada: ParteCalculada): ParteCalculada {
+  const { valida: _valida, ...parte } = guardada as ParteCalculada & { valida?: true };
+  return parte;
+}
+
 @Injectable()
 export class FacturadoService {
   constructor(@Inject(CONEXION_API) private readonly conexion: Sequelize) {}
@@ -21,12 +30,12 @@ export class FacturadoService {
         ORDER BY numero_parte`,
       { bind: [ordenId], type: QueryTypes.SELECT },
     );
-    return filas.map((f) => f.detalle_parte);
+    return filas.map((f) => sinMarcaDeValida(f.detalle_parte));
   }
 
   /**
-   * La parte de cada comprobante dado (`detalle_parte`), por su id: para la cuenta (`cobros[].detalleParte`). Se guarda
-   * el resultado de `calcularParte` tal cual, con su marca `valida`; aquí se quita para devolver solo la `ParteCalculada`.
+   * La parte de cada comprobante dado (`detalle_parte`), por su id: para la cuenta (`cobros[].detalleParte`). Es la
+   * misma `ParteCalculada` que devuelve `facturadoDeOrden`, sin la marca `valida`.
    */
   async detalleDeComprobantes(ids: readonly string[]): Promise<Map<string, ParteCalculada>> {
     if (ids.length === 0) return new Map();
@@ -35,11 +44,6 @@ export class FacturadoService {
         WHERE id = ANY($1::uuid[]) AND detalle_parte IS NOT NULL`,
       { bind: [ids], type: QueryTypes.SELECT },
     );
-    return new Map(
-      filas.map((f) => {
-        const { valida: _valida, ...parte } = f.detalle_parte as ParteCalculada & { valida?: true };
-        return [f.id, parte];
-      }),
-    );
+    return new Map(filas.map((f) => [f.id, sinMarcaDeValida(f.detalle_parte)] as const));
   }
 }

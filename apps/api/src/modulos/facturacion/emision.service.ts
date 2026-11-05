@@ -18,6 +18,7 @@ import { RELOJ, horaLocal, type Reloj } from '../../nucleo/reloj';
 import { documentoDeComprobante } from '../impresion';
 import { IMPRESION, type ImpresionPuerto } from '../pedidos/impresion';
 import { EmisoresService, SucursalesConsultaService, SuscripcionService } from '../plataforma';
+import { sinMarcaDeValida } from './facturado';
 import { leerComprobante } from './lectura-comprobante';
 import { SeriesService } from './series.service';
 
@@ -174,7 +175,7 @@ export class EmisionService {
           datos.orden?.mozo ?? null,
           datos.orden?.numeroLlamado ?? null,
           datos.orden === null ? null : datos.numeroParte,
-          JSON.stringify(datos.parte),
+          JSON.stringify(sinMarcaDeValida(datos.parte)),
         ],
         type: QueryTypes.SELECT,
       },

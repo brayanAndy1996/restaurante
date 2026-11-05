@@ -52,11 +52,10 @@ const entradaDeCuenta = (cuenta: CuentaRespuesta): CuentaEntrada => ({
   montoIcbper: cuenta.parametros.montoIcbper,
 });
 
-/** Facturación guarda el resultado de `calcularParte` con su marca `valida`; la cuenta devuelve solo la `ParteCalculada`. */
+/** Facturación guarda la `ParteCalculada` sin la marca `valida` de `calcularParte` (M7): la cuenta devuelve lo mismo. */
 const sinValida = (detalle: unknown): unknown => {
-  const { valida, ...parte } = detalle as { valida?: boolean };
-  expect(valida).toBe(true);
-  return parte;
+  expect(detalle).not.toHaveProperty('valida');
+  return detalle;
 };
 
 describe('la cuenta trae el detalle de cada parte cobrada', () => {
