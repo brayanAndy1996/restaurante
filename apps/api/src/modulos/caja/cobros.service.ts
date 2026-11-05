@@ -9,6 +9,7 @@ import type {
 import {
   MONTO_BOLETA_SIN_DOCUMENTO,
   excedeMontoMaximo,
+  fechaLima,
   type TipoParte,
 } from '@restaurante/dominio';
 import {
@@ -30,6 +31,7 @@ import { jsonCanonico } from '../../nucleo/idempotencia';
 import { RELOJ, type Reloj } from '../../nucleo/reloj';
 import { ComprobantesService, EmisionService, FacturadoService } from '../facturacion';
 import { CuentasDePedidos, type CuentaParaCobrar } from '../pedidos';
+import type { DatosParaComprobante } from '../plataforma';
 import { SesionActual, UsuariosConsultaService } from '../seguridad';
 import {
   clienteRequerido,
@@ -325,7 +327,7 @@ export class CobrosService {
 
     const turno = await this.turnoParaCobrar(normal.turnoId, sucursalId);
     const instante = this.reloj.ahora();
-    const parametros = await this.parametros.de(sucursalId, instante, true);
+    const { parametros, emisor } = await this.parametros.paraEmitir(sucursalId, instante);
     this.exigirComprobantePermitido(normal, parametros);
 
     return this.liquidar({
@@ -337,6 +339,7 @@ export class CobrosService {
       normal,
       huella,
       parametros,
+      emisor,
       instante,
       alCambiarElTotal: () => cuentaCambio(cuenta.version),
     });
@@ -379,10 +382,14 @@ export class CobrosService {
     normal: EntradaNormalizada;
     huella: Buffer;
     parametros: Parametros;
+    /** El emisor y la sucursal que se leyeron al calcular los parámetros: la emisión no los lee otra vez. */
+    emisor: DatosParaComprobante;
+    /** El instante con que se eligieron la tasa y el ICBPER; la emisión toma el suyo después de numerar. */
     instante: Date;
     alCambiarElTotal: (totalCalculado: string) => Error;
   }): Promise<CobroRespuesta> {
-    const { id, ordenId, sucursalId, cuenta, turno, normal, huella, parametros, instante } = d;
+    const { id, ordenId, sucursalId, cuenta, turno, normal, huella, parametros, emisor, instante } =
+      d;
     // La parte: lo que falta de la cuenta menos lo que tomaron las partes anteriores (comprobantes de la orden).
     const entradaCuenta = entradaDeCalculo(cuenta, parametros);
     const anteriores = await this.facturado.facturadoDeOrden(ordenId);
@@ -445,8 +452,11 @@ export class CobrosService {
       })),
       redondeo: normal.redondeo,
       vuelto,
-      instante,
+      emisorYSucursal: emisor,
+      fechaDeParametros: fechaLima(instante),
     });
+    // El cobro y sus pagos llevan el instante de la emisión (tomado después de numerar).
+    const cobradoEn = emitido.emitidoEn;
 
     // Lo que pedidos anota en la orden: ítems cobrados, monto, ICBPER, modo y, si no falta nada, el cierre.
     const tras = await this.cuentas.registrarCobro({
@@ -456,7 +466,7 @@ export class CobrosService {
       icbper: parte.totales.icbper,
       tipo: parte.tipo,
       cierraLaCuenta: parte.cierraLaCuenta,
-      ahora: instante,
+      ahora: cobradoEn,
     });
     const totalCuenta = calcularCuenta(entradaCuenta).totales.total;
     const cobrado = sumarMontos([cuenta.cobrado, parte.totales.total]);
@@ -481,7 +491,7 @@ export class CobrosService {
       impresion: emitido.impresion,
       trabajoId: emitido.trabajoId,
     };
-    await this.guardar(respuesta, huella, parte.tipo, normal, instante);
+    await this.guardar(respuesta, huella, parte.tipo, normal, cobradoEn);
     this.eventos.turnoCambio(sucursalId, turno.id, turno.caja_id);
     return respuesta;
   }

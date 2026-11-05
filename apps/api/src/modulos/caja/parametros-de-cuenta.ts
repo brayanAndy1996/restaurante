@@ -7,7 +7,7 @@ import {
   tiposDeComprobantePermitidos,
 } from '@restaurante/dominio/caja';
 import { RELOJ, type Reloj } from '../../nucleo/reloj';
-import { EmisoresService } from '../plataforma';
+import { EmisoresService, type DatosParaComprobante } from '../plataforma';
 
 /** Los parámetros tributarios de la sucursal con los que se calcula una cuenta (criterio 36). */
 export type Parametros = CuentaRespuesta['parametros'];
@@ -25,17 +25,34 @@ export class ParametrosDeCuenta {
   ) {}
 
   /**
-   * Los parámetros de la sucursal en la fecha de Lima de `instante` (por defecto, el reloj de la API). Con
-   * `paraEmitir` (el cobro y la venta de mostrador) la tasa se lee con el emisor bloqueado en modo compartido hasta el
-   * final de la transacción: el cambio de tasa de ese emisor espera a los cobros en curso (criterio 6) y los cobros
-   * entre sí no se esperan. Hay que llamarlo después del bloqueo de la orden y del turno y antes del de la serie.
+   * Los parámetros de la sucursal en la fecha de Lima de `instante` (por defecto, el reloj de la API), con la tasa leída
+   * sin bloquear al emisor (la consulta de la cuenta).
    */
-  async de(
+  async de(sucursalId: string, instante: Date = this.reloj.ahora()): Promise<Parametros> {
+    const datos = await this.emisores.datosParaComprobante(sucursalId);
+    return this.calcular(datos, instante, false);
+  }
+
+  /**
+   * Los parámetros para emitir (el cobro y la venta de mostrador) junto con los datos del emisor y la sucursal que se
+   * leyeron: el emisor se lee una sola vez por cobro y la emisión usa los mismos datos. La tasa se lee con el emisor
+   * bloqueado en modo compartido hasta el final de la transacción: el cambio de tasa de ese emisor espera a los cobros
+   * en curso (criterio 6) y los cobros entre sí no se esperan. Hay que llamarlo después del bloqueo de la orden y del
+   * turno y antes del de la serie.
+   */
+  async paraEmitir(
     sucursalId: string,
-    instante: Date = this.reloj.ahora(),
-    paraEmitir = false,
+    instante: Date,
+  ): Promise<{ parametros: Parametros; emisor: DatosParaComprobante }> {
+    const emisor = await this.emisores.datosParaComprobante(sucursalId);
+    return { parametros: await this.calcular(emisor, instante, true), emisor };
+  }
+
+  private async calcular(
+    { emisor }: DatosParaComprobante,
+    instante: Date,
+    paraEmitir: boolean,
   ): Promise<Parametros> {
-    const { emisor } = await this.emisores.datosParaComprobante(sucursalId);
     const hoy = fechaLima(instante);
     const tasa =
       emisor.regimen === 'NUEVO_RUS'

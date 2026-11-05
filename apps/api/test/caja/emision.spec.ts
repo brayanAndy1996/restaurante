@@ -17,6 +17,7 @@ import {
 import type { Client } from 'pg';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { EmisionService, type DatosDeEmision } from '../../src/modulos/facturacion';
+import { EmisoresService } from '../../src/modulos/plataforma';
 import { ContextoEmpresa } from '../../src/nucleo/contexto-empresa';
 import { ErrorAplicacion } from '../../src/nucleo/errores/error-aplicacion';
 import { enTransaccion, errorDe } from '../aislamiento/fabrica';
@@ -509,6 +510,56 @@ describe('criterios 73 y 74 · fecha de emisión y día operativo', () => {
         ])
       )[0]!.emitido_en.toISOString(),
     ).toBe('2026-11-01T04:30:00.000Z');
+  });
+});
+
+describe('criterio 74 · el instante se toma después de numerar (M15) y el emisor se lee una vez (M9)', () => {
+  it('sin instante en los datos, la emisión toma el reloj de la API: la fecha de emisión sigue al correlativo', async () => {
+    const caja = await cajaNueva('S1', { boleta: ['B691'] });
+    const inicial = ctx.reloj.ahora();
+    ctx.reloj.fijar('2026-11-04T10:00:00-05:00');
+    const primero = await emitir({ ...datosDe(caja), instante: undefined });
+    ctx.reloj.fijar('2026-11-04T10:00:05-05:00');
+    const segundo = await emitir({ ...datosDe(caja), instante: undefined });
+    ctx.reloj.fijar(inicial);
+    const emitidoEn = async (id: string) =>
+      (
+        await filas<{ emitido_en: Date }>('SELECT emitido_en FROM comprobante WHERE id = $1', [id])
+      )[0]!.emitido_en.getTime();
+    expect(primero.emitidoEn.toISOString()).toBe('2026-11-04T15:00:00.000Z');
+    expect(await emitidoEn(primero.comprobante.id)).toBeLessThan(
+      await emitidoEn(segundo.comprobante.id),
+    );
+    expect(Number(segundo.comprobante.numero)).toBe(Number(primero.comprobante.numero) + 1);
+  });
+
+  it('si el día cambió entre elegir la tasa y numerar, la emisión responde 409 CONFLICTO y no consume el número', async () => {
+    const caja = await cajaNueva('S1', { boleta: ['B692'] });
+    const inicial = ctx.reloj.ahora();
+    ctx.reloj.fijar('2026-11-07T00:00:01-05:00');
+    const antes = await ultimoNumero(caja.cajaId);
+    const error = await rechazo(
+      emitir({ ...datosDe(caja), instante: undefined, fechaDeParametros: '2026-11-06' }),
+    );
+    ctx.reloj.fijar(inicial);
+    expect(error).toMatchObject({ codigo: 'CONFLICTO' });
+    expect(await ultimoNumero(caja.cajaId)).toBe(antes);
+  });
+
+  it('con el emisor y la sucursal ya leídos, la emisión no los lee otra vez y usa esos datos', async () => {
+    const caja = await cajaNueva('S1', { boleta: ['B693'] });
+    const emisores = ctx.app.get(EmisoresService);
+    const leer = vi.spyOn(emisores, 'datosParaComprobante');
+    const datos = await ctx.app
+      .get(ContextoEmpresa)
+      .ejecutar(A().id, () => emisores.datosParaComprobante(sucursalId('S1')), {
+        actor: { sistema: 'prueba' },
+      });
+    leer.mockClear();
+    const emitido = await emitir({ ...datosDe(caja), emisorYSucursal: datos });
+    expect(leer).not.toHaveBeenCalled();
+    expect(emitido.comprobante.emisor.ruc).toBe(datos.emisor.ruc);
+    leer.mockRestore();
   });
 });
 

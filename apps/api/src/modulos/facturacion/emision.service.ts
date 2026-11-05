@@ -14,10 +14,16 @@ import {
 import { QueryTypes, type Sequelize } from 'sequelize';
 import { CONEXION_API } from '../../nucleo/base-de-datos';
 import { ContextoEmpresa } from '../../nucleo/contexto-empresa';
+import { ErrorAplicacion } from '../../nucleo/errores/error-aplicacion';
 import { RELOJ, horaLocal, type Reloj } from '../../nucleo/reloj';
 import { documentoDeComprobante } from '../impresion';
 import { IMPRESION, type ImpresionPuerto } from '../pedidos/impresion';
-import { EmisoresService, SucursalesConsultaService, SuscripcionService } from '../plataforma';
+import {
+  EmisoresService,
+  SucursalesConsultaService,
+  SuscripcionService,
+  type DatosParaComprobante,
+} from '../plataforma';
 import { sinMarcaDeValida } from './facturado';
 import { leerComprobante } from './lectura-comprobante';
 import { SeriesService } from './series.service';
@@ -72,8 +78,22 @@ export interface DatosDeEmision {
   pagos: readonly PagoParaTicket[];
   redondeo: string;
   vuelto: string;
-  /** El instante del cobro, del reloj de la API (define la fecha de emisión de Lima y el día operativo). */
-  instante: Date;
+  /**
+   * El emisor y la sucursal ya leídos por quien calculó los parámetros del cobro: el emisor se lee una sola vez por
+   * cobro. Sin ellos, la emisión los lee.
+   */
+  emisorYSucursal?: DatosParaComprobante;
+  /**
+   * El instante del cobro (define la fecha de emisión de Lima y el día operativo). Sin él, la emisión toma el reloj de
+   * la API **después de numerar**, con la serie ya bloqueada: así la fecha de emisión nunca va hacia atrás respecto
+   * del correlativo de la serie (criterio 74).
+   */
+  instante?: Date;
+  /**
+   * La fecha de Lima con la que se eligieron la tasa de IGV y el ICBPER del cobro. Si el instante de la emisión cae en
+   * otra fecha (el cobro cruzó la medianoche), se responde 409 `CONFLICTO` para repetirlo con los parámetros del día.
+   */
+  fechaDeParametros?: string;
 }
 
 export interface ComprobanteEmitido {
@@ -81,6 +101,8 @@ export interface ComprobanteEmitido {
   /** El trabajo `COMPROBANTE` encolado, o `null` sin impresora. */
   trabajoId: string | null;
   impresion: 'EN_COLA' | 'SIN_IMPRESORA';
+  /** El instante de la emisión: la fecha del comprobante y la hora del cobro. */
+  emitidoEn: Date;
 }
 
 @Injectable()
@@ -102,14 +124,23 @@ export class EmisionService {
    * para el emisor de la sucursal) o `SERIE_AGOTADA`. Nace `POR_ENVIAR`.
    */
   async emitir(datos: DatosDeEmision): Promise<ComprobanteEmitido> {
-    const { emisor, sucursal } = await this.emisores.datosParaComprobante(datos.sucursalId);
+    const { emisor, sucursal } =
+      datos.emisorYSucursal ?? (await this.emisores.datosParaComprobante(datos.sucursalId));
     const horaCorte = await this.sucursales.horaCorte(datos.sucursalId);
     const { serieId, serie, numero } = await this.series.tomarNumero(
       datos.cajaId,
       datos.tipo,
       emisor.id,
     );
-    const instante = datos.instante;
+    // Con la serie bloqueada: el instante se toma después de numerar, para que la fecha sea monótona con el número.
+    const instante = datos.instante ?? this.reloj.ahora();
+    if (datos.fechaDeParametros !== undefined && fechaLima(instante) !== datos.fechaDeParametros) {
+      throw new ErrorAplicacion(
+        409,
+        'CONFLICTO',
+        'Cambió el día mientras se cobraba; inténtalo de nuevo',
+      );
+    }
     const totales = datos.parte.totales;
     const operaciones = totales.operaciones;
     const cliente = datos.cliente;
@@ -185,11 +216,12 @@ export class EmisionService {
     await this.suscripciones.registrarComprobanteEmitido(datos.sucursalId, instante);
     const comprobante = await leerComprobante(this.conexion, comprobanteId);
     if (comprobante === null) throw new Error('El comprobante recién emitido no se puede leer');
-    const trabajoId = await this.encolarTicket(comprobante, datos);
+    const trabajoId = await this.encolarTicket(comprobante, datos, instante);
     return {
       comprobante,
       trabajoId,
       impresion: trabajoId === null ? 'SIN_IMPRESORA' : 'EN_COLA',
+      emitidoEn: instante,
     };
   }
 
@@ -201,6 +233,7 @@ export class EmisionService {
   private async encolarTicket(
     comprobante: ComprobanteRespuesta,
     datos: DatosDeEmision,
+    instante: Date,
   ): Promise<string | null> {
     const impresora = datos.impresora;
     if (impresora === null) return null;
@@ -225,7 +258,7 @@ export class EmisionService {
         ordenId: orden?.id ?? null,
         envioNumero: null,
         documento: documentoDeComprobante(comprobante, {
-          hora: horaLocal(datos.instante),
+          hora: horaLocal(instante),
           pagos: datos.pagos.map((p) => ({ medio: p.medio, monto: p.monto, recibido: p.recibido })),
           vuelto: datos.vuelto,
           redondeo: datos.redondeo,
