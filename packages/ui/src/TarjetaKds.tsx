@@ -114,7 +114,7 @@ export function TarjetaKds({
   const personas =
     comensales === undefined
       ? ''
-      : ` · ${comensales}\u00a0${comensales === 1 ? 'comensal' : 'comensales'}`;
+      : `${mozo === '' ? '' : ' · '}${comensales}\u00a0${comensales === 1 ? 'comensal' : 'comensales'}`;
 
   return (
     <article
@@ -141,10 +141,7 @@ export function TarjetaKds({
             ) : null}
           </div>
           <h3 className="ui-kds__mesa">{mesa}</h3>
-          <p className="ui-kds__ayuda">
-            {mozo}
-            {personas} · {estacion}
-          </p>
+          <p className="ui-kds__ayuda">{[mozo + personas, estacion].filter(Boolean).join(' · ')}</p>
         </div>
         {reciente ? (
           <span className="ui-kds__hace">Hace {textoDeMinutos(minutos)}</span>

@@ -26,7 +26,7 @@ import { useEstadoTiempoReal } from '../../lib/tiempo-real';
 import { disponibilidadVaEnCocina } from '../acceso/navegacion';
 import { useSesionActiva } from '../acceso/sesion';
 import { resumenDeImpresion, useEstadoDeImpresion } from '../impresion/estado';
-import { etiquetaDeMesas, pendientesEnOrden, recientesEnOrden } from './cocina';
+import { etiquetaDeOrden, pendientesEnOrden, recientesEnOrden } from './cocina';
 import './cocina.css';
 import {
   estacionesDelEquipo,
@@ -177,14 +177,16 @@ function CocinaDeSucursal({ empresaId, sucursalId }: { empresaId: string; sucurs
   const recientes = useMemo(() => recientesEnOrden(cocina?.recientes ?? []), [cocina]);
 
   function tarjeta(c: ComandaKds, modo: 'pendiente' | 'reciente') {
-    const mesa = etiquetaDeMesas(c.orden.mesas);
+    const mesa = etiquetaDeOrden(c.orden);
+    const deMostrador = c.orden.numeroLlamado != null;
     return (
       <li key={c.id}>
         <TarjetaKds
           tipo={c.tipo}
           mesa={mesa}
           mozo={c.orden.mozo?.nombre ?? ''}
-          comensales={c.orden.comensales}
+          // El mostrador no tiene mesa ni mozo: la tarjeta dice solo «Llamado N» y la estación.
+          {...(deMostrador ? {} : { comensales: c.orden.comensales })}
           estacion={c.estacion.nombre}
           creadaEn={c.creadaEn}
           ahora={ahora}

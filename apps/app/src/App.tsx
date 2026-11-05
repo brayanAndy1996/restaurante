@@ -127,6 +127,10 @@ const CuentaPagina = lazy(() =>
 const CobroPagina = lazy(() =>
   import('./modulos/caja/CobroPagina').then((m) => ({ default: m.CobroPagina })),
 );
+// La venta de mostrador (006): el comandero y el cobro en una pantalla; otro bloque que solo se baja al abrirla.
+const MostradorPagina = lazy(() =>
+  import('./modulos/caja/MostradorPagina').then((m) => ({ default: m.MostradorPagina })),
+);
 const CocinaPagina = lazy(() =>
   import('./modulos/cocina/CocinaPagina').then((m) => ({ default: m.CocinaPagina })),
 );
@@ -338,6 +342,7 @@ export function App() {
               <Route element={<RutaDeCaja />}>
                 <Route path="/caja" element={<CajaPagina />} />
                 <Route path="/caja/cuentas/:id/cobrar" element={<CobroPagina />} />
+                <Route path="/caja/mostrador" element={<MostradorPagina />} />
               </Route>
               <Route element={<RutaDeCuenta />}>
                 <Route path="/caja/cuentas/:id" element={<CuentaPagina />} />

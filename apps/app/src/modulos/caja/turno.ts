@@ -423,3 +423,6 @@ export function useIdConservado() {
 }
 
 export type { ReporteCaja, TurnoRespuesta };
+
+/** La venta de mostrador (006, criterio 115): se abre desde «Caja» con el turno abierto. */
+export const RUTA_DEL_MOSTRADOR = '/caja/mostrador';

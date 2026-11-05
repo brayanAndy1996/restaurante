@@ -110,7 +110,7 @@ export function demuestraQueNoSeGuardo(error: ErrorApi): boolean {
 }
 
 /** Las líneas rechazadas (`lineas.<i>`) con su motivo, por posición en lo que se envió. */
-function rechazosPorLinea(error: ErrorApi): Map<number, string> {
+export function rechazosPorLinea(error: ErrorApi): Map<number, string> {
   const mapa = new Map<number, string>();
   for (const campo of error.campos) {
     const m = /^lineas\.(\d+)/.exec(campo.campo);

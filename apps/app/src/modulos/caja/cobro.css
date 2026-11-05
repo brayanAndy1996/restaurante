@@ -207,6 +207,20 @@
   line-height: 2.75rem;
   font-variant-numeric: tabular-nums;
 }
+/* El número de llamado de una venta de mostrador: lo que se grita al cliente, legible de lejos. */
+.resultado__llamado {
+  margin: 0;
+  padding: var(--espacio-lg);
+  border: 2px solid var(--color-tinta);
+  border-radius: var(--radio-baldosa);
+  background: var(--color-baldosa);
+  color: var(--color-tinta);
+  font-size: 3rem;
+  line-height: 3.5rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
 .resultado__acciones {
   display: flex;
   flex-direction: column;

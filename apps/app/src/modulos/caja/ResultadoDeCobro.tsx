@@ -21,6 +21,8 @@ interface Props {
   textoDeSeguir: string;
   onSeguir: () => void;
   volverA: string;
+  /** El número de llamado de una venta de mostrador (criterio 115): se muestra en grande y no hay mesa que liberar. */
+  llamado?: number;
 }
 
 /**
@@ -35,18 +37,27 @@ export function ResultadoDeCobro({
   textoDeSeguir,
   onSeguir,
   volverA,
+  llamado,
 }: Props) {
   const cerrada = respuesta.cuenta.estado === 'CERRADA';
   const comprobante = respuesta.comprobante;
   const efectivo = respuesta.pagos.find((p) => p.medio === 'EFECTIVO');
   const hayVuelto = !montoEsCero(respuesta.vuelto);
+  const deMostrador = llamado !== undefined;
   return (
     <div className="resultado">
+      {deMostrador ? (
+        <p className="resultado__llamado" role="status">
+          {`Llamado ${llamado}`}
+        </p>
+      ) : null}
       <div role="status">
         <Aviso tipo="ok" titulo="Cobrado" icono={IconoExito}>
-          {parteIgual
-            ? `Parte ${parteIgual.numero} de ${parteIgual.de} de ${titulo}.`
-            : `Cuenta de ${titulo}.`}
+          {deMostrador
+            ? 'La venta está cobrada y el pedido ya salió a cocina.'
+            : parteIgual
+              ? `Parte ${parteIgual.numero} de ${parteIgual.de} de ${titulo}.`
+              : `Cuenta de ${titulo}.`}
         </Aviso>
       </div>
 
@@ -93,7 +104,7 @@ export function ResultadoDeCobro({
         </EtiquetaDeEstado>
       )}
 
-      {cerrada ? (
+      {deMostrador ? null : cerrada ? (
         <div role="status">
           <Aviso tipo="ok" titulo={`${titulo} libre`}>
             La cuenta quedó pagada y la mesa vuelve a estar libre.
@@ -106,13 +117,16 @@ export function ResultadoDeCobro({
       )}
 
       <div className="resultado__acciones">
-        {cerrada ? null : (
+        {cerrada && !deMostrador ? null : (
           <Boton variante="principal" bloque onClick={onSeguir}>
             {textoDeSeguir}
           </Boton>
         )}
-        <Link to={volverA} className={claseBoton(cerrada ? 'principal' : 'secundario', true)}>
-          {cerrada ? 'Listo' : 'Volver a Por cobrar'}
+        <Link
+          to={volverA}
+          className={claseBoton(cerrada && !deMostrador ? 'principal' : 'secundario', true)}
+        >
+          {deMostrador ? 'Volver a Caja' : cerrada ? 'Listo' : 'Volver a Por cobrar'}
         </Link>
       </div>
     </div>

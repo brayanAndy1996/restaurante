@@ -6,13 +6,16 @@ import {
   EsqueletoDeLista,
   EtiquetaDeEstado,
   IconoCandado,
+  Icono,
+  IconoPago,
   IconoOk,
   IconoReintentar,
   Segmentos,
+  claseBoton,
   type OpcionDeSegmento,
 } from '@restaurante/ui';
 import { useQuery } from '@tanstack/react-query';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { Pagina } from '../../componentes/Pagina';
 import { usePermiso } from '../acceso/permisos';
 import { useSesionActiva } from '../acceso/sesion';
@@ -21,7 +24,14 @@ import { CerrarCaja } from './CerrarCaja';
 import { Movimientos } from './Movimientos';
 import { PorCobrar } from './PorCobrar';
 import { ReporteDeCaja } from './ReporteDeCaja';
-import { claveReporte, horaDelTurno, leerReporte, mensajeDeCaja, soles } from './turno';
+import {
+  RUTA_DEL_MOSTRADOR,
+  claveReporte,
+  horaDelTurno,
+  leerReporte,
+  mensajeDeCaja,
+  soles,
+} from './turno';
 
 type Vista = 'por-cobrar' | 'movimientos' | 'reporte-x';
 
@@ -41,8 +51,7 @@ interface Props {
 
 /**
  * `/caja` con turno abierto (criterio 110 de 006): de qué caja es, desde cuándo y con qué fondo; el cambio entre
- * "Por cobrar" (para quien cobra), "Movimientos" y "Reporte X"; y, separado por una junta, "Cerrar caja". "Mostrador"
- * y el cobro mismo llegan después. El cierre es una vista aparte (`?paso=cierre`) para que el botón de volver del celular regrese al turno.
+ * "Por cobrar" (para quien cobra), "Movimientos" y "Reporte X"; y, separado por una junta, "Cerrar caja". "Mostrador" (la venta sin mesa, para quien cobra). El cierre es una vista aparte (`?paso=cierre`) para que el botón de volver del celular regrese al turno.
  */
 export function MiTurno({ turno, onCerrada }: Props) {
   const [parametros, ponerParametros] = useSearchParams();
@@ -102,6 +111,13 @@ export function MiTurno({ turno, onCerrada }: Props) {
             </div>
           </dl>
         </section>
+
+        {puedeCobrar ? (
+          <Link to={RUTA_DEL_MOSTRADOR} className={claseBoton('principal', true)}>
+            <Icono icono={IconoPago} tamano={20} />
+            Vender en el mostrador
+          </Link>
+        ) : null}
 
         <Segmentos
           etiqueta="Secciones de tu turno"
