@@ -100,8 +100,10 @@ async function huella() {
     comandas: await n('SELECT count(*) AS n FROM comanda WHERE sucursal_id = $1'),
     comprobantes: await n('SELECT count(*) AS n FROM comprobante WHERE sucursal_id = $1'),
     trabajos: await n('SELECT count(*) AS n FROM trabajo_impresion WHERE sucursal_id = $1'),
+    // El contador del día operativo más reciente: el máximo de todos los días no sirve, porque cada día reinicia en 1.
     llamado: await n(
-      'SELECT coalesce(max(ultimo), 0) AS n FROM contador_llamado WHERE sucursal_id = $1',
+      `SELECT coalesce((SELECT ultimo FROM contador_llamado WHERE sucursal_id = $1
+                        ORDER BY dia_operativo DESC LIMIT 1), 0) AS n`,
     ),
     serie: await ultimoNumero((await A().cajas()).S1!.caja1, 'BOLETA'),
   };

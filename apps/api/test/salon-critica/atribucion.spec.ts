@@ -183,8 +183,9 @@ describe('criterio 10 · con mozoId, otra persona que atiende mesas es el mozo r
         const res = await abrirOrden(ctx, cajero[tipo], { mesaId: mesa.id, mozoId: elegido.id });
         exigirEstado(res, 201, 'abrir con mozoId');
         const orden = ordenRespuestaSchema.parse(res.body);
-        expect(orden.mozo.id).toBe(elegido.id);
-        expect(orden.mozo.nombre.length).toBeGreaterThan(0);
+        expect(orden.mozo).not.toBeNull();
+        expect(orden.mozo!.id).toBe(elegido.id);
+        expect(orden.mozo!.nombre.length).toBeGreaterThan(0);
         expect(await mozoGuardado(admin, orden.id)).toBe(elegido.id);
         expect(await autorDeFila(admin, 'orden', orden.id)).toMatchObject({
           usuarioId: e.A.cajero.id,
@@ -553,7 +554,10 @@ describe.each(TIPOS_DE_SESION)(
         (k) => k.orden.id === ordenId,
       );
       expect(comandas.length).toBeGreaterThanOrEqual(3);
-      for (const k of comandas) expect(k.orden.mozo.id).toBe(e.A.mozo.id);
+      for (const k of comandas) {
+        expect(k.orden.mozo).not.toBeNull();
+        expect(k.orden.mozo!.id).toBe(e.A.mozo.id);
+      }
       expect(new Set(comandas.map((k) => k.tipo))).toEqual(new Set(['COMANDA', 'ADICION']));
     });
   },
