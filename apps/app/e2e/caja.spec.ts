@@ -8,7 +8,7 @@ import {
 } from '@playwright/test';
 import { writeFileSync } from 'node:fs';
 import { EmuladorEscPos, type SimuladorPuente } from '../../api/test/soporte/puente';
-import { CELULAR, fechaDeLima } from './ayudas';
+import { CELULAR, fechaDeLima, llamarApi } from './ayudas';
 import {
   CARPETA_DE_CAPTURAS,
   IMPRESORA_DE_CAJA,
@@ -20,13 +20,17 @@ import {
   darClaveDeSupervisor,
   cobrarYEsperar,
   elegirParteDelCobro,
+  cerrarConZ,
+  escribirConteo,
   esperarPulsosDeGaveta,
+  irACerrarCaja,
   esperarTicketCon,
   irACaja,
   irAlSalon,
   pulsosDeGaveta,
   irAAjustes,
   prepararImpresionDeCaja,
+  tokenPorApi,
   vigilarEscriturasDeCaja,
 } from './ayudas-caja';
 import { afirmarPantallaDeCelular, entrarEnCelular } from './ayudas-carta';
@@ -425,4 +429,176 @@ test('el Cajero imprime el reporte X', async () => {
   expect(ticket.texto).toContain('Reporte parcial');
   expect(ticket.pulsosGaveta).toBe(0);
   writeFileSync(`${CARPETA_DE_CAPTURAS}/15-ticket-reporte-x.txt`, `${ticket.marcado}\n`);
+
+  // En la tableta del Supervisor el reporte X y su «Imprimir» aprovechan el ancho.
+  const tableta = supervisor.page;
+  await irACaja(tableta);
+  await tableta.getByRole('button', { name: 'Reporte X', exact: true }).click();
+  await expect(tableta.getByRole('heading', { name: 'Ventas' })).toBeVisible();
+  await expect(tableta.getByRole('button', { name: 'Imprimir', exact: true })).toBeVisible();
+  await tableta.screenshot({ path: captura('13-reporte-x-imprimir-768'), fullPage: true });
+});
+
+test('el Cajero cierra a ciegas con una diferencia y su motivo y la Z sale impresa; el Supervisor, última caja, no puede cerrar con una mesa abierta', async () => {
+  const { page } = cajero;
+
+  await test.step('el Mozo abre la mesa 1 otra vez y comanda un lomo (S/ 28.00); queda abierta', async () => {
+    await abrirMesaYComandar(mozo.page, '1', [PLATOS.lomo]);
+  });
+
+  await test.step('el Cajero cuenta a ciegas: la pantalla no dice cuánto debería haber', async () => {
+    emulador.limpiar();
+    await irACerrarCaja(page);
+    await expect(page.getByText('Esperado')).toHaveCount(0);
+    await escribirConteo(page, {
+      Efectivo: '375',
+      'Tarjeta de crédito': '0',
+      'Tarjeta de débito': '0',
+      Yape: '20',
+      Plin: '0',
+    });
+    await page.screenshot({ path: captura('16-cierre-a-ciegas-360'), fullPage: true });
+    await afirmarPantallaDeCelular(page, 'Caja › Cerrar caja (conteo a ciegas)');
+  });
+
+  await test.step('faltan S/ 1.20 de efectivo: sin motivo no cierra; con el motivo cierra', async () => {
+    const primero = await cerrarConZ(page);
+    expect(primero.status(), 'sin motivo, la API pide el de la diferencia').toBe(422);
+    await expect(page.getByText('Faltan S/ 1.20')).toBeVisible();
+    await page
+      .getByRole('textbox', { name: 'Motivo de la diferencia en efectivo' })
+      .fill('Un vuelto mal dado');
+    await page.screenshot({ path: captura('17-cierre-con-diferencia-360'), fullPage: true });
+    await afirmarPantallaDeCelular(page, 'Caja › Cierre con diferencia');
+    const cierre = await cerrarConZ(page);
+    expect(cierre.status()).toBe(200);
+    expect(cierre.request().headers()['idempotency-key']).toMatch(/\S/);
+  });
+
+  await test.step('la Z queda en pantalla con el conteo, la diferencia y su motivo, e imprimiéndose', async () => {
+    await expect(page.getByText('Caja 1 cerrada')).toBeVisible();
+    await expect(page.getByText('Motivo: Un vuelto mal dado')).toBeVisible();
+    await expect(page.getByText('Faltan S/ 1.20')).toBeVisible();
+    await expect(page.getByText(`Imprimiendo el reporte Z en ${IMPRESORA_DE_CAJA}`)).toBeVisible();
+    await page.screenshot({ path: captura('18-reporte-z-360'), fullPage: true });
+    await afirmarPantallaDeCelular(page, 'Caja › Reporte Z');
+  });
+
+  await test.step('el emulador recibe la Z con el conteo y el motivo de la diferencia', async () => {
+    const ticket = await esperarTicketCon(emulador, 'REPORTE Z');
+    expect(ticket.texto).toContain('375.00');
+    expect(ticket.texto).toContain('Un vuelto mal dado');
+    expect(ticket.pulsosGaveta).toBe(0);
+    writeFileSync(`${CARPETA_DE_CAPTURAS}/19-ticket-reporte-z.txt`, `${ticket.marcado}\n`);
+  });
+
+  await test.step('«Listo» lleva a abrir otra caja', async () => {
+    await page.getByRole('button', { name: 'Listo', exact: true }).click();
+    await expect(page.getByRole('group', { name: 'Caja que vas a abrir' })).toBeVisible();
+  });
+
+  await test.step('el Supervisor es la última caja abierta: «Cerrar con Z» se bloquea con la mesa 1 abierta', async () => {
+    const { page: tableta } = supervisor;
+    await irACerrarCaja(tableta);
+    await escribirConteo(tableta, {
+      Efectivo: '133',
+      'Tarjeta de crédito': '0',
+      'Tarjeta de débito': '0',
+      Yape: '0',
+      Plin: '0',
+    });
+    const cierre = await cerrarConZ(tableta);
+    expect(cierre.status()).toBe(409);
+    await expect(tableta.getByText('Queda 1 cuenta abierta')).toBeVisible();
+    await expect(tableta.getByRole('list', { name: 'Cuentas abiertas' })).toContainText('Mesa 1');
+    await tableta.screenshot({ path: captura('20-cierre-bloqueado-768'), fullPage: true });
+  });
+
+  await test.step('cobra la mesa 1 en su caja (S/ 28.00) y cierra: efectivo S/ 161.00, cuadra', async () => {
+    const { page: tableta } = supervisor;
+    await abrirElCobroDeLaMesa(tableta, '1');
+    const cobro = await cobrarYEsperar(tableta);
+    expect(cobro.comprobante.numero).toBe('B002-00000002');
+    await expect(tableta.getByText('Mesa 1 libre')).toBeVisible();
+    await irACerrarCaja(tableta);
+    await escribirConteo(tableta, {
+      Efectivo: '161',
+      'Tarjeta de crédito': '0',
+      'Tarjeta de débito': '0',
+      Yape: '0',
+      Plin: '0',
+    });
+    const cierre = await cerrarConZ(tableta);
+    expect(cierre.status()).toBe(200);
+    await expect(tableta.getByText('Caja 2 cerrada')).toBeVisible();
+    await expect(tableta.getByText('Cuadra').first()).toBeVisible();
+    await tableta.screenshot({ path: captura('21-reporte-z-768'), fullPage: true });
+  });
+
+  afirmarClavesDelSalon(cajero.escrituras, [['POST', /\/turnos\/[^/]+\/cierre$/]]);
+});
+
+test('sin impresora de caja el cobro y la apertura se hacen igual y la pantalla lo dice', async ({
+  request,
+}) => {
+  await test.step('el Administrador quita la impresora de la caja de la sucursal', async () => {
+    const token = await tokenPorApi(request, e.administrador);
+    const r = await llamarApi(request, `/sucursales/${e.s1.id}/impresion`, {
+      metodo: 'PUT',
+      token,
+      cuerpo: { impresoraCajaId: null },
+    });
+    expect(r.estado).toBe(200);
+    await llamarApi(request, '/sesion', { metodo: 'DELETE', token });
+  });
+
+  const { page } = cajero;
+  await test.step('el Cajero abre Caja 1 con fondo: la caja abre y dice «Sin impresora de caja»', async () => {
+    const turno = await abrirCajaConFondo(page, 'Caja 1', '50');
+    expect(turno.impresion).toBe('SIN_IMPRESORA');
+    expect(turno.trabajoId ?? null).toBeNull();
+    await expect(page.getByText('Sin impresora de caja')).toBeVisible();
+    await expect(
+      page.getByText('El Administrador puede elegirla en Ajustes › Cajas.'),
+    ).toBeVisible();
+    await page.screenshot({ path: captura('22-apertura-sin-impresora-360'), fullPage: true });
+  });
+
+  await test.step('cobra una mesa: el cobro sale igual, sin ticket, y el resultado dice «Sin impresora de caja»', async () => {
+    await abrirMesaYComandar(mozo.page, '3', [PLATOS.gaseosa]);
+    await abrirElCobroDeLaMesa(page, '3');
+    emulador.limpiar();
+    const cobro = await cobrarYEsperar(page);
+    expect(cobro.impresion).toBe('SIN_IMPRESORA');
+    await expect(page.getByText('Mesa 3 libre')).toBeVisible();
+    await expect(page.getByText('Sin impresora de caja')).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Imprimir otra vez' })).toBeEnabled();
+    await page.screenshot({ path: captura('23-resultado-sin-impresora-360'), fullPage: true });
+    await afirmarPantallaDeCelular(page, 'Caja › Resultado sin impresora');
+    await emulador.noRecibe(500);
+  });
+
+  await test.step('«Imprimir otra vez» sin impresora lo dice en palabras', async () => {
+    await page.getByRole('button', { name: 'Imprimir otra vez' }).click();
+    await expect(page.getByText('No pudimos imprimir otra vez')).toBeVisible();
+    await expect(page.getByText(/Esta caja no tiene impresora/)).toBeVisible();
+  });
+
+  await test.step('en la tableta del Supervisor pasa lo mismo: abre su caja y cobra sin impresora', async () => {
+    const { page: tableta } = supervisor;
+    await irACaja(tableta);
+    await tableta
+      .getByRole('button', { name: 'Listo', exact: true })
+      .click()
+      .catch(() => undefined);
+    const turno = await abrirCajaConFondo(tableta, 'Caja 2', '20');
+    expect(turno.impresion).toBe('SIN_IMPRESORA');
+    await expect(tableta.getByText('Sin impresora de caja')).toBeVisible();
+    await abrirMesaYComandar(mozo.page, '2', [PLATOS.gaseosa]);
+    await abrirElCobroDeLaMesa(tableta, '2');
+    const cobro = await cobrarYEsperar(tableta);
+    expect(cobro.impresion).toBe('SIN_IMPRESORA');
+    await expect(tableta.getByText('Sin impresora de caja')).toBeVisible();
+    await tableta.screenshot({ path: captura('23-resultado-sin-impresora-768'), fullPage: true });
+  });
 });

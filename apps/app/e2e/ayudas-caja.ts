@@ -295,3 +295,34 @@ export async function esperarTicketCon(
     .toBe(true);
   return buscar() as TicketEmulado;
 }
+
+/** Escribe el conteo a ciegas de cada medio (lo que se contó, sin saber lo esperado). */
+export async function escribirConteo(
+  page: Page,
+  conteo: Record<'Efectivo' | 'Tarjeta de crédito' | 'Tarjeta de débito' | 'Yape' | 'Plin', string>,
+): Promise<void> {
+  for (const [medio, monto] of Object.entries(conteo)) {
+    await page.getByRole('textbox', { name: medio, exact: true }).fill(monto);
+  }
+}
+
+/** Va a «Cerrar caja» desde Mi turno y espera el conteo. */
+export async function irACerrarCaja(page: Page): Promise<void> {
+  await irACaja(page);
+  await page.getByRole('button', { name: 'Cerrar caja', exact: true }).click();
+  await expect(
+    page.getByRole('heading', { name: 'Cuenta lo que hay en cada medio' }),
+  ).toBeVisible();
+}
+
+/** Toca «Cerrar con Z», confirma en la ventana y devuelve la respuesta de `POST /turnos/:id/cierre`. */
+export async function cerrarConZ(page: Page) {
+  await page.getByRole('button', { name: 'Cerrar con Z', exact: true }).click();
+  const ventana = page.getByRole('dialog', { name: '¿Cerrar la caja con Z?' });
+  await expect(ventana).toBeVisible();
+  const respuesta = page.waitForResponse(
+    (r) => r.request().method() === 'POST' && /\/turnos\/[^/]+\/cierre$/.test(r.url()),
+  );
+  await ventana.getByRole('button', { name: 'Cerrar con Z', exact: true }).click();
+  return respuesta;
+}
