@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { AuditoriaModule } from '../auditoria';
 import { PlataformaModule } from '../plataforma';
 import { SeguridadModule } from '../seguridad';
+import { RegistroAlcanceDeTurnos } from './alcance-de-turnos';
 import { ComprobantesController } from './comprobantes.controller';
 import { ComprobantesService } from './comprobantes.service';
 import { EmisionService } from './emision.service';
@@ -28,6 +29,7 @@ import { UltimaEmisionDeComprobantes } from './ultima-emision-de-comprobantes';
     FacturadoService,
     ComprobantesService,
     RegistroImpresoraDeCaja,
+    RegistroAlcanceDeTurnos,
     UltimaEmisionDeComprobantes,
   ],
   exports: [
@@ -36,6 +38,7 @@ import { UltimaEmisionDeComprobantes } from './ultima-emision-de-comprobantes';
     FacturadoService,
     ComprobantesService,
     RegistroImpresoraDeCaja,
+    RegistroAlcanceDeTurnos,
   ],
 })
 export class FacturacionModule {}

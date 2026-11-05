@@ -31,3 +31,15 @@ export const serieAgotada = (): ErrorAplicacion =>
     'SERIE_AGOTADA',
     'La serie llegó a su último número: configura una serie nueva para esta caja',
   );
+
+/** 404 de un comprobante de otra sucursal, de otra empresa o inexistente: el mismo cuerpo (criterio 106). */
+export const comprobanteNoEncontrado = (): ErrorAplicacion =>
+  new ErrorAplicacion(404, 'NO_ENCONTRADO', 'El comprobante no existe');
+
+/** 403 `PROHIBIDO`: un Cajero que pide un comprobante de un turno que no es suyo (criterio 100). */
+export const comprobanteDeOtro = (): ErrorAplicacion =>
+  new ErrorAplicacion(
+    403,
+    'PROHIBIDO',
+    'No tienes permiso para ver los comprobantes del turno de otra persona',
+  );

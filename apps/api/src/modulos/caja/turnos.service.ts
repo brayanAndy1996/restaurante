@@ -257,7 +257,9 @@ export class TurnosService {
   }
 
   /** Encola un trabajo `REPORTE_X` en la impresora de la caja (tarea T21). */
-  async imprimirReporteX(_turnoId: string): Promise<ImpresionDeCajaRespuesta> {
+  async imprimirReporteX(turnoId: string): Promise<ImpresionDeCajaRespuesta> {
+    // El alcance del Cajero (criterio 100) se comprueba ya; el trabajo `REPORTE_X` llega con la tarea T21.
+    await this.turnoVisible(turnoId);
     throw noImplementado();
   }
 

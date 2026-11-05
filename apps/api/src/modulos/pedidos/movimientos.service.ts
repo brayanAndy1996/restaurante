@@ -23,6 +23,7 @@ import {
   mesaOrigenRequerida,
   montoFueraDeRango,
   operacionConcurrente,
+  ordenConCobros,
   ordenNoEncontrada,
 } from './errores-pedidos';
 import { EventosPedidos } from './eventos-pedidos';
@@ -224,6 +225,10 @@ export class MovimientosService {
       exigirOrdenAbierta(orden);
       absorbidas.push(await this.leerAbsorbida(orden));
     }
+
+    // Unir una orden con cobros (la principal o una absorbida) se rechaza antes de tocar nada (historia 006,
+    // criterio 88): lo cobrado no se mueve a otra cuenta.
+    if (principal.cobros > 0 || absorbidas.some((a) => a.orden.cobros > 0)) throw ordenConCobros();
 
     const mesasFinales = new Set<string>([
       ...vigentes,

@@ -223,3 +223,25 @@ export const descuentoNoAdmitido = (
 /** 422 `CORTESIA_INVALIDA` (criterio 43): un ítem con ICBPER no admite cortesía, ni más unidades que las vigentes. */
 export const cortesiaInvalida = (mensaje: string, campo = 'itemId'): ErrorAplicacion =>
   new ErrorAplicacion(422, 'CORTESIA_INVALIDA', mensaje, [{ campo, mensaje }]);
+
+/**
+ * 409 `CUENTA_COBRADA_EN_PARTE` (historia 006, criterios 20, 86 y 87): enviar o anular dejaría la cuenta de una orden con
+ * cobros sin cuadrar con lo ya cobrado. La transacción se revierte entera (también la clave del supervisor).
+ */
+export const cuentaCobradaEnParte = (): ErrorAplicacion =>
+  new ErrorAplicacion(
+    409,
+    'CUENTA_COBRADA_EN_PARTE',
+    'La cuenta ya tiene cobros y este cambio no cuadraría con lo cobrado: cóbrala como está o corrige con una nota de crédito',
+  );
+
+/**
+ * 409 `CUENTA_EN_COBRO` al unir o anular una orden que ya tiene cobros (criterio 88): lo cobrado no se mueve a otra
+ * cuenta ni se deshace sin una nota de crédito (6b).
+ */
+export const ordenConCobros = (): ErrorAplicacion =>
+  new ErrorAplicacion(
+    409,
+    'CUENTA_EN_COBRO',
+    'La orden ya tiene cobros: no se puede unir ni anular. Cóbrala o corrige lo cobrado con una nota de crédito',
+  );

@@ -9,3 +9,5 @@ export { ComprobantesService } from './comprobantes.service';
 export type { ResumenTributarioDeTurno } from './comprobantes.service';
 export { RegistroImpresoraDeCaja } from './impresora-de-caja';
 export type { ImpresoraDeCaja, ResolutorImpresoraDeCaja } from './impresora-de-caja';
+export { RegistroAlcanceDeTurnos } from './alcance-de-turnos';
+export type { ResolutorResponsableDeTurno } from './alcance-de-turnos';

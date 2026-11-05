@@ -5,7 +5,13 @@ import type {
   EnvioRespuesta,
   LineaEnvioEntradaValidada,
 } from '@restaurante/contratos';
-import type { AfectacionIgv, EstadoOrden, ModoCobro, TipoOrden } from '@restaurante/dominio';
+import type {
+  AfectacionIgv,
+  EstadoOrden,
+  ModoCobro,
+  TipoOrden,
+  TipoParte,
+} from '@restaurante/dominio';
 import { QueryTypes, type Sequelize } from 'sequelize';
 import { CONEXION_API } from '../../nucleo/base-de-datos';
 import { noImplementado } from '../../nucleo/errores';
@@ -21,6 +27,9 @@ import {
   type DatosDeCuenta,
 } from './cuenta-de-orden';
 import { operacionConcurrente, ordenNoEncontrada } from './errores-pedidos';
+import { EventosPedidos } from './eventos-pedidos';
+import { mesasVigentesDeOrden } from './mesas-de-orden';
+import { invalidarPrecuentaVigente } from './precuenta-invalidacion';
 
 /**
  * Lo que la caja necesita de las órdenes (historia 006, "Interfaces de la API"). Pedidos es dueño de las órdenes, los
@@ -72,16 +81,21 @@ export interface CuentaParaCobrar {
   abiertaEn: Date;
 }
 
-/** Lo que la caja anota en la orden al cobrar una parte (criterio 53). */
+/** Lo que la caja anota en la orden al cobrar una parte (criterios 52 y 53). */
 export interface CobroParaRegistrar {
   ordenId: string;
-  /** Unidades cobradas por ítem en esta parte (suma `item.cantidad_facturada`). */
+  /** Unidades cobradas por ítem en esta parte (el `porItem` de la parte; suma `item.cantidad_facturada`). */
   itemsFacturados: readonly { itemId: string; cantidad: number }[];
-  /** El total de la parte (suma `orden.monto_cobrado`). */
+  /** El total de la parte, con su ICBPER (suma `orden.monto_cobrado`). */
   monto: string;
-  modo: ModoCobro | null;
+  /** El ICBPER de la parte (suma `orden.icbper_cobrado`, para el `porPagar` de la pre-cuenta, criterio 89). */
+  icbper: string;
+  /** El tipo de la parte: fija `orden.modo_cobro` con `ITEMS` o `IGUALES`; `TOTAL` no lo cambia. */
+  tipo: TipoParte;
   /** `true` si con esta parte no falta nada: la orden queda `CERRADA` y las mesas, libres. */
-  cierra: boolean;
+  cierraLaCuenta: boolean;
+  /** El instante del cobro (reloj de la API). */
+  ahora: Date;
 }
 
 export interface EstadoDeCuentaTrasCobro {
@@ -129,6 +143,7 @@ export class CuentasDePedidos {
     @Inject(SesionActual) private readonly sesion: SesionActual,
     @Inject(UsuariosConsultaService) private readonly usuarios: UsuariosConsultaService,
     @Inject(MesasConsultaService) private readonly mesas: MesasConsultaService,
+    @Inject(EventosPedidos) private readonly eventos: EventosPedidos,
   ) {}
 
   /**
@@ -158,6 +173,7 @@ export class CuentasDePedidos {
         estado: fila.estado,
         comensales: 0,
         unidaA: fila.unida_a_orden_id,
+        cobros: fila.cobros,
       });
     }
     return (await this.armar([fila]))[0]!;
@@ -239,11 +255,77 @@ export class CuentasDePedidos {
   }
 
   /**
-   * Suma lo facturado y lo cobrado, fija el modo, sube la versión y, si `cierra`, deja la orden `CERRADA`, cierra
-   * `orden_mesa` y registra `salon.cambio` y `orden.cambio` con `alConfirmar` (criterios 52 y 53).
+   * Suma lo facturado y lo cobrado, fija el modo, sube la versión y, si `cierraLaCuenta`, deja la orden `CERRADA`,
+   * cierra `orden_mesa` y registra `salon.cambio` y `orden.cambio` con `alConfirmar` (criterios 52 y 53). La orden ya
+   * debe estar bloqueada por quien cobra (`cuentaParaCobrar` con `bloquear`). Un cobro parcial no invalida la
+   * pre-cuenta ni la saca de `EN_PRECUENTA`; el que cierra la cuenta sí la invalida (ya no hay nada que cobrar).
    */
-  async registrarCobro(_cobro: CobroParaRegistrar): Promise<EstadoDeCuentaTrasCobro> {
-    throw noImplementado();
+  async registrarCobro(cobro: CobroParaRegistrar): Promise<EstadoDeCuentaTrasCobro> {
+    const [antes] = await this.conexion.query<{ sucursal_id: string; estado: EstadoOrden }>(
+      'SELECT sucursal_id, estado FROM orden WHERE id = $1',
+      { bind: [cobro.ordenId], type: QueryTypes.SELECT },
+    );
+    if (antes === undefined) throw ordenNoEncontrada();
+    const mesaIds = cobro.cierraLaCuenta
+      ? await mesasVigentesDeOrden(this.conexion, cobro.ordenId)
+      : [];
+
+    if (cobro.itemsFacturados.length > 0) {
+      await this.conexion.query(
+        `UPDATE item i
+            SET cantidad_facturada = i.cantidad_facturada + x.cantidad, actualizado_en = $3
+           FROM jsonb_to_recordset($1::jsonb) AS x(item_id uuid, cantidad int)
+          WHERE i.id = x.item_id AND i.orden_id = $2`,
+        {
+          bind: [
+            JSON.stringify(
+              cobro.itemsFacturados.map((i) => ({ item_id: i.itemId, cantidad: i.cantidad })),
+            ),
+            cobro.ordenId,
+            cobro.ahora,
+          ],
+          type: QueryTypes.UPDATE,
+        },
+      );
+    }
+    const [despues] = await this.conexion.query<{ estado: EstadoOrden; version: number }>(
+      `UPDATE orden
+          SET monto_cobrado = monto_cobrado + $2::numeric,
+              icbper_cobrado = icbper_cobrado + $3::numeric,
+              cobros = cobros + 1,
+              modo_cobro = CASE WHEN $4::text = 'IGUALES' THEN 'IGUALES'
+                                WHEN $4::text = 'ITEMS' THEN coalesce(modo_cobro, 'ITEMS')
+                                ELSE modo_cobro END,
+              version = version + 1,
+              estado = CASE WHEN $5::boolean THEN 'CERRADA' ELSE estado END,
+              cerrada_en = CASE WHEN $5::boolean THEN $6::timestamptz ELSE cerrada_en END,
+              actualizado_en = $6
+        WHERE id = $1
+        RETURNING estado, version`,
+      {
+        bind: [
+          cobro.ordenId,
+          cobro.monto,
+          cobro.icbper,
+          cobro.tipo,
+          cobro.cierraLaCuenta,
+          cobro.ahora,
+        ],
+        type: QueryTypes.SELECT,
+      },
+    );
+    if (cobro.cierraLaCuenta) {
+      await this.conexion.query(
+        `UPDATE orden_mesa SET hasta = $2, actualizado_en = $2 WHERE orden_id = $1 AND hasta IS NULL`,
+        { bind: [cobro.ordenId, cobro.ahora], type: QueryTypes.UPDATE },
+      );
+      if (antes.estado === 'EN_PRECUENTA') {
+        await invalidarPrecuentaVigente(this.conexion, cobro.ordenId, cobro.ahora);
+      }
+      this.eventos.salonCambio(antes.sucursal_id, cobro.ordenId, mesaIds);
+    }
+    this.eventos.ordenCambio(antes.sucursal_id, cobro.ordenId);
+    return { estado: despues!.estado, version: despues!.version };
   }
 
   /**

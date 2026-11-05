@@ -240,6 +240,12 @@ export function sumarMontos(montos: readonly string[]): string {
   return comoMonto(montos.reduce((suma, m) => suma + centimos(m), 0n));
 }
 
+/** `a − b` de montos con 2 decimales, sin bajar de cero. */
+export function restarMontos(a: string, b: string): string {
+  const resta = centimos(a) - centimos(b);
+  return comoMonto(resta < 0n ? 0n : resta);
+}
+
 /** `monto × cantidad`, con 2 decimales. */
 export function multiplicarMonto(monto: string, cantidad: number): string {
   return comoMonto(centimos(monto) * BigInt(cantidad));
@@ -420,7 +426,24 @@ export function problemaAlAnular(
   if (quedan > 0 && cortesia !== undefined && cortesia.cantidad > quedan) {
     return 'CORTESIA_SUPERA_LA_CANTIDAD';
   }
-  const despues: DatosDeCuenta = {
+  return descuentoQueNoSeAdmite(cuentaDeDatos(datosTrasAnular(datos, itemId, cantidad)))
+    ? 'DESCUENTO_NO_ADMITIDO'
+    : null;
+}
+
+/**
+ * Los datos de la cuenta tal como quedarían al anular `cantidad` unidades del ítem: un ítem anulado del todo sale con su
+ * descuento y su cortesía. Sirve para `problemaAlAnular` y para preguntarle a caja si lo ya cobrado sigue cuadrando.
+ */
+export function datosTrasAnular(
+  datos: DatosDeCuenta,
+  itemId: string,
+  cantidad: number,
+): DatosDeCuenta {
+  const item = datos.items.find((i) => i.id === itemId);
+  if (item === undefined) return datos;
+  const quedan = item.cantidad - cantidad;
+  return {
     items:
       quedan === 0
         ? datos.items.filter((i) => i.id !== itemId)
@@ -432,5 +455,4 @@ export function problemaAlAnular(
     descuentoCuenta: datos.descuentoCuenta,
     cortesias: quedan === 0 ? datos.cortesias.filter((c) => c.itemId !== itemId) : datos.cortesias,
   };
-  return descuentoQueNoSeAdmite(cuentaDeDatos(despues)) ? 'DESCUENTO_NO_ADMITIDO' : null;
 }

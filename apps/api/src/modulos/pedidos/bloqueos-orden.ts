@@ -9,6 +9,8 @@ export interface OrdenBloqueada {
   comensales: number;
   /** La orden a la que se unió, si quedó `UNIDA`. */
   unidaA: string | null;
+  /** Cuántos cobros tiene (`orden.cobros`, historia 006): con alguno, unir y anular la orden se rechazan. */
+  cobros: number;
 }
 
 interface FilaOrdenBloqueada {
@@ -17,6 +19,7 @@ interface FilaOrdenBloqueada {
   estado: OrdenBloqueada['estado'];
   comensales: number;
   unida_a_orden_id: string | null;
+  cobros: number;
 }
 
 /**
@@ -30,7 +33,7 @@ export async function bloquearOrden(
   sucursalId: string,
 ): Promise<OrdenBloqueada> {
   const filas = await conexion.query<FilaOrdenBloqueada>(
-    `SELECT id, sucursal_id, estado, comensales, unida_a_orden_id FROM orden
+    `SELECT id, sucursal_id, estado, comensales, unida_a_orden_id, cobros FROM orden
       WHERE id = $1 AND sucursal_id = $2 FOR UPDATE`,
     { bind: [ordenId, sucursalId], type: QueryTypes.SELECT },
   );
@@ -42,6 +45,7 @@ export async function bloquearOrden(
     estado: fila.estado,
     comensales: fila.comensales,
     unidaA: fila.unida_a_orden_id,
+    cobros: fila.cobros,
   };
 }
 
@@ -58,7 +62,7 @@ export async function bloquearOrdenes(
 ): Promise<Map<string, OrdenBloqueada>> {
   const ids = [...new Set(ordenIds)].sort();
   const filas = await conexion.query<FilaOrdenBloqueada>(
-    `SELECT id, sucursal_id, estado, comensales, unida_a_orden_id FROM orden
+    `SELECT id, sucursal_id, estado, comensales, unida_a_orden_id, cobros FROM orden
       WHERE id = ANY($1::uuid[]) AND sucursal_id = $2 ORDER BY id FOR UPDATE`,
     { bind: [ids, sucursalId], type: QueryTypes.SELECT },
   );
@@ -71,6 +75,7 @@ export async function bloquearOrdenes(
         estado: fila.estado,
         comensales: fila.comensales,
         unidaA: fila.unida_a_orden_id,
+        cobros: fila.cobros,
       },
     ]),
   );

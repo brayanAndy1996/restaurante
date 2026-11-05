@@ -23,6 +23,8 @@ import { CartaVentaService, ErrorProductoNoVendible, ErrorSeleccionInvalida } fr
 import { SesionActual } from '../seguridad';
 import { bloquearOrden, exigirOrdenAbierta } from './bloqueos-orden';
 import { guardarComandas, type ParteParaGuardar } from './comandas';
+import { COBROS, exigirCambioConCobros, type CobrosPuerto } from './cobros';
+import { cuentaDeDatos, leerDatosDeCuenta } from './cuenta-de-orden';
 import {
   idDeClienteReutilizado,
   itemsNoMarchables,
@@ -85,6 +87,7 @@ export class EnviosService {
     @Inject(TicketsDePedidos) private readonly tickets: TicketsDePedidos,
     @Inject(EventosPedidos) private readonly eventos: EventosPedidos,
     @Inject(VistaOrdenService) private readonly vista: VistaOrdenService,
+    @Inject(COBROS) private readonly cobros: CobrosPuerto,
   ) {}
 
   // -------------------------------------------------------------------------------------------------
@@ -186,6 +189,12 @@ export class EnviosService {
           ahora,
         ],
       },
+    );
+
+    // Una orden con cobros solo admite el envío si lo ya cobrado sigue cuadrando (historia 006, criterios 20 y 87):
+    // con la orden bloqueada y los ítems nuevos ya guardados, caja lo comprueba; si no, 409 y se revierte todo.
+    await exigirCambioConCobros(this.conexion, this.cobros, orden.id, async () =>
+      cuentaDeDatos(await leerDatosDeCuenta(this.conexion, orden.id)),
     );
 
     // Ruteo por estación (criterio 22): una comanda por estación con las partes de todos los ítems.

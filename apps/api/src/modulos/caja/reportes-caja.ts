@@ -137,14 +137,29 @@ export class ReportesCaja {
   }
 
   /**
-   * Los cobros del turno por medio, con los redondeos y los vueltos. Las tablas `cobro` y `pago` llegan con la
-   * migración de la tarea T15 (cobro): hasta entonces el turno no tiene cobros y todo es cero.
+   * Los cobros del turno por medio, con los redondeos y los vueltos: dos consultas de sumas en `NUMERIC`, sin importar
+   * cuántos cobros tenga el turno. `cantidad` es la de pagos del medio; los cinco medios salen siempre, en cero si no
+   * hubo ninguno. El efectivo cuenta lo que quedó en la caja (`pago.monto`, sin el vuelto).
    */
-  private async sumasDeCobros(_turnoId: string): Promise<SumasDeCobros> {
+  private async sumasDeCobros(turnoId: string): Promise<SumasDeCobros> {
+    const pagos = await this.conexion.query<{ medio: MedioPago; cantidad: number; monto: string }>(
+      `SELECT medio, count(*)::int AS cantidad, sum(monto)::numeric(14, 2)::text AS monto
+         FROM pago WHERE turno_id = $1 GROUP BY medio`,
+      { bind: [turnoId], type: QueryTypes.SELECT },
+    );
+    const [totales] = await this.conexion.query<{ redondeos: string; vueltos: string }>(
+      `SELECT coalesce(sum(redondeo), 0)::numeric(14, 2)::text AS redondeos,
+              coalesce(sum(vuelto), 0)::numeric(14, 2)::text AS vueltos
+         FROM cobro WHERE turno_id = $1`,
+      { bind: [turnoId], type: QueryTypes.SELECT },
+    );
     return {
-      porMedio: MEDIOS_PAGO.map((medio) => ({ medio, cantidad: 0, monto: '0.00' })),
-      redondeos: '0.00',
-      vueltos: '0.00',
+      porMedio: MEDIOS_PAGO.map((medio) => {
+        const fila = pagos.find((p) => p.medio === medio);
+        return { medio, cantidad: fila?.cantidad ?? 0, monto: fila?.monto ?? '0.00' };
+      }),
+      redondeos: totales?.redondeos ?? '0.00',
+      vueltos: totales?.vueltos ?? '0.00',
     };
   }
 }

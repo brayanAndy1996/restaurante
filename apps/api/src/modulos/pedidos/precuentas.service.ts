@@ -1,7 +1,7 @@
 import { Inject, Injectable } from '@nestjs/common';
 import type { PrecuentaEntrada, PrecuentaRespuesta } from '@restaurante/contratos';
-import { excedeMontoMaximo, totalOrden, totalVigenteLinea } from '@restaurante/dominio';
-import { calcularCuenta } from '@restaurante/dominio/caja';
+import { excedeMontoMaximo, fechaLima, totalOrden, totalVigenteLinea } from '@restaurante/dominio';
+import { calcularCuenta, montoIcbperVigente } from '@restaurante/dominio/caja';
 import { QueryTypes, type Sequelize } from 'sequelize';
 import { CONEXION_API } from '../../nucleo/base-de-datos';
 import { ContextoEmpresa } from '../../nucleo/contexto-empresa';
@@ -14,6 +14,7 @@ import {
   leerDatosDeCuenta,
   montosDeDescuentos,
   multiplicarMonto,
+  restarMontos,
 } from './cuenta-de-orden';
 import { idDeClienteReutilizado, montoFueraDeRango, ordenSinConsumo } from './errores-pedidos';
 import { EventosPedidos } from './eventos-pedidos';
@@ -281,6 +282,28 @@ export class PrecuentasService {
   }
 
   /**
+   * "Pagado" y "Por pagar" de una cuenta con cobros (historia 006, criterio 89). `pagado` es lo cobrado de verdad
+   * (`orden.monto_cobrado`, con el ICBPER que ya se cobró). La pre-cuenta no lleva ICBPER, así que `porPagar` es el
+   * saldo de la cuenta menos el ICBPER que falta cobrar: (total − cobrado) − (ICBPER de la cuenta − ICBPER cobrado).
+   * El ICBPER vigente sale de `packages/dominio` por la fecha de Lima del reloj de la API.
+   */
+  private async pagos(
+    orden: { monto_cobrado: string; icbper_cobrado: string },
+    ordenId: string,
+  ): Promise<{ pagado: string; porPagar: string }> {
+    const datos = await leerDatosDeCuenta(this.conexion, ordenId);
+    const calculada = calcularCuenta(
+      cuentaDeDatos(datos, {
+        tasaIgv: null,
+        montoIcbper: montoIcbperVigente(fechaLima(this.reloj.ahora())),
+      }),
+    );
+    const saldo = restarMontos(calculada.totales.total, orden.monto_cobrado);
+    const icbperPendiente = restarMontos(calculada.totales.icbper, orden.icbper_cobrado);
+    return { pagado: orden.monto_cobrado, porPagar: restarMontos(saldo, icbperPendiente) };
+  }
+
+  /**
    * `precuentaRespuesta` de una pre-cuenta guardada: sus líneas, su total y su número tal como se emitieron, con
    * las mesas, el mozo y los comensales de la orden como están ahora (mover no la invalida). La nota sale de las
    * líneas guardadas.
@@ -291,10 +314,20 @@ export class PrecuentasService {
     sucursalId: string,
     trabajoId: string | null,
   ): Promise<PrecuentaRespuesta> {
-    const [orden] = await this.conexion.query<{ mozo_id: string | null; comensales: number }>(
-      'SELECT mozo_id, comensales FROM orden WHERE id = $1 AND sucursal_id = $2',
+    const [orden] = await this.conexion.query<{
+      mozo_id: string | null;
+      comensales: number;
+      cobros: number;
+      monto_cobrado: string;
+      icbper_cobrado: string;
+    }>(
+      `SELECT mozo_id, comensales, cobros, monto_cobrado::text AS monto_cobrado,
+              icbper_cobrado::text AS icbper_cobrado
+         FROM orden WHERE id = $1 AND sucursal_id = $2`,
       { bind: [ordenId, sucursalId], type: QueryTypes.SELECT },
     );
+    const conCobros =
+      orden !== undefined && orden.cobros > 0 ? await this.pagos(orden, ordenId) : {};
     const mesaIds = await mesasVigentesDeOrden(this.conexion, ordenId);
     const nombresMesas = await this.mesas.nombres(mesaIds);
     const mozoId = orden?.mozo_id ?? null;
@@ -325,6 +358,7 @@ export class PrecuentasService {
       nota: conIcbper ? `${NOTA_PRECUENTA} ${NOTA_ICBPER}` : NOTA_PRECUENTA,
       ...(fila.descuentos === null ? {} : { descuentos: fila.descuentos }),
       ...(fila.cortesias === null ? {} : { cortesias: fila.cortesias }),
+      ...conCobros,
       impresion: trabajoId === null ? 'SIN_IMPRESORA' : 'EN_COLA',
       trabajoId,
     };

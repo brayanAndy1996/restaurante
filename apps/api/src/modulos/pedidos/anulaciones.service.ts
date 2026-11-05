@@ -22,7 +22,13 @@ import { AuditoriaService } from '../auditoria';
 import { MesasConsultaService } from '../salon';
 import { SesionActual } from '../seguridad';
 import { bloquearOrden, exigirOrdenAbierta } from './bloqueos-orden';
-import { leerDatosDeCuenta, problemaAlAnular } from './cuenta-de-orden';
+import { COBROS, exigirCambioConCobros, type CobrosPuerto } from './cobros';
+import {
+  cuentaDeDatos,
+  datosTrasAnular,
+  leerDatosDeCuenta,
+  problemaAlAnular,
+} from './cuenta-de-orden';
 import { guardarComandas, type ComandaGuardada, type ParteParaGuardar } from './comandas';
 import {
   cantidadMayorQueLaVigente,
@@ -31,6 +37,7 @@ import {
   idDeClienteReutilizado,
   itemNoAnulable,
   itemNoEncontrado,
+  ordenConCobros,
 } from './errores-pedidos';
 import { EventosPedidos } from './eventos-pedidos';
 import { IMPRESION, type ImpresionPuerto } from './impresion';
@@ -98,6 +105,7 @@ export class AnulacionesService {
     @Inject(MesasConsultaService) private readonly mesas: MesasConsultaService,
     @Inject(EventosPedidos) private readonly eventos: EventosPedidos,
     @Inject(VistaOrdenService) private readonly vista: VistaOrdenService,
+    @Inject(COBROS) private readonly cobros: CobrosPuerto,
   ) {}
 
   // -------------------------------------------------------------------------------------------------
@@ -162,17 +170,19 @@ export class AnulacionesService {
 
     // Criterio 45a: si la cuenta que queda no admite el descuento o la cortesía, la anulación se rechaza sin
     // anular nada (y la reversión devuelve la clave); el descuento nunca se recorta ni se quita solo.
-    const problema = problemaAlAnular(
-      await leerDatosDeCuenta(this.conexion, orden.id),
-      item.id,
-      entrada.cantidad,
-    );
+    const datosDeLaCuenta = await leerDatosDeCuenta(this.conexion, orden.id);
+    const problema = problemaAlAnular(datosDeLaCuenta, item.id, entrada.cantidad);
     if (problema === 'DESCUENTO_NO_ADMITIDO') throw descuentoNoAdmitido('anular');
     if (problema === 'CORTESIA_SUPERA_LA_CANTIDAD') {
       throw conflictoDeCuenta(
         'La cortesía del ítem es mayor que lo que quedaría: quítala antes de anular',
       );
     }
+    // Una orden con cobros solo admite la anulación si lo ya cobrado sigue cuadrando (criterios 20 y 86); si no,
+    // 409 `CUENTA_COBRADA_EN_PARTE` sin anular nada y sin consumir la clave (la reversión la devuelve).
+    await exigirCambioConCobros(this.conexion, this.cobros, orden.id, async () =>
+      cuentaDeDatos(datosTrasAnular(datosDeLaCuenta, item.id, entrada.cantidad)),
+    );
 
     const ahora = this.reloj.ahora();
     const autorizacion = this.sesion.autorizacionConsumida();
@@ -285,6 +295,8 @@ export class AnulacionesService {
 
     const orden = await bloquearOrden(this.conexion, ordenId, sucursalId);
     exigirOrdenAbierta(orden);
+    // Lo cobrado no se deshace anulando la orden (criterio 88): solo con una nota de crédito (6b).
+    if (orden.cobros > 0) throw ordenConCobros();
 
     const vigentes = await this.conexion.query<ItemAnulable>(
       `SELECT ${COLUMNAS_ITEM}
