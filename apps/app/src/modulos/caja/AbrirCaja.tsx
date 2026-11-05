@@ -58,6 +58,8 @@ interface Props {
   esAdministrador: boolean;
   /** La sesión ya sabe que la sucursal está suspendida (solo el Administrador recibe ese aviso). */
   suspendida: boolean;
+  /** El turno quedó abierto: la pantalla guarda lo que dijo la API de la gaveta (criterio 93). */
+  onAbierta?: (turno: TurnoRespuesta) => void;
 }
 
 /** Lo que falta para cobrar, con una acción para el Administrador y la frase de a quién pedírselo para los demás. */
@@ -144,6 +146,7 @@ export function AbrirCaja({
   sucursalId,
   esAdministrador,
   suspendida,
+  onAbierta,
 }: Props) {
   const clientes = useQueryClient();
   const sondeo = useIntervaloDeSondeo();
@@ -195,6 +198,7 @@ export function AbrirCaja({
         cajaId: resultado.cajaId,
         fondo: resultado.fondo,
       });
+      onAbierta?.(turno);
       // Con el turno guardado la pantalla pasa sola a "Mi turno".
       clientes.setQueryData(claveTurnoMio(usuarioId, sucursalId), turno);
       void clientes.invalidateQueries({ queryKey: CLAVE_DE_TURNO });

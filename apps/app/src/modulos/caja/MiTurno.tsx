@@ -7,6 +7,7 @@ import {
   EtiquetaDeEstado,
   IconoCandado,
   Icono,
+  IconoImpresora,
   IconoPago,
   IconoOk,
   IconoReintentar,
@@ -17,10 +18,12 @@ import {
 import { useQuery } from '@tanstack/react-query';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { Pagina } from '../../componentes/Pagina';
+import { AvisoPendiente } from '../../componentes/PendienteDeEnvio';
 import { usePermiso } from '../acceso/permisos';
 import { useSesionActiva } from '../acceso/sesion';
 import { useIntervaloDeSondeo } from '../../lib/tiempo-real';
 import { CerrarCaja } from './CerrarCaja';
+import { EstadoDeLaImpresion, imprimirReporteX, useImpresionDeCaja } from './impresion-caja';
 import { Movimientos } from './Movimientos';
 import { PorCobrar } from './PorCobrar';
 import { ReporteDeCaja } from './ReporteDeCaja';
@@ -46,6 +49,8 @@ const VISTAS_CON_COBRO: readonly OpcionDeSegmento<Vista>[] = [
 
 interface Props {
   turno: TurnoRespuesta;
+  /** Lo que dijo la API de la gaveta al abrir este turno (criterio 93); se omite con fondo 0.00 y al volver a la pantalla. */
+  aperturaImpresa?: Pick<TurnoRespuesta, 'impresion' | 'trabajoId'> | undefined;
   onCerrada: (reporte: ReporteCaja) => void;
 }
 
@@ -53,7 +58,7 @@ interface Props {
  * `/caja` con turno abierto (criterio 110 de 006): de qué caja es, desde cuándo y con qué fondo; el cambio entre
  * "Por cobrar" (para quien cobra), "Movimientos" y "Reporte X"; y, separado por una junta, "Cerrar caja". "Mostrador" (la venta sin mesa, para quien cobra). El cierre es una vista aparte (`?paso=cierre`) para que el botón de volver del celular regrese al turno.
  */
-export function MiTurno({ turno, onCerrada }: Props) {
+export function MiTurno({ turno, aperturaImpresa, onCerrada }: Props) {
   const [parametros, ponerParametros] = useSearchParams();
   const navegar = useNavigate();
   const sondeo = useIntervaloDeSondeo();
@@ -61,6 +66,7 @@ export function MiTurno({ turno, onCerrada }: Props) {
   const puedeCobrar = usePermiso('COBRAR') !== 'prohibido';
   const sucursalId = useSesionActiva().sucursal?.id ?? '';
   const pedida = parametros.get('ver');
+  const impresionDelX = useImpresionDeCaja(imprimirReporteX);
   // «Por cobrar» se ofrece a quien cobra; la vista por defecto sigue siendo «Movimientos» hasta que llegue el cobro.
   const vista: Vista =
     pedida === 'reporte-x'
@@ -110,6 +116,13 @@ export function MiTurno({ turno, onCerrada }: Props) {
               <dd>{soles(turno.fondo)}</dd>
             </div>
           </dl>
+          {aperturaImpresa?.impresion ? (
+            <EstadoDeLaImpresion
+              gaveta
+              impresion={aperturaImpresa.impresion}
+              trabajoId={aperturaImpresa.trabajoId}
+            />
+          ) : null}
         </section>
 
         {puedeCobrar ? (
@@ -151,6 +164,14 @@ export function MiTurno({ turno, onCerrada }: Props) {
               <>
                 <div className="turno__x-acciones">
                   <Boton
+                    icono={IconoImpresora}
+                    cargando={impresionDelX.enCurso}
+                    textoCargando={impresionDelX.pendiente ? 'Pendiente de envío' : 'Imprimiendo…'}
+                    onClick={() => void impresionDelX.imprimir(turno.id)}
+                  >
+                    Imprimir
+                  </Boton>
+                  <Boton
                     icono={IconoReintentar}
                     onClick={() => void reporte.refetch()}
                     cargando={reporte.isFetching}
@@ -159,6 +180,19 @@ export function MiTurno({ turno, onCerrada }: Props) {
                     Actualizar
                   </Boton>
                 </div>
+                <AvisoPendiente pendiente={impresionDelX.pendiente} />
+                {impresionDelX.fallo ? (
+                  <Aviso tipo="error" titulo="No pudimos imprimir el reporte X">
+                    {impresionDelX.fallo.mensaje}
+                  </Aviso>
+                ) : null}
+                {impresionDelX.resultado ? (
+                  <EstadoDeLaImpresion
+                    que="el reporte X"
+                    impresion={impresionDelX.resultado.impresion}
+                    trabajoId={impresionDelX.resultado.trabajoId}
+                  />
+                ) : null}
                 {reporte.isError ? (
                   <Aviso tipo="alerta" titulo="No pudimos actualizar el reporte">
                     Lo que ves puede estar desactualizado. Seguimos intentando.

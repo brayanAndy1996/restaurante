@@ -97,6 +97,11 @@ interface Datos {
   cierre?: Manejador;
   abrir?: Manejador;
   movimiento?: Manejador;
+  /** Lo que la API añade al responder la apertura y un movimiento (criterio 96): `impresion` y `trabajoId`. */
+  impresion?: {
+    apertura?: Pick<TurnoRespuesta, 'impresion' | 'trabajoId'>;
+    movimiento?: Pick<MovimientoRespuesta, 'impresion' | 'trabajoId'>;
+  };
 }
 
 /** API de mentira con memoria: abre el turno, guarda los movimientos y entrega el X con ellos. */
@@ -121,7 +126,7 @@ function api(datos: Datos = {}, extra: Record<string, Manejador> = {}) {
         caja: { id: c.cajaId, nombre: elegida?.nombre ?? 'Caja' },
         fondo: c.fondo,
       });
-      return json(201, actual);
+      return json(201, { ...actual, ...datos.impresion?.apertura });
     },
     'GET /turnos/*/reporte': () =>
       actual
@@ -145,7 +150,7 @@ function api(datos: Datos = {}, extra: Record<string, Manejador> = {}) {
       };
       const nuevo = movimiento(movimientos.length + 1, { ...c });
       movimientos.push(nuevo);
-      return json(201, nuevo);
+      return json(201, { ...nuevo, ...datos.impresion?.movimiento });
     },
     'POST /turnos/*/cierre': async (pedido) => {
       if (!datos.cierre) return conflicto('ERROR_INTERNO', 'Sin manejador', 500);
@@ -494,8 +499,8 @@ describe('/caja con turno: mi turno, movimientos y reporte X (criterios 28, 29 y
       .getByRole('heading', { name: 'Lo que debería haber en caja' })
       .closest('section') as HTMLElement;
     expect(within(esperado).getByText('S/ 307.00')).toBeInTheDocument();
-    // "Imprimir" todavía no existe: no se ofrece.
-    expect(screen.queryByRole('button', { name: /Imprimir/ })).toBeNull();
+    // «Imprimir» saca el X por la impresora de la caja (criterio 95).
+    expect(screen.getByRole('button', { name: 'Imprimir' })).toBeEnabled();
   });
 
   it('"Actualizar" vuelve a pedir el X', async () => {
@@ -915,5 +920,203 @@ describe('Quién ve la caja (criterio 108)', () => {
     await waitFor(() =>
       expect(screen.queryByRole('group', { name: 'Caja que vas a abrir' })).toBeNull(),
     );
+  });
+});
+
+describe('La impresión de la caja (criterios 90 a 96 y 110)', () => {
+  const TRABAJO = uuid(950);
+  const listaDeTrabajos = (nombre = 'Impresora de caja') => [
+    {
+      id: TRABAJO,
+      tipo: 'GAVETA',
+      impresora: { id: uuid(60), nombre },
+      mesa: null,
+      estado: 'PENDIENTE',
+      intentos: 0,
+      creadoEn: '2026-11-05T00:10:00.000Z',
+      impresoEn: null,
+      reimpresionDe: null,
+      ordenId: null,
+      envioNumero: null,
+    },
+  ];
+  const conImpresora = (nombre?: string): Record<string, Manejador> => ({
+    'GET /impresion/trabajos': () => json(200, listaDeTrabajos(nombre)),
+  });
+
+  it('al abrir con fondo dice «Abriendo la gaveta en <impresora>»', async () => {
+    api(
+      {
+        cajas: [caja(1, 'Caja 1')],
+        impresion: { apertura: { impresion: 'EN_COLA', trabajoId: TRABAJO } },
+      },
+      conImpresora('Epson de caja'),
+    );
+    renderApp('/caja');
+    await userEvent.type(await screen.findByLabelText('Fondo inicial'), '200');
+    await userEvent.click(boton('Abrir caja'));
+    expect(await screen.findByText('Turno abierto')).toBeInTheDocument();
+    expect(await screen.findByText('Abriendo la gaveta en Epson de caja')).toBeInTheDocument();
+  });
+
+  it('al abrir sin impresora de caja lo dice y manda al Administrador a Ajustes › Cajas', async () => {
+    api(
+      {
+        cajas: [caja(1, 'Caja 1')],
+        sesion: sesionDeRol('ADMINISTRADOR', { modulos: PLAN }),
+        impresion: { apertura: { impresion: 'SIN_IMPRESORA', trabajoId: null } },
+      },
+      {
+        'GET /impresion/trabajos': () => json(200, []),
+        'GET /emisores': () => json(200, []),
+        'GET /sucursales/*/tasa-igv': () => json(404, { codigo: 'NO_ENCONTRADO', mensaje: 'No' }),
+      },
+    );
+    renderApp('/caja');
+    await userEvent.type(await screen.findByLabelText('Fondo inicial'), '200');
+    await userEvent.click(boton('Abrir caja'));
+    expect(await screen.findByText('Sin impresora de caja')).toBeInTheDocument();
+    expect(
+      screen.getByRole('link', { name: 'Elegir la impresora en Ajustes › Cajas' }),
+    ).toHaveAttribute('href', '/administracion/cajas');
+  });
+
+  it('con fondo en cero la API no trae impresión: no se dice nada de la gaveta', async () => {
+    api({ cajas: [caja(1, 'Caja 1')] });
+    renderApp('/caja');
+    await userEvent.type(await screen.findByLabelText('Fondo inicial'), '0');
+    await userEvent.click(boton('Abrir caja'));
+    expect(await screen.findByText('Turno abierto')).toBeInTheDocument();
+    expect(screen.queryByText(/gaveta/i)).toBeNull();
+    expect(screen.queryByText('Sin impresora de caja')).toBeNull();
+  });
+
+  it('un movimiento dice qué pasó con la gaveta; sin impresora lo dice un Cajero sin enlace', async () => {
+    api(
+      {
+        turno: turno(),
+        impresion: { movimiento: { impresion: 'SIN_IMPRESORA', trabajoId: null } },
+      },
+      conImpresora(),
+    );
+    renderApp('/caja');
+    await userEvent.type(await screen.findByLabelText('Monto'), '15.5');
+    await userEvent.type(campo('Motivo'), 'Hielo');
+    await userEvent.click(boton('Registrar egreso'));
+    expect(await screen.findByText('Sin impresora de caja')).toBeInTheDocument();
+    expect(
+      screen.getByText('El Administrador puede elegirla en Ajustes › Cajas.'),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /Ajustes › Cajas/ })).toBeNull();
+  });
+
+  it('«Imprimir» del reporte X manda la petición con su clave y dice dónde sale', async () => {
+    const s = api(
+      { turno: turno() },
+      {
+        ...conImpresora('Epson de caja'),
+        [`POST /turnos/${uuid(300)}/reporte-x/impresiones`]: () =>
+          json(201, { trabajoId: TRABAJO, impresion: 'EN_COLA' }),
+      },
+    );
+    renderApp('/caja');
+    await userEvent.click(await screen.findByRole('button', { name: 'Reporte X' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Imprimir' }));
+    expect(
+      await screen.findByText('Imprimiendo el reporte X en Epson de caja'),
+    ).toBeInTheDocument();
+    const llamada = s.de('POST', `/turnos/${uuid(300)}/reporte-x/impresiones`)[0];
+    expect(llamada?.cuerpo).toBeUndefined();
+    expect(llamada?.cabeceras.get('Idempotency-Key')).toMatch(/\S/);
+  });
+
+  it('«Imprimir» del X sin impresora de caja dice «Sin impresora de caja»', async () => {
+    api(
+      { turno: turno() },
+      {
+        [`POST /turnos/${uuid(300)}/reporte-x/impresiones`]: () =>
+          json(201, { trabajoId: null, impresion: 'SIN_IMPRESORA' }),
+      },
+    );
+    renderApp('/caja');
+    await userEvent.click(await screen.findByRole('button', { name: 'Reporte X' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Imprimir' }));
+    expect(await screen.findByText('Sin impresora de caja')).toBeInTheDocument();
+  });
+
+  it('si el X no se pudo imprimir (403) lo dice en palabras y deja volver a intentar con la misma clave', async () => {
+    let intento = 0;
+    const s = api(
+      { turno: turno() },
+      {
+        [`POST /turnos/${uuid(300)}/reporte-x/impresiones`]: () => {
+          intento += 1;
+          return intento === 1
+            ? conflicto('PROHIBIDO', 'No', 403)
+            : json(201, { trabajoId: null, impresion: 'SIN_IMPRESORA' });
+        },
+      },
+    );
+    renderApp('/caja');
+    await userEvent.click(await screen.findByRole('button', { name: 'Reporte X' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Imprimir' }));
+    expect(await screen.findByText('No pudimos imprimir el reporte X')).toBeInTheDocument();
+    expect(screen.getByText(/Solo quien cobró en este turno/)).toBeInTheDocument();
+    await userEvent.click(boton('Imprimir'));
+    expect(await screen.findByText('Sin impresora de caja')).toBeInTheDocument();
+    const llamadas = s.de('POST', `/turnos/${uuid(300)}/reporte-x/impresiones`);
+    expect(llamadas[1]?.cabeceras.get('Idempotency-Key')).toBe(
+      llamadas[0]?.cabeceras.get('Idempotency-Key'),
+    );
+  });
+
+  it('la Z cerrada dice si se imprimió', async () => {
+    const t = turno();
+    api({
+      turno: t,
+      cierre: () =>
+        json(200, {
+          ...reporte(
+            {
+              ...t,
+              estado: 'CERRADO',
+              cerradoEn: '2026-11-05T01:00:00.000Z',
+              cerradoPor: t.responsable,
+            },
+            {
+              cierre: {
+                cerradoEn: '2026-11-05T01:00:00.000Z',
+                cerradoPor: t.responsable,
+                conteo: MEDIOS.map((medio) => ({
+                  medio,
+                  esperado: '0.00',
+                  contado: '0.00',
+                  diferencia: '0.00',
+                  motivo: null,
+                })),
+              },
+            },
+          ),
+          impresion: 'EN_COLA',
+          trabajoId: TRABAJO,
+        }),
+    });
+    renderApp('/caja');
+    await userEvent.click(await screen.findByRole('button', { name: 'Cerrar caja' }));
+    await screen.findByRole('heading', { name: 'Cuenta lo que hay en cada medio' });
+    for (const etiqueta of [
+      'Efectivo',
+      'Tarjeta de crédito',
+      'Tarjeta de débito',
+      'Yape',
+      'Plin',
+    ]) {
+      await userEvent.type(campo(etiqueta), '0');
+    }
+    await userEvent.click(boton('Cerrar con Z'));
+    const dialogo = await screen.findByRole('dialog', { name: '¿Cerrar la caja con Z?' });
+    await userEvent.click(within(dialogo).getByRole('button', { name: 'Cerrar con Z' }));
+    expect(await screen.findByText('Caja 1 cerrada')).toBeInTheDocument();
+    expect(await screen.findByText(/Imprimiendo el reporte Z/)).toBeInTheDocument();
   });
 });

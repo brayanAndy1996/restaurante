@@ -6,7 +6,7 @@ import type {
   TurnoRespuesta,
 } from '@restaurante/contratos';
 import { calcularParte, type ParteCalculada, type ParteEntrada } from '@restaurante/dominio/caja';
-import { screen, within } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { guardarTokenDeSesion } from '../src/lib/almacen';
@@ -167,7 +167,13 @@ function comprobante(
 /** Lo que responde la API al cobrar, calculado a partir de la entrada. */
 function respuestaDe(
   entrada: CobroEntrada,
-  extra: { estado?: 'CERRADA' | 'ABIERTA'; saldo?: string; numero?: string; vuelto?: string } = {},
+  extra: {
+    estado?: 'CERRADA' | 'ABIERTA';
+    saldo?: string;
+    numero?: string;
+    vuelto?: string;
+    trabajoId?: string;
+  } = {},
 ): CobroRespuesta {
   const efectivo = entrada.pagos.find((p) => p.medio === 'EFECTIVO');
   return {
@@ -193,8 +199,8 @@ function respuestaDe(
       tipo: entrada.comprobante.tipo,
     }),
     cuenta: { estado: extra.estado ?? 'CERRADA', saldo: extra.saldo ?? '0.00', version: 4 },
-    impresion: 'SIN_IMPRESORA',
-    trabajoId: null,
+    impresion: extra.trabajoId ? 'EN_COLA' : 'SIN_IMPRESORA',
+    trabajoId: extra.trabajoId ?? null,
   };
 }
 
@@ -257,7 +263,7 @@ describe('El cobro de una cuenta (criterios 47 a 52 y 111)', () => {
     });
     expect(cobros(s)[0]?.cabeceras.get('Idempotency-Key')).toBe(entrada.id);
     expect(screen.getByText('Vuelto').nextSibling).toHaveTextContent('S/ 31.50');
-    expect(screen.getByText('Sin impresora')).toBeVisible();
+    expect(screen.getByText('Sin impresora de caja')).toBeVisible();
     expect(screen.getByText('Mesa 4 libre')).toBeVisible();
   });
 
@@ -953,5 +959,117 @@ describe('Entradas al cobro (criterio 111)', () => {
     renderApp(`/salon/ordenes/${ORDEN}`);
     await screen.findByRole('button', { name: 'Pedir pre-cuenta' });
     expect(screen.queryByRole('link', { name: 'Cobrar' })).toBeNull();
+  });
+});
+
+describe('La impresión del comprobante (criterios 90, 96 y 114)', () => {
+  const TRABAJO = uuid(960);
+  const API_IMPRESION = `/comprobantes/${uuid(7000)}/impresiones`;
+  const trabajos = () =>
+    json(
+      200,
+      [TRABAJO, uuid(961)].map((id) => ({
+        id,
+        tipo: 'COMPROBANTE',
+        impresora: { id: uuid(60), nombre: 'Epson de caja' },
+        mesa: '4',
+        estado: 'PENDIENTE',
+        intentos: 0,
+        creadoEn: '2026-11-05T00:10:00.000Z',
+        impresoEn: null,
+        reimpresionDe: null,
+        ordenId: ORDEN,
+        envioNumero: null,
+      })),
+    );
+
+  async function cobrarEnEfectivo(s: ReturnType<typeof montar>) {
+    renderApp(RUTA);
+    await userEvent.click(await screen.findByRole('button', { name: 'S/\u00a0100' }));
+    await userEvent.click(boton('Cobrar S/\u00a068.50'));
+    await screen.findByText('Boleta · B001-00000001');
+    return s;
+  }
+
+  const montarConImpresora = (extra: Record<string, Manejador> = {}) =>
+    montar({
+      extra: {
+        [`POST ${API_COBROS}`]: ({ cuerpo }) =>
+          json(201, respuestaDe(cuerpo as CobroEntrada, { trabajoId: TRABAJO })),
+        'GET /impresion/trabajos': trabajos,
+        ...extra,
+      },
+    });
+
+  it('dice «Imprimiendo en <impresora>» cuando el ticket quedó en cola', async () => {
+    await cobrarEnEfectivo(montarConImpresora());
+    expect(await screen.findByText('Imprimiendo en Epson de caja')).toBeVisible();
+    expect(screen.queryByText('Sin impresora de caja')).toBeNull();
+  });
+
+  it('sin impresora de caja lo dice, con la salida para quien no administra', async () => {
+    await cobrarEnEfectivo(
+      montar({
+        extra: {
+          [`POST ${API_COBROS}`]: ({ cuerpo }) => json(201, respuestaDe(cuerpo as CobroEntrada)),
+        },
+      }),
+    );
+    expect(screen.getByText('Sin impresora de caja')).toBeVisible();
+    expect(screen.getByText('El Administrador puede elegirla en Ajustes › Cajas.')).toBeVisible();
+    // El cobro ya está hecho: «Imprimir otra vez» sigue ofrecido.
+    expect(boton('Imprimir otra vez')).toBeEnabled();
+  });
+
+  it('«Imprimir otra vez» pide una copia del comprobante con su clave de idempotencia y la dice', async () => {
+    const s = montarConImpresora({
+      [`POST ${API_IMPRESION}`]: () => json(201, { trabajoId: uuid(961), impresion: 'EN_COLA' }),
+    });
+    await cobrarEnEfectivo(s);
+    await userEvent.click(boton('Imprimir otra vez'));
+    expect(await screen.findByText('Imprimiendo otra copia en Epson de caja')).toBeVisible();
+    const llamada = s.de('POST', API_IMPRESION)[0];
+    expect(llamada?.cuerpo).toBeUndefined();
+    expect(llamada?.cabeceras.get('Idempotency-Key')).toMatch(/\S/);
+    // Otra copia es una impresión nueva: lleva otra clave.
+    await userEvent.click(boton('Imprimir otra vez'));
+    await waitFor(() => expect(s.de('POST', API_IMPRESION)).toHaveLength(2));
+    expect(s.de('POST', API_IMPRESION)[1]?.cabeceras.get('Idempotency-Key')).not.toBe(
+      llamada?.cabeceras.get('Idempotency-Key'),
+    );
+  });
+
+  it('si la caja ya no tiene impresora (409) lo dice en palabras y no pierde el resultado del cobro', async () => {
+    const s = montarConImpresora({
+      [`POST ${API_IMPRESION}`]: () =>
+        json(409, { codigo: 'SIN_IMPRESORA', mensaje: 'La caja no tiene impresora' }),
+    });
+    await cobrarEnEfectivo(s);
+    await userEvent.click(boton('Imprimir otra vez'));
+    expect(await screen.findByText('No pudimos imprimir otra vez')).toBeVisible();
+    expect(screen.getByText(/Esta caja no tiene impresora/)).toBeVisible();
+    expect(screen.getByText('Boleta · B001-00000001')).toBeVisible();
+    expect(screen.getByText('Mesa 4 libre')).toBeVisible();
+  });
+
+  it('reintentar tras un fallo usa la misma clave: si la primera sí llegó, no sale otra copia', async () => {
+    let intento = 0;
+    const s = montarConImpresora({
+      [`POST ${API_IMPRESION}`]: () => {
+        intento += 1;
+        return intento === 1
+          ? json(403, { codigo: 'PROHIBIDO', mensaje: 'No' })
+          : json(201, { trabajoId: uuid(961), impresion: 'EN_COLA' });
+      },
+    });
+    await cobrarEnEfectivo(s);
+    await userEvent.click(boton('Imprimir otra vez'));
+    expect(await screen.findByText(/Solo quien cobró en este turno/)).toBeVisible();
+    await userEvent.click(boton('Imprimir otra vez'));
+    await screen.findByText(/Imprimiendo otra copia/);
+    const llamadas = s.de('POST', API_IMPRESION);
+    expect(llamadas[1]?.cabeceras.get('Idempotency-Key')).toBe(
+      llamadas[0]?.cabeceras.get('Idempotency-Key'),
+    );
   });
 });

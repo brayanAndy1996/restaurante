@@ -1,4 +1,4 @@
-import type { ReporteCaja } from '@restaurante/contratos';
+import type { ReporteCaja, TurnoRespuesta } from '@restaurante/contratos';
 import {
   Aviso,
   Boton,
@@ -8,15 +8,18 @@ import {
   IconoTienda,
 } from '@restaurante/ui';
 import { useQuery } from '@tanstack/react-query';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Pagina } from '../../componentes/Pagina';
 import { useIntervaloDeSondeo } from '../../lib/tiempo-real';
 import { useSesionActiva } from '../acceso/sesion';
 import { AbrirCaja } from './AbrirCaja';
+import { EstadoDeLaImpresion } from './impresion-caja';
 import { MiTurno } from './MiTurno';
 import { ReporteDeCaja } from './ReporteDeCaja';
 import { claveTurnoMio, leerTurnoMio, mensajeDeCaja } from './turno';
 import './caja.css';
+
+const SEGUNDOS_DE_AVISO_DE_GAVETA = 20;
 
 /** El turno quedó cerrado: la Z en pantalla y la salida hacia "Abrir caja". */
 function CajaCerrada({ reporte, onListo }: { reporte: ReporteCaja; onListo: () => void }) {
@@ -33,6 +36,11 @@ function CajaCerrada({ reporte, onListo }: { reporte: ReporteCaja; onListo: () =
         <Aviso tipo="ok" titulo={`${reporte.turno.caja.nombre} cerrada`}>
           Este es el reporte Z de tu turno. Ya no se pueden registrar cobros ni movimientos en él.
         </Aviso>
+        <EstadoDeLaImpresion
+          que="el reporte Z"
+          impresion={reporte.impresion}
+          trabajoId={reporte.trabajoId}
+        />
         <ReporteDeCaja reporte={reporte} />
       </div>
     </Pagina>
@@ -81,6 +89,14 @@ interface Props {
 function CajaDeSucursal({ empresaId, usuarioId, sucursalId, esAdministrador, suspendida }: Props) {
   const sondeo = useIntervaloDeSondeo();
   const [cerrada, setCerrada] = useState<ReporteCaja | null>(null);
+  // Lo que dijo la API de la gaveta al abrir: el turno que se vuelve a leer ya no lo trae.
+  const [apertura, setApertura] = useState<TurnoRespuesta | null>(null);
+  // «Abriendo la gaveta» es de ese momento: se retira solo; «Sin impresora de caja» sigue hasta salir de la pantalla.
+  useEffect(() => {
+    if (apertura?.impresion !== 'EN_COLA') return;
+    const id = window.setTimeout(() => setApertura(null), SEGUNDOS_DE_AVISO_DE_GAVETA * 1000);
+    return () => window.clearTimeout(id);
+  }, [apertura]);
   const mio = useQuery({
     queryKey: claveTurnoMio(usuarioId, sucursalId),
     queryFn: ({ signal }) => leerTurnoMio(signal),
@@ -113,6 +129,7 @@ function CajaDeSucursal({ empresaId, usuarioId, sucursalId, esAdministrador, sus
     return (
       <MiTurno
         turno={mio.data}
+        aperturaImpresa={apertura?.id === mio.data.id ? apertura : undefined}
         onCerrada={(reporte) => {
           setCerrada(reporte);
         }}
@@ -126,6 +143,7 @@ function CajaDeSucursal({ empresaId, usuarioId, sucursalId, esAdministrador, sus
       sucursalId={sucursalId}
       esAdministrador={esAdministrador}
       suspendida={suspendida}
+      onAbierta={setApertura}
     />
   );
 }

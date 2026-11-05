@@ -1,4 +1,4 @@
-import type { ReporteCaja, TurnoRespuesta } from '@restaurante/contratos';
+import type { MovimientoRespuesta, ReporteCaja, TurnoRespuesta } from '@restaurante/contratos';
 import {
   Aviso,
   Boton,
@@ -16,6 +16,7 @@ import { useState } from 'react';
 import { AvisoPendiente } from '../../componentes/PendienteDeEnvio';
 import { useEnvioPendiente } from '../../lib/envios';
 import { ErrorApi } from '../../lib/errores';
+import { EstadoDeLaImpresion } from './impresion-caja';
 import {
   CLAVE_DE_TURNO,
   NOMBRE_DE_MOVIMIENTO,
@@ -59,6 +60,7 @@ export function Movimientos({ turno, reporte, cargando, fallo }: Props) {
   const [errores, setErrores] = useState<{ monto?: string; motivo?: string }>({});
   const [problema, setProblema] = useState<string>();
   const [hecho, setHecho] = useState<string>();
+  const [gaveta, setGaveta] = useState<Pick<MovimientoRespuesta, 'impresion' | 'trabajoId'>>();
   const [enviando, setEnviando] = useState(false);
 
   function cambiar(parcial: Partial<BorradorDeMovimiento>) {
@@ -71,6 +73,7 @@ export function Movimientos({ turno, reporte, cargando, fallo }: Props) {
     });
     setProblema(undefined);
     setHecho(undefined);
+    setGaveta(undefined);
   }
 
   async function registrar() {
@@ -86,10 +89,11 @@ export function Movimientos({ turno, reporte, cargando, fallo }: Props) {
     setErrores({});
     setProblema(undefined);
     setHecho(undefined);
+    setGaveta(undefined);
     setEnviando(true);
     const id = idDelMovimiento.para(`${resultado.tipo}|${resultado.monto}|${resultado.motivo}`);
     try {
-      await envio.enviar((extra) =>
+      const movimiento = await envio.enviar((extra) =>
         registrarMovimiento(
           turno.id,
           { id, tipo: resultado.tipo, monto: resultado.monto, motivo: resultado.motivo },
@@ -97,6 +101,7 @@ export function Movimientos({ turno, reporte, cargando, fallo }: Props) {
         ),
       );
       idDelMovimiento.soltar();
+      setGaveta({ impresion: movimiento.impresion, trabajoId: movimiento.trabajoId });
       setHecho(
         `${NOMBRE_DE_MOVIMIENTO[resultado.tipo]} de ${soles(resultado.monto)} registrado: ${resultado.motivo}`,
       );
@@ -164,11 +169,18 @@ export function Movimientos({ turno, reporte, cargando, fallo }: Props) {
           </Aviso>
         ) : null}
         {hecho ? (
-          <div role="status">
-            <Aviso tipo="ok" titulo="Registrado">
-              {hecho}
-            </Aviso>
-          </div>
+          <>
+            <div role="status">
+              <Aviso tipo="ok" titulo="Registrado">
+                {hecho}
+              </Aviso>
+            </div>
+            <EstadoDeLaImpresion
+              gaveta
+              impresion={gaveta?.impresion}
+              trabajoId={gaveta?.trabajoId}
+            />
+          </>
         ) : null}
         <Boton
           type="submit"

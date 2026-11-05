@@ -1,15 +1,10 @@
 import type { CobroRespuesta } from '@restaurante/contratos';
-import {
-  Aviso,
-  Boton,
-  EtiquetaDeEstado,
-  IconoExito,
-  IconoImpresora,
-  claseBoton,
-} from '@restaurante/ui';
+import { Aviso, Boton, IconoExito, IconoImpresora, claseBoton } from '@restaurante/ui';
 import { Link } from 'react-router-dom';
 import { montoEnSoles, montoEsCero } from '../../lib/monto';
+import { AvisoPendiente } from '../../componentes/PendienteDeEnvio';
 import { NOMBRE_DE_MEDIO_DE_PAGO } from './cobro';
+import { EstadoDeLaImpresion, imprimirComprobante, useImpresionDeCaja } from './impresion-caja';
 
 interface Props {
   respuesta: CobroRespuesta;
@@ -28,7 +23,7 @@ interface Props {
 /**
  * Lo que pasó al cobrar (criterio 114): el comprobante emitido con su número, el vuelto, el redondeo, si salió o no por
  * una impresora y, si la cuenta quedó pagada, que la mesa está libre; si falta algo, cómo seguir. «Imprimir otra vez»
- * llega con la impresión (la API todavía responde `SIN_IMPRESORA`).
+ * pide una copia del ticket con la marca «REIMPRESIÓN» y sin abrir la gaveta (criterios 90 y 114).
  */
 export function ResultadoDeCobro({
   respuesta,
@@ -44,6 +39,9 @@ export function ResultadoDeCobro({
   const efectivo = respuesta.pagos.find((p) => p.medio === 'EFECTIVO');
   const hayVuelto = !montoEsCero(respuesta.vuelto);
   const deMostrador = llamado !== undefined;
+  const reimpresion = useImpresionDeCaja(imprimirComprobante);
+  // La copia que se acaba de pedir manda sobre el estado del cobro: la última impresión es la que importa.
+  const estado = reimpresion.resultado ?? respuesta;
   return (
     <div className="resultado">
       {deMostrador ? (
@@ -94,15 +92,28 @@ export function ResultadoDeCobro({
         ) : null}
       </dl>
 
-      {respuesta.impresion === 'SIN_IMPRESORA' ? (
-        <EtiquetaDeEstado tono="neutro" icono={IconoImpresora}>
-          Sin impresora
-        </EtiquetaDeEstado>
-      ) : (
-        <EtiquetaDeEstado tono="info" icono={IconoImpresora}>
-          Imprimiendo
-        </EtiquetaDeEstado>
-      )}
+      <div className="resultado__impresion">
+        <EstadoDeLaImpresion
+          impresion={estado.impresion}
+          trabajoId={estado.trabajoId}
+          {...(reimpresion.resultado ? { que: 'otra copia' } : {})}
+        />
+        <AvisoPendiente pendiente={reimpresion.pendiente} />
+        <Boton
+          bloque
+          icono={IconoImpresora}
+          cargando={reimpresion.enCurso}
+          textoCargando={reimpresion.pendiente ? 'Pendiente de envío' : 'Imprimiendo…'}
+          onClick={() => void reimpresion.imprimir(comprobante.id)}
+        >
+          Imprimir otra vez
+        </Boton>
+        {reimpresion.fallo ? (
+          <Aviso tipo="error" titulo="No pudimos imprimir otra vez">
+            {reimpresion.fallo.mensaje}
+          </Aviso>
+        ) : null}
+      </div>
 
       {deMostrador ? null : cerrada ? (
         <div role="status">

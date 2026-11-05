@@ -137,6 +137,7 @@
 
 .turno__x-acciones {
   display: flex;
+  gap: var(--espacio-sm);
 }
 .turno__x-acciones > * {
   flex: 1 1 auto;
