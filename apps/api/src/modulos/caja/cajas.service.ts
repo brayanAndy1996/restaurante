@@ -6,6 +6,7 @@ import type {
   SerieEntrada,
 } from '@restaurante/contratos';
 import { MAXIMO_CAJAS_SUCURSAL, type TipoComprobante } from '@restaurante/dominio';
+import { tiposDeComprobantePermitidos } from '@restaurante/dominio/caja';
 import { QueryTypes, type Sequelize } from 'sequelize';
 import { CONEXION_API, SQLSTATE, restriccionDe, sqlstateDe } from '../../nucleo/base-de-datos';
 import { ContextoEmpresa } from '../../nucleo/contexto-empresa';
@@ -246,6 +247,11 @@ export class CajasService {
     );
     const nombres = await this.usuarios.nombres(turnos.map((t) => t.responsable_id));
     const turnoDe = new Map(turnos.map((t) => [t.caja_id, t]));
+    const { emisor } = await this.emisores.datosParaComprobante(sucursalId);
+    const parametros = {
+      regimen: emisor.regimen,
+      tiposComprobante: [...tiposDeComprobantePermitidos(emisor.regimen)],
+    };
     return cajas.map((c) => {
       const impresora = c.impresora_id === null ? undefined : impresoras.get(c.impresora_id);
       const turno = turnoDe.get(c.id);
@@ -259,6 +265,7 @@ export class CajasService {
             ? null
             : { id: impresora.id, nombre: impresora.nombre, gaveta: impresora.gaveta },
         series: series.get(c.id) ?? [],
+        parametros,
         turnoAbierto:
           turno === undefined
             ? null

@@ -257,6 +257,19 @@ describe('criterio 1 · cajas', () => {
     expect(cajas.every((c) => c.activa && c.sucursalId === A().S1)).toBe(true);
     expect(cajas.map((c) => c.id)).toContain(caja.id);
     expect(cajas.map((c) => c.id)).not.toContain(inactiva.id);
+    // Los parámetros del emisor de la sucursal: el régimen y los tipos que el cobro aceptará.
+    const regimen = (
+      await filas(
+        `SELECT e.regimen FROM sucursal s JOIN emisor e ON e.id = s.emisor_id WHERE s.id = $1`,
+        [A().S1],
+      )
+    )[0]!.regimen as string;
+    for (const c of cajas) {
+      expect(c.parametros.regimen).toBe(regimen);
+      expect(c.parametros.tiposComprobante).toEqual(
+        regimen === 'NUEVO_RUS' ? ['BOLETA'] : ['BOLETA', 'FACTURA'],
+      );
+    }
     expect(cajas.find((c) => c.id === caja.id)!.turnoAbierto?.responsable.id).toBe(
       A().personas.cajero2!.id,
     );
