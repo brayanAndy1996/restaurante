@@ -658,6 +658,30 @@ export function registrarItems(e: EmpresaCaja, cuenta: Cuenta, items: Libre[]): 
   }
 }
 
+/** Una cuenta con líneas ya armadas (modificadores a la medida): abre la mesa y envía; devuelve los ítems creados. */
+export async function cuentaConLineas(
+  ctx: AppP5,
+  e: EmpresaCaja,
+  sucursal: Sucursal,
+  lineas: LineaPlana[],
+): Promise<{ ordenId: string; mesaId: string; token: string; items: Libre[] }> {
+  const token = e.operador(sucursal);
+  const mesaId = await e.mesaNueva(sucursal);
+  const abrir = await escribir(ctx, token, 'post', '/ordenes', {
+    id: randomUUID(),
+    mesaId,
+    comensales: 2,
+  });
+  exigirEstado(abrir, 201, 'Abrir la mesa (004)');
+  const ordenId = abrir.body.id as string;
+  const envio = await escribir(ctx, token, 'post', `/ordenes/${ordenId}/envios`, {
+    id: randomUUID(),
+    lineas,
+  });
+  exigirEstado(envio, 201, 'Enviar la comanda (004)');
+  return { ordenId, mesaId, token, items: envio.body.items as Libre[] };
+}
+
 /** La cuenta C de la especificación: Lomo [3/4] × 2, Gaseosa × 1, Bolsa × 2 y Mandarina × 1 (total `"69.20"`). */
 export const cuentaC = (ctx: AppP5, e: EmpresaCaja, sucursal: Sucursal = 'S1') =>
   cuentaCon(ctx, e, sucursal, [
