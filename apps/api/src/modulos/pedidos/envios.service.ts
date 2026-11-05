@@ -36,7 +36,7 @@ import { EventosPedidos } from './eventos-pedidos';
 import { IMPRESION, type ImpresionPuerto } from './impresion';
 import { INVENTARIO, type InventarioPuerto } from './inventario';
 import { mesasVigentesDeOrden } from './mesas-de-orden';
-import { invalidarPrecuentaVigente } from './precuenta-invalidacion';
+import { cerrarCuentaSinNadaQueFaltar, invalidarPrecuentaVigente } from './precuenta-invalidacion';
 import { huellaDeEnvio, huellaDeMarcha, normalizarLineas } from './replica';
 import { TicketsDePedidos } from './tickets-de-pedidos';
 import { VistaOrdenService } from './vista-orden';
@@ -193,8 +193,11 @@ export class EnviosService {
 
     // Una orden con cobros solo admite el envío si lo ya cobrado sigue cuadrando (historia 006, criterios 20 y 87):
     // con la orden bloqueada y los ítems nuevos ya guardados, caja lo comprueba; si no, 409 y se revierte todo.
-    await exigirCambioConCobros(this.conexion, this.cobros, orden.id, async () =>
-      cuentaDeDatos(await leerDatosDeCuenta(this.conexion, orden.id)),
+    const cierraLaCuenta = await exigirCambioConCobros(
+      this.conexion,
+      this.cobros,
+      orden.id,
+      async () => cuentaDeDatos(await leerDatosDeCuenta(this.conexion, orden.id)),
     );
 
     // Ruteo por estación (criterio 22): una comanda por estación con las partes de todos los ítems.
@@ -230,17 +233,28 @@ export class EnviosService {
       partes: partesDeStockDeEnvio(preparadas),
     });
 
-    // Una adición saca la orden de la pre-cuenta e invalida la vigente (criterio 23).
+    // Una adición saca la orden de la pre-cuenta e invalida la vigente (criterio 23). Si lo ya cobrado cubre toda la
+    // cuenta que queda (criterio 52), la orden se cierra en esta misma transacción y sus mesas quedan libres.
     const estabaEnPrecuenta = orden.estado === 'EN_PRECUENTA';
-    await this.conexion.query(
-      `UPDATE orden
-          SET version = version + 1,
-              estado = CASE WHEN estado = 'EN_PRECUENTA' THEN 'ABIERTA' ELSE estado END,
-              actualizado_en = $2
-        WHERE id = $1`,
-      { bind: [orden.id, ahora], type: QueryTypes.UPDATE },
-    );
-    if (estabaEnPrecuenta) await invalidarPrecuentaVigente(this.conexion, orden.id, ahora);
+    let mesasLiberadas: string[] = [];
+    if (cierraLaCuenta) {
+      mesasLiberadas = await cerrarCuentaSinNadaQueFaltar(
+        this.conexion,
+        orden.id,
+        orden.estado,
+        ahora,
+      );
+    } else {
+      await this.conexion.query(
+        `UPDATE orden
+            SET version = version + 1,
+                estado = CASE WHEN estado = 'EN_PRECUENTA' THEN 'ABIERTA' ELSE estado END,
+                actualizado_en = $2
+          WHERE id = $1`,
+        { bind: [orden.id, ahora], type: QueryTypes.UPDATE },
+      );
+      if (estabaEnPrecuenta) await invalidarPrecuentaVigente(this.conexion, orden.id, ahora);
+    }
 
     // Eventos: solo después de confirmar (criterio 31).
     for (const c of comandas) {
@@ -251,7 +265,9 @@ export class EnviosService {
       });
     }
     this.eventos.ordenCambio(sucursalId, orden.id);
-    if (estabaEnPrecuenta) {
+    if (mesasLiberadas.length > 0) {
+      this.eventos.salonCambio(sucursalId, orden.id, mesasLiberadas);
+    } else if (estabaEnPrecuenta) {
       this.eventos.salonCambio(
         sucursalId,
         orden.id,

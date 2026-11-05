@@ -1,8 +1,8 @@
 import { Inject, Injectable, OnModuleInit } from '@nestjs/common';
-import type { CuentaEntrada, ResultadoCambioDeCuenta } from '@restaurante/dominio';
-import { cambioDeCuentaPermitido } from '@restaurante/dominio/caja';
+import type { CuentaEntrada } from '@restaurante/dominio';
+import { cambioDeCuentaPermitido, cuentaSinNadaQueFaltar } from '@restaurante/dominio/caja';
 import { FacturadoService } from '../facturacion';
-import { RegistroDeCobros, type CobrosPuerto } from '../pedidos';
+import { RegistroDeCobros, type CobrosPuerto, type ResultadoCambioConCobros } from '../pedidos';
 import { SesionActual } from '../seguridad';
 import { ParametrosDeCuenta } from './parametros-de-cuenta';
 
@@ -29,14 +29,19 @@ export class CobrosDePedidos implements CobrosPuerto, OnModuleInit {
   async validarCambio(
     ordenId: string,
     cuentaNueva: CuentaEntrada,
-  ): Promise<ResultadoCambioDeCuenta> {
+  ): Promise<ResultadoCambioConCobros> {
     try {
       const parametros = await this.parametros.de(this.sesion.sucursalActiva());
       const partes = await this.facturado.facturadoDeOrden(ordenId);
-      return cambioDeCuentaPermitido(
-        { ...cuentaNueva, tasaIgv: parametros.tasaIgv, montoIcbper: parametros.montoIcbper },
-        partes,
-      );
+      const cuenta = {
+        ...cuentaNueva,
+        tasaIgv: parametros.tasaIgv,
+        montoIcbper: parametros.montoIcbper,
+      };
+      const resultado = cambioDeCuentaPermitido(cuenta, partes);
+      if (!resultado.permitido) return resultado;
+      // Si el cambio deja la cuenta sin nada que falte (criterio 52), pedidos cierra la orden en la misma transacción.
+      return { permitido: true, cierraLaCuenta: cuentaSinNadaQueFaltar(cuenta, partes) };
     } catch (error) {
       if (error instanceof RangeError) {
         return { permitido: false, codigo: 'CUENTA_COBRADA_EN_PARTE' };

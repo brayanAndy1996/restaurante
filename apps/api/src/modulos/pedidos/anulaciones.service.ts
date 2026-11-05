@@ -43,7 +43,7 @@ import { EventosPedidos } from './eventos-pedidos';
 import { IMPRESION, type ImpresionPuerto } from './impresion';
 import { INVENTARIO, type InventarioPuerto } from './inventario';
 import { mesasVigentesDeOrden } from './mesas-de-orden';
-import { invalidarPrecuentaVigente } from './precuenta-invalidacion';
+import { cerrarCuentaSinNadaQueFaltar, invalidarPrecuentaVigente } from './precuenta-invalidacion';
 import { huellaDeAnulacion, huellaDeAnulacionDeOrden } from './replica';
 import { TicketsDePedidos } from './tickets-de-pedidos';
 import { VistaOrdenService } from './vista-orden';
@@ -180,8 +180,11 @@ export class AnulacionesService {
     }
     // Una orden con cobros solo admite la anulación si lo ya cobrado sigue cuadrando (criterios 20 y 86); si no,
     // 409 `CUENTA_COBRADA_EN_PARTE` sin anular nada y sin consumir la clave (la reversión la devuelve).
-    await exigirCambioConCobros(this.conexion, this.cobros, orden.id, async () =>
-      cuentaDeDatos(datosTrasAnular(datosDeLaCuenta, item.id, entrada.cantidad)),
+    const cierraLaCuenta = await exigirCambioConCobros(
+      this.conexion,
+      this.cobros,
+      orden.id,
+      async () => cuentaDeDatos(datosTrasAnular(datosDeLaCuenta, item.id, entrada.cantidad)),
     );
 
     const ahora = this.reloj.ahora();
@@ -243,7 +246,21 @@ export class AnulacionesService {
       destino: entrada.destinoStock,
     });
 
-    const estabaEnPrecuenta = await this.cambiarLaOrden(orden.id, orden.estado, ahora);
+    // Si lo cobrado cubre toda la cuenta que queda (criterio 52), la orden se cierra en esta misma transacción y sus
+    // mesas quedan libres, sin emitir otro comprobante (criterio 90).
+    let mesasLiberadas: string[] = [];
+    let estabaEnPrecuenta: boolean;
+    if (cierraLaCuenta) {
+      mesasLiberadas = await cerrarCuentaSinNadaQueFaltar(
+        this.conexion,
+        orden.id,
+        orden.estado,
+        ahora,
+      );
+      estabaEnPrecuenta = false;
+    } else {
+      estabaEnPrecuenta = await this.cambiarLaOrden(orden.id, orden.estado, ahora);
+    }
 
     await this.auditoria.registrar({
       accion: 'anular_item',
@@ -268,7 +285,9 @@ export class AnulacionesService {
     // Eventos: solo después de confirmar (criterio 38).
     this.publicarComandas(sucursalId, comandas);
     this.eventos.ordenCambio(sucursalId, orden.id);
-    if (estabaEnPrecuenta) {
+    if (mesasLiberadas.length > 0) {
+      this.eventos.salonCambio(sucursalId, orden.id, mesasLiberadas);
+    } else if (estabaEnPrecuenta) {
       this.eventos.salonCambio(
         sucursalId,
         orden.id,

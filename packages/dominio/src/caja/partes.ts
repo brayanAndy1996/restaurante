@@ -571,3 +571,19 @@ export function cambioDeCuentaPermitido(
   });
   return aMedias ? noPermitido : permitido;
 }
+
+/**
+ * Si, con la cuenta nueva y lo ya cobrado, no falta nada (criterio 52, la misma definición que `cierraLaCuenta` de una
+ * parte): una cuenta con cobros cuyo saldo es 0.00, sin bolsas ni cortesías pendientes ni unidades por cobrar. Una
+ * anulación (o cualquier cambio permitido) que la deja así cierra la orden. `false` si no hay partes anteriores o la
+ * cuenta no cuadra con ellas (`cambioDeCuentaPermitido` la rechaza).
+ */
+export function cuentaSinNadaQueFaltar(
+  cuentaNueva: CuentaEntrada,
+  partesAnteriores: readonly ParteCalculada[],
+): boolean {
+  const anteriores = leerPartesAnteriores(partesAnteriores);
+  if (anteriores.length === 0 || cuentaNueva.descuentoCuenta !== null) return false;
+  const falta = pendiente(cuentaNueva, calcularCuenta(cuentaNueva), anteriores);
+  return !conExceso(falta) && nadaFalta(falta);
+}

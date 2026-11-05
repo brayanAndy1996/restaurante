@@ -14,7 +14,7 @@ export type {
 } from './montos';
 export { montoIcbperVigente, tasaIgvVigente } from './vigencias';
 export type { TasaIgvDesde } from './vigencias';
-export { calcularParte, cambioDeCuentaPermitido } from './partes';
+export { calcularParte, cambioDeCuentaPermitido, cuentaSinNadaQueFaltar } from './partes';
 export type {
   ItemDeParte,
   LineaDeParte,
