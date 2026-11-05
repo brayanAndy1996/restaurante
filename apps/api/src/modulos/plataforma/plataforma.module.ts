@@ -30,6 +30,7 @@ import { SucursalesController } from './sucursales.controller';
 import { SuperadministradorGuard } from './superadministrador.guard';
 import { SuperadministradoresService } from './superadministradores.service';
 import { SuscripcionModule } from './suscripcion.module';
+import { UltimaEmisionDeEmisor } from './ultima-emision';
 import { SuscripcionesController } from './suscripciones.controller';
 import { SuscripcionesPlataformaService } from './suscripciones-plataforma.service';
 
@@ -69,6 +70,7 @@ import { SuscripcionesPlataformaService } from './suscripciones-plataforma.servi
     PlataformaEmpresasService,
     SucursalService,
     EmisoresService,
+    UltimaEmisionDeEmisor,
     SoporteService,
     SuperadministradoresService,
     PlanesService,
@@ -80,6 +82,7 @@ import { SuscripcionesPlataformaService } from './suscripciones-plataforma.servi
     PlataformaEmpresasService,
     SucursalService,
     EmisoresService,
+    UltimaEmisionDeEmisor,
     PlanesService,
     SuscripcionModule,
     SucursalesConsultaModule,

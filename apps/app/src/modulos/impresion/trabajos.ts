@@ -76,6 +76,10 @@ export const TEXTO_DE_TIPO: Record<TipoTrabajo, string> = {
   ANULACION: 'Anulación',
   PRECUENTA: 'Pre-cuenta',
   PRUEBA: 'Página de prueba',
+  COMPROBANTE: 'Comprobante',
+  REPORTE_X: 'Reporte X',
+  REPORTE_Z: 'Reporte Z',
+  GAVETA: 'Apertura de gaveta',
 };
 
 export const ESTADO_DE_TRABAJO: Record<

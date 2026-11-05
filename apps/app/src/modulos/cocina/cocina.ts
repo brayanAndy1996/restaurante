@@ -117,6 +117,18 @@ export function etiquetaDeMesas(mesas: readonly { nombre: string }[]): string {
   return `Mesas ${numeros.slice(0, -1).join(', ')} y ${numeros[numeros.length - 1]}`;
 }
 
+/**
+ * Lo que encabeza la tarjeta: «Llamado 23» en una venta de mostrador, que no tiene mesa (historia 006, criterio 82), y
+ * las mesas en las demás órdenes.
+ */
+export function etiquetaDeOrden(
+  orden: Pick<ComandaKds['orden'], 'mesas' | 'numeroLlamado'>,
+): string {
+  return orden.numeroLlamado != null
+    ? `Llamado ${orden.numeroLlamado}`
+    : etiquetaDeMesas(orden.mesas);
+}
+
 // --- Cambios provisionales (la pantalla responde al toque, la API confirma después) --------------
 
 /** Vuelve a repartir las comandas entre pendientes y recientes según su estado actual. */

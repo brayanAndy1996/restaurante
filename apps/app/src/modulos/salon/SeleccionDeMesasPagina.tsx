@@ -27,6 +27,7 @@ import { preferenciaDelSalon, type VistaDelSalon } from '../../lib/almacen';
 import { nuevaClaveDeIdempotencia } from '../../lib/api';
 import { useEnvioPendiente } from '../../lib/envios';
 import { ErrorApi, mensajeDeError } from '../../lib/errores';
+import { falloDeCuenta } from '../caja/fallos';
 import { useAnchoDe } from '../../lib/medidas';
 import { CLAVES_TIEMPO_REAL } from '../../lib/tiempo-real';
 import { usePermiso } from '../acceso/permisos';
@@ -68,6 +69,8 @@ const MENSAJES = {
   MESA_OCUPADA:
     'Esa mesa acaba de ocuparse. Elige otra libre, o usa «Unir» para juntar las cuentas.',
   ORDEN_NO_ABIERTA: 'Esta cuenta ya no está abierta. Actualizamos la pantalla.',
+  CUENTA_EN_COBRO:
+    'Esta cuenta ya tiene cobros, así que no se puede unir. Cóbrala completa; mover la cuenta a otra mesa sí se puede.',
   NO_ENCONTRADO: 'Una de las mesas ya no existe. Actualizamos el salón.',
   CONFLICTO: 'Otra persona está cambiando estas mesas a la vez. Vuelve a intentarlo.',
   PROHIBIDO: 'Tu rol no puede mover ni unir mesas.',
@@ -322,14 +325,19 @@ function ElegirMesas({
       const hecho =
         modo === 'mover'
           ? `La cuenta pasó a la ${nombreAccesibleDeMesa(destino?.nombre ?? '').toLowerCase()}. La ${nombreAccesibleDeMesa(origenNombre).toLowerCase()} quedó libre.`
-          : `Se unieron ${listaDeNombres(nombresElegidos)} a esta cuenta. La venta queda a nombre de ${orden?.mozo.nombre ?? ''}.`;
+          : `Se unieron ${listaDeNombres(nombresElegidos)} a esta cuenta. La venta queda a nombre de ${orden?.mozo?.nombre ?? ''}.`;
       navegar(rutaDeOrden(ordenId), { replace: true, state: { hecho } });
     } catch (error) {
       void clientes.invalidateQueries({ queryKey: CLAVES_TIEMPO_REAL.salon });
       void clientes.invalidateQueries({ queryKey: CLAVES_TIEMPO_REAL.orden(ordenId) });
       if (!envio.sigueMontada()) return;
       setConfirmando(false);
-      setFallo(mensajeDeError(error, MENSAJES));
+      // Unir una cuenta con descuento de cuenta (criterio 45a de 006): la API dice qué quitar antes.
+      setFallo(
+        (error instanceof ErrorApi && error.codigo === 'DESCUENTO_INVALIDO'
+          ? falloDeCuenta(error)?.texto
+          : undefined) ?? mensajeDeError(error, MENSAJES),
+      );
       // Una mesa que ya no vale se suelta; el resto de la elección se conserva.
       if (error instanceof ErrorApi && error.codigo === 'MESA_OCUPADA') setElegidas([]);
     } finally {
@@ -362,7 +370,7 @@ function ElegirMesas({
           </p>
           <p className="seleccion__mozo">
             {modo === 'mover' ? 'Sigue a cargo de ' : 'La venta queda a nombre de '}
-            <b>{orden.mozo.nombre}</b>
+            <b>{orden.mozo?.nombre}</b>
             {modo === 'unir' ? ', el mozo de esta cuenta' : ''}.
           </p>
         </div>

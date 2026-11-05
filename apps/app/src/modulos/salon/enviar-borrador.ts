@@ -75,6 +75,8 @@ export function textoDeRechazo(mensaje: string): string {
 
 const MENSAJES = {
   ORDEN_NO_ABIERTA: 'Esta cuenta ya no está abierta, así que no se puede enviar nada.',
+  CUENTA_COBRADA_EN_PARTE:
+    'Esta cuenta ya tiene cobros y lo que envías no cuadra con lo cobrado (por ejemplo, tiene un descuento a la cuenta). Pídele al cajero que revise la cuenta. Lo que armaste sigue aquí.',
   NO_ENCONTRADO: 'Esta cuenta ya no existe.',
   PRODUCTO_NO_VENDIBLE: 'Algunos productos ya no se pueden vender.',
   SELECCION_INVALIDA: 'Algunas opciones elegidas ya no son válidas.',
@@ -101,12 +103,14 @@ const CODIGOS_DE_RECHAZO_DEL_CONTENIDO: ReadonlySet<string> = new Set([
  */
 export function demuestraQueNoSeGuardo(error: ErrorApi): boolean {
   if (error.estado === 422) return CODIGOS_DE_RECHAZO_DEL_CONTENIDO.has(error.codigo);
-  if (error.estado === 409) return error.codigo === 'ORDEN_NO_ABIERTA';
+  if (error.estado === 409) {
+    return error.codigo === 'ORDEN_NO_ABIERTA' || error.codigo === 'CUENTA_COBRADA_EN_PARTE';
+  }
   return false;
 }
 
 /** Las líneas rechazadas (`lineas.<i>`) con su motivo, por posición en lo que se envió. */
-function rechazosPorLinea(error: ErrorApi): Map<number, string> {
+export function rechazosPorLinea(error: ErrorApi): Map<number, string> {
   const mapa = new Map<number, string>();
   for (const campo of error.campos) {
     const m = /^lineas\.(\d+)/.exec(campo.campo);

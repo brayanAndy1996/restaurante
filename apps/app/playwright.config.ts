@@ -3,7 +3,7 @@ import { defineConfig } from '@playwright/test';
 /**
  * Pruebas E2E de la PWA contra la API real y PostgreSQL (criterio 104 de la sección 002, tarea T35).
  * Corren en un viewport de celular (360 × 740, táctil), que es el dispositivo de las personas del
- * restaurante.
+ * restaurante. La E2E de caja (`caja.spec.ts`) corre además en el proyecto `tablet` (768 × 1024).
  *
  * Requisitos: la base preparada, migrada y con el superadministrador de la semilla
  * (`pnpm db:preparar && pnpm db:migrar && pnpm db:semilla`) y las variables de la API (`DATABASE_URL`,
@@ -32,7 +32,16 @@ export default defineConfig({
     trace: 'retain-on-failure',
     screenshot: 'only-on-failure',
   },
-  projects: [{ name: 'celular' }],
+  projects: [
+    { name: 'celular' },
+    // La E2E de caja también corre con todas las personas en tableta (768 × 1024, criterio 118 de 006). Solo ese archivo:
+    // las demás pruebas no se repiten.
+    {
+      name: 'tablet',
+      testMatch: '**/caja.spec.ts',
+      use: { viewport: { width: 768, height: 1024 }, hasTouch: true, deviceScaleFactor: 2 },
+    },
+  ],
   webServer: [
     {
       command: process.env.CI

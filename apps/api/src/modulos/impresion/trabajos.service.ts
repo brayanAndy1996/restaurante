@@ -10,6 +10,7 @@ import {
   type TrabajosConsulta,
 } from '@restaurante/contratos';
 import type { DocumentoTicket } from '@restaurante/contratos';
+import { SEGUNDOS_PULSO_GAVETA } from '@restaurante/dominio';
 import { QueryTypes, type Sequelize } from 'sequelize';
 import { CONEXION_API } from '../../nucleo/base-de-datos';
 import { ContextoEmpresa } from '../../nucleo/contexto-empresa';
@@ -18,15 +19,18 @@ import type { PuenteAutenticado } from '../../nucleo/principal';
 import { RELOJ, horaLocal, type Reloj } from '../../nucleo/reloj';
 import { SucursalesConsultaService } from '../plataforma';
 import { SesionActual } from '../seguridad';
+import { AlcanceDeReimpresion, esTrabajoDeCaja } from './alcance-de-reimpresion';
 import { ColaImpresionService } from './cola-impresion.service';
+import { EventosImpresion } from './eventos-impresion';
 import {
   conMarcas,
   documentoDePrueba,
   esIncompleto,
   recortarError,
+  renderizarTicket,
   renderizarTicketDetallado,
 } from './escpos';
-import { noEncontrado, sinImpresora } from './errores-impresion';
+import { gavetaNoSeReimprime, noEncontrado, sinImpresora } from './errores-impresion';
 import { OrdenesVigentes } from './ordenes-vigentes';
 import type { FilaImpresora } from './lectura-impresoras';
 
@@ -40,6 +44,8 @@ interface FilaEntrega {
   creado_en: Date;
   ancho_mm: 58 | 80;
   juego_caracteres: FilaImpresora['juego_caracteres'];
+  /** Historia 006, criterio 94: la impresora tiene gaveta, es la primera entrega y no es una reimpresión. */
+  puede_pulsar: boolean;
 }
 
 /** Lo que `GET /puente/trabajos` responde: los trabajos y si quedaron otros esperando por el tope de bytes. */
@@ -73,6 +79,15 @@ interface FilaResumen {
 
 const MAXIMO_LISTA = 200;
 
+/** Los trabajos que salen por la impresora de caja (la pre-cuenta y, desde 006, el comprobante, el X, la Z y la gaveta). */
+const TIPOS_DE_CAJA: readonly TipoTrabajo[] = [
+  'PRECUENTA',
+  'COMPROBANTE',
+  'REPORTE_X',
+  'REPORTE_Z',
+  'GAVETA',
+];
+
 /**
  * Los trabajos de impresión (historia 004, 3b, criterios 113 a 118, 127 y 128; ruta crítica P5 y P6).
  *
@@ -99,6 +114,8 @@ export class TrabajosService {
     @Inject(SucursalesConsultaService) private readonly sucursales: SucursalesConsultaService,
     @Inject(ColaImpresionService) private readonly cola: ColaImpresionService,
     @Inject(OrdenesVigentes) private readonly ordenes: OrdenesVigentes,
+    @Inject(AlcanceDeReimpresion) private readonly alcance: AlcanceDeReimpresion,
+    @Inject(EventosImpresion) private readonly eventos: EventosImpresion,
   ) {}
 
   // ---- El puente ----------------------------------------------------------------------------------
@@ -120,8 +137,9 @@ export class TrabajosService {
     const ahora = this.reloj.ahora();
     const hoy = await this.cola.diaOperativoDe(puente.sucursalId, ahora);
     const filas = await this.conexion.query<FilaEntrega>(
-      `SELECT id, impresora_id, tipo, creado_en, ancho_mm, juego_caracteres
+      `SELECT id, impresora_id, tipo, creado_en, ancho_mm, juego_caracteres, puede_pulsar
          FROM (SELECT t.id, t.impresora_id, t.tipo, t.creado_en, i.ancho_mm, i.juego_caracteres,
+                      (i.gaveta AND t.entregado_en IS NULL AND t.reimpresion_de_id IS NULL) AS puede_pulsar,
                       row_number() OVER (PARTITION BY t.impresora_id ORDER BY t.creado_en, t.id) AS posicion
                  FROM trabajo_impresion t
                  JOIN impresora i ON i.id = t.impresora_id AND i.empresa_id = t.empresa_id
@@ -139,6 +157,7 @@ export class TrabajosService {
     // La marca `incompleto` de cada trabajo entregado, calculada con lo que de verdad salió (ronda 4, F2).
     const marcaIncompleto = new Map<string, boolean>();
     const entregadosPorImpresora = new Map<string, number>();
+    const candidatosAPulso = new Map<string, { documento: DocumentoTicket; fila: FilaEntrega }>();
     const cerradas = new Set<string>();
     let bytesTotales = 0;
     let hayMas = false;
@@ -173,15 +192,22 @@ export class TrabajosService {
             ahora.getTime() - creado.getTime() > MS_RETRASO
               ? conMarcas(documentoGuardado, { retraso: { horaEnvio: horaLocal(creado) } })
               : documentoGuardado;
+          // El pulso de la gaveta (criterio 94): solo en la primera entrega, de un trabajo que no es reimpresión, a menos
+          // de `SEGUNDOS_PULSO_GAVETA` de creado (reloj de la API). Se reserva con `entregado_en` más abajo.
+          const aTiempo = ahora.getTime() - creado.getTime() < SEGUNDOS_PULSO_GAVETA * 1000;
+          const pulsa = fila.puede_pulsar && aTiempo;
+          if (pulsa) candidatosAPulso.set(fila.id, { documento, fila });
           const { bytes, recortado } = renderizarTicketDetallado(documento, {
             anchoMm: fila.ancho_mm,
             juegoCaracteres: fila.juego_caracteres,
+            pulsoGaveta: pulsa,
           });
           const yaTiene = (entregadosPorImpresora.get(fila.impresora_id) ?? 0) > 0;
           if (yaTiene && bytesTotales + bytes.length > MAXIMO_BYTES_RESPUESTA_TRABAJOS) {
             // No cabe: esta impresora espera a la siguiente llamada (sus trabajos salen en orden).
             cerradas.add(fila.impresora_id);
             hayMas = true;
+            candidatosAPulso.delete(fila.id);
             continue;
           }
           // Incompleto es verdadero si la plantilla cortó el documento (su aviso estructural) o si el renderizador lo
@@ -232,11 +258,27 @@ export class TrabajosService {
       );
     }
     if (entregados.length > 0) {
-      await this.conexion.query(
+      // Se marca la primera entrega y, con ella, quién se queda con el pulso: dos entregas simultáneas del mismo
+      // trabajo se turnan por el bloqueo de la fila y solo la primera ve `entregado_en` nulo (criterio 94).
+      const primeras = await this.conexion.query<{ id: string }>(
         `UPDATE trabajo_impresion SET entregado_en = $2, actualizado_en = $2
-          WHERE id = ANY($1::uuid[]) AND entregado_en IS NULL`,
-        { bind: [entregados.map((e) => e.id), ahora], type: QueryTypes.UPDATE },
+          WHERE id = ANY($1::uuid[]) AND entregado_en IS NULL
+          RETURNING id`,
+        { bind: [entregados.map((e) => e.id), ahora], type: QueryTypes.SELECT },
       );
+      const ganadas = new Set(primeras.map((f) => f.id));
+      for (const entregado of entregados) {
+        const candidato = candidatosAPulso.get(entregado.id);
+        if (candidato === undefined || ganadas.has(entregado.id)) continue;
+        // Otra entrega se llevó el pulso mientras tanto: este ticket sale sin él.
+        entregado.bytes = Buffer.from(
+          renderizarTicket(candidato.documento, {
+            anchoMm: candidato.fila.ancho_mm,
+            juegoCaracteres: candidato.fila.juego_caracteres,
+            pulsoGaveta: false,
+          }),
+        ).toString('base64');
+      }
     }
     return { trabajos: entregados, hayMas };
   }
@@ -274,6 +316,8 @@ export class TrabajosService {
         `UPDATE trabajo_impresion SET estado = 'IMPRESO', impreso_en = $2, actualizado_en = $2 WHERE id = $1`,
         { bind: [id, ahora], type: QueryTypes.UPDATE },
       );
+      // Los pendientes de la sucursal bajaron: la PWA vuelve a pedir el estado (si no, mostraría un conteo viejo).
+      this.eventos.impresionEstado(puente.sucursalId);
       return;
     }
     // Un trabajo ya impreso no vuelve a pendiente por un reporte tardío de fallo.
@@ -386,13 +430,15 @@ export class TrabajosService {
       documento: DocumentoTicket;
       comanda_id: string | null;
       precuenta_id: string | null;
+      comprobante_id: string | null;
+      turno_id: string | null;
       mesa: string | null;
       orden_id: string | null;
       envio_numero: number | null;
       impresora_utilizable: boolean;
     }>(
-      `SELECT t.impresora_id, t.estacion_id, t.tipo, t.documento, t.comanda_id, t.precuenta_id, t.mesa,
-              t.orden_id, t.envio_numero, (i.activa AND i.conexion_tipo = 'RED') AS impresora_utilizable
+      `SELECT t.impresora_id, t.estacion_id, t.tipo, t.documento, t.comanda_id, t.precuenta_id, t.comprobante_id,
+              t.turno_id, t.mesa, t.orden_id, t.envio_numero, (i.activa AND i.conexion_tipo = 'RED') AS impresora_utilizable
          FROM trabajo_impresion t
          JOIN impresora i ON i.id = t.impresora_id AND i.empresa_id = t.empresa_id
         WHERE t.id = $1 AND t.sucursal_id = $2`,
@@ -400,6 +446,15 @@ export class TrabajosService {
     );
     const original = filas[0];
     if (original === undefined) throw noEncontrado('El trabajo');
+    if (original.tipo === 'GAVETA') throw gavetaNoSeReimprime();
+    // Los documentos de caja siguen el permiso y el alcance de caja (historia 006, criterio 90): 403 antes de copiar.
+    if (esTrabajoDeCaja(original.tipo)) {
+      await this.alcance.exigir({
+        tipo: original.tipo,
+        comprobanteId: original.comprobante_id,
+        turnoId: original.turno_id,
+      });
+    }
 
     // Una impresora que pasó a Bluetooth no imprime en 3b (decisión 12): se trata como una inactiva. Si tampoco hay
     // otra de red activa para la estación (o la caja), 409 sin crear el trabajo (ronda 2 del ataque, F4).
@@ -421,6 +476,8 @@ export class TrabajosService {
           documento,
           comanda_id: original.comanda_id,
           precuenta_id: original.precuenta_id,
+          comprobante_id: original.comprobante_id,
+          turno_id: original.turno_id,
           mesa: original.mesa,
           orden_id: original.orden_id,
           envio_numero: original.envio_numero,
@@ -443,7 +500,7 @@ export class TrabajosService {
     sucursalId: string,
     original: { estacion_id: string | null; tipo: TipoTrabajo },
   ): Promise<string | null> {
-    if (original.tipo === 'PRECUENTA') {
+    if (TIPOS_DE_CAJA.includes(original.tipo)) {
       const caja = await this.cola.impresoraDeCaja(sucursalId);
       if (caja === null) return null;
       const filas = await this.conexion.query<{ id: string }>(

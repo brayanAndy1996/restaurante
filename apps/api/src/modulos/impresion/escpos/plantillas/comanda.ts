@@ -51,6 +51,8 @@ export interface ContextoDeComanda {
   hora: string;
   /** Número de envío de la orden; `null` en una marcha o una anulación, que no son un envío. */
   envioNumero?: number | null;
+  /** Historia 006 (criterio 82): el número de llamado de una venta de mostrador; sale en lugar de la mesa y del mozo. */
+  numeroLlamado?: number | null;
 }
 
 const ETIQUETA_TIPO: Readonly<Record<TipoComanda, string>> = {
@@ -112,18 +114,22 @@ function textoDeLinea(linea: LineaDeComanda, tipo: TipoComanda): string {
 }
 
 function encabezadoDe(comanda: ComandaParaTicket, contexto: ContextoDeComanda): BloqueTicket[] {
+  const esMostrador = contexto.numeroLlamado !== undefined && contexto.numeroLlamado !== null;
   const encabezado: BloqueTicket[] = [
     {
       tipo: 'titulo',
       texto: limpiarTexto(`${comanda.estacion.toUpperCase()} · ${ETIQUETA_TIPO[comanda.tipo]}`),
     },
-    ...lineasDeMesas(contexto.mesas, true).map((texto): BloqueTicket => ({
-      tipo: 'titulo',
-      texto,
-    })),
+    // La venta de mostrador no tiene mesa ni mozo: sale "LLAMADO 23" en doble alto (historia 006, criterio 82).
+    ...(esMostrador
+      ? [{ tipo: 'titulo', texto: `LLAMADO ${contexto.numeroLlamado}` } satisfies BloqueTicket]
+      : lineasDeMesas(contexto.mesas, true).map((texto): BloqueTicket => ({
+          tipo: 'titulo',
+          texto,
+        }))),
     {
       tipo: 'columnas',
-      izquierda: limpiarTexto(`Mozo: ${contexto.mozo}`),
+      izquierda: esMostrador ? '' : limpiarTexto(`Mozo: ${contexto.mozo}`),
       derecha: limpiarTexto(contexto.hora),
     },
   ];

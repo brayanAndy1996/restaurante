@@ -10,7 +10,7 @@ import {
 } from '@restaurante/ui';
 import { AvisoPendiente } from '../../componentes/PendienteDeEnvio';
 import { horaDeLima } from '../../lib/formato';
-import { montoEnSoles } from '../../lib/monto';
+import { montoEnSoles, textoDeDescuento } from '../../lib/monto';
 import { useReimpresion } from '../impresion/trabajos';
 import { tituloDeMesas } from './ordenes';
 import { TEXTO_DE_IMPRESION, esFraseDeIcbper, frasesDeLaNota } from './precuenta';
@@ -93,6 +93,8 @@ export function PrecuentaHoja({
           ))}
         </ul>
 
+        <Ajustes precuenta={precuenta} />
+
         <div className="precuenta__total">
           <span>
             Total
@@ -100,6 +102,21 @@ export function PrecuentaHoja({
           </span>
           <b>{montoEnSoles(precuenta.total)}</b>
         </div>
+
+        {precuenta.pagado !== undefined && precuenta.porPagar !== undefined ? (
+          <dl className="precuenta__ajustes" aria-label="Lo cobrado">
+            <div className="precuenta__ajuste">
+              <dt>Pagado</dt>
+              <dd>{montoEnSoles(precuenta.pagado)}</dd>
+            </div>
+            <div className="precuenta__ajuste">
+              <dt>Por pagar</dt>
+              <dd>
+                <b>{montoEnSoles(precuenta.porPagar)}</b>
+              </dd>
+            </div>
+          </dl>
+        ) : null}
 
         <div className="precuenta__nota">
           {frasesDeLaNota(precuenta.nota).map((frase) => (
@@ -164,6 +181,38 @@ export function PrecuentaHoja({
         </div>
       </div>
     </Hoja>
+  );
+}
+
+/**
+ * Los descuentos y las cortesías de la cuenta (criterio 44 y pregunta 11 de 006), cada uno con su monto: el total de
+ * abajo ya los trae aplicados, sin ICBPER. Los montos son los de la API.
+ */
+function Ajustes({ precuenta }: { precuenta: PrecuentaRespuesta }) {
+  const { descuentos = [], cortesias = [], lineas } = precuenta;
+  if (descuentos.length === 0 && cortesias.length === 0) return null;
+  const nombreDe = (itemId: string) => lineas.find((l) => l.itemId === itemId)?.nombre ?? 'Ítem';
+  return (
+    <dl className="precuenta__ajustes" aria-label="Descuentos y cortesías">
+      {descuentos.map((d) => (
+        <div className="precuenta__ajuste" key={`d-${d.itemId ?? 'cuenta'}`}>
+          <dt>
+            Descuento {textoDeDescuento(d.tipo, d.valor)}
+            <small>{d.itemId === null ? 'A toda la cuenta' : nombreDe(d.itemId)}</small>
+          </dt>
+          <dd>−{montoEnSoles(d.monto)}</dd>
+        </div>
+      ))}
+      {cortesias.map((c) => (
+        <div className="precuenta__ajuste" key={`c-${c.itemId}`}>
+          <dt>
+            Cortesía · {c.cantidad} × {nombreDe(c.itemId)}
+            <small>Sin cobro</small>
+          </dt>
+          <dd>{montoEnSoles(c.valorReferencial)}</dd>
+        </div>
+      ))}
+    </dl>
   );
 }
 

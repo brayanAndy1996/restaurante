@@ -59,3 +59,11 @@ export function montoEnSoles(valor: string | null | undefined): string | null {
   const formateado = formatearMonto(valor);
   return formateado === null ? null : `S/\u00a0${formateado}`;
 }
+
+/** "10 %" o "7.5 %" (sin ceros de más; el espacio es duro para que el signo no quede solo en otra línea). */
+export const comoPorcentaje = (valor: string): string =>
+  `${formatearMonto(valor, { minDecimales: 0 }) ?? valor}\u00a0%`;
+
+/** El valor de un descuento: «10 %» (porcentaje) o «S/ 5.00» (monto). */
+export const textoDeDescuento = (tipo: 'PORCENTAJE' | 'MONTO', valor: string): string =>
+  tipo === 'MONTO' ? (montoEnSoles(valor) ?? valor) : comoPorcentaje(valor);

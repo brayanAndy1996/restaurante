@@ -8,6 +8,7 @@ export type {
 } from './plataforma-empresas.service';
 export { SucursalService } from './sucursal.service';
 export { EmisoresService } from './emisores.service';
+export type { DatosParaComprobante } from './emisores.service';
 export { SoporteService } from './soporte.service';
 export { SuperadministradoresService } from './superadministradores.service';
 export { SucursalesController } from './sucursales.controller';
@@ -45,3 +46,5 @@ export { PlanesController } from './planes.controller';
 export { PlataformaEmpresasController } from './plataforma-empresas.controller';
 export { PlataformaSesionesController } from './plataforma-sesiones.controller';
 export { SuscripcionesController } from './suscripciones.controller';
+export { UltimaEmisionDeEmisor } from './ultima-emision';
+export type { ConsultaUltimaEmision } from './ultima-emision';

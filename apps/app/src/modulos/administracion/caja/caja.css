@@ -1,0 +1,152 @@
+/* Ajustes › Cajas y Emisores (006, 6a): se carga junto con la pantalla, no con el paquete inicial */
+
+.caja__formulario {
+  max-width: 40rem;
+}
+
+.caja__grupo {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espacio-sm);
+}
+
+/* Un campo o aviso al que se salta por un error no queda tapado por la acción fija de abajo */
+.caja__formulario .ui-campo__control,
+.caja__formulario .ui-aviso {
+  scroll-margin-block: 5rem 7rem;
+}
+
+/* ---------- Series: una junta por tipo de comprobante ---------- */
+
+.caja__serie {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espacio-md);
+  min-width: 0;
+  padding-top: var(--espacio-lg);
+  border-top: 1px solid var(--color-junta);
+}
+
+.caja__serie-titulo {
+  margin: 0;
+  font-size: 1.0625rem;
+  line-height: 1.5rem;
+  font-weight: 700;
+}
+
+.caja__serie .ui-campo__control {
+  font-variant-numeric: tabular-nums;
+  text-transform: uppercase;
+}
+/* "Primer número" es un número, no una serie */
+.caja__serie-campos .ui-campo:nth-child(2) .ui-campo__control {
+  text-transform: none;
+}
+
+/* Serie y primer número: uno debajo del otro en celular angosto, para que las ayudas y los errores tengan ancho */
+.caja__serie-campos--dos {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--espacio-lg);
+}
+
+@media (min-width: 560px) {
+  .caja__serie-campos--dos {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    align-items: start;
+  }
+}
+
+/* ---------- Primeros pasos para cobrar (pregunta 19) ---------- */
+
+/* Un panel informativo: borde de junta, no de control (no se toca) */
+.caja__inicio {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espacio-md);
+  padding: var(--espacio-lg);
+  background: var(--color-baldosa);
+  border: 1px solid var(--color-junta);
+  border-radius: var(--radio-baldosa);
+}
+
+.caja__inicio-titulo {
+  margin: 0;
+  font-size: 1.125rem;
+  line-height: 1.5rem;
+  font-weight: 700;
+}
+
+.caja__pasos {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.caja__paso {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  column-gap: var(--espacio-md);
+  row-gap: var(--espacio-sm);
+  min-height: 3rem;
+  padding-block: var(--espacio-sm);
+}
+.caja__paso + .caja__paso {
+  border-top: 1px solid var(--color-junta);
+}
+
+.caja__paso-icono {
+  display: inline-flex;
+  color: var(--color-aviso-texto);
+}
+.caja__paso-texto {
+  font-size: 1.0625rem;
+  line-height: 1.5rem;
+  font-weight: 600;
+}
+.caja__paso-texto--hecho {
+  color: var(--color-tinta-suave);
+  font-weight: 400;
+}
+/* El icono de lo hecho es verde; el de lo que falta, ámbar: además de la palabra "Hecho" / "Falta" */
+.caja__paso:has(.caja__paso-texto--hecho) .caja__paso-icono {
+  color: var(--color-exito);
+}
+
+.caja__paso-accion {
+  grid-column: 2 / -1;
+  display: flex;
+}
+.caja__paso-accion > * {
+  flex: 1 1 auto;
+}
+
+@media (min-width: 768px) {
+  .caja__paso-accion > * {
+    flex: 0 0 auto;
+  }
+}
+
+/* ---------- Emisor y tasas ---------- */
+
+.caja__emisor {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espacio-xs);
+  padding: var(--espacio-md) var(--espacio-lg);
+  background: var(--color-baldosa);
+  border: 1px solid var(--color-junta);
+  border-radius: var(--radio-baldosa);
+}
+.caja__emisor b {
+  font-size: 1.0625rem;
+  line-height: 1.5rem;
+  overflow-wrap: anywhere;
+}
+
+.caja__tasa {
+  font-variant-numeric: tabular-nums;
+}

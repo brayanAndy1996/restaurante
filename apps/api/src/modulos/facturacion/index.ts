@@ -1,0 +1,18 @@
+export { FacturacionModule } from './facturacion.module';
+export { SeriesService } from './series.service';
+export type { ConfigurarSerie, NumeroTomado } from './series.service';
+export { leerComprobante, textoDelNumero } from './lectura-comprobante';
+export { EmisionService } from './emision.service';
+export type { ComprobanteEmitido, DatosDeEmision, PagoParaTicket } from './emision.service';
+export { FacturadoService } from './facturado';
+export { ComprobantesService } from './comprobantes.service';
+export type { ResumenTributarioDeTurno } from './comprobantes.service';
+export { RegistroImpresoraDeCaja, RegistroPagosDeCobro } from './impresora-de-caja';
+export type {
+  ImpresoraDeCaja,
+  PagosDeUnCobro,
+  ResolutorImpresoraDeCaja,
+  ResolutorPagosDeCobro,
+} from './impresora-de-caja';
+export { RegistroAlcanceDeTurnos } from './alcance-de-turnos';
+export type { ResolutorResponsableDeTurno } from './alcance-de-turnos';

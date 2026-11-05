@@ -59,6 +59,7 @@ interface FilaOrdenDeComanda {
   id: string;
   mozo_id: string | null;
   comensales: number;
+  numero_llamado: number | null;
   mesa_ids: string[];
 }
 
@@ -238,7 +239,7 @@ export class CocinaService {
          SELECT c.origen_id, o.id, o.empresa_id, o.unida_a_orden_id
            FROM cadena c JOIN orden o ON o.id = c.unida_a_orden_id AND o.empresa_id = c.empresa_id
        )
-       SELECT c.origen_id, o.id, o.mozo_id, o.comensales,
+       SELECT c.origen_id, o.id, o.mozo_id, o.comensales, o.numero_llamado,
               coalesce((SELECT array_agg(om.mesa_id ORDER BY om.desde, om.id) FROM orden_mesa om
                          WHERE om.orden_id = o.id AND om.empresa_id = o.empresa_id AND om.hasta IS NULL),
                        '{}') AS mesa_ids
@@ -270,11 +271,15 @@ export class CocinaService {
         orden: {
           id: orden?.id ?? f.orden_id,
           mesas: (orden?.mesa_ids ?? []).map((id) => ({ id, nombre: nombresMesas.get(id) ?? '' })),
-          mozo: {
-            id: orden?.mozo_id ?? '',
-            nombre: nombresPersonas.get(orden?.mozo_id ?? '') ?? '',
-          },
+          // Sin mozo en la venta de mostrador (historia 006, criterio 82); en ese caso trae el número de llamado.
+          mozo:
+            orden?.mozo_id === null || orden === undefined
+              ? null
+              : { id: orden.mozo_id, nombre: nombresPersonas.get(orden.mozo_id) ?? '' },
           comensales: orden?.comensales ?? 0,
+          ...(orden?.numero_llamado === null || orden === undefined
+            ? {}
+            : { numeroLlamado: orden.numero_llamado }),
         },
         lineas: lineasDe.get(f.id) ?? [],
       };

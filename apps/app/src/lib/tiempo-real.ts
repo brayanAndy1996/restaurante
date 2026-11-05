@@ -40,6 +40,8 @@ export const CLAVES_TIEMPO_REAL = {
   impresoras: ['impresion', 'impresoras'] as const,
   /** Los llamados desde la mesa (005): la lista (`['llamados', 'lista', sucursalId]`) y el detalle abierto (`['llamados', 'detalle', id]`). */
   llamados: ['llamados'] as const,
+  /** El turno de caja (006): mi turno, las cajas, el reporte y las cuentas que bloquean el cierre. */
+  turno: ['turno'] as const,
 } as const;
 
 /** Cada cuánto se refrescan las pantallas en vivo cuando no hay conexión de Socket.IO (criterio 97). */
@@ -131,7 +133,8 @@ export type NombreDeEvento =
   | 'carta.actualizada'
   | 'impresion.estado'
   | 'llamado.nuevo'
-  | 'llamado.cambio';
+  | 'llamado.cambio'
+  | 'turno.cambio';
 
 const EVENTOS: readonly NombreDeEvento[] = [
   'salon.cambio',
@@ -145,6 +148,7 @@ const EVENTOS: readonly NombreDeEvento[] = [
   'impresion.estado',
   'llamado.nuevo',
   'llamado.cambio',
+  'turno.cambio',
 ];
 
 type OyenteDeEvento = (nombre: NombreDeEvento, datos: unknown) => void;
@@ -233,6 +237,10 @@ function alLlegarEvento(cliente: QueryClient, nombre: NombreDeEvento, datos: unk
       // `llamado.cambio` con atender también abre la mesa: los eventos del salón llegan aparte (`salon.cambio`).
       invalidar(cliente, CLAVES_TIEMPO_REAL.llamados);
       break;
+    case 'turno.cambio':
+      // Se abrió o cerró un turno, o hubo un movimiento (006): mi turno, la lista de cajas y el reporte lo vuelven a pedir.
+      invalidar(cliente, CLAVES_TIEMPO_REAL.turno);
+      break;
   }
   oyentesDeEvento.forEach((oyente) => oyente(nombre, datos));
 }
@@ -246,6 +254,7 @@ function invalidarTodo(cliente: QueryClient): void {
   invalidar(cliente, CLAVES_TIEMPO_REAL.disponibilidad, opciones);
   invalidar(cliente, CLAVES_TIEMPO_REAL.impresionEstado, opciones);
   invalidar(cliente, CLAVES_TIEMPO_REAL.llamados, opciones);
+  invalidar(cliente, CLAVES_TIEMPO_REAL.turno, opciones);
 }
 
 // --- La conexión de la sesión ----------------------------------------------------------------

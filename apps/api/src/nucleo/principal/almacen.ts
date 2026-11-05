@@ -1,4 +1,5 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
+import type { ObjetivoAutorizacion } from '@restaurante/contratos';
 import type { Request } from 'express';
 import type { Principal } from './principal';
 
@@ -12,6 +13,11 @@ export interface AutorizacionDePeticion {
   solicitanteId: string;
   autorizadorId: string;
   motivo: string;
+  /**
+   * Lo que la clave autoriza (historia 006, criterio 40), ya normalizado, o `null` si se creó sin objetivo. Las rutas
+   * de descuentos y cortesías lo comparan con el de su cuerpo (`exigirObjetivo`).
+   */
+  objetivo: ObjetivoAutorizacion | null;
 }
 
 /** Lo que vive mientras dura la petición: su principal y, si la acción lo necesitó, la autorización consumida. */

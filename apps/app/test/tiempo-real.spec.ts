@@ -110,9 +110,10 @@ describe('la conexión de la sesión', () => {
       [...CLAVES_TIEMPO_REAL.disponibilidad],
       [...CLAVES_TIEMPO_REAL.impresionEstado],
       [...CLAVES_TIEMPO_REAL.llamados],
+      [...CLAVES_TIEMPO_REAL.turno],
     ]);
     // Si ya hay una lectura en camino, esa sirve: no se cancela para bajar lo mismo dos veces.
-    expect(opcionesDeInvalidacion).toEqual(Array(6).fill({ cancelRefetch: false }));
+    expect(opcionesDeInvalidacion).toEqual(Array(7).fill({ cancelRefetch: false }));
   });
 
   it('un aviso de cambio sí cancela la lectura en curso, que pudo salir antes del cambio', async () => {
@@ -289,6 +290,14 @@ describe('el estado de la impresión', () => {
 });
 
 describe('los llamados desde la mesa (005)', () => {
+  it('turno.cambio vuelve a pedir mi turno, las cajas y el reporte (006)', async () => {
+    const socket = await abrir();
+    socket.conectar();
+    invalidadas.length = 0;
+    socket.desdeElServidor('turno.cambio', { turnoId: ORDEN, cajaId: ORDEN });
+    expect(invalidadas).toEqual([[...CLAVES_TIEMPO_REAL.turno]]);
+  });
+
   it('llamado.nuevo y llamado.cambio vuelven a pedir la lista y el detalle de los llamados', async () => {
     const socket = await abrir();
     socket.conectar();

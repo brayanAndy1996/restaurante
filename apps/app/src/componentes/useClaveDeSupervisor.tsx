@@ -1,16 +1,26 @@
-import type { AutorizacionRespuesta } from '@restaurante/contratos';
+import type { AutorizacionRespuesta, ObjetivoAutorizacion } from '@restaurante/contratos';
 import type { Accion } from '@restaurante/dominio';
 import { useCallback, useRef, useState, type ReactNode } from 'react';
+import { describirObjetivo, type ContextoDeObjetivo } from './objetivo-de-clave';
 import { VentanaClaveSupervisor } from './VentanaClaveSupervisor';
 
 export interface PedidoDeClave {
   accion: Accion;
   /** Qué se autoriza, para que el supervisor lo lea ("Anular ítem: Ceviche mixto x1 · S/ 38.00"). */
-  descripcion: string;
+  descripcion?: string;
+  /** Lo que la clave autoriza con exactitud (descuentos y cortesías): se manda y se muestra el mismo objeto. */
+  objetivo?: ObjetivoAutorizacion;
+  /** Nombres del ítem y de la mesa para decir el `objetivo` con palabras. */
+  contexto?: ContextoDeObjetivo;
   atajos?: readonly string[];
   /** Motivo que la persona ya eligió: la ventana lo muestra y no lo pide otra vez. */
   motivo?: string;
 }
+
+const claveDelPedido = (pedido: PedidoDeClave): string =>
+  pedido.objetivo
+    ? `${JSON.stringify(pedido.objetivo)}|${describirObjetivo(pedido.objetivo, pedido.contexto ?? { mesa: '' })}`
+    : (pedido.descripcion ?? '');
 
 /**
  * Forma cómoda de usar la ventana de clave de supervisor desde una pantalla:
@@ -56,10 +66,12 @@ export function useClaveDeSupervisor(): {
   const ventana = (
     <VentanaClaveSupervisor
       // Un pedido nuevo empieza con la ventana limpia.
-      key={pedido ? `${pedido.accion}:${pedido.descripcion}` : 'cerrada'}
+      key={pedido ? `${pedido.accion}:${claveDelPedido(pedido)}` : 'cerrada'}
       abierta={pedido !== null}
       accion={pedido?.accion ?? 'ATENDER_MESA'}
       descripcion={pedido?.descripcion ?? ''}
+      {...(pedido?.objetivo ? { objetivo: pedido.objetivo } : {})}
+      {...(pedido?.contexto ? { contexto: pedido.contexto } : {})}
       {...(pedido?.atajos ? { atajos: pedido.atajos } : {})}
       {...(pedido?.motivo ? { motivo: pedido.motivo } : {})}
       onAutorizada={terminar}

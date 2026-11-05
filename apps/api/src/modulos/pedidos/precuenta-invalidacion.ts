@@ -1,4 +1,5 @@
 import { type Sequelize } from 'sequelize';
+import { mesasVigentesDeOrden } from './mesas-de-orden';
 
 /**
  * Marca como invalidada la pre-cuenta vigente de una orden cuando esta cambia (historia 004, criterios 23, 40 y
@@ -15,4 +16,56 @@ export async function invalidarPrecuentaVigente(
       WHERE orden_id = $1 AND invalidada_en IS NULL`,
     { bind: [ordenId, ahora] },
   );
+}
+
+/**
+ * Lo que cambia en la orden cuando cambia su cuenta sin tocar sus ítems (historia 006, criterio 44: un descuento o
+ * una cortesía, aplicados o quitados): sube `orden.version` y, si estaba en pre-cuenta, la devuelve a `ABIERTA` e
+ * invalida la pre-cuenta vigente, como una anulación (004, criterio 40). Devuelve si estaba en pre-cuenta (entonces
+ * también cambió la mesa).
+ */
+export async function cambiarLaCuenta(
+  conexion: Sequelize,
+  ordenId: string,
+  estado: string,
+  ahora: Date,
+): Promise<boolean> {
+  await conexion.query(
+    `UPDATE orden
+        SET version = version + 1,
+            estado = CASE WHEN estado = 'EN_PRECUENTA' THEN 'ABIERTA' ELSE estado END,
+            actualizado_en = $2
+      WHERE id = $1`,
+    { bind: [ordenId, ahora] },
+  );
+  const estabaEnPrecuenta = estado === 'EN_PRECUENTA';
+  if (estabaEnPrecuenta) await invalidarPrecuentaVigente(conexion, ordenId, ahora);
+  return estabaEnPrecuenta;
+}
+
+/**
+ * Cierra la orden cuyo cambio (una anulación de ítem o un envío) la deja con cobros y sin nada que falte (historia 006,
+ * criterios 52 y 90), como lo hace el cobro que cierra la cuenta: `CERRADA` con `cerrada_en`, versión + 1, las mesas
+ * vigentes libres (`orden_mesa.hasta`) y la pre-cuenta vigente invalidada. No emite ningún comprobante. Devuelve las
+ * mesas que quedaron libres, para publicar `salon.cambio` después de confirmar. La orden ya debe estar bloqueada.
+ */
+export async function cerrarCuentaSinNadaQueFaltar(
+  conexion: Sequelize,
+  ordenId: string,
+  estado: string,
+  ahora: Date,
+): Promise<string[]> {
+  const mesaIds = await mesasVigentesDeOrden(conexion, ordenId);
+  await conexion.query(
+    `UPDATE orden
+        SET version = version + 1, estado = 'CERRADA', cerrada_en = $2, actualizado_en = $2
+      WHERE id = $1`,
+    { bind: [ordenId, ahora] },
+  );
+  await conexion.query(
+    'UPDATE orden_mesa SET hasta = $2, actualizado_en = $2 WHERE orden_id = $1 AND hasta IS NULL',
+    { bind: [ordenId, ahora] },
+  );
+  if (estado === 'EN_PRECUENTA') await invalidarPrecuentaVigente(conexion, ordenId, ahora);
+  return mesaIds;
 }

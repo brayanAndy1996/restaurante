@@ -329,7 +329,7 @@ describe('criterios 46 y 47 · unir', () => {
       [principal.mesa.id, absorbida.mesa.id, extra.id].sort(),
     );
     expect(orden.comensales).toBe(7);
-    expect(orden.mozo.id).toBe(e.A.mozo.id);
+    expect(orden.mozo!.id).toBe(e.A.mozo.id);
     const combo = orden.items.find((i) => i.id === comboId)!;
     expect(combo.comandadoPor?.id).toBe(e.mozo2.id);
     expect(combo.envioNumero).toBe(1);

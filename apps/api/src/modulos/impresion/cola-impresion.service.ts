@@ -9,6 +9,7 @@ import { RELOJ, type Reloj } from '../../nucleo/reloj';
 import type {
   DestinoDeEstacion,
   DestinoVisibleDeEstacion,
+  ImpresoraDeCajaVisible,
   ImpresionPuerto,
   TrabajoParaEncolar,
 } from '../pedidos/impresion';
@@ -131,6 +132,9 @@ export class ColaImpresionService implements ImpresionPuerto {
       documento: t.documento,
       comanda_id: t.comandaId,
       precuenta_id: t.precuentaId,
+      comprobante_id: t.comprobanteId ?? null,
+      turno_id: t.turnoId ?? null,
+      reimpresion_de_id: t.reimpresionDeId ?? null,
       mesa: recortarMesa(t.mesa),
       orden_id: t.ordenId,
       envio_numero: t.envioNumero,
@@ -164,6 +168,8 @@ export class ColaImpresionService implements ImpresionPuerto {
       documento: unknown;
       comanda_id: string | null;
       precuenta_id: string | null;
+      comprobante_id?: string | null;
+      turno_id?: string | null;
       mesa: string | null;
       orden_id: string | null;
       envio_numero: number | null;
@@ -182,15 +188,17 @@ export class ColaImpresionService implements ImpresionPuerto {
     }));
     await this.conexion.query(
       `INSERT INTO trabajo_impresion (id, empresa_id, sucursal_id, impresora_id, estacion_id, tipo, documento,
-                                      comanda_id, precuenta_id, reimpresion_de_id, orden_id, envio_numero, mesa, estado, dia_operativo,
+                                      comanda_id, precuenta_id, comprobante_id, turno_id, reimpresion_de_id, orden_id,
+                                      envio_numero, mesa, estado, dia_operativo,
                                       error_render, incompleto, creado_en, actualizado_en)
        SELECT x.id, $2::uuid, x.sucursal_id, x.impresora_id, x.estacion_id, x.tipo, x.documento,
-              x.comanda_id, x.precuenta_id, x.reimpresion_de_id, x.orden_id, x.envio_numero, x.mesa, 'PENDIENTE', x.dia_operativo,
+              x.comanda_id, x.precuenta_id, x.comprobante_id, x.turno_id, x.reimpresion_de_id, x.orden_id,
+              x.envio_numero, x.mesa, 'PENDIENTE', x.dia_operativo,
               x.error_render, x.incompleto, $3::timestamptz, $3::timestamptz
          FROM jsonb_to_recordset($1::jsonb) AS x(id uuid, sucursal_id uuid, impresora_id uuid,
               estacion_id uuid, tipo text, documento jsonb, comanda_id uuid, precuenta_id uuid,
-              reimpresion_de_id uuid, orden_id uuid, envio_numero int, mesa text, dia_operativo date,
-              error_render text, incompleto boolean)`,
+              comprobante_id uuid, turno_id uuid, reimpresion_de_id uuid, orden_id uuid, envio_numero int,
+              mesa text, dia_operativo date, error_render text, incompleto boolean)`,
       { bind: [JSON.stringify(conIncompleto), empresaId, ahora] },
     );
   }
@@ -261,6 +269,55 @@ export class ColaImpresionService implements ImpresionPuerto {
          JOIN impresora i ON i.id = s.impresora_caja_id AND i.empresa_id = s.empresa_id
         WHERE s.sucursal_id = $1 AND i.activa`,
       { bind: [sucursalId], type: QueryTypes.SELECT },
+    );
+    return filas[0] ?? null;
+  }
+
+  async impresoraDeLaCaja(
+    sucursalId: string,
+    impresoraId: string | null,
+  ): Promise<{ id: string; gaveta: boolean } | null> {
+    if (impresoraId !== null) {
+      const propias = await this.conexion.query<{ id: string; gaveta: boolean }>(
+        'SELECT id, gaveta FROM impresora WHERE id = $1 AND sucursal_id = $2 AND activa',
+        { bind: [impresoraId, sucursalId], type: QueryTypes.SELECT },
+      );
+      if (propias[0] !== undefined) return propias[0];
+    }
+    const deLaSucursal = await this.conexion.query<{ id: string; gaveta: boolean }>(
+      `SELECT i.id, i.gaveta FROM impresion_sucursal s
+         JOIN impresora i ON i.id = s.impresora_caja_id AND i.empresa_id = s.empresa_id
+        WHERE s.sucursal_id = $1 AND i.activa`,
+      { bind: [sucursalId], type: QueryTypes.SELECT },
+    );
+    return deLaSucursal[0] ?? null;
+  }
+
+  async impresorasDeLaSucursal(
+    sucursalId: string,
+    impresoraIds: readonly string[],
+  ): Promise<ReadonlyMap<string, ImpresoraDeCajaVisible>> {
+    if (impresoraIds.length === 0) return new Map();
+    const filas = await this.conexion.query<ImpresoraDeCajaVisible>(
+      `SELECT id, nombre, gaveta, activa FROM impresora
+        WHERE sucursal_id = $1 AND id = ANY($2::uuid[])`,
+      {
+        bind: [sucursalId, [...new Set(impresoraIds.map((id) => id.toLowerCase()))]],
+        type: QueryTypes.SELECT,
+      },
+    );
+    return new Map(filas.map((f) => [f.id, f]));
+  }
+
+  async trabajoDeComprobante(
+    comprobanteId: string,
+  ): Promise<{ id: string; documento: DocumentoTicket } | null> {
+    const filas = await this.conexion.query<{ id: string; documento: DocumentoTicket }>(
+      `SELECT id, documento FROM trabajo_impresion
+        WHERE comprobante_id = $1 AND tipo = 'COMPROBANTE'
+        ORDER BY (reimpresion_de_id IS NULL) DESC, creado_en, id
+        LIMIT 1`,
+      { bind: [comprobanteId], type: QueryTypes.SELECT },
     );
     return filas[0] ?? null;
   }

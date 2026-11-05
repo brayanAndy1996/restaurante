@@ -320,6 +320,9 @@ const espejoCodigos = async () =>
   ).rows;
 const espejoDe = <T extends { empresa_id: string }>(filas: T[], empresaId: string): T[] =>
   filas.filter((f) => f.empresa_id === empresaId);
+/** Solo las filas de las empresas de la prueba: otros archivos crean cartas web en paralelo en la misma base. */
+const espejoDeVarias = <T extends { empresa_id: string }>(filas: T[], empresas: string[]): T[] =>
+  filas.filter((f) => empresas.includes(f.empresa_id));
 
 describe('criterio 65 · el espejo carta_publica refleja carta_web y mesa_qr', () => {
   it('tiene una fila de dirección por cada carta_web y una de código por cada mesa_qr, con su empresa', async () => {
@@ -359,7 +362,9 @@ describe('criterio 65 · el espejo carta_publica refleja carta_web y mesa_qr', (
     expect(espejoDe(despues, c.empresaId)).toEqual([{ slug: otra, empresa_id: c.empresaId }]);
     expect(espejoDe(despues, A.empresaId)).toEqual(espejoDe(antes, A.empresaId));
     expect(espejoDe(despues, B.empresaId)).toEqual(espejoDe(antes, B.empresaId));
-    expect(despues.length).toBe(antes.length);
+    expect(espejoDeVarias(despues, [A.empresaId, B.empresaId, c.empresaId]).length).toBe(
+      espejoDeVarias(antes, [A.empresaId, B.empresaId, c.empresaId]).length,
+    );
     const funcion = (slug: string) =>
       apiCliente.query<{ id: string | null }>('SELECT public.empresa_de_carta($1) AS id', [slug]);
     expect((await funcion(otra)).rows[0]!.id).toBe(c.empresaId);
@@ -411,16 +416,28 @@ describe('criterio 65 · el espejo carta_publica refleja carta_web y mesa_qr', (
       expect(espejoDe(co, A.empresaId)).toEqual(espejoDe(antesCodigos, A.empresaId));
       expect(espejoDe(co, B.empresaId)).toEqual(espejoDe(antesCodigos, B.empresaId));
     });
-    // El ROLLBACK devolvió todo.
-    expect(await espejoSlugs()).toEqual(antesSlugs);
-    expect(await espejoCodigos()).toEqual(antesCodigos);
+    // El ROLLBACK devolvió todo lo de las empresas de la prueba (las filas de C vuelven exactas; A y B no cambian).
+    const propias = [A.empresaId, B.empresaId, c.empresaId];
+    const slugsDespues = await espejoSlugs();
+    const codigosDespues = await espejoCodigos();
+    expect(espejoDe(slugsDespues, c.empresaId)).toEqual(espejoDe(antesSlugs, c.empresaId));
+    expect(espejoDe(codigosDespues, c.empresaId)).toEqual(espejoDe(antesCodigos, c.empresaId));
+    expect(espejoDe(slugsDespues, c.empresaId).length).toBe(1);
+    expect(espejoDe(codigosDespues, c.empresaId).length).toBeGreaterThan(0);
+    expect(espejoDe(slugsDespues, A.empresaId)).toEqual(espejoDe(antesSlugs, A.empresaId));
+    expect(espejoDe(slugsDespues, B.empresaId)).toEqual(espejoDe(antesSlugs, B.empresaId));
+    expect(espejoDe(codigosDespues, A.empresaId)).toEqual(espejoDe(antesCodigos, A.empresaId));
+    expect(espejoDe(codigosDespues, B.empresaId)).toEqual(espejoDe(antesCodigos, B.empresaId));
+    expect(espejoDeVarias(slugsDespues, propias)).toEqual(espejoDeVarias(antesSlugs, propias));
+    expect(espejoDeVarias(codigosDespues, propias)).toEqual(espejoDeVarias(antesCodigos, propias));
   });
 
   it('A no puede quedarse con la dirección de B: PUT /carta-web responde 409 CONFLICTO sin revelar nada y sin cambiar la de B', async () => {
-    const { m, B } = await sembrado();
+    const { m, A, B } = await sembrado();
     const c = await empresaC();
+    const propias = [A.empresaId, B.empresaId, c.empresaId];
     const antesB = await fotoDe('carta_web', B.empresaId);
-    const antesEspejo = await espejoSlugs();
+    const antesEspejo = espejoDeVarias(await espejoSlugs(), propias);
     const res = await llamar(ctx, c.token, {
       metodo: 'put',
       ruta: '/carta-web',
@@ -432,7 +449,7 @@ describe('criterio 65 · el espejo carta_publica refleja carta_web y mesa_qr', (
       expect(res.text).not.toContain(secreto);
     }
     expect(await fotoDe('carta_web', B.empresaId)).toEqual(antesB);
-    expect(await espejoSlugs()).toEqual(antesEspejo);
+    expect(espejoDeVarias(await espejoSlugs(), propias)).toEqual(antesEspejo);
     // La configuración de C no cambió.
     const mia = await llamar(ctx, c.token, { metodo: 'get', ruta: '/carta-web' });
     exigirEstado(mia, 200, 'la carta web de C');
@@ -440,12 +457,13 @@ describe('criterio 65 · el espejo carta_publica refleja carta_web y mesa_qr', (
   });
 
   it('lo mismo por SQL: poner la dirección de B (o el código de una mesa de B) falla con unicidad (23505) sin revelar la empresa de B', async () => {
-    const { m, B } = await sembrado();
+    const { m, A, B } = await sembrado();
     const c = await empresaC();
+    const propias = [A.empresaId, B.empresaId, c.empresaId];
     const antesB = await fotoDe('carta_web', B.empresaId);
     const antesQrB = await fotoDe('mesa_qr', B.empresaId);
-    const antesSlugs = await espejoSlugs();
-    const antesCodigos = await espejoCodigos();
+    const antesSlugs = espejoDeVarias(await espejoSlugs(), propias);
+    const antesCodigos = espejoDeVarias(await espejoCodigos(), propias);
     const sinRevelar = (e: { message: string; detail?: string; table?: string }) => {
       const texto = JSON.stringify([e.message, e.detail]);
       expect(texto).not.toContain(B.empresaId);
@@ -473,13 +491,14 @@ describe('criterio 65 · el espejo carta_publica refleja carta_web y mesa_qr', (
     });
     expect(await fotoDe('carta_web', B.empresaId)).toEqual(antesB);
     expect(await fotoDe('mesa_qr', B.empresaId)).toEqual(antesQrB);
-    expect(await espejoSlugs()).toEqual(antesSlugs);
-    expect(await espejoCodigos()).toEqual(antesCodigos);
+    expect(espejoDeVarias(await espejoSlugs(), propias)).toEqual(antesSlugs);
+    expect(espejoDeVarias(await espejoCodigos(), propias)).toEqual(antesCodigos);
   });
 
   it('el trigger toma la empresa de la fila nueva: una fila de mesa_qr con la empresa de B puesta desde A no entra ni deja nada en el espejo', async () => {
     const { m, A, B } = await sembrado();
-    const antes = await espejoCodigos();
+    const propias = [A.empresaId, B.empresaId];
+    const antes = espejoDeVarias(await espejoCodigos(), propias);
     const nuevo = randomBytes(16).toString('base64url');
     const cambios = {
       id: randomUUID(),
@@ -499,7 +518,7 @@ describe('criterio 65 · el espejo carta_publica refleja carta_web y mesa_qr', (
       expect(error.code, error.message).toBe('42501');
       expect(error.message).toMatch(/row-level security/);
     });
-    expect(await espejoCodigos()).toEqual(antes);
+    expect(espejoDeVarias(await espejoCodigos(), propias)).toEqual(antes);
     expect((await espejoCodigos()).some((f) => f.codigo === nuevo)).toBe(false);
   });
 });

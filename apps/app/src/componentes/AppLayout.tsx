@@ -6,6 +6,7 @@ import {
   IconoCocina,
   IconoDisponibilidad,
   IconoInicio,
+  IconoPago,
   IconoSalon,
   Navegacion,
   type LucideIcon,
@@ -34,6 +35,7 @@ const AvisosDeLlamados = lazy(() =>
 const ICONO_DE_DESTINO: Record<IdDeDestino, LucideIcon> = {
   inicio: IconoInicio,
   salon: IconoSalon,
+  caja: IconoPago,
   cocina: IconoCocina,
   carta: IconoCarta,
   disponibilidad: IconoDisponibilidad,

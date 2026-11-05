@@ -28,6 +28,12 @@ export interface TicketRenderizado {
 export interface ImpresoraParaRenderizar {
   anchoMm: AnchoPapelMm;
   juegoCaracteres: JuegoCaracteres;
+  /**
+   * Historia 006, criterio 94: `true` si el bloque `gaveta` del documento debe mandar el pulso. Lo decide quien entrega
+   * el trabajo (la impresora tiene gaveta, es la primera entrega, no es una reimpresión y se entrega a menos de
+   * `SEGUNDOS_PULSO_GAVETA` de creado); por defecto `false`: el pulso nunca sale sin que se pida.
+   */
+  pulsoGaveta?: boolean;
 }
 
 type Alineacion = 'izquierda' | 'centro' | 'derecha';
@@ -52,10 +58,17 @@ const HOLGURA_DEL_CIERRE = 4;
  */
 const RESERVA_AL_CORTAR = 512;
 
+/** Tamaño del módulo del QR (puntos): legible en 58 mm con los textos de hasta 300 caracteres de un comprobante. */
+const TAMANO_MODULO_QR = 4;
+/** Corrección de errores M del QR (`GS ( k` función 169, n = 49). */
+const CORRECCION_QR_M = 49;
+/** Pulso de la gaveta: `ESC p 0 25 250` (pin 2, 50 ms encendido, 500 ms apagado). */
+const PULSO_GAVETA = [ESC, 0x70, 0, 25, 250] as const;
+
 /**
  * Escribe los comandos ESC/POS llevando el estado de la impresora (alineación, negrita, doble alto) para mandar
- * un comando solo cuando cambia. Usa únicamente: `ESC @`, `ESC t`, `ESC E`, `ESC a`, `GS !`, `LF`, `ESC d` y
- * `GS V`.
+ * un comando solo cuando cambia. Usa únicamente: `ESC @`, `ESC t`, `ESC E`, `ESC a`, `GS !`, `LF`, `ESC d`,
+ * `GS V`, `GS ( k` (el QR) y `ESC p` (el pulso de la gaveta).
  */
 class EscritorEscPos {
   private readonly bytes: number[] = [];
@@ -107,7 +120,92 @@ class EscritorEscPos {
     return true;
   }
 
-  finalizar(): Uint8Array {
+  /**
+   * El pulso de la gaveta, antes de lo que sigue. Devuelve `false`, sin escribir nada, si ya no cabe (el ticket llegó a
+   * su tope de bytes).
+   */
+  pulso(): boolean {
+    if (this.bytes.length + PULSO_GAVETA.length > this.limite) return false;
+    this.bytes.push(...PULSO_GAVETA);
+    return true;
+  }
+
+  /**
+   * Un QR centrado (`GS ( k`, modelo 2, corrección M) con el texto en UTF-8. Devuelve `false`, sin escribir nada, si
+   * no cabe en el tope de bytes del ticket.
+   */
+  qr(texto: string): boolean {
+    const datos = new TextEncoder().encode(texto);
+    const inicio = this.bytes.length;
+    const antes = { alineacion: this.alineacion, negrita: this.negrita, dobleAlto: this.dobleAlto };
+    this.estilo('centro', false, false);
+    const largo = datos.length + 3;
+    const comandos = [
+      // Modelo 2.
+      GS,
+      0x28,
+      0x6b,
+      4,
+      0,
+      49,
+      65,
+      50,
+      0,
+      // Tamaño del módulo.
+      GS,
+      0x28,
+      0x6b,
+      3,
+      0,
+      49,
+      67,
+      TAMANO_MODULO_QR,
+      // Corrección de errores M.
+      GS,
+      0x28,
+      0x6b,
+      3,
+      0,
+      49,
+      69,
+      CORRECCION_QR_M,
+      // Guarda los datos.
+      GS,
+      0x28,
+      0x6b,
+      largo % 256,
+      Math.floor(largo / 256),
+      49,
+      80,
+      48,
+      ...datos,
+      // Imprime lo guardado.
+      GS,
+      0x28,
+      0x6b,
+      3,
+      0,
+      49,
+      81,
+      48,
+    ];
+    if (this.bytes.length + comandos.length > this.limite) {
+      this.bytes.length = inicio;
+      this.alineacion = antes.alineacion;
+      this.negrita = antes.negrita;
+      this.dobleAlto = antes.dobleAlto;
+      return false;
+    }
+    for (const byte of comandos) this.bytes.push(byte);
+    return true;
+  }
+
+  /**
+   * Termina el ticket: estilo base, avance y corte parcial. Un documento que es solo el pulso de la gaveta no avanza
+   * ni corta (criterio 93: sin papel).
+   */
+  finalizar(sinPapel = false): Uint8Array {
+    if (sinPapel) return Uint8Array.from(this.bytes);
     this.estilo('izquierda', false, false);
     // Avance (`BYTES_AVANCE_Y_CORTE` en total, con el corte); el estilo de arriba ocupa a lo más `BYTES_ESTILO_DEL_CIERRE`.
     this.bytes.push(ESC, 0x64, AVANCE_ANTES_DEL_CORTE, GS, 0x56, 66, 0);
@@ -140,6 +238,7 @@ function escribirBloque(
   bloque: BloqueTicket,
   columnas: number,
   juego: JuegoCaracteres,
+  pulsoGaveta: boolean,
 ): boolean {
   const adaptar = (texto: string): string => adaptarTexto(texto, juego);
   switch (bloque.tipo) {
@@ -195,6 +294,11 @@ function escribirBloque(
         if (!escritor.linea('')) return false;
       }
       return true;
+    // Historia 006 (criterios 91 y 92): el QR centrado y el pulso de la gaveta, que sale antes de todo lo que sigue.
+    case 'qr':
+      return escritor.qr(bloque.texto);
+    case 'gaveta':
+      return pulsoGaveta ? escritor.pulso() : true;
   }
 }
 
@@ -235,9 +339,12 @@ export function renderizarTicketDetallado(
   const escritor = new EscritorEscPos(impresora.juegoCaracteres);
   escritor.iniciar();
   const bloques = valido.data.bloques;
+  const pulsoGaveta = impresora.pulsoGaveta === true;
   let recortado = false;
   for (let i = 0; i < bloques.length; i += 1) {
-    if (escribirBloque(escritor, bloques[i]!, columnas, impresora.juegoCaracteres)) continue;
+    if (escribirBloque(escritor, bloques[i]!, columnas, impresora.juegoCaracteres, pulsoGaveta)) {
+      continue;
+    }
     // No cupo: el bloque en curso y los que siguen se omiten, y el ticket lo dice.
     recortado = true;
     escritor.usarReserva();
@@ -249,10 +356,12 @@ export function renderizarTicketDetallado(
       avisoDeCorte(sinEscribir + omitidosPorAvisos(bloques)),
       columnas,
       impresora.juegoCaracteres,
+      false,
     );
     break;
   }
-  return { bytes: escritor.finalizar(), recortado };
+  const soloGaveta = bloques.length > 0 && bloques.every((b) => b.tipo === 'gaveta');
+  return { bytes: escritor.finalizar(soloGaveta), recortado };
 }
 
 /** Los bytes de un ticket (ver `renderizarTicketDetallado`, que además dice si hubo que cortarlo). */

@@ -1,0 +1,10 @@
+/* El estado de un trabajo de impresión de la caja (y su camino cuando no hay impresora). */
+.impresion-caja {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--espacio-sm);
+}
+.impresion-caja > .texto-ayuda {
+  margin: 0;
+}

@@ -440,7 +440,11 @@ describe('reactivación con un pago (criterio 83)', () => {
 
 describe('nada más consulta el estado de la suscripción (criterio 84)', () => {
   /** Archivos de `src` que pueden hablar del estado de la suscripción: solo el servicio dueño. */
-  const PERMITIDOS = ['modulos/plataforma/suscripcion.service.ts'];
+  const PERMITIDOS = [
+    'modulos/plataforma/suscripcion.service.ts',
+    // La apertura de caja es el único gancho de la suspensión (criterios 25 y 84).
+    'modulos/caja/turnos.service.ts',
+  ];
   const PATRONES = [
     'estadoDeSucursal',
     'exigirAperturaDeCaja',

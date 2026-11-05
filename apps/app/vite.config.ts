@@ -57,6 +57,11 @@ export default defineConfig({
       '@restaurante/contratos': fileURLToPath(
         new URL('../../packages/contratos/src/index.ts', import.meta.url),
       ),
+      // La entrada de caja (montos, partes y pagos) va aparte y antes de la general: si no, se resolvería como
+      // `…/src/index.ts/caja`. Así solo los bloques de caja bajan `decimal.js` y el cálculo de la cuenta.
+      '@restaurante/dominio/caja': fileURLToPath(
+        new URL('../../packages/dominio/src/caja/index.ts', import.meta.url),
+      ),
       '@restaurante/dominio': fileURLToPath(
         new URL('../../packages/dominio/src/index.ts', import.meta.url),
       ),

@@ -23,6 +23,8 @@ import './comandero.css';
 interface Props {
   borrador: BorradorEnPantalla;
   onEditar: (linea: LineaBorrador) => void;
+  /** `mostrador`: la venta de mostrador (006), que se cobra y se envía a la vez. Cambia solo lo que dicen los textos. */
+  modo?: 'mostrador';
 }
 
 /** "3/4 · Huevo", los modificadores elegidos de una línea. */
@@ -34,7 +36,8 @@ const textoDeModificadores = (linea: LineaBorrador): string | null =>
  * (tocándola) o se quita sin clave; mientras un envío está en curso o sin terminar, las líneas se bloquean y
  * la pantalla lo dice con "Pendiente de envío" (criterio 92). Las líneas que la API rechazó llevan su motivo.
  */
-export function PorEnviar({ borrador, onEditar }: Props) {
+export function PorEnviar({ borrador, onEditar, modo }: Props) {
+  const deMostrador = modo === 'mostrador';
   const bloqueado = borrador.envioId !== null;
   const [quitada, setQuitada] = useState<LineaBorrador | null>(null);
 
@@ -57,15 +60,25 @@ export function PorEnviar({ borrador, onEditar }: Props) {
       ) : null}
       {borrador.fase === 'esperando-red' ? <AvisoPendiente pendiente /> : null}
       {borrador.porReintentar && !borrador.aviso ? (
-        <Aviso tipo="alerta" titulo="Hay un envío sin terminar" icono={IconoPendiente}>
-          No sabemos si llegó a cocina. Toca «Reintentar el envío»: si ya había llegado, no se
-          duplicará.
+        <Aviso
+          tipo="alerta"
+          titulo={deMostrador ? 'Hay una venta sin terminar' : 'Hay un envío sin terminar'}
+          icono={IconoPendiente}
+        >
+          {deMostrador
+            ? 'No sabemos si se cobró. Toca «Reintentar la venta»: si ya estaba hecha, no se duplicará.'
+            : 'No sabemos si llegó a cocina. Toca «Reintentar el envío»: si ya había llegado, no se duplicará.'}
         </Aviso>
       ) : null}
 
       {borrador.lineas.length === 0 ? (
-        <EstadoVacio icono={IconoPendiente} titulo="Nada por enviar">
-          Elige productos en la carta y aparecerán aquí antes de salir a cocina.
+        <EstadoVacio
+          icono={IconoPendiente}
+          titulo={deMostrador ? 'Venta vacía' : 'Nada por enviar'}
+        >
+          {deMostrador
+            ? 'Elige productos en la carta y aparecerán aquí para cobrarlos.'
+            : 'Elige productos en la carta y aparecerán aquí antes de salir a cocina.'}
         </EstadoVacio>
       ) : (
         <ul className="por-enviar__lista" aria-label="Productos por enviar">
@@ -91,7 +104,7 @@ export function PorEnviar({ borrador, onEditar }: Props) {
         </p>
       ) : null}
 
-      {borrador.lineas.length > 0 ? (
+      {borrador.lineas.length > 0 && !deMostrador ? (
         <div className="por-enviar__total">
           <span>Total por enviar</span>
           <b>{montoEnSoles(totalDelBorrador(borrador.lineas))}</b>

@@ -20,6 +20,7 @@ import {
 //   ESC d n          imprime y avanza n líneas
 //   ESC p m t1 t2    pulso de la gaveta
 //   GS V m [n]       corte (0 y 48 total, 1 y 49 parcial; 65 y 66 con avance, total y parcial)
+//   GS ( k …         el QR (historia 006): modelo, tamaño, corrección, datos e impresión; se anota como `[QR] <texto>`
 //   ESC 2, ESC 3 n, ESC J n     separación de líneas y avance en puntos (se aceptan y no cambian el texto)
 //   LF               fin de línea (CR y HT se ignoran)
 // Todo lo demás queda en `comandosDesconocidos` del ticket (en hexadecimal), para que una prueba falle si el
@@ -75,6 +76,8 @@ export interface TicketEmulado {
   corte: 'parcial' | 'total' | null;
   /** Líneas de avance (`ESC d`) en todo el ticket. */
   avance: number;
+  /** Los textos de los códigos QR impresos, en orden (historia 006, criterio 91). */
+  qrs: string[];
   pulsosGaveta: number;
   /** Los comandos que el intérprete no conoce, en hexadecimal (`1B 58`). */
   comandosDesconocidos: string[];
@@ -100,6 +103,7 @@ type Evento =
   | { tipo: 'linea'; linea: LineaEmulada }
   | { tipo: 'avance'; n: number }
   | { tipo: 'gaveta' }
+  | { tipo: 'qr'; texto: string }
   | { tipo: 'corte'; corte: 'parcial' | 'total' }
   | { tipo: 'desconocido'; hex: string };
 
@@ -185,6 +189,9 @@ export class InterpreteEscPos {
   private eventos: Evento[] = [];
   private bytesDelTicket: number[] = [];
   private avance = 0;
+  private qrs: string[] = [];
+  /** Los datos guardados del QR (`GS ( k` función 80), a la espera de la función 81 que los imprime. */
+  private datosQr: Uint8Array | null = null;
   private pulsosGaveta = 0;
   private desconocidos: string[] = [];
   private desbordes = 0;
@@ -263,6 +270,16 @@ export class InterpreteEscPos {
     if (b === GS) {
       if (disponibles < 2) return 0;
       const c = buf[pos + 1]!;
+      if (c === 0x28) {
+        // `GS ( fn pL pH` + `pL + 256 pH` bytes (el QR es `fn` = `k`).
+        if (disponibles < 5) return 0;
+        const largoDatos = buf[pos + 3]! + 256 * buf[pos + 4]!;
+        const total = 5 + largoDatos;
+        const n = tomar(total);
+        if (n === null) return 0;
+        this.ejecutarFuncionGs(buf[pos + 2]!, buf.subarray(pos + 5, pos + total));
+        return n;
+      }
       let largo = 2;
       if (c === 0x21) largo = 3;
       else if (c === 0x56) {
@@ -358,6 +375,31 @@ export class InterpreteEscPos {
       default:
         this.registrarDesconocido(`1B ${hex([c])}`);
     }
+  }
+
+  /** `GS ( k`: las funciones del QR (`cn` 49). Todo lo demás queda como comando desconocido. */
+  private ejecutarFuncionGs(familia: number, datos: Uint8Array): void {
+    const cn = datos[0];
+    const fn = datos[1];
+    if (familia !== 0x6b || cn !== 49 || fn === undefined) {
+      this.registrarDesconocido(`1D 28 ${hex([familia, ...datos])}`);
+      return;
+    }
+    // 65 modelo, 67 tamaño del módulo, 69 corrección: se aceptan y no cambian el texto.
+    if (fn === 65 || fn === 67 || fn === 69) return;
+    if (fn === 80) {
+      this.datosQr = datos.slice(3);
+      return;
+    }
+    if (fn === 81) {
+      this.cerrarLinea();
+      const texto = new TextDecoder().decode(this.datosQr ?? new Uint8Array(0));
+      this.datosQr = null;
+      this.qrs.push(texto);
+      this.eventos.push({ tipo: 'qr', texto });
+      return;
+    }
+    this.registrarDesconocido(`1D 28 6B ${hex(datos)}`);
   }
 
   private ejecutarGs(c: number, params: Uint8Array): void {
@@ -475,6 +517,8 @@ export class InterpreteEscPos {
           return `[AVANCE ${e.n}]`;
         case 'gaveta':
           return '[GAVETA]';
+        case 'qr':
+          return `[QR] ${e.texto}`;
         case 'corte':
           return e.corte === 'parcial' ? '[CORTE PARCIAL]' : '[CORTE TOTAL]';
         case 'desconocido':
@@ -491,6 +535,7 @@ export class InterpreteEscPos {
       codificacionExplicita: this.paginaExplicita,
       corte,
       avance: this.avance,
+      qrs: [...this.qrs],
       pulsosGaveta: this.pulsosGaveta,
       comandosDesconocidos: [...this.desconocidos],
       desbordes: this.desbordes,
@@ -503,6 +548,8 @@ export class InterpreteEscPos {
     this.eventos = [];
     this.bytesDelTicket = [];
     this.avance = 0;
+    this.qrs = [];
+    this.datosQr = null;
     this.pulsosGaveta = 0;
     this.desconocidos = [];
     this.desbordes = 0;

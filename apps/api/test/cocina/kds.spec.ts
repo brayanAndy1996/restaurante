@@ -166,7 +166,7 @@ describe('criterios 56 y 57 · lo que muestra cada comanda y el orden de llegada
         comensales: 2,
       },
     });
-    expect(cocina.orden.mozo.nombre).not.toBe('');
+    expect(cocina.orden.mozo!.nombre).not.toBe('');
     expect(cocina.orden.mesas).toHaveLength(1);
     expect(cocina.orden.mesas[0]).toMatchObject({ id: primera.orden.mesaId });
     expect(cocina.orden.mesas[0]!.nombre).not.toBe('');
@@ -257,7 +257,7 @@ describe('criterios 56 y 57 · lo que muestra cada comanda y el orden de llegada
     );
     expect(comanda).toBeDefined();
     expect(comanda!.orden.mesas.map((m) => m.id)).toEqual([o2.mesaId]);
-    expect(comanda!.orden.mozo.id).toBe(esc.mozo2.id);
+    expect(comanda!.orden.mozo!.id).toBe(esc.mozo2.id);
   });
 });
 

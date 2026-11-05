@@ -1,9 +1,24 @@
 import { Inject, Injectable } from '@nestjs/common';
-import type { EmisorCrearEntrada, EmisorRespuesta } from '@restaurante/contratos';
-import { SQLSTATE, sqlstateDe } from '../../nucleo/base-de-datos';
+import type {
+  EmisorCrearEntrada,
+  EmisorRespuesta,
+  TasaIgvEntrada,
+  TasaIgvRespuesta,
+} from '@restaurante/contratos';
+import type { RegimenTributario } from '@restaurante/dominio';
+import { QueryTypes, type Sequelize } from 'sequelize';
+import { CONEXION_API, SQLSTATE, sqlstateDe } from '../../nucleo/base-de-datos';
 import { ContextoEmpresa } from '../../nucleo/contexto-empresa';
 import { ErrorAplicacion } from '../../nucleo/errores/error-aplicacion';
+import { RELOJ, type Reloj } from '../../nucleo/reloj';
+import { AuditoriaService } from '../auditoria';
 import { MODELOS_API, type EmisorModelo, type Modelos } from './modelos';
+import { UltimaEmisionDeEmisor } from './ultima-emision';
+
+/** Lo que `configurarTasaIgv` espera a los cobros en curso del emisor antes de responder 409 `CONFLICTO`. */
+const ESPERA_MAXIMA_DE_COBROS_MS = 3_000;
+/** Pausa entre un intento de bloquear al emisor y el siguiente. */
+const PAUSA_ENTRE_INTENTOS_MS = 25;
 
 /** Fila de la tabla a la forma de `emisorRespuesta` (fechas ISO 8601). */
 export function emisorARespuesta(emisor: EmisorModelo): EmisorRespuesta {
@@ -19,6 +34,15 @@ export function emisorARespuesta(emisor: EmisorModelo): EmisorRespuesta {
 }
 
 /**
+ * Lo que un comprobante guarda del emisor y de la sucursal al emitirse (historia 006, criterio 69): la sucursal con
+ * su código de establecimiento y el emisor con su RUC, razón social y régimen.
+ */
+export interface DatosParaComprobante {
+  sucursal: { id: string; nombre: string; direccion: string; codigoEstablecimiento: string };
+  emisor: { id: string; ruc: string; razonSocial: string; regimen: RegimenTributario };
+}
+
+/**
  * Emisores de la empresa del contexto activo (RF-01). Debe llamarse dentro de `ContextoEmpresa.ejecutar`:
  * los modelos son los de la conexión de la API, así que con contexto la RLS limita todo a la propia empresa.
  */
@@ -27,6 +51,10 @@ export class EmisoresService {
   constructor(
     @Inject(MODELOS_API) private readonly modelos: Modelos,
     @Inject(ContextoEmpresa) private readonly contexto: ContextoEmpresa,
+    @Inject(UltimaEmisionDeEmisor) private readonly ultimaEmision: UltimaEmisionDeEmisor,
+    @Inject(CONEXION_API) private readonly conexion: Sequelize,
+    @Inject(AuditoriaService) private readonly auditoria: AuditoriaService,
+    @Inject(RELOJ) private readonly reloj: Reloj,
   ) {}
 
   async listar(): Promise<EmisorRespuesta[]> {
@@ -57,5 +85,184 @@ export class EmisoresService {
       }
       throw error;
     }
+  }
+
+  /**
+   * Las tasas de IGV del emisor en orden de `desde` (historia 006, criterio 6). 404 si el emisor no es de la empresa
+   * (uno de otra empresa es indistinguible de uno inexistente).
+   */
+  async tasasIgv(emisorId: string): Promise<TasaIgvRespuesta[]> {
+    await this.exigirEmisor(emisorId);
+    return this.leerTasas(emisorId);
+  }
+
+  /**
+   * Las tasas del emisor para emitir un comprobante con la vigente (cobro y venta de mostrador). Toma la fila del
+   * emisor con `FOR SHARE` hasta el final de la transacción: choca con el `FOR NO KEY UPDATE` de
+   * `configurarTasaIgv`, de modo que "leer la tasa vigente" y "cambiar la tasa" se turnan (nunca dos tasas para la
+   * misma fecha de emisión), pero dos cobros del mismo emisor no se esperan entre sí. Va después de los bloqueos de la
+   * orden y del turno y antes del de la serie (el orden fijo del plan).
+   */
+  async tasasIgvParaEmitir(emisorId: string): Promise<TasaIgvRespuesta[]> {
+    await this.exigirEmisor(emisorId, 'compartido');
+    return this.leerTasas(emisorId);
+  }
+
+  /**
+   * Crea o cambia la tasa de IGV del emisor desde una fecha (criterio 6). Repetir el mismo valor responde 200 sin
+   * auditoría. No se puede crear ni cambiar una tasa con `desde` igual o anterior a la fecha de Lima del último
+   * comprobante emitido por el emisor (409 `CONFLICTO`: las ventas pasadas no se recalculan); esa fecha la da el puerto
+   * `UltimaEmisionDeEmisor` que registra facturación y, sin registro, se rechaza (falla cerrado). La fila del emisor se
+   * toma con `FOR NO KEY UPDATE`: dos cambios del mismo emisor se turnan y esperan a los cobros en curso del emisor,
+   * que leen la tasa con `FOR SHARE` (`tasasIgvParaEmitir`) y la sueltan al confirmar; así la última fecha de emisión
+   * que se comprueba abajo ya incluye a esos cobros (409 si es de la fecha o posterior). La espera es de a lo sumo
+   * `ESPERA_MAXIMA_DE_COBROS_MS`: con cobros llegando sin pausa el bloqueo podría no llegar nunca (los cobros nuevos
+   * toman `FOR SHARE` sin hacer fila detrás de quien espera), así que pasado el plazo responde 409 `CONFLICTO`
+   * («Hay cobros en curso; inténtalo de nuevo») sin guardar nada (criterio 90).
+   */
+  async configurarTasaIgv(
+    emisorId: string,
+    desde: string,
+    entrada: TasaIgvEntrada,
+  ): Promise<TasaIgvRespuesta> {
+    await this.bloquearEmisorConEspera(emisorId);
+    // Un emisor Nuevo RUS no tiene IGV: no se le guarda ninguna tasa (422, sin guardar ni auditar).
+    const regimen = await this.conexion.query<{ regimen: RegimenTributario }>(
+      'SELECT regimen FROM emisor WHERE id = $1',
+      { bind: [emisorId], type: QueryTypes.SELECT },
+    );
+    if (regimen[0]?.regimen === 'NUEVO_RUS') {
+      throw new ErrorAplicacion(
+        422,
+        'EMISOR_INVALIDO',
+        'Un emisor del Nuevo RUS no tiene tasa de IGV',
+      );
+    }
+    // La igualdad es numérica y exacta, en la base (`18` y `18.00` son la misma tasa; sin coma flotante).
+    const actuales = await this.conexion.query<{ id: string; tasa: string; igual: boolean }>(
+      `SELECT id, tasa::text AS tasa, tasa = $3::numeric AS igual
+         FROM emisor_tasa_igv WHERE emisor_id = $1 AND desde = $2::date`,
+      { bind: [emisorId, desde, entrada.tasa], type: QueryTypes.SELECT },
+    );
+    const actual = actuales[0];
+    if (actual !== undefined && actual.igual) {
+      return { desde, tasa: actual.tasa };
+    }
+    const ultima = await this.ultimaEmision.fecha(emisorId);
+    if (ultima !== null && desde <= ultima) {
+      throw new ErrorAplicacion(
+        409,
+        'CONFLICTO',
+        `El emisor ya emitió comprobantes hasta el ${ultima}: no se puede crear ni cambiar una tasa desde esa fecha o una anterior`,
+        [{ campo: 'desde', mensaje: 'Debe ser posterior al último comprobante emitido' }],
+      );
+    }
+    const guardadas = await this.conexion.query<{ id: string; tasa: string }>(
+      actual === undefined
+        ? `INSERT INTO emisor_tasa_igv (empresa_id, emisor_id, desde, tasa, creado_en, actualizado_en)
+           VALUES ($1, $2, $3::date, $4::numeric, $5, $5) RETURNING id, tasa::text AS tasa`
+        : `UPDATE emisor_tasa_igv SET tasa = $4::numeric, actualizado_en = $5
+            WHERE emisor_id = $2 AND desde = $3::date AND empresa_id = $1 RETURNING id, tasa::text AS tasa`,
+      {
+        bind: [this.contexto.empresaActual(), emisorId, desde, entrada.tasa, this.reloj.ahora()],
+        type: QueryTypes.SELECT,
+      },
+    );
+    const guardada = guardadas[0]!;
+    await this.auditoria.registrar({
+      accion: 'configurar_tasa_igv',
+      entidad: 'emisor_tasa_igv',
+      entidadId: guardada.id,
+      detalle: {
+        emisorId,
+        desde,
+        antes: actual?.tasa ?? null,
+        despues: guardada.tasa,
+      },
+    });
+    return { desde, tasa: guardada.tasa };
+  }
+
+  /**
+   * El emisor y la sucursal tal como se guardan en el comprobante (criterio 69). Lo usa el cobro (módulo de caja) y
+   * la emisión. 404 si la sucursal no es de la empresa.
+   */
+  async datosParaComprobante(sucursalId: string): Promise<DatosParaComprobante> {
+    const filas = await this.conexion.query<{
+      sucursal_id: string;
+      nombre: string;
+      direccion: string;
+      codigo_establecimiento: string;
+      emisor_id: string;
+      ruc: string;
+      razon_social: string;
+      regimen: RegimenTributario;
+    }>(
+      `SELECT s.id AS sucursal_id, s.nombre, s.direccion, s.codigo_establecimiento::text AS codigo_establecimiento,
+              e.id AS emisor_id, e.ruc::text AS ruc, e.razon_social, e.regimen
+         FROM sucursal s
+         JOIN emisor e ON e.id = s.emisor_id AND e.empresa_id = s.empresa_id
+        WHERE s.id = $1`,
+      { bind: [sucursalId], type: QueryTypes.SELECT },
+    );
+    const fila = filas[0];
+    if (fila === undefined)
+      throw new ErrorAplicacion(404, 'NO_ENCONTRADO', 'La sucursal no existe');
+    return {
+      sucursal: {
+        id: fila.sucursal_id,
+        nombre: fila.nombre,
+        direccion: fila.direccion,
+        codigoEstablecimiento: fila.codigo_establecimiento,
+      },
+      emisor: {
+        id: fila.emisor_id,
+        ruc: fila.ruc,
+        razonSocial: fila.razon_social,
+        regimen: fila.regimen,
+      },
+    };
+  }
+
+  private async leerTasas(emisorId: string): Promise<TasaIgvRespuesta[]> {
+    return this.conexion.query<TasaIgvRespuesta>(
+      `SELECT to_char(desde, 'YYYY-MM-DD') AS desde, tasa::text AS tasa
+         FROM emisor_tasa_igv WHERE emisor_id = $1 ORDER BY desde`,
+      { bind: [emisorId], type: QueryTypes.SELECT },
+    );
+  }
+
+  /**
+   * `FOR NO KEY UPDATE` de la fila del emisor, esperando a lo sumo `ESPERA_MAXIMA_DE_COBROS_MS`. La guarda de la API
+   * no admite `SET lock_timeout` (ni `SAVEPOINT` para sobrevivir a `NOWAIT`), así que se intenta con `SKIP LOCKED`
+   * cada `PAUSA_ENTRE_INTENTOS_MS`: una fila vacía es «bloqueada por un cobro». 404 si el emisor no es de la empresa;
+   * pasado el plazo, 409 `CONFLICTO` y la transacción se revierte sin guardar nada.
+   */
+  private async bloquearEmisorConEspera(emisorId: string): Promise<void> {
+    await this.exigirEmisor(emisorId);
+    const limite = performance.now() + ESPERA_MAXIMA_DE_COBROS_MS;
+    for (;;) {
+      const filas = await this.conexion.query<{ id: string }>(
+        'SELECT id FROM emisor WHERE id = $1 FOR NO KEY UPDATE SKIP LOCKED',
+        { bind: [emisorId], type: QueryTypes.SELECT },
+      );
+      if (filas.length > 0) return;
+      if (performance.now() >= limite) {
+        throw new ErrorAplicacion(409, 'CONFLICTO', 'Hay cobros en curso; inténtalo de nuevo');
+      }
+      await new Promise((resolver) => setTimeout(resolver, PAUSA_ENTRE_INTENTOS_MS));
+    }
+  }
+
+  private async exigirEmisor(
+    emisorId: string,
+    bloquear: boolean | 'compartido' = false,
+  ): Promise<void> {
+    const cerrojo = bloquear === 'compartido' ? ' FOR SHARE' : bloquear ? ' FOR NO KEY UPDATE' : '';
+    const filas = await this.conexion.query<{ id: string }>(
+      `SELECT id FROM emisor WHERE id = $1${cerrojo}`,
+      { bind: [emisorId], type: QueryTypes.SELECT },
+    );
+    if (filas.length === 0) throw new ErrorAplicacion(404, 'NO_ENCONTRADO', 'El emisor no existe');
   }
 }

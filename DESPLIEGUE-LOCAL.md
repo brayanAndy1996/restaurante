@@ -14,9 +14,9 @@ secciones ya aprobadas y cerradas. Hoy son:
   QR, cola de trabajos con reenvío, tickets ESC/POS y un simulador del puente para probarla sin Android
   (la app Android llega en la 3c).
 - **Sección 5a, Carta web y llamados desde la mesa:** la API, los QR de las mesas (en Ajustes › Mapa de mesas) y los llamados (en Salón › Llamados).
+- **Sección 5b, Carta web y pedido desde la mesa:** la carta pública de cada sucursal y el modo mesa, que abre el QR de cada mesa (`apps/web`).
 
-La carta para el cliente (sección 5b: la carta y el modo mesa) está en la rama `claude/upbeat-wright-q09k0n` y todavía no está en `main`.
-Las secciones siguientes (caja, etc.) se trabajan en otra rama y llegan a `main` cuando se aprueban.
+La caja (sección 6a, caja, cobro y comprobante sin PSE) está en la rama `claude/upbeat-wright-q09k0n` y todavía no está en `main`: para probarla, cambia a esa rama con `git checkout claude/upbeat-wright-q09k0n`. Los comprobantes de la 6a quedan «por enviar» hasta la 6b (facturación electrónica), que se trabaja en la misma rama y llega a `main` cuando se aprueba.
 
 ## 1. Lo que necesitas instalar
 
@@ -177,7 +177,7 @@ Si el texto del QR trae una dirección que tu computadora no alcanza, agrega `--
 
 #### Carta web y pedido desde la mesa (sección 5b)
 
-Esta parte está en la rama `claude/upbeat-wright-q09k0n`, todavía no en `main`. La carta web es otra aplicación (`apps/web`, Next.js) que corre en el **puerto 3001**. La ve el cliente del
+La carta web es otra aplicación (`apps/web`, Next.js) que corre en el **puerto 3001**. La ve el cliente del
 restaurante en su propio celular, sin cuenta y sin instalar nada. Hazlo después del paso 4 de la carta, porque
 necesita platos disponibles.
 
@@ -215,6 +215,19 @@ El contenedor llega a la API de tu computadora por `host.docker.internal`; en Li
 configura. Construir la imagen tarda unos minutos la primera vez. Para detenerla: `docker compose --profile web stop web`.
 Con Docker, las fotos pueden no verse en la carta: el optimizador de imágenes corre dentro del contenedor y
 `localhost:3000` no es tu computadora desde ahí. Para revisar las fotos usa el servidor de desarrollo.
+
+#### Caja, cobro y comprobante (sección 6a)
+
+Esta parte está en la rama `claude/upbeat-wright-q09k0n` (`git checkout claude/upbeat-wright-q09k0n`), todavía no en `main`. Hazla después de «Salón y cocina» (sección 3a), porque cobrar necesita una mesa con comanda. La demostración no trae cajas, series ni tasa de IGV: las creas tú en los pasos 1 y 2. El recorrido completo, pantalla por pantalla, está en [`docs/guia-de-uso/06-caja-y-cobro.md`](docs/guia-de-uso/06-caja-y-cobro.md).
+
+1. **Pon la tasa de IGV.** Como `fogon.admin`, en _Ajustes › Emisores_, elige el emisor «El Fogón Restaurante S.A.C.» (régimen General, el de Miraflores), toca _Agregar tasa_, escribe la fecha «Desde» (por ejemplo, `2026-01-01`) y la tasa, `18`, y pulsa _Guardar tasa_. Sin tasa no se cobra. El valor es de prueba: la tasa de tu negocio la confirma tu contador.
+2. **Crea la caja y sus series.** En _Ajustes › Cajas_, toca _Agregar caja_, escribe el nombre (por ejemplo, «Caja 1») y, si tienes una impresora de la 3b, elígela en _Impresora de la caja_. En el mismo formulario, pon la serie de boleta `B001` y la de factura `F001`, con el _Primer número_ en 1, y pulsa _Crear caja_. Sin una serie de cada tipo, ese comprobante no se emite.
+3. **Abre la caja.** Entra como `fogon.cajero` y ve a _Caja_. Elige «Caja 1», escribe el _Fondo inicial_ (por ejemplo, `200.00`) y pulsa _Abrir caja_. Si la impresora tiene gaveta, la gaveta se abre.
+4. **Cobra una mesa.** Como `fogon.mozo`, abre una mesa y envía una comanda (paso 3 de «Salón y cocina»). Como `fogon.cajero`, abre la cuenta de la mesa o _Por cobrar_ en _Caja_, toca _Cobrar_ y elige _Boleta_. Escribe lo que recibes en efectivo (la app calcula el vuelto), toca _Agregar otro pago_ para sumar Yape o una tarjeta, con su número de operación, y confirma. La mesa queda libre y el ticket sale por la impresora, si hay una.
+5. **Divide y descuenta (opcional).** En la cuenta, divide por _Por ítems_ o por _Partes iguales_. Un descuento pide la clave del supervisor: ingresa el PIN de `fogon.supervisor`, como en «Salón y cocina», paso 8.
+6. **Venta de mostrador (opcional).** En _Caja_, toca _Vender en el mostrador_, arma el pedido y pulsa _Cobrar y enviar_. La comanda sale a cocina con su «Llamado N», que verás en la pantalla de cocina.
+7. **Reporte X y cierre.** En _Caja_, _Reporte X_ muestra el turno sin cerrarlo. Para cerrar, toca _Cerrar caja_: cuenta cada medio sin ver lo esperado; si algo no cuadra, escribe el motivo de cada medio y pulsa _Cerrar con Z_. Si es el último turno de la sucursal y quedan cuentas abiertas, el cierre se bloquea y la pantalla las lista.
+8. **Reimprime (opcional).** En un comprobante, _Imprimir otra vez_ saca una copia marcada REIMPRESIÓN. Si creaste la impresora de la 3b, los tickets salen en la consola del simulador (`pnpm puente:simular --emulador`).
 
 ### Probar desde tu celular (opcional)
 
@@ -278,6 +291,10 @@ usuario `postgres`).
 | `pnpm puente:simular` dice «El código del QR no sirve»                                  | El código dura 10 minutos y sirve una sola vez; pedir otro invalida el anterior. Pide uno nuevo en Ajustes › Impresión y copia el texto completo, entre comillas.                                                                |
 | `pnpm puente:simular` dice «La API no reconoce la credencial del puente»                | Se revocó esta vinculación, porque se vinculó otro puente en la sucursal o se revocó desde la app. Borra `.puente-simulador.json` y vincula con un código nuevo.                                                                 |
 | La app dice «La impresora … no responde»                                                | Comprueba que `pnpm puente:simular --emulador` siga corriendo y que la impresora apunte a `127.0.0.1` y al puerto del emulador (9100 por defecto).                                                                               |
+| Cobrar dice «Falta la tasa de IGV de la empresa»                                        | Agrégala en Ajustes › Emisores (_Agregar tasa_), con la fecha «Desde» que indique tu contador                                                                                                                                    |
+| Cobrar dice «Esta caja no tiene una serie activa para este comprobante»                 | Pon la serie de ese tipo en la caja, en Ajustes › Cajas                                                                                                                                                                          |
+| El cierre dice «Aún quedan cuentas abiertas»                                            | Cobra o anula esas cuentas antes de cerrar. El bloqueo solo aplica al último turno de la sucursal                                                                                                                                |
+| No aparece Caja en el menú                                                              | Solo lo ven el Cajero, el Supervisor y el Administrador, y solo si el plan de la sucursal incluye el módulo Caja                                                                                                                 |
 
 ## 8. Empezar de cero
 

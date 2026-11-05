@@ -22,18 +22,28 @@ import { AuditoriaService } from '../auditoria';
 import { MesasConsultaService } from '../salon';
 import { SesionActual } from '../seguridad';
 import { bloquearOrden, exigirOrdenAbierta } from './bloqueos-orden';
+import { COBROS, exigirCambioConCobros, type CobrosPuerto } from './cobros';
+import {
+  cuentaDeDatos,
+  datosTrasAnular,
+  leerDatosDeCuenta,
+  problemaAlAnular,
+} from './cuenta-de-orden';
 import { guardarComandas, type ComandaGuardada, type ParteParaGuardar } from './comandas';
 import {
   cantidadMayorQueLaVigente,
+  conflictoDeCuenta,
+  descuentoNoAdmitido,
   idDeClienteReutilizado,
   itemNoAnulable,
   itemNoEncontrado,
+  ordenConCobros,
 } from './errores-pedidos';
 import { EventosPedidos } from './eventos-pedidos';
 import { IMPRESION, type ImpresionPuerto } from './impresion';
 import { INVENTARIO, type InventarioPuerto } from './inventario';
 import { mesasVigentesDeOrden } from './mesas-de-orden';
-import { invalidarPrecuentaVigente } from './precuenta-invalidacion';
+import { cerrarCuentaSinNadaQueFaltar, invalidarPrecuentaVigente } from './precuenta-invalidacion';
 import { huellaDeAnulacion, huellaDeAnulacionDeOrden } from './replica';
 import { TicketsDePedidos } from './tickets-de-pedidos';
 import { VistaOrdenService } from './vista-orden';
@@ -95,6 +105,7 @@ export class AnulacionesService {
     @Inject(MesasConsultaService) private readonly mesas: MesasConsultaService,
     @Inject(EventosPedidos) private readonly eventos: EventosPedidos,
     @Inject(VistaOrdenService) private readonly vista: VistaOrdenService,
+    @Inject(COBROS) private readonly cobros: CobrosPuerto,
   ) {}
 
   // -------------------------------------------------------------------------------------------------
@@ -157,6 +168,25 @@ export class AnulacionesService {
     if (vigente === 0) throw itemNoAnulable();
     if (entrada.cantidad > vigente) throw cantidadMayorQueLaVigente(vigente);
 
+    // Criterio 45a: si la cuenta que queda no admite el descuento o la cortesía, la anulación se rechaza sin
+    // anular nada (y la reversión devuelve la clave); el descuento nunca se recorta ni se quita solo.
+    const datosDeLaCuenta = await leerDatosDeCuenta(this.conexion, orden.id);
+    const problema = problemaAlAnular(datosDeLaCuenta, item.id, entrada.cantidad);
+    if (problema === 'DESCUENTO_NO_ADMITIDO') throw descuentoNoAdmitido('anular');
+    if (problema === 'CORTESIA_SUPERA_LA_CANTIDAD') {
+      throw conflictoDeCuenta(
+        'La cortesía del ítem es mayor que lo que quedaría: quítala antes de anular',
+      );
+    }
+    // Una orden con cobros solo admite la anulación si lo ya cobrado sigue cuadrando (criterios 20 y 86); si no,
+    // 409 `CUENTA_COBRADA_EN_PARTE` sin anular nada y sin consumir la clave (la reversión la devuelve).
+    const cierraLaCuenta = await exigirCambioConCobros(
+      this.conexion,
+      this.cobros,
+      orden.id,
+      async () => cuentaDeDatos(datosTrasAnular(datosDeLaCuenta, item.id, entrada.cantidad)),
+    );
+
     const ahora = this.reloj.ahora();
     const autorizacion = this.sesion.autorizacionConsumida();
     const insertada = await this.conexion.query<{ id: string }>(
@@ -216,7 +246,21 @@ export class AnulacionesService {
       destino: entrada.destinoStock,
     });
 
-    const estabaEnPrecuenta = await this.cambiarLaOrden(orden.id, orden.estado, ahora);
+    // Si lo cobrado cubre toda la cuenta que queda (criterio 52), la orden se cierra en esta misma transacción y sus
+    // mesas quedan libres, sin emitir otro comprobante (criterio 90).
+    let mesasLiberadas: string[] = [];
+    let estabaEnPrecuenta: boolean;
+    if (cierraLaCuenta) {
+      mesasLiberadas = await cerrarCuentaSinNadaQueFaltar(
+        this.conexion,
+        orden.id,
+        orden.estado,
+        ahora,
+      );
+      estabaEnPrecuenta = false;
+    } else {
+      estabaEnPrecuenta = await this.cambiarLaOrden(orden.id, orden.estado, ahora);
+    }
 
     await this.auditoria.registrar({
       accion: 'anular_item',
@@ -241,7 +285,9 @@ export class AnulacionesService {
     // Eventos: solo después de confirmar (criterio 38).
     this.publicarComandas(sucursalId, comandas);
     this.eventos.ordenCambio(sucursalId, orden.id);
-    if (estabaEnPrecuenta) {
+    if (mesasLiberadas.length > 0) {
+      this.eventos.salonCambio(sucursalId, orden.id, mesasLiberadas);
+    } else if (estabaEnPrecuenta) {
       this.eventos.salonCambio(
         sucursalId,
         orden.id,
@@ -268,6 +314,8 @@ export class AnulacionesService {
 
     const orden = await bloquearOrden(this.conexion, ordenId, sucursalId);
     exigirOrdenAbierta(orden);
+    // Lo cobrado no se deshace anulando la orden (criterio 88): solo con una nota de crédito (6b).
+    if (orden.cobros > 0) throw ordenConCobros();
 
     const vigentes = await this.conexion.query<ItemAnulable>(
       `SELECT ${COLUMNAS_ITEM}

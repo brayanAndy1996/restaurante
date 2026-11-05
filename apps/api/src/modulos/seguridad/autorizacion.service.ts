@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { uuidSchema } from '@restaurante/contratos';
+import { uuidSchema, type ObjetivoAutorizacion } from '@restaurante/contratos';
 import type { Accion } from '@restaurante/dominio';
 import { QueryTypes, type Sequelize } from 'sequelize';
 import { CONEXION_API } from '../../nucleo/base-de-datos';
@@ -20,6 +20,11 @@ export interface AutorizacionConsumida {
   solicitanteId: string;
   autorizadorId: string;
   motivo: string;
+  /**
+   * Lo que la clave autoriza (historia 006, criterio 40), normalizado: ids en minúsculas y `valor` con 2 decimales.
+   * `null` si se creó sin objetivo. `consumir` no lo compara: lo hacen las rutas que lo necesitan (`exigirObjetivo`).
+   */
+  objetivo: ObjetivoAutorizacion | null;
 }
 
 /**
@@ -33,6 +38,7 @@ interface FilaConsumida {
   solicitante_id: string;
   autorizador_id: string;
   motivo: string;
+  objetivo: ObjetivoAutorizacion | null;
 }
 
 /** Autorizaciones de supervisor de un solo uso (HU-03, criterios 44 a 53). */
@@ -72,7 +78,7 @@ export class AutorizacionService {
       `UPDATE autorizacion SET usada_en = $6, actualizado_en = $6
         WHERE id = $1 AND sesion_id = $2 AND solicitante_id = $3 AND sucursal_id = $4 AND accion = $5
           AND usada_en IS NULL AND expira_en > $6
-        RETURNING solicitante_id, autorizador_id, motivo`,
+        RETURNING solicitante_id, autorizador_id, motivo, objetivo`,
       {
         bind: [
           id.data.toLowerCase(),
@@ -93,6 +99,7 @@ export class AutorizacionService {
       solicitanteId: fila.solicitante_id,
       autorizadorId: fila.autorizador_id,
       motivo: fila.motivo,
+      objetivo: fila.objetivo ?? null,
     };
     await this.auditoria.registrar({
       accion: datos.accion,

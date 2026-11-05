@@ -1,0 +1,253 @@
+/* La cuenta con sus descuentos y cortesías (criterios 36 a 46 y 111 de 006). Se carga con la pantalla y con sus hojas. */
+
+.cuentacaja {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espacio-lg);
+  min-width: 0;
+}
+
+.cuentacaja__cabecera {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--espacio-sm);
+}
+.cuentacaja__datos {
+  margin: 0;
+  font-size: 0.9375rem;
+  line-height: 1.375rem;
+  color: var(--color-tinta-suave);
+}
+
+/* Las líneas de la cuenta: una baldosa por línea, con sus acciones debajo */
+.cuentacaja__lineas {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border: 1px solid var(--color-junta);
+  border-radius: var(--radio-baldosa);
+  background: var(--color-baldosa);
+}
+.cuentacaja__lineas > li + li {
+  border-top: 1px solid var(--color-junta);
+}
+.linea {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espacio-sm);
+  padding: var(--espacio-md) var(--espacio-lg);
+}
+.linea__cabecera {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--espacio-md);
+}
+.linea__cantidad {
+  flex: none;
+  min-width: 2.25rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.linea__texto {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.linea__nombre {
+  font-size: 1.0625rem;
+  line-height: 1.375rem;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.linea__detalle {
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+  color: var(--color-tinta-suave);
+  overflow-wrap: anywhere;
+}
+.linea__importe {
+  flex: none;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Un descuento o una cortesía aplicados: lo que son, cuánto valen y cómo quitarlos */
+.ajustes {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espacio-xs);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.ajustes:empty {
+  display: none;
+}
+.ajuste-aplicado {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--espacio-sm);
+  min-height: 3rem;
+  padding: var(--espacio-xs) var(--espacio-sm) var(--espacio-xs) var(--espacio-md);
+  background: var(--color-accion-suave);
+  border: 1px solid var(--color-accion-borde);
+  border-radius: var(--radio-baldosa);
+}
+.ajuste-aplicado__texto {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  font-size: 0.9375rem;
+  line-height: 1.375rem;
+}
+.ajuste-aplicado__texto b {
+  font-variant-numeric: tabular-nums;
+}
+.ajuste-aplicado__texto .texto-ayuda {
+  overflow-wrap: anywhere;
+}
+.ajuste-aplicado__quitar {
+  flex: none;
+}
+
+.linea__acciones,
+.cuentacaja__cuenta {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(8rem, 1fr));
+  gap: var(--espacio-sm);
+}
+.linea__acciones:empty {
+  display: none;
+}
+
+/* Descuento de toda la cuenta */
+.cuentacaja__cuenta {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+/* El desglose: cifras tabulares, el total grande */
+.desglose {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espacio-xs);
+  margin: 0;
+  padding: var(--espacio-md) var(--espacio-lg);
+  background: var(--color-baldosa);
+  border: 1px solid var(--color-junta);
+  border-radius: var(--radio-baldosa);
+}
+.desglose__fila {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--espacio-md);
+  min-height: 2rem;
+}
+.desglose__fila dt {
+  min-width: 0;
+  font-size: 1rem;
+  line-height: 1.5rem;
+  overflow-wrap: anywhere;
+}
+.desglose__fila dd {
+  margin: 0;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  white-space: nowrap;
+}
+.desglose__fila--ayuda dt,
+.desglose__fila--ayuda dd {
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+  font-weight: 400;
+  color: var(--color-tinta-suave);
+}
+.desglose__fila--total {
+  margin-top: var(--espacio-xs);
+  padding-top: var(--espacio-sm);
+  border-top: 2px solid var(--color-tinta);
+}
+.desglose__fila--total dt {
+  font-weight: 600;
+}
+.desglose__fila--total dd {
+  font-size: 1.5rem;
+  line-height: 2rem;
+  font-weight: 700;
+}
+
+/* Por cobrar: la lista de cuentas abiertas */
+.porcobrar {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espacio-md);
+}
+.porcobrar__lista {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border: 1px solid var(--color-junta);
+  border-radius: var(--radio-baldosa);
+  overflow: hidden;
+}
+.porcobrar__monto {
+  display: flex;
+  align-items: center;
+  gap: var(--espacio-sm);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* ---------- Hojas «Descuento» y «Cortesía» ---------- */
+
+.hoja-ajuste .ui-hoja__cuerpo {
+  padding-bottom: 0;
+  scroll-padding-bottom: 6rem;
+}
+.ajuste__que {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--espacio-md);
+  background: var(--color-fondo);
+  border: 1px solid var(--color-junta);
+  border-radius: var(--radio-baldosa);
+}
+.ajuste__que > b {
+  font-size: 1.0625rem;
+  line-height: 1.375rem;
+  overflow-wrap: anywhere;
+}
+.ajuste__cantidad {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espacio-sm);
+}
+.ajuste__previa {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 0.9375rem;
+  line-height: 1.375rem;
+  font-variant-numeric: tabular-nums;
+}
+.ajuste__previa:empty {
+  display: none;
+}
+.ajuste__pie {
+  position: sticky;
+  bottom: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--espacio-sm);
+  margin: 0 calc(var(--espacio-lg) * -1);
+  padding: var(--espacio-md) var(--espacio-lg) max(var(--espacio-lg), env(safe-area-inset-bottom));
+  border-top: 1px solid var(--color-junta);
+  background: var(--color-baldosa);
+}

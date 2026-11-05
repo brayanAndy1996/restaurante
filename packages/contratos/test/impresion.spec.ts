@@ -328,7 +328,7 @@ describe('estadoImpresionRespuestaSchema, trabajoResumenSchema y trabajosConsult
     ).toBe(true);
   });
 
-  it('el trabajo cubre los seis tipos y los tres estados', () => {
+  it('el trabajo cubre los diez tipos (los seis de 004 y los cuatro de caja de 006) y los tres estados', () => {
     expect([...TIPOS_TRABAJO]).toEqual([
       'COMANDA',
       'ADICION',
@@ -336,6 +336,10 @@ describe('estadoImpresionRespuestaSchema, trabajoResumenSchema y trabajosConsult
       'ANULACION',
       'PRECUENTA',
       'PRUEBA',
+      'COMPROBANTE',
+      'REPORTE_X',
+      'REPORTE_Z',
+      'GAVETA',
     ]);
     const base = {
       id: ID_1,
@@ -452,6 +456,28 @@ describe('documentoTicketSchema (criterio 126)', () => {
         .success,
     ).toBe(true);
     expect(documentoTicketSchema.safeParse({ ...documento, bloques: [] }).success).toBe(false);
+  });
+
+  it('acepta los bloques qr y gaveta de caja (historia 006) y los rechaza mal formados', () => {
+    expect(
+      documentoTicketSchema.safeParse({
+        ...documento,
+        tipo: 'COMPROBANTE',
+        bloques: [{ tipo: 'gaveta' }, { tipo: 'qr', texto: '20123456789|03|B001|124|9.94|69.20' }],
+      }).success,
+    ).toBe(true);
+    expect(bloqueTicketSchema.safeParse({ tipo: 'qr', texto: 'x'.repeat(300) }).success).toBe(true);
+    for (const malo of [
+      { tipo: 'qr', texto: '' },
+      { tipo: 'qr', texto: 'x'.repeat(301) },
+      { tipo: 'qr', texto: 'a\nb' },
+      { tipo: 'qr', texto: 'a\u0000b' },
+      { tipo: 'qr' },
+      { tipo: 'gaveta', texto: 'x' },
+      { tipo: 'gaveta', veces: 2 },
+    ]) {
+      expect(bloqueTicketSchema.safeParse(malo).success, JSON.stringify(malo)).toBe(false);
+    }
   });
 
   it('exige la versión 1 y un tipo de trabajo conocido', () => {

@@ -1,0 +1,8 @@
+/* La venta de mostrador (criterio 115 de 006). Reutiliza el comandero y el cobro; aquí solo lo que cambia. */
+
+/* En pantalla ancha la venta (líneas, comprobante y pagos) es más alta que «Por enviar»: se desplaza sola. */
+.comandero--ancho.mostrador > .comandero__panel:last-child {
+  max-height: calc(100dvh - var(--alto-barra) - 10rem);
+  overflow-y: auto;
+  padding-inline-end: var(--espacio-xs, 4px);
+}

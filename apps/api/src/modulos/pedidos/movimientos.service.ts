@@ -16,12 +16,14 @@ import { SesionActual, UsuariosConsultaService } from '../seguridad';
 import { bloquearOrdenes, exigirOrdenAbierta, type OrdenBloqueada } from './bloqueos-orden';
 import {
   demasiadasMesas,
+  descuentoNoAdmitido,
   mesaInactiva,
   mesaOcupada,
   mesaOrigenInvalida,
   mesaOrigenRequerida,
   montoFueraDeRango,
   operacionConcurrente,
+  ordenConCobros,
   ordenNoEncontrada,
 } from './errores-pedidos';
 import { EventosPedidos } from './eventos-pedidos';
@@ -224,6 +226,10 @@ export class MovimientosService {
       absorbidas.push(await this.leerAbsorbida(orden));
     }
 
+    // Unir una orden con cobros (la principal o una absorbida) se rechaza antes de tocar nada (historia 006,
+    // criterio 88): lo cobrado no se mueve a otra cuenta.
+    if (principal.cobros > 0 || absorbidas.some((a) => a.orden.cobros > 0)) throw ordenConCobros();
+
     const mesasFinales = new Set<string>([
       ...vigentes,
       ...nuevas,
@@ -231,6 +237,7 @@ export class MovimientosService {
     ]);
     if (mesasFinales.size > MAXIMO_MESAS_ORDEN) throw demasiadasMesas(MAXIMO_MESAS_ORDEN);
     await this.exigirTotalEnRango(principal, absorbidas);
+    await this.exigirSinDescuentoDeCuenta(absorbidas);
 
     // 3. Cambios.
     const ahora = this.reloj.ahora();
@@ -311,6 +318,21 @@ export class MovimientosService {
         { campo: 'mesaIds', mensaje: 'El total de la orden unida supera el máximo' },
       ]);
     }
+  }
+
+  /**
+   * Criterio 45a: una orden absorbida queda sin ítems, así que su descuento de cuenta quedaría sin base. El descuento
+   * nunca se pasa, se recorta ni se quita solo: la unión se rechaza (422 `DESCUENTO_INVALIDO`) y la persona lo quita
+   * (sin clave) o lo vuelve a pedir sobre la cuenta unida. Los descuentos y las cortesías de ítem viajan con su ítem.
+   */
+  private async exigirSinDescuentoDeCuenta(absorbidas: readonly Absorbida[]): Promise<void> {
+    if (absorbidas.length === 0) return;
+    const filas = await this.conexion.query(
+      `SELECT 1 FROM descuento
+        WHERE orden_id = ANY($1::uuid[]) AND item_id IS NULL AND quitado_en IS NULL LIMIT 1`,
+      { bind: [absorbidas.map((a) => a.orden.id)], type: QueryTypes.SELECT },
+    );
+    if (filas.length > 0) throw descuentoNoAdmitido('unir');
   }
 
   /** Una mesa inactiva libre no se puede unir (409 `CONFLICTO`); una que ya está ocupada por una orden se une con ella. */

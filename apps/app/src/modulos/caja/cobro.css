@@ -1,0 +1,248 @@
+/* El cobro de una cuenta (criterios 111 a 114 de 006). Baldosas planas con junta; nada de sombras ni baldosas dentro de baldosas. */
+
+.cobro {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espacio-xl);
+  min-width: 0;
+}
+
+.cobro__bloque {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espacio-md);
+  min-width: 0;
+}
+.cobro__bloque > h2 {
+  margin: 0;
+  font-size: 1.125rem;
+  line-height: 1.5rem;
+  font-weight: 700;
+}
+.cobro__bloque--junta {
+  padding-top: var(--espacio-xl);
+  border-top: 1px solid var(--color-junta);
+}
+
+/* Qué se cobra: la lista de ítems con su cantidad y la lista de partes */
+.cobro__lista {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border: 1px solid var(--color-junta);
+  border-radius: var(--radio-baldosa);
+  background: var(--color-baldosa);
+}
+.cobro__lista > li + li {
+  border-top: 1px solid var(--color-junta);
+}
+.cobro__fila {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--espacio-md);
+  min-height: 4rem;
+  padding: var(--espacio-sm) var(--espacio-lg);
+}
+.cobro__fila-texto {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  gap: 2px;
+}
+.cobro__fila-texto > b {
+  font-size: 1.0625rem;
+  line-height: 1.375rem;
+  overflow-wrap: anywhere;
+}
+.cobro__fila-monto {
+  flex: none;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+.cobro__fila--actual {
+  background: var(--color-accion-suave);
+}
+
+/* El total de la parte, en grande: lo que se va a cobrar */
+.cobro__total {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--espacio-md);
+}
+.cobro__total > span {
+  font-size: 1rem;
+  line-height: 1.5rem;
+}
+.cobro__total > b {
+  font-size: 2.5rem;
+  line-height: 2.75rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Cliente */
+.cobro__cliente {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espacio-md);
+}
+
+/* Pagos: una fila por pago, separadas por una junta */
+.pagos {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border: 1px solid var(--color-junta);
+  border-radius: var(--radio-baldosa);
+  background: var(--color-baldosa);
+}
+.pagos > li + li {
+  border-top: 1px solid var(--color-junta);
+}
+.pago {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espacio-md);
+  padding: var(--espacio-md) var(--espacio-lg) var(--espacio-lg);
+}
+.pago__cabecera {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--espacio-sm);
+}
+.pago__cabecera > b {
+  font-size: 1rem;
+  line-height: 1.5rem;
+}
+.pago__cobra {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--espacio-md);
+}
+.pago__cobra > b {
+  font-size: 1.5rem;
+  line-height: 2rem;
+  font-variant-numeric: tabular-nums;
+}
+.pago__billetes {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(5.5rem, 1fr));
+  gap: var(--espacio-sm);
+}
+.pago__vuelto {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--espacio-md);
+  padding: var(--espacio-md);
+  background: var(--color-exito-suave);
+  border: 1px solid var(--color-exito-borde);
+  border-radius: var(--radio-baldosa);
+  color: var(--color-exito-oscuro);
+}
+.pago__vuelto > b {
+  font-size: 2.5rem;
+  line-height: 2.75rem;
+  font-variant-numeric: tabular-nums;
+}
+.pago__problema {
+  margin: 0;
+  font-size: 0.9375rem;
+  line-height: 1.375rem;
+  color: var(--color-peligro-oscuro);
+}
+.pagos__redondeo {
+  margin: 0;
+  font-size: 0.9375rem;
+  line-height: 1.375rem;
+  font-variant-numeric: tabular-nums;
+}
+
+/* El pie fijo: por qué todavía no se puede cobrar y el botón */
+.cobro__pie {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espacio-sm);
+}
+.cobro__pie-motivo {
+  margin: 0;
+  font-size: 0.9375rem;
+  line-height: 1.375rem;
+  color: var(--color-tinta-suave);
+}
+
+/* El resultado */
+.resultado {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espacio-lg);
+}
+.resultado__numero {
+  margin: 0;
+  font-size: 1.5rem;
+  line-height: 1.875rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+.resultado__vuelto {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--espacio-lg);
+  background: var(--color-exito-suave);
+  border: 1px solid var(--color-exito-borde);
+  border-radius: var(--radio-baldosa);
+  color: var(--color-exito-oscuro);
+}
+.resultado__vuelto > b {
+  font-size: 2.5rem;
+  line-height: 2.75rem;
+  font-variant-numeric: tabular-nums;
+}
+/* El número de llamado de una venta de mostrador: lo que se grita al cliente, legible de lejos. */
+.resultado__llamado {
+  margin: 0;
+  padding: var(--espacio-lg);
+  border: 2px solid var(--color-tinta);
+  border-radius: var(--radio-baldosa);
+  background: var(--color-baldosa);
+  color: var(--color-tinta);
+  font-size: 3rem;
+  line-height: 3.5rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+.resultado__acciones {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espacio-sm);
+}
+
+@media (min-width: 768px) {
+  .cobro {
+    gap: var(--espacio-xxl);
+  }
+  .resultado__acciones {
+    flex-direction: row;
+    flex-wrap: wrap;
+  }
+  .resultado__acciones > * {
+    flex: 1 1 14rem;
+  }
+}
+
+/* La impresión del comprobante: su estado y «Imprimir otra vez», juntos. */
+.resultado__impresion {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espacio-sm);
+}

@@ -154,6 +154,17 @@ export const ordenSinConsumo = (): ErrorAplicacion =>
 export const operacionConcurrente = (): ErrorAplicacion =>
   new ErrorAplicacion(409, 'CONFLICTO', MENSAJE_OPERACION_CONCURRENTE);
 
+/**
+ * 409 `CONFLICTO` de una lectura o una pre-cuenta cuyos montos no cuadran (un saldo negativo u otro dato que el
+ * dominio rechaza con `RangeError`, historia 006, criterio 45a): nunca un 500. El detalle va al log.
+ */
+export const montosInconsistentes = (): ErrorAplicacion =>
+  new ErrorAplicacion(
+    409,
+    'CONFLICTO',
+    'Los montos de la cuenta no cuadran: avisa al administrador antes de cobrarla',
+  );
+
 /** 400 `DATOS_INVALIDOS` (criterio 45): una orden con varias mesas necesita saber cuál se mueve. */
 export const mesaOrigenRequerida = (): ErrorAplicacion =>
   new ErrorAplicacion(400, 'DATOS_INVALIDOS', 'Indica cuál de las mesas de la orden se mueve', [
@@ -174,3 +185,74 @@ export const demasiadasMesas = (maximo: number): ErrorAplicacion =>
   new ErrorAplicacion(422, 'DATOS_INVALIDOS', `Una orden admite como máximo ${maximo} mesas`, [
     { campo: 'mesaIds', mensaje: `La orden quedaría con más de ${maximo} mesas` },
   ]);
+
+// ---------------------------------------------------------------------------------------------------
+// Descuentos y cortesías (historia 006, criterios 38 a 45a)
+// ---------------------------------------------------------------------------------------------------
+
+/** 409 `CONFLICTO` con el motivo en el mensaje (un descuento o una cortesía que la cuenta no admite en ese estado). */
+export const conflictoDeCuenta = (mensaje: string): ErrorAplicacion =>
+  new ErrorAplicacion(409, 'CONFLICTO', mensaje);
+
+/** 409 `CUENTA_EN_COBRO` (criterio 45): la cuenta ya tiene algún cobro; ya no se tocan sus descuentos ni cortesías. */
+export const cuentaEnCobro = (): ErrorAplicacion =>
+  new ErrorAplicacion(
+    409,
+    'CUENTA_EN_COBRO',
+    'La cuenta ya tiene cobros: no se pueden cambiar sus descuentos ni sus cortesías',
+  );
+
+/** Los motivos con que `validarDescuento` rechaza un descuento (criterio 14), dichos para una persona. */
+const MENSAJE_DE_DESCUENTO: Record<'DESCUENTO_EXCESIVO' | 'DESCUENTO_NULO', string> = {
+  DESCUENTO_EXCESIVO: 'El descuento no puede igualar ni superar el importe sobre el que se aplica',
+  DESCUENTO_NULO: 'El descuento no descuenta nada',
+};
+
+/** 422 `DESCUENTO_INVALIDO` con `campos.valor` y el código de `validarDescuento` en el mensaje (criterio 41). */
+export const descuentoInvalido = (
+  codigo: 'DESCUENTO_EXCESIVO' | 'DESCUENTO_NULO',
+): ErrorAplicacion =>
+  new ErrorAplicacion(422, 'DESCUENTO_INVALIDO', `${codigo}: ${MENSAJE_DE_DESCUENTO[codigo]}`, [
+    { campo: 'valor', mensaje: MENSAJE_DE_DESCUENTO[codigo] },
+  ]);
+
+/**
+ * 422 `DESCUENTO_INVALIDO` con `campos.descuento` (criterio 45a, decisión del usuario del 2026-11-04): el cambio dejaría
+ * un descuento por monto mayor o igual que su base. No se anula, se une ni se envía nada, no se consume la clave y el
+ * descuento nunca se recorta ni se quita solo.
+ */
+export const descuentoNoAdmitido = (
+  verbo: 'anular' | 'unir' | 'dar la cortesía' | 'aplicar otro descuento',
+): ErrorAplicacion =>
+  new ErrorAplicacion(
+    422,
+    'DESCUENTO_INVALIDO',
+    `Quita o vuelve a pedir el descuento antes de ${verbo}`,
+    [{ campo: 'descuento', mensaje: `Quita o vuelve a pedir el descuento antes de ${verbo}` }],
+  );
+
+/** 422 `CORTESIA_INVALIDA` (criterio 43): un ítem con ICBPER no admite cortesía, ni más unidades que las vigentes. */
+export const cortesiaInvalida = (mensaje: string, campo = 'itemId'): ErrorAplicacion =>
+  new ErrorAplicacion(422, 'CORTESIA_INVALIDA', mensaje, [{ campo, mensaje }]);
+
+/**
+ * 409 `CUENTA_COBRADA_EN_PARTE` (historia 006, criterios 20, 86 y 87): enviar o anular dejaría la cuenta de una orden con
+ * cobros sin cuadrar con lo ya cobrado. La transacción se revierte entera (también la clave del supervisor).
+ */
+export const cuentaCobradaEnParte = (): ErrorAplicacion =>
+  new ErrorAplicacion(
+    409,
+    'CUENTA_COBRADA_EN_PARTE',
+    'La cuenta ya tiene cobros y este cambio no cuadraría con lo cobrado: cóbrala como está o corrige con una nota de crédito',
+  );
+
+/**
+ * 409 `CUENTA_EN_COBRO` al unir o anular una orden que ya tiene cobros (criterio 88): lo cobrado no se mueve a otra
+ * cuenta ni se deshace sin una nota de crédito (6b).
+ */
+export const ordenConCobros = (): ErrorAplicacion =>
+  new ErrorAplicacion(
+    409,
+    'CUENTA_EN_COBRO',
+    'La orden ya tiene cobros: no se puede unir ni anular. Cóbrala o corrige lo cobrado con una nota de crédito',
+  );
