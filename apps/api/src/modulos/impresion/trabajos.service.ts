@@ -21,6 +21,7 @@ import { SucursalesConsultaService } from '../plataforma';
 import { SesionActual } from '../seguridad';
 import { AlcanceDeReimpresion, esTrabajoDeCaja } from './alcance-de-reimpresion';
 import { ColaImpresionService } from './cola-impresion.service';
+import { EventosImpresion } from './eventos-impresion';
 import {
   conMarcas,
   documentoDePrueba,
@@ -114,6 +115,7 @@ export class TrabajosService {
     @Inject(ColaImpresionService) private readonly cola: ColaImpresionService,
     @Inject(OrdenesVigentes) private readonly ordenes: OrdenesVigentes,
     @Inject(AlcanceDeReimpresion) private readonly alcance: AlcanceDeReimpresion,
+    @Inject(EventosImpresion) private readonly eventos: EventosImpresion,
   ) {}
 
   // ---- El puente ----------------------------------------------------------------------------------
@@ -314,6 +316,8 @@ export class TrabajosService {
         `UPDATE trabajo_impresion SET estado = 'IMPRESO', impreso_en = $2, actualizado_en = $2 WHERE id = $1`,
         { bind: [id, ahora], type: QueryTypes.UPDATE },
       );
+      // Los pendientes de la sucursal bajaron: la PWA vuelve a pedir el estado (si no, mostraría un conteo viejo).
+      this.eventos.impresionEstado(puente.sucursalId);
       return;
     }
     // Un trabajo ya impreso no vuelve a pendiente por un reporte tardío de fallo.

@@ -255,6 +255,24 @@ describe('página de prueba, lista de trabajos, reimpresión y resultado', () =>
     expect(tickets[0]!.texto).toContain(impresora.nombre);
   });
 
+  it('al pasar un trabajo a IMPRESO se publica impresion.estado una sola vez (y un fallo o una repetición no lo publican)', async () => {
+    const impresora = await impresoraCreada(ctx, T(), A().S1);
+    const puente = await nuevoPuente(ctx, T(), A(), A().S1);
+    const id = await crearPrueba(ctx, T(), A().S1, impresora.id);
+    const reportar = (cuerpo: unknown) =>
+      llamarPuente(ctx, puente.token, 'post', `/puente/trabajos/${id}/resultado`, cuerpo);
+    const avisos = () => ctx.publicador.eventos().filter((e) => e.nombre === 'impresion.estado');
+
+    ctx.publicador.limpiar();
+    expect((await reportar({ resultado: 'NO_IMPRESO', error: 'Sin papel' })).status).toBe(200);
+    expect(avisos()).toHaveLength(0);
+    expect((await reportar({ resultado: 'IMPRESO' })).status).toBe(200);
+    expect(avisos()).toHaveLength(1);
+    expect(avisos()[0]).toMatchObject({ sala: { tipo: 'sucursal', sucursalId: A().S1 } });
+    expect((await reportar({ resultado: 'IMPRESO' })).status).toBe(200);
+    expect(avisos()).toHaveLength(1);
+  });
+
   it('el resultado NO_IMPRESO suma un intento y deja el error; IMPRESO cierra el trabajo; repetirlo no cambia nada', async () => {
     const impresora = await impresoraCreada(ctx, T(), A().S1);
     const puente = await nuevoPuente(ctx, T(), A(), A().S1);
