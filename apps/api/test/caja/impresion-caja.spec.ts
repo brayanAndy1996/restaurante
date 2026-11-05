@@ -4,12 +4,18 @@
 // gaveta y la falla inyectada del encolado las cubren las pruebas protegidas (`caja-critica/gaveta.spec.ts`,
 // `cobro-idempotencia.spec.ts` y `comprobante.spec.ts`).
 import { randomUUID } from 'node:crypto';
-import { impresionDeCajaRespuestaSchema } from '@restaurante/contratos';
+import {
+  impresionDeCajaRespuestaSchema,
+  movimientoRespuestaSchema,
+  reporteCajaSchema,
+  turnoRespuestaSchema,
+} from '@restaurante/contratos';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import {
   abrirTurno,
   api,
   arrancarCaja,
+  abrirTurnoCrudo,
   cerrarAdmin,
   cerrarTurnoCrudo,
   Cierres,
@@ -261,6 +267,78 @@ describe('con impresora de caja con gaveta (S3)', () => {
     expect(await conTrabajos(A().S3, turno2, 'REPORTE_Z')).toHaveLength(1);
   });
 
+  it('la apertura, el movimiento y el cierre dicen si se imprimió; las réplicas devuelven lo mismo', async () => {
+    const supervisor = A().token.supervisorS3!;
+    const id = randomUUID();
+    const apertura = await abrirTurnoCrudo(ctx, supervisor, caja2, '30.00', id);
+    exigirEstado(apertura, 201, 'Abrir con fondo (006, criterio 93)');
+    const turno = turnoRespuestaSchema.parse(apertura.body);
+    expect(turno.impresion).toBe('EN_COLA');
+    const [gaveta] = await conTrabajos(A().S3, id, 'GAVETA');
+    expect(turno.trabajoId).toBe(gaveta!.id);
+    const replicaApertura = await abrirTurnoCrudo(ctx, supervisor, caja2, '30.00', id);
+    exigirEstado(replicaApertura, 201, 'Réplica de la apertura');
+    expect(replicaApertura.body).toEqual(apertura.body);
+    expect(await conTrabajos(A().S3, id, 'GAVETA')).toHaveLength(1);
+
+    const idMov = randomUUID();
+    const cuerpoMov = { id: idMov, tipo: 'INGRESO', monto: '10.00', motivo: 'Sencillo' };
+    const mov = await escribir(ctx, supervisor, 'post', `/turnos/${id}/movimientos`, cuerpoMov);
+    exigirEstado(mov, 201, 'Movimiento (006, criterio 28)');
+    const movimiento = movimientoRespuestaSchema.parse(mov.body);
+    expect(movimiento.impresion).toBe('EN_COLA');
+    const gavetas = await conTrabajos(A().S3, id, 'GAVETA');
+    expect(gavetas).toHaveLength(2);
+    expect(movimiento.trabajoId).not.toBe(turno.trabajoId);
+    expect(gavetas.map((g) => g.id)).toContain(movimiento.trabajoId);
+    const replicaMov = await escribir(
+      ctx,
+      supervisor,
+      'post',
+      `/turnos/${id}/movimientos`,
+      cuerpoMov,
+    );
+    exigirEstado(replicaMov, 201, 'Réplica del movimiento');
+    expect(replicaMov.body).toEqual(mov.body);
+    expect(await conTrabajos(A().S3, id, 'GAVETA')).toHaveLength(2);
+
+    // El reporte X (GET) y la lista de movimientos no traen los campos.
+    const x = await api(ctx, supervisor, 'get', `/turnos/${id}/reporte`);
+    exigirEstado(x, 200, 'Reporte X');
+    expect(x.body).not.toHaveProperty('impresion');
+    expect(reporteCajaSchema.parse(x.body).movimientos.lista[0]).not.toHaveProperty('impresion');
+
+    // La gaveta no se reimprime por la ruta de 3b.
+    const reimpresion = await escribir(
+      ctx,
+      supervisor,
+      'post',
+      `/impresion/trabajos/${gaveta!.id}/reimpresion`,
+    );
+    exigirEstado(reimpresion, 409, 'Reimprimir una gaveta');
+    expect(reimpresion.body.codigo).toBe('CONFLICTO');
+    expect(await conTrabajos(A().S3, id, 'GAVETA')).toHaveLength(2);
+
+    const cierre = await cerrarTurnoCrudo(ctx, supervisor, id, conteo({ EFECTIVO: '40.00' }));
+    exigirEstado(cierre, 200, 'Cerrar (006, criterio 31)');
+    const z = reporteCajaSchema.parse(cierre.body);
+    const [zeta] = await conTrabajos(A().S3, id, 'REPORTE_Z');
+    expect(z).toMatchObject({ impresion: 'EN_COLA', trabajoId: zeta!.id });
+  });
+
+  it('un fondo de 0.00 no dice nada de impresión en la apertura', async () => {
+    const id = randomUUID();
+    const apertura = await abrirTurnoCrudo(ctx, A().token.supervisorS3!, caja2, '0.00', id);
+    exigirEstado(apertura, 201, 'Abrir sin fondo');
+    expect(apertura.body).not.toHaveProperty('impresion');
+    expect(apertura.body).not.toHaveProperty('trabajoId');
+    exigirEstado(
+      await cerrarTurnoCrudo(ctx, A().token.supervisorS3!, id, conteo({})),
+      200,
+      'Cerrar sin ventas',
+    );
+  });
+
   it('la base tiene los únicos parciales de la Z por turno y del ticket de emisión por comprobante', async () => {
     const indices = await filas<{ indexname: string; indexdef: string }>(
       `SELECT indexname, indexdef FROM pg_indexes
@@ -284,7 +362,10 @@ describe('sin impresora de caja ni de la sucursal (S1)', () => {
   });
 
   it('el cobro, la apertura, los movimientos, el X y el cierre se hacen igual y no dejan trabajos', async () => {
-    const turnoId = await abrirTurno(ctx, cajeroS1(), caja1, '50.00');
+    const apertura = await abrirTurnoCrudo(ctx, cajeroS1(), caja1, '50.00');
+    exigirEstado(apertura, 201, 'Abrir sin impresora (006, criterio 96)');
+    expect(apertura.body).toMatchObject({ impresion: 'SIN_IMPRESORA', trabajoId: null });
+    const turnoId = apertura.body.id as string;
     const mov = await escribir(ctx, cajeroS1(), 'post', `/turnos/${turnoId}/movimientos`, {
       id: randomUUID(),
       tipo: 'INGRESO',
@@ -292,6 +373,7 @@ describe('sin impresora de caja ni de la sucursal (S1)', () => {
       motivo: 'Sencillo',
     });
     exigirEstado(mov, 201, 'Movimiento sin impresora (006, criterio 96)');
+    expect(mov.body).toMatchObject({ impresion: 'SIN_IMPRESORA', trabajoId: null });
     const cuenta = await cuentaCon(ctx, A(), 'S1', [['lomo', 1]]);
     const cobro = await cobrar(ctx, cajeroS1(), cuenta, {
       turnoId,
@@ -318,6 +400,7 @@ describe('sin impresora de caja ni de la sucursal (S1)', () => {
 
     const cierre = await cerrarTurnoCrudo(ctx, cajeroS1(), turnoId, conteo({ EFECTIVO: '88.00' }));
     exigirEstado(cierre, 200, 'Cerrar sin impresora');
+    expect(cierre.body).toMatchObject({ impresion: 'SIN_IMPRESORA', trabajoId: null });
     expect(await trabajosDe(A().S1)).toEqual([]);
   });
 

@@ -28,7 +28,7 @@ import {
   renderizarTicket,
   renderizarTicketDetallado,
 } from './escpos';
-import { noEncontrado, sinImpresora } from './errores-impresion';
+import { gavetaNoSeReimprime, noEncontrado, sinImpresora } from './errores-impresion';
 import { OrdenesVigentes } from './ordenes-vigentes';
 import type { FilaImpresora } from './lectura-impresoras';
 
@@ -440,6 +440,7 @@ export class TrabajosService {
     );
     const original = filas[0];
     if (original === undefined) throw noEncontrado('El trabajo');
+    if (original.tipo === 'GAVETA') throw gavetaNoSeReimprime();
 
     // Una impresora que pasó a Bluetooth no imprime en 3b (decisión 12): se trata como una inactiva. Si tampoco hay
     // otra de red activa para la estación (o la caja), 409 sin crear el trabajo (ronda 2 del ataque, F4).

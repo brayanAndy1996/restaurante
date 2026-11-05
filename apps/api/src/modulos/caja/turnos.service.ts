@@ -41,6 +41,7 @@ import {
   SQL_TURNO,
   buscarTurno,
   conDosDecimales,
+  conImpresionDeApertura,
   turnoARespuesta,
   type FilaTurno,
 } from './lectura-turno';
@@ -61,6 +62,9 @@ interface FilaMovimiento {
   motivo: string;
   creado_en: Date;
   creado_por_usuario_id: string | null;
+  /** Lo que dijo su trabajo `GAVETA` (migración 8). */
+  impresion: 'EN_COLA' | 'SIN_IMPRESORA' | null;
+  trabajo_impresion_id: string | null;
 }
 
 /**
@@ -109,7 +113,7 @@ export class TurnosService {
       if (existente.sucursal_id !== sucursalId || !guardada.equals(huella)) {
         throw idDeClienteReutilizado();
       }
-      return turnoARespuesta(this.usuarios, existente);
+      return conImpresionDeApertura(await turnoARespuesta(this.usuarios, existente), existente);
     }
 
     await this.suscripciones.exigirAperturaDeCaja(sucursalId);
@@ -165,7 +169,13 @@ export class TurnosService {
       throw error;
     }
     // Un fondo mayor que cero abre la gaveta (criterio 93); la réplica ya devolvió arriba, sin trabajo.
-    if (fondo !== '0.00') await this.tickets.encolarGaveta({ sucursalId, cajaId, turnoId: id });
+    if (fondo !== '0.00') {
+      const impresion = await this.tickets.encolarGaveta({ sucursalId, cajaId, turnoId: id });
+      await this.conexion.query(
+        `UPDATE turno SET apertura_impresion = $2, apertura_trabajo_id = $3, actualizado_en = $4 WHERE id = $1`,
+        { bind: [id, impresion.impresion, impresion.trabajoId, ahora], type: QueryTypes.UPDATE },
+      );
+    }
     this.eventos.turnoCambio(sucursalId, id, cajaId);
     return this.respuestaDe(id);
   }
@@ -205,7 +215,8 @@ export class TurnosService {
     await this.turnarPor(`movimiento-id:${id}`);
 
     const existentes = await this.conexion.query<FilaMovimiento>(
-      `SELECT id, turno_id, tipo, monto::text AS monto, motivo, creado_en, creado_por_usuario_id
+      `SELECT id, turno_id, tipo, monto::text AS monto, motivo, creado_en, creado_por_usuario_id, impresion,
+              trabajo_impresion_id
          FROM movimiento_caja WHERE id = $1`,
       { bind: [id], type: QueryTypes.SELECT },
     );
@@ -232,10 +243,18 @@ export class TurnosService {
     this.exigirResponsableOSupervisor(turno);
     if (turno.estado !== 'ABIERTO') throw turnoCerrado();
 
+    // El trabajo `GAVETA` se encola antes de guardar el movimiento, que guarda lo que dijo (criterio 96).
+    const impresion = await this.tickets.encolarGaveta({
+      sucursalId,
+      cajaId: turno.caja_id,
+      turnoId: turno.id,
+    });
     const filas = await this.conexion.query<FilaMovimiento>(
-      `INSERT INTO movimiento_caja (id, empresa_id, turno_id, tipo, medio, monto, motivo, creado_en, actualizado_en)
-       VALUES ($1, $2, $3, $4, 'EFECTIVO', $5::numeric, $6, $7, $7)
-       RETURNING id, turno_id, tipo, monto::text AS monto, motivo, creado_en, creado_por_usuario_id`,
+      `INSERT INTO movimiento_caja (id, empresa_id, turno_id, tipo, medio, monto, motivo, impresion,
+                                    trabajo_impresion_id, creado_en, actualizado_en)
+       VALUES ($1, $2, $3, $4, 'EFECTIVO', $5::numeric, $6, $7, $8, $9, $9)
+       RETURNING id, turno_id, tipo, monto::text AS monto, motivo, creado_en, creado_por_usuario_id, impresion,
+                 trabajo_impresion_id`,
       {
         bind: [
           id,
@@ -244,16 +263,13 @@ export class TurnosService {
           entrada.tipo,
           monto,
           entrada.motivo,
+          impresion.impresion,
+          impresion.trabajoId,
           this.reloj.ahora(),
         ],
         type: QueryTypes.SELECT,
       },
     );
-    await this.tickets.encolarGaveta({
-      sucursalId,
-      cajaId: turno.caja_id,
-      turnoId: turno.id,
-    });
     this.eventos.turnoCambio(sucursalId, turno.id, turno.caja_id);
     return this.movimientoARespuesta(filas[0]!);
   }
@@ -378,14 +394,14 @@ export class TurnosService {
     });
     // La Z se encola en la misma transacción del cierre (criterio 95: un solo `REPORTE_Z` por turno).
     const z = await this.reportes.armar(previo.id);
-    await this.tickets.encolarReporte('REPORTE_Z', {
+    const impresion = await this.tickets.encolarReporte('REPORTE_Z', {
       sucursalId,
       cajaId: previo.caja_id,
       turnoId: previo.id,
       reporte: z,
     });
     this.eventos.turnoCambio(sucursalId, previo.id, previo.caja_id);
-    return z;
+    return { ...z, ...impresion };
   }
 
   // ---- Ayudas ---------------------------------------------------------------------------------
@@ -449,7 +465,7 @@ export class TurnosService {
   private async respuestaDe(turnoId: string): Promise<TurnoRespuesta> {
     const fila = await buscarTurno(this.conexion, turnoId);
     if (fila === undefined) throw noEncontrado('El turno');
-    return turnoARespuesta(this.usuarios, fila);
+    return conImpresionDeApertura(await turnoARespuesta(this.usuarios, fila), fila);
   }
 
   private async movimientoARespuesta(fila: FilaMovimiento): Promise<MovimientoRespuesta> {
@@ -469,6 +485,9 @@ export class TurnosService {
               id: fila.creado_por_usuario_id,
               nombre: nombres.get(fila.creado_por_usuario_id) ?? '',
             },
+      ...(fila.impresion === null
+        ? {}
+        : { impresion: fila.impresion, trabajoId: fila.trabajo_impresion_id }),
     };
   }
 

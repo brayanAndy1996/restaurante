@@ -15,11 +15,14 @@ export interface FilaTurno {
   fondo: string;
   cerrado_en: Date | null;
   cerrado_por_id: string | null;
+  /** Lo que dijo la apertura de su trabajo `GAVETA` (migración 8); nulos con fondo `0.00`. */
+  apertura_impresion: 'EN_COLA' | 'SIN_IMPRESORA' | null;
+  apertura_trabajo_id: string | null;
 }
 
 export const SQL_TURNO = `SELECT t.id, t.caja_id, c.nombre AS caja_nombre, t.sucursal_id, t.responsable_id, t.estado,
        t.abierto_en, to_char(t.dia_operativo, 'YYYY-MM-DD') AS dia_operativo, t.fondo::text AS fondo,
-       t.cerrado_en, t.cerrado_por_id
+       t.cerrado_en, t.cerrado_por_id, t.apertura_impresion, t.apertura_trabajo_id
   FROM turno t JOIN caja c ON c.id = t.caja_id AND c.empresa_id = t.empresa_id`;
 
 /** El turno con ese id en la empresa del contexto (la RLS la limita), o `undefined`. */
@@ -52,6 +55,20 @@ export async function turnoARespuesta(
         ? null
         : { id: fila.cerrado_por_id, nombre: nombres.get(fila.cerrado_por_id) ?? '' },
   };
+}
+
+/**
+ * La respuesta de la apertura (201): el turno y, si el fondo era mayor que cero, lo que dijo su trabajo `GAVETA`
+ * (criterio 96). La réplica por `id` devuelve lo mismo, guardado en el turno.
+ */
+export function conImpresionDeApertura(respuesta: TurnoRespuesta, fila: FilaTurno): TurnoRespuesta {
+  return fila.apertura_impresion === null
+    ? respuesta
+    : {
+        ...respuesta,
+        impresion: fila.apertura_impresion,
+        trabajoId: fila.apertura_trabajo_id,
+      };
 }
 
 /** Un monto de texto (`"100"`, `"100.5"`) con exactamente 2 decimales. */

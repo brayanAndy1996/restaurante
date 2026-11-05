@@ -182,7 +182,19 @@ export const abrirTurnoEntradaSchema = z.strictObject({
   fondo: montoNoNegativoSchema,
 });
 
+/**
+ * Si la operación dejó un trabajo de impresión (historia 006, criterio 96), opcional: `impresion` y `trabajoId`. Lo
+ * traen la respuesta de la apertura (trabajo `GAVETA` del fondo), la de un movimiento nuevo (trabajo `GAVETA`) y la del
+ * cierre (trabajo `REPORTE_Z`). `SIN_IMPRESORA` con `trabajoId` `null` si no hay impresora de caja (o no tiene gaveta,
+ * en los dos primeros). La réplica por `id` devuelve los mismos valores (se guardan con el turno y el movimiento). Se omiten en una apertura con fondo `"0.00"` (no hay nada que abrir), en `GET` del turno y del reporte X, y en la lista de movimientos del reporte.
+ */
+const impresionDeOperacionShape = {
+  impresion: z.enum(['EN_COLA', 'SIN_IMPRESORA']).optional(),
+  trabajoId: uuidSchema.nullable().optional(),
+};
+
 export const turnoRespuestaSchema = z.object({
+  ...impresionDeOperacionShape,
   id: uuidSchema,
   caja: z.object({ id: uuidSchema, nombre: z.string() }),
   responsable: personaRefSchema,
@@ -203,6 +215,7 @@ export const movimientoEntradaSchema = z.strictObject({
 });
 
 export const movimientoRespuestaSchema = z.object({
+  ...impresionDeOperacionShape,
   id: uuidSchema,
   tipo: tipoMovimientoCajaSchema,
   monto: z.string(),
@@ -254,6 +267,7 @@ export const diferenciaDeArqueoSchema = z.object({
 
 /** `reporteCaja` (criterio 29): el reporte X de un turno abierto o el Z de uno cerrado (con `cierre`). */
 export const reporteCajaSchema = z.object({
+  ...impresionDeOperacionShape,
   turno: turnoRespuestaSchema,
   generadoEn: instanteSchema,
   fondo: z.string(),

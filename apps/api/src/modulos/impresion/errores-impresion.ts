@@ -52,3 +52,11 @@ export const limiteDeImpresoras = (maximo: number): ErrorAplicacion =>
     'CONFLICTO',
     `La sucursal ya tiene ${maximo} impresoras activas, que es el máximo. Desactiva una que no uses antes de agregar otra`,
   );
+
+/** 409 `CONFLICTO`: el trabajo `GAVETA` es solo el pulso de la gaveta y no se reimprime (historia 006, criterio 94). */
+export const gavetaNoSeReimprime = (): ErrorAplicacion =>
+  new ErrorAplicacion(
+    409,
+    'CONFLICTO',
+    'Un trabajo de la gaveta no se reimprime: solo abre la gaveta una vez',
+  );

@@ -12,6 +12,9 @@ import {
   descuentoEntradaSchema,
   errorRespuestaSchema,
   movimientoEntradaSchema,
+  movimientoRespuestaSchema,
+  reporteCajaSchema,
+  turnoRespuestaSchema,
   objetivoAutorizacionSchema,
   pagoCobroEntradaSchema,
   parteEntradaSchema,
@@ -649,5 +652,70 @@ describe('códigos de error de 006', () => {
     expect(completo.diferencias).toHaveLength(1);
     expect(errorRespuestaSchema.safeParse({ ...base, ordenes: -1 }).success).toBe(false);
     expect(errorRespuestaSchema.safeParse({ ...base, version: 1.5 }).success).toBe(false);
+  });
+});
+
+describe('impresión de la apertura, los movimientos y el cierre (criterio 96)', () => {
+  const persona = { id: ID_1, nombre: 'Ana' };
+  const turno = {
+    id: ID_2,
+    caja: { id: ID_3, nombre: 'Caja 1' },
+    responsable: persona,
+    estado: 'ABIERTO',
+    abiertoEn: '2026-11-02T15:00:00.000Z',
+    diaOperativo: '2026-11-02',
+    fondo: '100.00',
+    cerradoEn: null,
+    cerradoPor: null,
+  };
+  const movimiento = {
+    id: ID_1,
+    tipo: 'INGRESO',
+    monto: '10.00',
+    motivo: 'Sencillo',
+    creadoEn: '2026-11-02T15:30:00.000Z',
+    creadoPor: persona,
+  };
+
+  it('turnoRespuesta y movimientoRespuesta aceptan impresion y trabajoId, y también no traerlos', () => {
+    for (const esquema of [turnoRespuestaSchema, movimientoRespuestaSchema]) {
+      const base = esquema === turnoRespuestaSchema ? turno : movimiento;
+      expect(esquema.safeParse(base).success).toBe(true);
+      expect(esquema.safeParse({ ...base, impresion: 'EN_COLA', trabajoId: ID_3 }).success).toBe(
+        true,
+      );
+      expect(
+        esquema.safeParse({ ...base, impresion: 'SIN_IMPRESORA', trabajoId: null }).success,
+      ).toBe(true);
+      expect(campos(esquema.safeParse({ ...base, impresion: 'IMPRESO' }))).toEqual(['impresion']);
+      expect(campos(esquema.safeParse({ ...base, trabajoId: 'no-es-uuid' }))).toEqual([
+        'trabajoId',
+      ]);
+    }
+  });
+
+  it('reporteCaja los acepta en el nivel del reporte (la Z del cierre)', () => {
+    const reporte = {
+      turno,
+      generadoEn: '2026-11-02T22:00:00.000Z',
+      fondo: '100.00',
+      ventas: {
+        total: '0.00',
+        cantidad: 0,
+        porTipo: [],
+        porMedio: [],
+        descuentos: '0.00',
+        cortesias: '0.00',
+        igv: '0.00',
+        icbper: '0.00',
+        redondeos: '0.00',
+        vueltos: '0.00',
+      },
+      movimientos: { ingresos: '0.00', egresos: '0.00', lista: [] },
+      esperado: [],
+    };
+    expect(reporteCajaSchema.safeParse(reporte).success).toBe(true);
+    const z = reporteCajaSchema.parse({ ...reporte, impresion: 'EN_COLA', trabajoId: ID_3 });
+    expect(z).toMatchObject({ impresion: 'EN_COLA', trabajoId: ID_3 });
   });
 });
