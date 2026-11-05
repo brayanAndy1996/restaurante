@@ -145,6 +145,14 @@ export const cajaRespuestaSchema = z.object({
   turnoAbierto: z
     .object({ id: uuidSchema, responsable: personaRefSchema, abiertoEn: instanteSchema })
     .nullable(),
+  /**
+   * Parámetros de la caja según el emisor de su sucursal: el régimen y los tipos de comprobante que puede emitir
+   * (`tiposDeComprobantePermitidos`), para que la PWA ofrezca solo los que el cobro aceptará.
+   */
+  parametros: z.object({
+    regimen: regimenTributarioSchema,
+    tiposComprobante: z.array(z.enum(TIPOS_COMPROBANTE)),
+  }),
 });
 
 // ---------------------------------------------------------------------------------------------------
@@ -258,11 +266,9 @@ export const conteoCierreRespuestaSchema = z.object({
   motivo: z.string().nullable(),
 });
 
-/** Las diferencias que trae el 422 `DIFERENCIA_SIN_MOTIVO` (criterio 32): sin el esperado. */
+/** Las diferencias que trae el 422 `DIFERENCIA_SIN_MOTIVO` (criterio 32): solo el medio, sin montos. */
 export const diferenciaDeArqueoSchema = z.object({
   medio: medioPagoSchema,
-  contado: z.string(),
-  diferencia: z.string(),
 });
 
 /** `reporteCaja` (criterio 29): el reporte X de un turno abierto o el Z de uno cerrado (con `cierre`). */

@@ -119,17 +119,10 @@ export const errorRespuestaSchema = z.object({
   /** Solo en `CIERRE_BLOQUEADO` (criterio 33 de 006): cuántas órdenes siguen abiertas. */
   ordenes: z.number().int().nonnegative().optional(),
   /**
-   * Solo en `DIFERENCIA_SIN_MOTIVO` (criterios 31 y 32 de 006): las diferencias de cada medio, sin el esperado.
+   * Solo en `DIFERENCIA_SIN_MOTIVO` (criterios 31 y 32 de 006): los medios que no cuadran y no traen motivo, en el
+   * orden de `MEDIOS_PAGO`; sin esperado, contado ni diferencia (decisión del usuario: el aviso no lleva montos).
    */
-  diferencias: z
-    .array(
-      z.object({
-        medio: z.enum(MEDIOS_PAGO),
-        contado: z.string(),
-        diferencia: z.string(),
-      }),
-    )
-    .optional(),
+  diferencias: z.array(z.object({ medio: z.enum(MEDIOS_PAGO) })).optional(),
   /** Solo en `LLAMADO_TOMADO` (criterio 43 de 005): quién ya está atendiendo el llamado. */
   atendidoPor: z.object({ id: uuidSchema, nombre: z.string() }).optional(),
   /** Solo en `LLAMADO_CERRADO` (criterios 44 y 53 de 005): el estado en que quedó el llamado. */
