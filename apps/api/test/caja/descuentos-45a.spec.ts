@@ -277,6 +277,28 @@ describe('criterio 45a · un cambio que la cuenta no admite con el descuento', (
     expect(vista.body.cortesias).toHaveLength(1);
   });
 
+  it('un descuento de ítem nuevo que dejaría un descuento de cuenta por porcentaje sin base (neto 0.00) también es 422', async () => {
+    const cuenta = await cuentaC(ctx, A());
+    exigirEstado(
+      await descuento(sup(), cuenta, null, 'PORCENTAJE', '99.99'),
+      201,
+      '99.99 % por cuenta',
+    );
+    // Con S/ 55.99 al Lomo la base baja a 9.01 y el 99.99 % se redondea a 9.01: ya no deja nada que cobrar.
+    esperarError(
+      await descuento(sup(), cuenta, cuenta.item.lomo!, 'MONTO', '55.99'),
+      422,
+      'DESCUENTO_INVALIDO',
+    );
+    expect(
+      (
+        await filas('SELECT 1 FROM descuento WHERE orden_id = $1 AND item_id IS NOT NULL', [
+          cuenta.ordenId,
+        ])
+      ).length,
+    ).toBe(0);
+  });
+
   it('un descuento de ítem o una cortesía nuevos que dejarían sin base el descuento de cuenta: 422 sin escribir', async () => {
     const cuenta = await cuentaC(ctx, A());
     exigirEstado(

@@ -291,10 +291,11 @@ export function baseDeCuenta(cuenta: CuentaEntrada): string {
 }
 
 /**
- * Criterio 45a (decisión del usuario del 2026-11-04): ¿la cuenta deja algún descuento por `MONTO`, de ítem o de la
- * cuenta, mayor o igual que su base? Un porcentaje se recalcula sobre la base nueva y nunca llega a la base. Devuelve
- * `true` si la cuenta no se admite; quien la arma rechaza el cambio con 422 `DESCUENTO_INVALIDO`, sin escribir nada, y
- * el descuento nunca se recorta ni se quita solo.
+ * Criterio 45a (decisión del usuario del 2026-11-04 y ronda 3 del ataque): ¿la cuenta deja algún descuento, de ítem o
+ * de la cuenta, que ya no admite su base? Un `MONTO` mayor o igual que su base; un `PORCENTAJE` se recalcula sobre la
+ * base nueva y también se rechaza si el recálculo la iguala (neto 0.00). Devuelve `true` si la cuenta no se admite;
+ * quien la arma rechaza el cambio con 422 `DESCUENTO_INVALIDO`, sin escribir nada, y el descuento nunca se recorta ni
+ * se quita solo.
  */
 export function descuentoQueNoSeAdmite(cuenta: CuentaEntrada): boolean {
   const sinDescuentos = calcularCuenta({
@@ -304,13 +305,20 @@ export function descuentoQueNoSeAdmite(cuenta: CuentaEntrada): boolean {
     descuentoCuenta: null,
   });
   const excedido = cuenta.lineas.some((linea, i) => {
-    if (linea.descuento === null || linea.descuento.tipo !== 'MONTO') return false;
-    return !validarDescuento(sinDescuentos.lineas[i]!.bruto, linea.descuento).valido;
+    if (linea.descuento === null) return false;
+    return sinBase(sinDescuentos.lineas[i]!.bruto, linea.descuento);
   });
   if (excedido) return true;
   const descuentoCuenta = cuenta.descuentoCuenta;
-  if (descuentoCuenta === null || descuentoCuenta.tipo !== 'MONTO') return false;
-  return !validarDescuento(baseDeCuenta(cuenta), descuentoCuenta).valido;
+  if (descuentoCuenta === null) return false;
+  return sinBase(baseDeCuenta(cuenta), descuentoCuenta);
+}
+
+/** ¿El descuento ya no cabe en su base? Un monto, por cualquier razón; un porcentaje, solo si la iguala o la pasa. */
+function sinBase(base: string, descuento: NonNullable<CuentaEntrada['descuentoCuenta']>): boolean {
+  const r = validarDescuento(base, descuento);
+  if (r.valido) return false;
+  return descuento.tipo === 'MONTO' || r.codigo === 'DESCUENTO_EXCESIVO';
 }
 
 // ---------------------------------------------------------------------------------------------------
