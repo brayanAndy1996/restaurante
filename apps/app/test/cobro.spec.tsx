@@ -707,6 +707,67 @@ describe('Dividir la cuenta (criterios 64 a 68 y 113)', () => {
         comprobante: { formato: 'CONSUMO' },
       });
     });
+
+    it('si otro equipo cobra una parte mientras tanto, las que faltan aquí se ajustan y no se divide de más', async () => {
+      const base = cuenta();
+      const primera = parteDe(base, [], { tipo: 'IGUALES', partesRestantes: 3 }, 'CONSUMO');
+      const c1 = cuenta({
+        version: 4,
+        cobrado: primera.totales.total,
+        saldo: '45.67',
+        modo: 'IGUALES',
+        cobros: [cobroDe(0, primera, 'B001-00000124', PERSONA)],
+      });
+      const segunda = parteDe(c1, [primera], { tipo: 'IGUALES', partesRestantes: 2 }, 'CONSUMO');
+      // Tras el cobro de esta pantalla (parte 1), la cuenta ya trae también la parte 2 cobrada por otro equipo.
+      const c2 = cuenta({
+        version: 6,
+        cobrado: '45.66',
+        saldo: '22.84',
+        modo: 'IGUALES',
+        cobros: [
+          cobroDe(0, primera, 'B001-00000124', PERSONA),
+          cobroDe(1, segunda, 'B002-00000031'),
+        ],
+      });
+      const ultima = parteDe(
+        c2,
+        [primera, segunda],
+        { tipo: 'IGUALES', partesRestantes: 1 },
+        'CONSUMO',
+      );
+      let cobrado = false;
+      const s = montar({
+        cuenta: () => (cobrado ? c2 : base),
+        extra: {
+          [`POST ${API_COBROS}`]: ({ cuerpo }) => {
+            cobrado = true;
+            return json(
+              201,
+              respuestaDe(cuerpo as CobroEntrada, { estado: 'ABIERTA', saldo: '45.67' }),
+            );
+          },
+        },
+      });
+      renderApp(RUTA);
+      await screen.findByRole('button', { name: 'Cobrar S/\u00a068.50' });
+      await userEvent.click(screen.getByRole('button', { name: 'Partes iguales' }));
+      await userEvent.click(screen.getByRole('button', { name: 'Agregar uno a partes' }));
+      await userEvent.click(await screen.findByRole('button', { name: /Cobrar la parte 1 de 3/ }));
+      await screen.findByText('Parte 1 de 3 de Mesa 4.');
+      await userEvent.click(screen.getByRole('button', { name: 'Cobrar la parte 2 de 3' }));
+      // La parte 2 ya se cobró en otro equipo: lo que sigue es la 3 de 3, con lo que queda.
+      const ultimaParte = await screen.findByRole('button', { name: /Cobrar la parte 3 de 3/ });
+      expect(ultimaParte).toHaveTextContent(
+        (montoEnSoles(ultima.totales.total) ?? '').replace('\u00a0', ' '),
+      );
+      await userEvent.click(ultimaParte);
+      await screen.findByText('Parte 3 de 3 de Mesa 4.');
+      expect(entradaDe(s, 1)).toMatchObject({
+        total: ultima.totales.total,
+        parte: { tipo: 'IGUALES', partesRestantes: 1 },
+      });
+    });
   });
 });
 

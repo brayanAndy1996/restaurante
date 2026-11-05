@@ -4,7 +4,7 @@ type DetalleDeParte = CuentaRespuesta['cobros'][number]['detalleParte'];
 
 /**
  * El `detalleParte` de un cobro de los ejemplos: una parte cobrada de `total` soles con IGV incluido, vista por consumo
- * (una línea gravada sin ítem). La pantalla todavía no lo usa para decidir nada; solo hace falta que sea válido.
+ * (una línea gravada sin ítem). Solo hace falta que sea válido: las pruebas que dependen de la parte siguiente lo calculan con el dominio.
  */
 export function detalleDeParte(
   total: string,

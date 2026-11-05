@@ -144,8 +144,9 @@ function Cobro({ ordenId, empresaId, usuarioId, sucursalId, atras }: PropsCobro)
 
   const [modo, setModo] = useState<ModoDeCobro>('TOTAL');
   const [unidades, setUnidades] = useState<Record<string, number>>({});
-  // Cuántas partes iguales faltan, contando la que se cobra; `null` hasta que la persona lo cambie.
-  const [partesFaltan, setPartesFaltan] = useState<number | null>(null);
+  // En cuántas partes iguales se divide la cuenta; `null` hasta que la persona lo cambie. Se guarda el total (no las que
+  // faltan) para que, si otro equipo cobra una parte, las que faltan aquí se ajusten solas.
+  const [partesTotales, setPartesTotales] = useState<number | null>(null);
   const [tipo, setTipo] = useState<'BOLETA' | 'FACTURA'>('BOLETA');
   const [formato, setFormato] = useState<FormatoDeCobro>('DETALLADO');
   const [cliente, setCliente] = useState<ClienteEscrito>(CLIENTE_VACIO);
@@ -175,7 +176,10 @@ function Cobro({ ordenId, empresaId, usuarioId, sucursalId, atras }: PropsCobro)
   const minimoDePartes = plan.pagadas.length > 0 ? 1 : 2;
   const partesRestantes = Math.min(
     MAXIMO_PARTES_IGUALES,
-    Math.max(minimoDePartes, partesFaltan ?? minimoDePartes),
+    Math.max(
+      minimoDePartes,
+      partesTotales === null ? minimoDePartes : partesTotales - plan.pagadas.length,
+    ),
   );
   const modoVigente: ModoDeCobro = soloIguales ? 'IGUALES' : modo;
   const seleccion: Seleccion =
@@ -253,10 +257,10 @@ function Cobro({ ordenId, empresaId, usuarioId, sucursalId, atras }: PropsCobro)
             setCliente(CLIENTE_VACIO);
             setTipo('BOLETA');
             setFilas([pagoNuevo('EFECTIVO')]);
-            // Tras una parte igual siguen las demás: faltan una menos.
+            // Tras una parte igual siguen las demás, en las mismas partes.
             if (hecho.parteIgual) {
               setModo('IGUALES');
-              setPartesFaltan(Math.max(1, hecho.parteIgual.de - hecho.parteIgual.numero));
+              setPartesTotales(hecho.parteIgual.de);
             } else {
               setModo('TOTAL');
             }
@@ -484,7 +488,7 @@ function Cobro({ ordenId, empresaId, usuarioId, sucursalId, atras }: PropsCobro)
           unidades={unidades}
           onUnidades={setUnidades}
           partesElegidas={partesRestantes}
-          onPartesElegidas={setPartesFaltan}
+          onPartesElegidas={(faltan) => setPartesTotales(plan.pagadas.length + faltan)}
           plan={plan}
           parte={parte ?? { ok: false, motivo: 'VACIA' }}
         />
