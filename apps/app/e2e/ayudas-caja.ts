@@ -157,7 +157,9 @@ export async function abrirElCobroDeLaMesa(page: Page, mesa: string): Promise<vo
 
 /** El botón principal del pie del cobro («Cobrar S/ 62.00»). */
 export const botonDeCobrar = (page: Page): Locator =>
-  page.getByRole('button', { name: /^Cobrar S\/\s?[\d,]+\.\d\d$/ });
+  page.getByRole('button', {
+    name: /^Cobrar( la parte \d+ de \d+ ·)? S\/\s?[\d,]+\.\d\d$/,
+  });
 
 /** Escribe la clave del supervisor en la ventana de PIN (teclado propio) y espera que se cierre. */
 export async function darClaveDeSupervisor(page: Page, pin: string): Promise<void> {
@@ -242,4 +244,33 @@ export async function irAlSalon(page: Page): Promise<void> {
   if ((await enlace.count()) > 0) await enlace.click();
   else await page.goto('/salon');
   await expect(page).toHaveURL(/\/salon$/);
+}
+
+/** Elige «Toda la cuenta», «Por ítems» o «Partes iguales» en el cobro. */
+export async function elegirParteDelCobro(
+  page: Page,
+  modo: 'Toda la cuenta' | 'Lo que falta' | 'Por ítems' | 'Partes iguales',
+): Promise<void> {
+  const boton = page
+    .getByRole('group', { name: 'Qué parte de la cuenta se cobra' })
+    .getByRole('button', { name: modo, exact: true });
+  await boton.click();
+  await expect(boton).toHaveAttribute('aria-pressed', 'true');
+}
+
+/** Toca «Cobrar S/ …», espera el 201 del cobro y devuelve su respuesta. */
+export async function cobrarYEsperar(page: Page) {
+  const respuesta = page.waitForResponse(
+    (r) =>
+      r.request().method() === 'POST' &&
+      /^\/cuentas\/[^/]+\/cobros$/.test(new URL(r.url()).pathname),
+  );
+  await botonDeCobrar(page).click();
+  const cobro = await respuesta;
+  expect(cobro.status(), 'el cobro se aceptó').toBe(201);
+  return (await cobro.json()) as {
+    comprobante: { numero: string };
+    cuenta: { estado: string; saldo: string };
+    impresion: string;
+  };
 }

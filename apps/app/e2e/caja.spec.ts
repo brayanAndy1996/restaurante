@@ -17,6 +17,8 @@ import {
   abrirElCobroDeLaMesa,
   abrirMesaYComandar,
   botonDeCobrar,
+  cobrarYEsperar,
+  elegirParteDelCobro,
   esperarPulsosDeGaveta,
   irAlSalon,
   pulsosDeGaveta,
@@ -260,4 +262,53 @@ test('el Mozo abre la mesa 1 y comanda; el Cajero cobra con efectivo (con vuelto
     ['POST', /\/comprobantes\/[^/]+\/impresiones$/],
   ]);
   void texto;
+});
+
+test('la cuenta de la mesa 2 se divide por ítems con el Cajero y en partes iguales entre el Supervisor y el Cajero', async () => {
+  await test.step('el Mozo abre la mesa 2 y comanda dos cevices y un lomo (S/ 104.00)', async () => {
+    await abrirMesaYComandar(mozo.page, '2', [PLATOS.ceviche, PLATOS.ceviche, PLATOS.lomo]);
+  });
+
+  await test.step('el Cajero cobra un ceviche por ítems (S/ 38.00) y falta cobrar S/ 66.00', async () => {
+    const { page } = cajero;
+    await abrirElCobroDeLaMesa(page, '2');
+    await elegirParteDelCobro(page, 'Por ítems');
+    await page.getByRole('button', { name: 'Agregar una unidad de Ceviche mixto' }).first().click();
+    await expect(botonDeCobrar(page)).toHaveText('Cobrar S/\u00a038.00');
+    const cobro = await cobrarYEsperar(page);
+    expect(cobro.comprobante.numero).toBe('B001-00000002');
+    expect(cobro.cuenta).toMatchObject({ estado: 'ABIERTA', saldo: '66.00' });
+    await expect(page.getByText('Boleta · B001-00000002')).toBeVisible();
+    await expect(page.getByText('Falta cobrar S/ 66.00')).toBeVisible();
+    await expect(page.getByText('Mesa 2 libre')).toHaveCount(0);
+    await page.screenshot({ path: captura('07-cobro-por-items-falta-360'), fullPage: true });
+    await afirmarPantallaDeCelular(page, 'Caja › Resultado del cobro por ítems');
+  });
+
+  await test.step('el Supervisor cobra la parte 1 de 2 de lo que falta (S/ 33.00) en su caja, en la tableta', async () => {
+    const { page } = supervisor;
+    await abrirElCobroDeLaMesa(page, '2');
+    await elegirParteDelCobro(page, 'Partes iguales');
+    await expect(page.getByText('Cada parte es de S/ 33.00')).toBeVisible();
+    await expect(botonDeCobrar(page)).toHaveText('Cobrar la parte 1 de 2 · S/\u00a033.00');
+    const cobro = await cobrarYEsperar(page);
+    expect(cobro.comprobante.numero).toBe('B002-00000001');
+    expect(cobro.cuenta).toMatchObject({ estado: 'ABIERTA', saldo: '33.00' });
+    await expect(page.getByText('Parte 1 de 2 de Mesa 2.')).toBeVisible();
+    await page.screenshot({ path: captura('08-parte-igual-768'), fullPage: true });
+  });
+
+  await test.step('el Cajero cobra la parte 2 de 2 (S/ 33.00), con su propio correlativo, y la mesa queda libre', async () => {
+    const { page } = cajero;
+    await abrirElCobroDeLaMesa(page, '2');
+    // La cuenta quedó en partes iguales: solo falta la última, y el cobro ya viene así.
+    await expect(page.getByText('Esta es la última parte: S/ 33.00')).toBeVisible();
+    await expect(botonDeCobrar(page)).toHaveText('Cobrar la parte 2 de 2 · S/\u00a033.00');
+    const cobro = await cobrarYEsperar(page);
+    expect(cobro.comprobante.numero).toBe('B001-00000003');
+    expect(cobro.cuenta).toMatchObject({ estado: 'CERRADA', saldo: '0.00' });
+    await expect(page.getByText('Mesa 2 libre')).toBeVisible();
+    await irAlSalon(mozo.page);
+    await afirmarEstadoDeMesa(mozo.page, '2', 'libre');
+  });
 });
