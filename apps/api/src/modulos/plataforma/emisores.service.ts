@@ -126,12 +126,26 @@ export class EmisoresService {
     entrada: TasaIgvEntrada,
   ): Promise<TasaIgvRespuesta> {
     await this.bloquearEmisorConEspera(emisorId);
-    const actuales = await this.conexion.query<{ id: string; tasa: string }>(
-      `SELECT id, tasa::text AS tasa FROM emisor_tasa_igv WHERE emisor_id = $1 AND desde = $2::date`,
-      { bind: [emisorId, desde], type: QueryTypes.SELECT },
+    // Un emisor Nuevo RUS no tiene IGV: no se le guarda ninguna tasa (422, sin guardar ni auditar).
+    const regimen = await this.conexion.query<{ regimen: RegimenTributario }>(
+      'SELECT regimen FROM emisor WHERE id = $1',
+      { bind: [emisorId], type: QueryTypes.SELECT },
+    );
+    if (regimen[0]?.regimen === 'NUEVO_RUS') {
+      throw new ErrorAplicacion(
+        422,
+        'EMISOR_INVALIDO',
+        'Un emisor del Nuevo RUS no tiene tasa de IGV',
+      );
+    }
+    // La igualdad es numérica y exacta, en la base (`18` y `18.00` son la misma tasa; sin coma flotante).
+    const actuales = await this.conexion.query<{ id: string; tasa: string; igual: boolean }>(
+      `SELECT id, tasa::text AS tasa, tasa = $3::numeric AS igual
+         FROM emisor_tasa_igv WHERE emisor_id = $1 AND desde = $2::date`,
+      { bind: [emisorId, desde, entrada.tasa], type: QueryTypes.SELECT },
     );
     const actual = actuales[0];
-    if (actual !== undefined && Number(actual.tasa) === Number(entrada.tasa)) {
+    if (actual !== undefined && actual.igual) {
       return { desde, tasa: actual.tasa };
     }
     const ultima = await this.ultimaEmision.fecha(emisorId);

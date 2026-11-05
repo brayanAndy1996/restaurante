@@ -546,6 +546,14 @@ describe('criterio 6 · tasa de IGV del emisor', () => {
     expect(cambiada.texto).toContain('10.50');
   });
 
+  it('un emisor Nuevo RUS no tiene tasa de IGV: PUT responde 422 EMISOR_INVALIDO sin guardar ni auditar', async () => {
+    const rus = A().emisor2!;
+    const antes = (await filasAuditoria(A().id, 'configurar_tasa_igv')).length;
+    esperarError(await ponerTasa(ctx, admin(), rus, '2031-03-01', '18.00'), 422, 'EMISOR_INVALIDO');
+    expect(await filas('SELECT 1 FROM emisor_tasa_igv WHERE emisor_id = $1', [rus])).toEqual([]);
+    expect((await filasAuditoria(A().id, 'configurar_tasa_igv')).length).toBe(antes);
+  });
+
   it('la tasa va de 0.01 a 30.00 con 2 decimales y desde es una fecha real (400); un emisor de B o inexistente es 404', async () => {
     const emisor = A().emisor1;
     for (const tasa of ['0.00', '30.01', '18.123', 'abc', '']) {
