@@ -22,6 +22,7 @@ import {
   elegirParteDelCobro,
   esperarPulsosDeGaveta,
   esperarTicketCon,
+  irACaja,
   irAlSalon,
   pulsosDeGaveta,
   irAAjustes,
@@ -323,6 +324,8 @@ test('el Cajero aplica un descuento por ítem con la clave del Supervisor y cobr
 
   await test.step('el Cajero abre la cuenta de la mesa 3 y elige «Descuento a Lomo saltado»', async () => {
     await irAlSalon(page);
+    // El mapa se actualiza en vivo: si todavía la ve libre, tocarla abriría otra cuenta.
+    await afirmarEstadoDeMesa(page, '3', 'ocupada');
     await baldosaDeMesa(page, '3').click();
     await esperarLaCuenta(page, 'Mesa 3');
     await page.getByRole('link', { name: 'Descuentos y cortesías' }).click();
@@ -353,4 +356,73 @@ test('el Cajero aplica un descuento por ítem con la clave del Supervisor y cobr
     const ticket = await esperarTicketCon(emulador, 'B001-00000004');
     expect(ticket.texto).toMatch(/Descuento/i);
   });
+});
+
+test('la venta de mostrador se cobra y manda el pedido a Cocina con su «Llamado N» en el KDS', async () => {
+  const { page } = cajero;
+  await irACaja(page);
+  await page.getByRole('link', { name: /Vender en el mostrador/ }).click();
+  await expect(page.getByRole('heading', { name: 'Mostrador', level: 1 })).toBeVisible();
+
+  await test.step('arma la venta con un ceviche y la revisa', async () => {
+    await page.getByRole('button', { name: /^Ceviche mixto/ }).click();
+    const hoja = page.getByRole('dialog', { name: 'Ceviche mixto' });
+    await hoja.getByRole('button', { name: /^Agregar( ·|$)/ }).click();
+    await expect(hoja).toBeHidden();
+    await page.getByRole('button', { name: /^Revisar la venta/ }).click();
+    await expect(page.getByRole('heading', { name: 'La venta' })).toBeVisible();
+  });
+
+  await test.step('cobra y enviar: sale el «Llamado 1» en grande, con su comprobante', async () => {
+    const respuesta = page.waitForResponse(
+      (r) => r.request().method() === 'POST' && new URL(r.url()).pathname === '/ventas-mostrador',
+    );
+    await page.getByRole('button', { name: /^Cobrar y enviar/ }).click();
+    const venta = await respuesta;
+    expect(venta.status(), 'la venta se aceptó').toBe(201);
+    expect(venta.request().headers()['idempotency-key']).toMatch(/\S/);
+    await expect(page.locator('.resultado__llamado')).toHaveText('Llamado 1');
+    await expect(page.getByText('Boleta · B001-00000005')).toBeVisible();
+    await expect(page.getByText(`Imprimiendo en ${IMPRESORA_DE_CAJA}`)).toBeVisible();
+    await page.screenshot({ path: captura('11-mostrador-llamado-360'), fullPage: true });
+    await afirmarPantallaDeCelular(page, 'Caja › Resultado de la venta de mostrador');
+  });
+
+  await test.step('Cocina ve la comanda con el «Llamado 1» y no hay mesa que liberar', async () => {
+    const tarjeta = tarjetaDeCocina(cocina.page, 'Comanda', 'Llamado 1', 'Cocina');
+    await expect(tarjeta).toBeVisible();
+    await expect(tarjeta).toContainText('Ceviche mixto');
+    await cocina.page.screenshot({ path: captura('12-kds-llamado-360') });
+  });
+
+  afirmarClavesDelSalon(cajero.escrituras, [['POST', /^\/ventas-mostrador$/]]);
+});
+
+test('el Cajero imprime el reporte X', async () => {
+  const { page } = cajero;
+  await irACaja(page);
+  await page.getByRole('button', { name: 'Reporte X', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Ventas' })).toBeVisible();
+  await page.screenshot({ path: captura('13-reporte-x-imprimir-360'), fullPage: true });
+  await afirmarPantallaDeCelular(page, 'Caja › Reporte X');
+
+  emulador.limpiar();
+  const respuesta = page.waitForResponse(
+    (r) =>
+      r.request().method() === 'POST' && /\/turnos\/[^/]+\/reporte-x\/impresiones$/.test(r.url()),
+  );
+  await page.getByRole('button', { name: 'Imprimir', exact: true }).click();
+  const impresion = await respuesta;
+  expect(impresion.status()).toBe(201);
+  expect(impresion.request().headers()['idempotency-key']).toMatch(/\S/);
+  await expect(page.getByText(`Imprimiendo el reporte X en ${IMPRESORA_DE_CAJA}`)).toBeVisible();
+  await page.screenshot({ path: captura('14-reporte-x-imprimiendo-360'), fullPage: true });
+
+  const ticket = await esperarTicketCon(emulador, 'REPORTE X');
+  expect(ticket.texto).toContain('Caja 1');
+  expect(ticket.texto).toContain('ESPERADO EN CAJA');
+  expect(ticket.texto).toContain('376.20');
+  expect(ticket.texto).toContain('Reporte parcial');
+  expect(ticket.pulsosGaveta).toBe(0);
+  writeFileSync(`${CARPETA_DE_CAPTURAS}/15-ticket-reporte-x.txt`, `${ticket.marcado}\n`);
 });
