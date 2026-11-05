@@ -92,12 +92,25 @@ export class EmisoresService {
   }
 
   /**
+   * Las tasas del emisor para emitir un comprobante con la vigente (cobro y venta de mostrador). Toma la fila del
+   * emisor con `FOR SHARE` hasta el final de la transacción: choca con el `FOR NO KEY UPDATE` de
+   * `configurarTasaIgv`, de modo que "leer la tasa vigente" y "cambiar la tasa" se turnan (nunca dos tasas para la
+   * misma fecha de emisión), pero dos cobros del mismo emisor no se esperan entre sí. Va después de los bloqueos de la
+   * orden y del turno y antes del de la serie (el orden fijo del plan).
+   */
+  async tasasIgvParaEmitir(emisorId: string): Promise<TasaIgvRespuesta[]> {
+    await this.exigirEmisor(emisorId, 'compartido');
+    return this.leerTasas(emisorId);
+  }
+
+  /**
    * Crea o cambia la tasa de IGV del emisor desde una fecha (criterio 6). Repetir el mismo valor responde 200 sin
    * auditoría. No se puede crear ni cambiar una tasa con `desde` igual o anterior a la fecha de Lima del último
    * comprobante emitido por el emisor (409 `CONFLICTO`: las ventas pasadas no se recalculan); esa fecha la da el puerto
    * `UltimaEmisionDeEmisor` que registra facturación y, sin registro, se rechaza (falla cerrado). La fila del emisor se
-   * toma con `FOR NO KEY UPDATE`: dos cambios del mismo emisor se turnan y no se cruzan con los cobros, que solo
-   * necesitan `FOR KEY SHARE` por sus llaves foráneas.
+   * toma con `FOR NO KEY UPDATE`: dos cambios del mismo emisor se turnan y esperan a los cobros en curso del emisor,
+   * que leen la tasa con `FOR SHARE` (`tasasIgvParaEmitir`) y la sueltan al confirmar; así la última fecha de emisión
+   * que se comprueba abajo ya incluye a esos cobros (409 si es de la fecha o posterior).
    */
   async configurarTasaIgv(
     emisorId: string,
@@ -197,9 +210,13 @@ export class EmisoresService {
     );
   }
 
-  private async exigirEmisor(emisorId: string, bloquear = false): Promise<void> {
+  private async exigirEmisor(
+    emisorId: string,
+    bloquear: boolean | 'compartido' = false,
+  ): Promise<void> {
+    const cerrojo = bloquear === 'compartido' ? ' FOR SHARE' : bloquear ? ' FOR NO KEY UPDATE' : '';
     const filas = await this.conexion.query<{ id: string }>(
-      `SELECT id FROM emisor WHERE id = $1${bloquear ? ' FOR NO KEY UPDATE' : ''}`,
+      `SELECT id FROM emisor WHERE id = $1${cerrojo}`,
       { bind: [emisorId], type: QueryTypes.SELECT },
     );
     if (filas.length === 0) throw new ErrorAplicacion(404, 'NO_ENCONTRADO', 'El emisor no existe');

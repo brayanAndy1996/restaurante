@@ -24,14 +24,28 @@ export class ParametrosDeCuenta {
     @Inject(RELOJ) private readonly reloj: Reloj,
   ) {}
 
-  /** Los parámetros de la sucursal en la fecha de Lima de `instante` (por defecto, el reloj de la API). */
-  async de(sucursalId: string, instante: Date = this.reloj.ahora()): Promise<Parametros> {
+  /**
+   * Los parámetros de la sucursal en la fecha de Lima de `instante` (por defecto, el reloj de la API). Con
+   * `paraEmitir` (el cobro y la venta de mostrador) la tasa se lee con el emisor bloqueado en modo compartido hasta el
+   * final de la transacción: el cambio de tasa de ese emisor espera a los cobros en curso (criterio 6) y los cobros
+   * entre sí no se esperan. Hay que llamarlo después del bloqueo de la orden y del turno y antes del de la serie.
+   */
+  async de(
+    sucursalId: string,
+    instante: Date = this.reloj.ahora(),
+    paraEmitir = false,
+  ): Promise<Parametros> {
     const { emisor } = await this.emisores.datosParaComprobante(sucursalId);
     const hoy = fechaLima(instante);
     const tasa =
       emisor.regimen === 'NUEVO_RUS'
         ? null
-        : tasaIgvVigente(await this.emisores.tasasIgv(emisor.id), hoy);
+        : tasaIgvVigente(
+            paraEmitir
+              ? await this.emisores.tasasIgvParaEmitir(emisor.id)
+              : await this.emisores.tasasIgv(emisor.id),
+            hoy,
+          );
     return {
       tasaIgv: tasa,
       montoIcbper: montoIcbperVigente(hoy),

@@ -333,7 +333,7 @@ export class CobrosService {
 
     const turno = await this.turnoParaCobrar(normal.turnoId, sucursalId);
     const instante = this.reloj.ahora();
-    const parametros = await this.parametros.de(sucursalId, instante);
+    const parametros = await this.parametros.de(sucursalId, instante, true);
     this.exigirComprobantePermitido(normal, parametros);
 
     return this.liquidar({

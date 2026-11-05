@@ -86,7 +86,7 @@ export class MostradorService {
 
     const turno = await this.cobros.turnoParaCobrar(normal.turnoId, sucursalId);
     const instante = this.reloj.ahora();
-    const parametros = await this.parametros.de(sucursalId, instante);
+    const parametros = await this.parametros.de(sucursalId, instante, true);
     this.cobros.exigirComprobantePermitido(normal, parametros);
 
     // Pedidos crea la orden, toma el número de llamado y envía a cocina (004): valida cada línea y descuenta el stock.
