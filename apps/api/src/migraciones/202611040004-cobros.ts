@@ -44,9 +44,9 @@ CREATE TABLE cobro (
   CONSTRAINT cobro_turno_fk FOREIGN KEY (turno_id, empresa_id) REFERENCES turno (id, empresa_id),
   CONSTRAINT cobro_comprobante_fk
     FOREIGN KEY (comprobante_id, empresa_id) REFERENCES comprobante (id, empresa_id),
-  -- Un comprobante, un cobro. Se comprueba al confirmar (DEFERRABLE): la red de siempre es la clave primaria y el
-  -- índice único de 'comprobante.cobro_id', que sí chocan al insertar; esta es la tercera, la de la relación inversa.
-  CONSTRAINT cobro_comprobante_unico UNIQUE (empresa_id, comprobante_id) DEFERRABLE INITIALLY DEFERRED
+  -- Un comprobante, un cobro. Único inmediato: junto con la clave primaria y el índice único de
+  -- 'comprobante.cobro_id', es la red de la relación inversa.
+  CONSTRAINT cobro_comprobante_unico UNIQUE (empresa_id, comprobante_id)
 );
 CREATE INDEX cobro_empresa_id_idx ON cobro (empresa_id);
 CREATE INDEX cobro_orden_idx ON cobro (orden_id);

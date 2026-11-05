@@ -132,9 +132,7 @@ describe('migración 4 de 6a (cobro y pago)', () => {
       const def = (nombre: string) =>
         restricciones.rows.find((r) => r.conname === nombre)?.def ?? '';
       expect(def('cobro_pk')).toBe('PRIMARY KEY (empresa_id, id)');
-      expect(def('cobro_comprobante_unico')).toBe(
-        'UNIQUE (empresa_id, comprobante_id) DEFERRABLE INITIALLY DEFERRED',
-      );
+      expect(def('cobro_comprobante_unico')).toBe('UNIQUE (empresa_id, comprobante_id)');
       expect(def('cobro_orden_fk')).toContain('REFERENCES orden(id, empresa_id)');
       expect(def('cobro_turno_fk')).toContain('REFERENCES turno(id, empresa_id)');
       expect(def('cobro_comprobante_fk')).toContain('REFERENCES comprobante(id, empresa_id)');
