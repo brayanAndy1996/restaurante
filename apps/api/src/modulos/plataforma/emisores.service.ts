@@ -15,6 +15,11 @@ import { AuditoriaService } from '../auditoria';
 import { MODELOS_API, type EmisorModelo, type Modelos } from './modelos';
 import { UltimaEmisionDeEmisor } from './ultima-emision';
 
+/** Lo que `configurarTasaIgv` espera a los cobros en curso del emisor antes de responder 409 `CONFLICTO`. */
+const ESPERA_MAXIMA_DE_COBROS_MS = 3_000;
+/** Pausa entre un intento de bloquear al emisor y el siguiente. */
+const PAUSA_ENTRE_INTENTOS_MS = 25;
+
 /** Fila de la tabla a la forma de `emisorRespuesta` (fechas ISO 8601). */
 export function emisorARespuesta(emisor: EmisorModelo): EmisorRespuesta {
   return {
@@ -110,14 +115,17 @@ export class EmisoresService {
    * `UltimaEmisionDeEmisor` que registra facturación y, sin registro, se rechaza (falla cerrado). La fila del emisor se
    * toma con `FOR NO KEY UPDATE`: dos cambios del mismo emisor se turnan y esperan a los cobros en curso del emisor,
    * que leen la tasa con `FOR SHARE` (`tasasIgvParaEmitir`) y la sueltan al confirmar; así la última fecha de emisión
-   * que se comprueba abajo ya incluye a esos cobros (409 si es de la fecha o posterior).
+   * que se comprueba abajo ya incluye a esos cobros (409 si es de la fecha o posterior). La espera es de a lo sumo
+   * `ESPERA_MAXIMA_DE_COBROS_MS`: con cobros llegando sin pausa el bloqueo podría no llegar nunca (los cobros nuevos
+   * toman `FOR SHARE` sin hacer fila detrás de quien espera), así que pasado el plazo responde 409 `CONFLICTO`
+   * («Hay cobros en curso; inténtalo de nuevo») sin guardar nada (criterio 90).
    */
   async configurarTasaIgv(
     emisorId: string,
     desde: string,
     entrada: TasaIgvEntrada,
   ): Promise<TasaIgvRespuesta> {
-    await this.exigirEmisor(emisorId, true);
+    await this.bloquearEmisorConEspera(emisorId);
     const actuales = await this.conexion.query<{ id: string; tasa: string }>(
       `SELECT id, tasa::text AS tasa FROM emisor_tasa_igv WHERE emisor_id = $1 AND desde = $2::date`,
       { bind: [emisorId, desde], type: QueryTypes.SELECT },
@@ -208,6 +216,28 @@ export class EmisoresService {
          FROM emisor_tasa_igv WHERE emisor_id = $1 ORDER BY desde`,
       { bind: [emisorId], type: QueryTypes.SELECT },
     );
+  }
+
+  /**
+   * `FOR NO KEY UPDATE` de la fila del emisor, esperando a lo sumo `ESPERA_MAXIMA_DE_COBROS_MS`. La guarda de la API
+   * no admite `SET lock_timeout` (ni `SAVEPOINT` para sobrevivir a `NOWAIT`), así que se intenta con `SKIP LOCKED`
+   * cada `PAUSA_ENTRE_INTENTOS_MS`: una fila vacía es «bloqueada por un cobro». 404 si el emisor no es de la empresa;
+   * pasado el plazo, 409 `CONFLICTO` y la transacción se revierte sin guardar nada.
+   */
+  private async bloquearEmisorConEspera(emisorId: string): Promise<void> {
+    await this.exigirEmisor(emisorId);
+    const limite = performance.now() + ESPERA_MAXIMA_DE_COBROS_MS;
+    for (;;) {
+      const filas = await this.conexion.query<{ id: string }>(
+        'SELECT id FROM emisor WHERE id = $1 FOR NO KEY UPDATE SKIP LOCKED',
+        { bind: [emisorId], type: QueryTypes.SELECT },
+      );
+      if (filas.length > 0) return;
+      if (performance.now() >= limite) {
+        throw new ErrorAplicacion(409, 'CONFLICTO', 'Hay cobros en curso; inténtalo de nuevo');
+      }
+      await new Promise((resolver) => setTimeout(resolver, PAUSA_ENTRE_INTENTOS_MS));
+    }
   }
 
   private async exigirEmisor(
