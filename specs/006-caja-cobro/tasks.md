@@ -87,7 +87,7 @@ Commit propio. Es el corazón de P2 y P4.
 
 - [x] T15 · backend · Migración 4 (cobros y pagos); `CobrosService` según "Flujo del cobro" de `plan.md` (orden de bloqueos, réplica por `id`, recálculo, parámetros, emisión, cobro, `registrarCobro`, eventos); `FacturadoService.facturadoDeOrden` (lee `comprobante.detalle_parte`, en facturación); el puerto `COBROS` registrado por caja y usado en envíos, anulaciones y uniones de pedidos, y los 409 `CUENTA_EN_COBRO` de unir y anular (86 a 88); la pre-cuenta con lo pagado (89); `GET /comprobantes` y `GET /comprobantes/:id` con su alcance; rutas con `COBRAR` y `CAJA` o `FACTURACION`. Deja en verde P2 salvo mostrador y gaveta, P4, el resto de P3 y P6. (criterios 47 a 78, 86 a 89, 97 a 107)
 - [x] T16 · frontend · Cobro: desde "Por cobrar" y desde la cuenta de la mesa; comprobante y cliente; pagos con vuelto y redondeo; dividir por ítems y en partes iguales con las partes recordadas en el equipo; resultado, `CUENTA_CAMBIO` sin perder los pagos y "Reintentar" con el mismo `id`; aviso de ítems sin enviar en este equipo (60). Pruebas de componente: el `id` del cobro se conserva hasta una respuesta final; los montos de la pantalla son los de `packages/dominio`. (criterios 60, 111 a 114)
-- [ ] T17 · tester · Suite completa, lint, tipos, build y presupuesto. Pueden seguir en rojo: `mostrador.spec.ts` y `gaveta.spec.ts` de P2.
+- [x] T17 · tester · Suite completa, lint, tipos, build y presupuesto. Pueden seguir en rojo: `mostrador.spec.ts` y `gaveta.spec.ts` de P2.
 
 #### C5 · HU-18, RF-34: venta de mostrador
 
