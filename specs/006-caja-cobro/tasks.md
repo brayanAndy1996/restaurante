@@ -101,7 +101,7 @@ Commit propio.
 
 Commit propio.
 
-- [ ] T21 · backend · Migración 7; plantillas `comprobante.ts`, `reporte-caja.ts` y `gaveta.ts`; bloques `qr` y `gaveta` en el renderizador y en el emulador; la regla del pulso en la entrega; `impresoraDeLaCaja`; los trabajos de comprobante, X, Z y gaveta desde cobros, mostrador, apertura, movimientos y cierre; `POST /comprobantes/:id/impresiones` y `POST /turnos/:id/reporte-x/impresiones`. Pruebas no protegidas con el emulador: el contenido del ticket (91) en 58 y 80 mm y con `SIN_TILDES`, el X y la Z (95), sin impresora (96). Deja en verde `gaveta.spec.ts`. (criterios 90 a 96)
+- [x] T21 · backend · Migración 7; plantillas `comprobante.ts`, `reporte-caja.ts` y `gaveta.ts`; bloques `qr` y `gaveta` en el renderizador y en el emulador; la regla del pulso en la entrega; `impresoraDeLaCaja`; los trabajos de comprobante, X, Z y gaveta desde cobros, mostrador, apertura, movimientos y cierre; `POST /comprobantes/:id/impresiones` y `POST /turnos/:id/reporte-x/impresiones`. Pruebas no protegidas con el emulador: el contenido del ticket (91) en 58 y 80 mm y con `SIN_TILDES`, el X y la Z (95), sin impresora (96). Deja en verde `gaveta.spec.ts`. (criterios 90 a 96)
 - [ ] T22 · frontend · "Imprimir" y "Imprimir otra vez" del comprobante y del X; "Sin impresora de caja" donde corresponde. (criterios 96, 110, 114 en la impresión)
 - [ ] T23 · frontend · E2E de 6a con Playwright según el criterio 118 (contextos separados de Cajero, Mozo, Supervisor y Cocina/Barra; celular y tablet; emulador de impresora). (criterio 118)
 - [ ] T24 · tester · Suite completa, lint, tipos, build, presupuesto y E2E; P1 a P6 completas en verde.

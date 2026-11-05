@@ -36,7 +36,7 @@ export interface ResumenTributarioDeTurno {
 
 /**
  * Consulta e impresión de comprobantes (historia 006, criterios 77 y 90). Un Cajero solo ve los de sus propios
- * turnos (criterio 100), que filtra con `turno_responsable_id` sin leer `turno`. FIRMAS de la fase A.
+ * turnos (criterio 100), que filtra con `turno_responsable_id` sin leer `turno`.
  */
 @Injectable()
 export class ComprobantesService {
