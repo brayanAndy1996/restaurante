@@ -358,7 +358,8 @@ async function prepararEmpresa(
     S4: () => token.supervisorS4 ?? token.mozo!,
   };
   const id = (s: Sucursal): string => ({ S1, S2, S3: S3 ?? S1, S4: S4 ?? S1 })[s];
-  const zonas = new Map<Sucursal, ReturnType<typeof crearZona>>();
+  const zonas = new Map<Sucursal, Promise<string>>();
+  const mesasCreadas = new Map<Sucursal, number>();
   const e: EmpresaCaja = {
     base,
     id: base.empresaId,
@@ -375,15 +376,36 @@ async function prepararEmpresa(
     operador: (s) => operadores[s](),
     sucursalId: id,
     mesaNueva: async (s) => {
-      if (!zonas.has(s)) zonas.set(s, crearZona(ctx.app, token.admin!, id(s)));
-      return (await zonas.get(s)!).nuevaMesa();
+      if (!zonas.has(s))
+        zonas.set(
+          s,
+          crearZona(ctx.app, token.admin!, id(s)).then((z) => z.zonaId),
+        );
+      const zonaId = await zonas.get(s)!;
+      const n = mesasCreadas.get(s) ?? 0;
+      mesasCreadas.set(s, n + 1);
+      // Como `crearZona(...).nuevaMesa()` de 004, pero con la sesión vigente del Administrador (`token.admin`).
+      const mesa = await api(
+        ctx,
+        token.admin,
+        'post',
+        `/sucursales/${id(s)}/zonas/${zonaId}/mesas`,
+        {
+          nombre: `M${n + 1}`,
+          capacidad: 4,
+          forma: 'CUADRADA',
+          columna: (n % 12) + 1,
+          fila: Math.floor(n / 12) + 1,
+        },
+      );
+      exigirEstado(mesa, 201, 'Crear la mesa (004, criterio 3)');
+      return mesa.body.id as string;
     },
     refrescarSesiones: async () => {
       token.admin = await sesionContrasena(ctx, base.admin, null);
       for (const { clave, persona } of altas) {
         token[clave] = await sesionContrasena(ctx, persona, sucursalDe[clave] ?? S1);
       }
-      zonas.clear();
     },
     cajas: async () => {
       throw new Error('se asigna abajo');
