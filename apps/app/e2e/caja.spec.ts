@@ -330,6 +330,15 @@ test('la cuenta de la mesa 2 se divide por ítems con el Cajero y en partes igua
     await expect(page.getByText('Ya se cobró 1 parte igual de esta cuenta')).toHaveCount(0);
     await page.screenshot({ path: captura('08b-parte-igual-recargada-768'), fullPage: true });
     await afirmarPantallaDeCelular(page, 'Caja › Cobro en partes iguales tras recargar');
+
+    // La misma pantalla en un ancho de celular, recargada: recuerda lo mismo.
+    await page.setViewportSize({ width: 360, height: 740 });
+    await page.reload();
+    await expect(page.getByText('Pagada · B002-00000001')).toBeVisible();
+    await expect(botonDeCobrar(page)).toHaveText('Cobrar la parte 2 de 2 · S/\u00a033.00');
+    await page.screenshot({ path: captura('08b-parte-igual-recargada-360'), fullPage: true });
+    await afirmarPantallaDeCelular(page, 'Caja › Cobro en partes iguales tras recargar (360)');
+    await page.setViewportSize({ width: 768, height: 1024 });
   });
 
   await test.step('el Cajero cobra la parte 2 de 2 (S/ 33.00), con su propio correlativo, y la mesa queda libre', async () => {
