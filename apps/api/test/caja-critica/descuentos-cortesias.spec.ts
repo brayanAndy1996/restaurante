@@ -49,6 +49,9 @@ const A = () => esc.A;
 beforeAll(async () => {
   ctx = await arrancarCaja();
   esc = await crearEscenario(ctx);
+  // La cuenta de un emisor GENERAL solo desglosa el IGV con la tasa vigente (criterio 10, pregunta 6): se
+  // configuran cajas, series y tasa de IGV antes de cualquier prueba, sin depender del orden del archivo.
+  await A().cajas();
 });
 afterAll(async () => {
   await ctx?.cerrar();
