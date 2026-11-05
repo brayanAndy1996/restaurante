@@ -68,6 +68,12 @@ let turnoSupervisor: Promise<string> | undefined;
 const turnoCaja3 = () =>
   (turnoSupervisor ??= (async () =>
     abrirTurno(ctx, A().token.supervisor!, (await A().cajas()).S1!.caja3))());
+// El turno del Supervisor de S2 en su Caja 1: lo comparten las pruebas que lo necesitan (criterio 26: un turno por
+// persona y por caja).
+let turnoSupervisorS2: Promise<string> | undefined;
+const turnoS2Caja1 = () =>
+  (turnoSupervisorS2 ??= (async () =>
+    abrirTurno(ctx, A().token.supervisorS2!, (await A().cajas()).S2!.caja1))());
 
 /** Comprueba que no se guardó ningún cobro ni comprobante de la orden y que sigue como estaba. */
 async function sinCobro(ordenId: string, estado = 'ABIERTA'): Promise<void> {
@@ -208,9 +214,8 @@ describe('criterio 48 · el turno', () => {
   });
 
   it('un turno de otra sucursal, de B o inexistente responde 404', async () => {
-    const cajasA = await A().cajas();
     const cajasB = await esc.B.cajas();
-    const turnoS2 = await abrirTurno(ctx, A().token.supervisorS2!, cajasA.S2!.caja1);
+    const turnoS2 = await turnoS2Caja1();
     const turnoB = await abrirTurno(ctx, esc.B.token.cajero!, cajasB.S1!.caja1);
     const cuenta = await cuentaC(ctx, A());
     const version = await versionDe(cuenta.ordenId);
@@ -505,8 +510,7 @@ describe('criterio 51 · el comprobante', () => {
   });
 
   it('un emisor Nuevo RUS solo emite boletas y sin IGV (el ICBPER se suma igual)', async () => {
-    const cajas = await A().cajas();
-    const turnoId = await abrirTurno(ctx, A().token.supervisorS2!, cajas.S2!.caja1);
+    const turnoId = await turnoS2Caja1();
     const cuenta = await cuentaC(ctx, A(), 'S2');
     const factura = await cobrarCrudo(
       ctx,

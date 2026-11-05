@@ -41,7 +41,6 @@ import {
   filas,
   impresoraDeCaja,
   ponerTasa,
-  sesionContrasena,
   ultimoNumero,
   versionDe,
   yape,
@@ -76,6 +75,14 @@ afterAll(async () => {
   await apiSql?.end();
   await cerrarAdmin();
 });
+
+/** Después de mover el reloj las sesiones expiraron: abre las de todos de nuevo y las deja en las variables. */
+async function refrescarSesiones(): Promise<void> {
+  await A().refrescarSesiones();
+  tokenCajero = A().token.cajero!;
+  tokenCajero2 = A().token.cajero2!;
+  tokenSupervisor = A().token.supervisor!;
+}
 
 let t1: Promise<string> | undefined;
 const turno1 = () =>
@@ -609,7 +616,7 @@ describe('criterio 74 · fecha de emisión y día operativo', () => {
       'Una tasa desde el 6',
     );
     ctx.reloj.fijar('2026-11-05T02:00:00-05:00');
-    tokenCajero = await sesionContrasena(ctx, A().personas.cajero!, A().S1);
+    await refrescarSesiones();
     const madrugada = await cobrar(ctx, tokenCajero, await cuentaC(ctx, A()), {
       turnoId,
       total: '69.20',
@@ -621,7 +628,7 @@ describe('criterio 74 · fecha de emisión y día operativo', () => {
     });
 
     ctx.reloj.fijar('2026-11-05T23:59:00-05:00');
-    tokenCajero = await sesionContrasena(ctx, A().personas.cajero!, A().S1);
+    await refrescarSesiones();
     const antesDelCambio = await cobrar(ctx, tokenCajero, await cuentaC(ctx, A()), {
       turnoId,
       total: '69.20',
@@ -632,7 +639,7 @@ describe('criterio 74 · fecha de emisión y día operativo', () => {
     });
 
     ctx.reloj.fijar('2026-11-06T00:01:00-05:00');
-    tokenCajero = await sesionContrasena(ctx, A().personas.cajero!, A().S1);
+    await refrescarSesiones();
     const despues = await cobrar(ctx, tokenCajero, await cuentaC(ctx, A()), {
       turnoId,
       total: '69.20',
@@ -674,7 +681,7 @@ describe('criterio 74 · fecha de emisión y día operativo', () => {
     const noviembre = await consumo('2026-11');
     const diciembre = await consumo('2026-12');
     ctx.reloj.fijar('2026-11-30T23:30:00-05:00');
-    tokenCajero = await sesionContrasena(ctx, A().personas.cajero!, A().S1);
+    await refrescarSesiones();
     await cobrar(ctx, tokenCajero, await cuentaC(ctx, A()), { turnoId, total: '69.20' });
     expect(await consumo('2026-11')).toBe(noviembre + 1);
     expect(await consumo('2026-12')).toBe(diciembre);

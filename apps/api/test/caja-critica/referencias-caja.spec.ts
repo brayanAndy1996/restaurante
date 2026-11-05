@@ -150,7 +150,7 @@ const deB = (b: Sembrada, objetivo: Objetivo): string =>
 
 /**
  * Cambios que evitan que la copia choque con la fila de A de la que sale (un nombre, un número o una serie únicos, un
- * turno que ya no está abierto, un descuento ya quitado). Nunca tocan la columna que se prueba ni los valores que
+ * turno que ya no está abierto, un descuento ya quitado). Nunca tocan la columna que se prueba (salvo `cobro.comprobante_id`, donde el control usa otro comprobante de A) ni los valores que
  * compartiría con la fila de B: si un índice único dejara ver la fila de B, el error sería 23505 y no 23503.
  */
 function sinChocarConA(tabla: TablaCaja, columna: string, a: Sembrada): Record<string, unknown> {
@@ -163,7 +163,9 @@ function sinChocarConA(tabla: TablaCaja, columna: string, a: Sembrada): Record<s
     case 'turno_conteo':
       return { medio: 'PLIN' };
     case 'cobro':
-      return columna === 'comprobante_id' ? {} : { comprobante_id: a.filas.comprobante2 };
+      // Un comprobante distinto del de la fila de A (UNIQUE empresa_id, comprobante_id). Si la columna que se prueba es
+      // `comprobante_id`, el valor cruzado o inexistente de `insertarCopia` lo reemplaza; en el control queda este.
+      return { comprobante_id: a.filas.comprobante2 };
     case 'serie':
       return { serie: 'B9Z1', activa: false };
     case 'comprobante':

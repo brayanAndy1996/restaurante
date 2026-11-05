@@ -196,7 +196,9 @@ describe('criterio 58 · el mozo agrega o anula mientras se cobra', () => {
 
 describe('criterio 59 · el turno se cierra a la vez', () => {
   it('un cobro y el cierre del mismo turno: el cobro entra en la Z o responde 409 TURNO_CERRADO', async () => {
-    await turnoUno(); // el turno del Cajero sigue abierto: el cierre del otro no es el del último turno
+    // Los turnos del Cajero y del Cajero 2 siguen abiertos (criterio 26: uno por persona y por caja); este criterio
+    // abre y cierra los suyos con el Supervisor en la Caja 3, que ninguna otra prueba de este archivo usa.
+    await turnoUno();
     const motivos = {
       EFECTIVO: 'x',
       TARJETA_CREDITO: 'x',
@@ -207,8 +209,8 @@ describe('criterio 59 · el turno se cierra a la vez', () => {
     for (let i = 0; i < REPETICIONES; i++) {
       const turnoId = await abrirTurno(
         ctx,
-        A().token.cajero2!,
-        (await A().cajas()).S1!.caja2,
+        A().token.supervisor!,
+        (await A().cajas()).S1!.caja3,
         '100.00',
       );
       const cuenta = await cuentaC(ctx, A());
@@ -216,11 +218,16 @@ describe('criterio 59 · el turno se cierra a la vez', () => {
       const [cobro, cierre] = await Promise.all([
         cobrarCrudo(
           ctx,
-          A().token.cajero2!,
+          A().token.supervisor!,
           cuenta.ordenId,
           cuerpoDeCobro({ turnoId, version, total: '69.20' }),
         ),
-        cerrarTurnoCrudo(ctx, A().token.cajero2!, turnoId, conteo({ EFECTIVO: '100.00' }, motivos)),
+        cerrarTurnoCrudo(
+          ctx,
+          A().token.supervisor!,
+          turnoId,
+          conteo({ EFECTIVO: '100.00' }, motivos),
+        ),
       ]);
       exigirEstado(cierre, 200, `Cerrar el turno ${i}`);
       const [z] = await filas(

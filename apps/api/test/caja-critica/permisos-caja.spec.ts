@@ -560,15 +560,16 @@ describe('criterio 101 · auditoría', () => {
   });
 
   it('abrir turno, movimientos, cobros y reportes X no se auditan', async () => {
+    // El Supervisor abre su turno en la Caja 3: los de los dos cajeros siguen abiertos desde el criterio 100 (criterio 26).
     const cajas = await A().cajas();
     const antes = Number(
       (await filas('SELECT count(*) AS n FROM auditoria WHERE empresa_id = $1', [A().id]))[0]!.n,
     );
-    const turnoId = await abrirTurno(ctx, A().token.cajero2!, cajas.S1!.caja2);
+    const turnoId = await abrirTurno(ctx, A().token.supervisor!, cajas.S1!.caja3);
     exigirEstado(
       await api(
         ctx,
-        A().token.cajero2,
+        A().token.supervisor,
         'post',
         `/turnos/${turnoId}/movimientos`,
         { id: randomUUID(), tipo: 'INGRESO', monto: '5.00', motivo: 'Cambio' },
@@ -577,8 +578,12 @@ describe('criterio 101 · auditoría', () => {
       201,
       'Movimiento',
     );
-    await cobrar(ctx, A().token.cajero2!, await cuentaC(ctx, A()), { turnoId, total: '69.20' });
-    exigirEstado(await api(ctx, A().token.cajero2, 'get', `/turnos/${turnoId}/reporte`), 200, 'X');
+    await cobrar(ctx, A().token.supervisor!, await cuentaC(ctx, A()), { turnoId, total: '69.20' });
+    exigirEstado(
+      await api(ctx, A().token.supervisor, 'get', `/turnos/${turnoId}/reporte`),
+      200,
+      'X',
+    );
     const despues = Number(
       (await filas('SELECT count(*) AS n FROM auditoria WHERE empresa_id = $1', [A().id]))[0]!.n,
     );

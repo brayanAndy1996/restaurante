@@ -179,6 +179,12 @@ export interface EmpresaCaja {
   operador(s: Sucursal): string;
   mesaNueva(s: Sucursal): Promise<string>;
   sucursalId(s: Sucursal): string;
+  /**
+   * Abre de nuevo la sesión de contraseña de cada persona (y del Administrador) y actualiza `token` en su sitio. Se
+   * usa después de mover el reloj de la API con `fijar`, porque las sesiones anteriores ya expiraron. Las mesas
+   * nuevas se crean desde entonces con la sesión nueva del Administrador.
+   */
+  refrescarSesiones(): Promise<void>;
 }
 
 export interface Escenario {
@@ -344,11 +350,12 @@ async function prepararEmpresa(
     token[clave] = await sesionContrasena(ctx, persona, sucursalDe[clave] ?? S1);
   }
   const carta = await sembrarCartaCaja(ctx, t);
-  const operadores: Record<Sucursal, string> = {
-    S1: token.mozo!,
-    S2: token.supervisorS2 ?? token.mozo!,
-    S3: token.supervisorS3 ?? token.mozo!,
-    S4: token.supervisorS4 ?? token.mozo!,
+  // Quién opera el salón en cada sucursal; se lee de `token` en cada uso para ver las sesiones refrescadas.
+  const operadores: Record<Sucursal, () => string> = {
+    S1: () => token.mozo!,
+    S2: () => token.supervisorS2 ?? token.mozo!,
+    S3: () => token.supervisorS3 ?? token.mozo!,
+    S4: () => token.supervisorS4 ?? token.mozo!,
   };
   const id = (s: Sucursal): string => ({ S1, S2, S3: S3 ?? S1, S4: S4 ?? S1 })[s];
   const zonas = new Map<Sucursal, ReturnType<typeof crearZona>>();
@@ -365,11 +372,18 @@ async function prepararEmpresa(
     personas,
     token,
     carta,
-    operador: (s) => operadores[s],
+    operador: (s) => operadores[s](),
     sucursalId: id,
     mesaNueva: async (s) => {
-      if (!zonas.has(s)) zonas.set(s, crearZona(ctx.app, t, id(s)));
+      if (!zonas.has(s)) zonas.set(s, crearZona(ctx.app, token.admin!, id(s)));
       return (await zonas.get(s)!).nuevaMesa();
+    },
+    refrescarSesiones: async () => {
+      token.admin = await sesionContrasena(ctx, base.admin, null);
+      for (const { clave, persona } of altas) {
+        token[clave] = await sesionContrasena(ctx, persona, sucursalDe[clave] ?? S1);
+      }
+      zonas.clear();
     },
     cajas: async () => {
       throw new Error('se asigna abajo');
