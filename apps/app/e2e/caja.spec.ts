@@ -61,6 +61,14 @@ const TABLETA: BrowserContextOptions = {
   isMobile: false,
 };
 
+/**
+ * El mismo recorrido corre en dos proyectos de Playwright (criterio 118: «viewport de celular y de tableta»): `celular`
+ * (360 × 740: cada persona en su celular y el Supervisor, además, en una tableta) y `tablet` (768 × 1024: todas las
+ * personas en tableta). Las capturas de la tableta llevan el prefijo `tablet-` para no pisar las del celular.
+ */
+const enTableta = () => test.info().project.name === 'tablet';
+const equipoBase = (): BrowserContextOptions => (enTableta() ? TABLETA : CELULAR);
+
 let e: EscenarioDeSalon;
 let emulador: EmuladorEscPos;
 let puente: SimuladorPuente | undefined;
@@ -95,14 +103,17 @@ async function entrar(
   browser: Browser,
   persona: Parameters<typeof entrarEnCelular>[1],
   sucursal?: string,
-  opciones: BrowserContextOptions = CELULAR,
+  opciones: BrowserContextOptions = equipoBase(),
 ): Promise<Persona> {
   const { contexto, page } = await entrarEnCelular(browser, persona, sucursal, opciones);
   abiertos.push(contexto);
   return { contexto, page, escrituras: vigilarEscriturasDeCaja(page) };
 }
 
-const captura = (nombre: string) => `${CARPETA_DE_CAPTURAS}/${nombre}.png`;
+const captura = (nombre: string) =>
+  enTableta()
+    ? `${CARPETA_DE_CAPTURAS}/tablet-${nombre.replace(/-360$/, '-768')}.png`
+    : `${CARPETA_DE_CAPTURAS}/${nombre}.png`;
 
 // ---------------------------------------------------------------------------------------------------------
 
@@ -135,9 +146,12 @@ test('el Administrador deja lista la caja: la tasa de IGV, dos cajas con sus ser
     };
     await nueva('Caja 1', 'B001', 'F001');
     await nueva('Caja 2', 'B002', 'F002');
-    const fila = page.getByRole('button', { name: /^Caja 1/ });
-    await expect(fila).toContainText('Boletas B001');
-    await expect(fila).toContainText('Facturas F001');
+    // En celular la lista son filas con etiquetas («Boletas B001»); en tableta, una tabla con una columna por serie.
+    const fila = enTableta()
+      ? page.getByRole('row', { name: /^Caja 1/ })
+      : page.getByRole('button', { name: /^Caja 1/ });
+    await expect(fila).toContainText(enTableta() ? 'B001' : 'Boletas B001');
+    await expect(fila).toContainText(enTableta() ? 'F001' : 'Facturas F001');
     await page.screenshot({ path: captura('01-cajas-360'), fullPage: true });
     await afirmarPantallaDeCelular(page, 'Ajustes › Cajas');
   });
@@ -307,10 +321,29 @@ test('la cuenta de la mesa 2 se divide por ítems con el Cajero y en partes igua
     await page.screenshot({ path: captura('08-parte-igual-768'), fullPage: true });
   });
 
+  await test.step('el Supervisor recarga la pantalla: el equipo recuerda las 2 partes y propone la que falta, no el saldo entero', async () => {
+    const { page } = supervisor;
+    await page.reload();
+    await expect(page.getByText('Parte 1 de 2')).toBeVisible();
+    await expect(page.getByText('Pagada · B002-00000001')).toBeVisible();
+    await expect(botonDeCobrar(page)).toHaveText('Cobrar la parte 2 de 2 · S/\u00a033.00');
+    await expect(page.getByText('Ya se cobró 1 parte igual de esta cuenta')).toHaveCount(0);
+    await page.screenshot({ path: captura('08b-parte-igual-recargada-768'), fullPage: true });
+    await afirmarPantallaDeCelular(page, 'Caja › Cobro en partes iguales tras recargar');
+  });
+
   await test.step('el Cajero cobra la parte 2 de 2 (S/ 33.00), con su propio correlativo, y la mesa queda libre', async () => {
     const { page } = cajero;
     await abrirElCobroDeLaMesa(page, '2');
-    // La cuenta quedó en partes iguales: solo falta la última, y el cobro ya viene así.
+    // La cuenta quedó en partes iguales, pero este equipo no sabe en cuántas se dividió: lo dice y pide confirmarlo antes
+    // de cobrar (no propone el saldo entero).
+    await expect(page.getByText('Ya se cobró 1 parte igual de esta cuenta')).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Cobrar', exact: true })).toBeDisabled();
+    await expect(page.getByRole('button', { name: /^Cobrar la parte/ })).toHaveCount(0);
+    await page.screenshot({ path: captura('08c-parte-igual-otro-equipo-360'), fullPage: true });
+    await afirmarPantallaDeCelular(page, 'Caja › Confirmar en cuántas partes se dividió');
+    await page.getByRole('button', { name: 'Quitar uno de partes en total' }).click();
+    await page.getByRole('button', { name: 'Se dividió en 2 partes' }).click();
     await expect(page.getByText('Esta es la última parte: S/ 33.00')).toBeVisible();
     await expect(botonDeCobrar(page)).toHaveText('Cobrar la parte 2 de 2 · S/\u00a033.00');
     const cobro = await cobrarYEsperar(page);
@@ -373,8 +406,13 @@ test('la venta de mostrador se cobra y manda el pedido a Cocina con su «Llamado
     const hoja = page.getByRole('dialog', { name: 'Ceviche mixto' });
     await hoja.getByRole('button', { name: /^Agregar( ·|$)/ }).click();
     await expect(hoja).toBeHidden();
-    await page.getByRole('button', { name: /^Revisar la venta/ }).click();
+    // En tableta la carta y la venta se ven juntas: no hay que pasar a la venta.
+    if (!enTableta()) await page.getByRole('button', { name: /^Revisar la venta/ }).click();
     await expect(page.getByRole('heading', { name: 'La venta' })).toBeVisible();
+    // La caja dice qué comprobantes emite su emisor (régimen general: boleta y factura).
+    const tipos = page.getByRole('group', { name: 'Tipo de comprobante' });
+    await expect(tipos.getByRole('button', { name: 'Boleta' })).toBeVisible();
+    await expect(tipos.getByRole('button', { name: 'Factura' })).toBeVisible();
   });
 
   await test.step('cobra y enviar: sale el «Llamado 1» en grande, con su comprobante', async () => {
@@ -464,7 +502,7 @@ test('el Cajero cierra a ciegas con una diferencia y su motivo y la Z sale impre
   await test.step('faltan S/ 1.20 de efectivo: sin motivo no cierra y solo dice «No cuadra»; con el motivo cierra', async () => {
     const primero = await cerrarConZ(page);
     expect(primero.status(), 'sin motivo, la API pide el de la diferencia').toBe(422);
-    await expect(page.getByText('No cuadra')).toBeVisible();
+    await expect(page.getByText('No cuadra', { exact: true })).toBeVisible();
     // La diferencia exacta se ve recién en la Z cerrada: ahora no hay ningún monto de más o de menos.
     await expect(page.getByText(/Faltan S\/|Sobran S\/|Esperado/)).toHaveCount(0);
     await page
