@@ -354,11 +354,10 @@ export class TurnosService {
         })),
         undefined,
         {
-          diferencias: diferencias.map((d) => ({
-            medio: d.medio,
-            contado: d.contado,
-            diferencia: d.diferencia,
-          })),
+          // Solo los medios que no cuadran y sin ningún monto (decisión del usuario): la diferencia se ve en la Z.
+          diferencias: diferencias
+            .filter((d) => d.diferencia !== '0.00')
+            .map((d) => ({ medio: d.medio })),
         },
       );
     }

@@ -22,8 +22,8 @@ export interface DetalleDeError {
   version?: number;
   /** Solo en `CIERRE_BLOQUEADO` (historia 006, criterio 33): cuántas órdenes siguen abiertas. */
   ordenes?: number;
-  /** Solo en `DIFERENCIA_SIN_MOTIVO` (historia 006, criterios 31 y 32): sin el esperado. */
-  diferencias?: { medio: MedioPago; contado: string; diferencia: string }[];
+  /** Solo en `DIFERENCIA_SIN_MOTIVO` (historia 006, criterios 31 y 32): los medios que no cuadran, sin montos. */
+  diferencias?: { medio: MedioPago }[];
 }
 
 /** Opciones de un `ErrorAplicacion` que no son parte de su respuesta HTTP. */

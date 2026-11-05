@@ -216,7 +216,7 @@ describe('criterio 29 · reporte X con comprobantes', () => {
 });
 
 describe('criterios 31 a 35 · cierre con movimientos', () => {
-  it('arqueo a ciegas: sin motivo es 422 con las diferencias de los cinco medios y sin el esperado; con motivo cierra y guarda el conteo', async () => {
+  it('arqueo a ciegas: sin motivo es 422 con solo los medios que no cuadran y sin ningún monto; con motivo cierra y guarda el conteo', async () => {
     const cajas = await A().cajas();
     const t = await abrirTurno(ctx, A().token.cajero!, cajas.S1!.caja1, '100.00');
     exigirEstado(await movimiento(A().token.cajero!, t, 'INGRESO', '20.00'), 201, 'Ingreso');
@@ -228,13 +228,9 @@ describe('criterios 31 a 35 · cierre con movimientos', () => {
       conteo({ EFECTIVO: '118.50', YAPE: '5.00' }),
     );
     esperarError(sinMotivo, 422, 'DIFERENCIA_SIN_MOTIVO');
-    expect(sinMotivo.body.diferencias).toEqual([
-      { medio: 'EFECTIVO', contado: '118.50', diferencia: '-1.50' },
-      { medio: 'TARJETA_CREDITO', contado: '0.00', diferencia: '0.00' },
-      { medio: 'TARJETA_DEBITO', contado: '0.00', diferencia: '0.00' },
-      { medio: 'YAPE', contado: '5.00', diferencia: '5.00' },
-      { medio: 'PLIN', contado: '0.00', diferencia: '0.00' },
-    ]);
+    // Solo los medios que no cuadran, en el orden de MEDIOS_PAGO y sin ningún monto.
+    expect(sinMotivo.body.diferencias).toEqual([{ medio: 'EFECTIVO' }, { medio: 'YAPE' }]);
+    expect(sinMotivo.text).not.toMatch(/118\.50|-1\.50|5\.00/);
     expect(sinMotivo.body.campos.map((c: { campo: string }) => c.campo)).toEqual([
       'conteo.0.motivo',
       'conteo.3.motivo',
