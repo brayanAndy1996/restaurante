@@ -123,6 +123,10 @@ const CajaPagina = lazy(() =>
 const CuentaPagina = lazy(() =>
   import('./modulos/caja/CuentaPagina').then((m) => ({ default: m.CuentaPagina })),
 );
+// El cobro de una cuenta (006): otro bloque, con el cálculo de montos de `@restaurante/dominio/caja`.
+const CobroPagina = lazy(() =>
+  import('./modulos/caja/CobroPagina').then((m) => ({ default: m.CobroPagina })),
+);
 const CocinaPagina = lazy(() =>
   import('./modulos/cocina/CocinaPagina').then((m) => ({ default: m.CocinaPagina })),
 );
@@ -333,6 +337,7 @@ export function App() {
               </Route>
               <Route element={<RutaDeCaja />}>
                 <Route path="/caja" element={<CajaPagina />} />
+                <Route path="/caja/cuentas/:id/cobrar" element={<CobroPagina />} />
               </Route>
               <Route element={<RutaDeCuenta />}>
                 <Route path="/caja/cuentas/:id" element={<CuentaPagina />} />

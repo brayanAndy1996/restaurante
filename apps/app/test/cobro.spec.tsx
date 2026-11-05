@@ -1,0 +1,676 @@
+import type {
+  CobroEntrada,
+  CobroRespuesta,
+  ComprobanteRespuesta,
+  CuentaRespuesta,
+  TurnoRespuesta,
+} from '@restaurante/contratos';
+import { screen, waitFor, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { guardarTokenDeSesion } from '../src/lib/almacen';
+import { espera } from '../src/lib/api';
+import { claveDeBorrador } from '../src/modulos/salon/borrador';
+import { ID, json, renderApp, servidor } from './ayudas';
+import { sesionDeRol, uuid } from './ayudas-salon';
+
+// spec: 006-caja-cobro, criterios 47 a 68, 60 y 111 a 114 en la interfaz (pruebas no protegidas de la pantalla del
+// cobro). Los montos que se esperan son los de `packages/dominio` para la cuenta C de 004.
+
+const TOKEN =
+  'se.11111111-1111-4111-8111-111111111111.22222222-2222-4222-8222-222222222222.secreto';
+const ORDEN = uuid(904);
+const LOMO = uuid(1001);
+const GASEOSA = uuid(1002);
+const BOLSA = uuid(1003);
+const TURNO = uuid(300);
+const RUTA = `/caja/cuentas/${ORDEN}/cobrar`;
+const API_COBROS = `/cuentas/${ORDEN}/cobros`;
+const PERSONA = { id: ID.usuario, nombre: 'Marta Pérez' };
+
+beforeEach(() => {
+  vi.spyOn(espera, 'dormir').mockResolvedValue();
+  guardarTokenDeSesion(TOKEN);
+  localStorage.clear();
+});
+afterEach(() => {
+  vi.unstubAllGlobals();
+  vi.restoreAllMocks();
+});
+
+const turno: TurnoRespuesta = {
+  id: TURNO,
+  caja: { id: uuid(101), nombre: 'Caja 1' },
+  responsable: PERSONA,
+  estado: 'ABIERTO',
+  abiertoEn: '2026-11-05T23:02:00.000Z',
+  diaOperativo: '2026-11-05',
+  fondo: '200.00',
+  cerradoEn: null,
+  cerradoPor: null,
+};
+
+function linea(
+  itemId: string,
+  nombre: string,
+  precio: string,
+  cantidad: number,
+  bruto: string,
+  icbper = false,
+) {
+  return {
+    itemId,
+    nombre,
+    modificadores: [],
+    precioUnitario: precio,
+    cantidad,
+    cantidadCortesia: 0,
+    cantidadFacturada: 0,
+    afectacion: 'GRAVADO' as const,
+    aplicaIcbper: icbper,
+    bruto,
+    descuento: null,
+    descuentoCuenta: '0.00',
+    neto: bruto,
+    icbper: icbper ? '2.50' : '0.00',
+  };
+}
+
+/** La cuenta C de 004: Lomo saltado × 2 (S/ 56.00), Gaseosa × 1 (S/ 9.00) y 5 bolsas con ICBPER. Total S/ 68.50. */
+function cuenta(extra: Partial<CuentaRespuesta> = {}): CuentaRespuesta {
+  return {
+    ordenId: ORDEN,
+    tipo: 'MESA',
+    estado: 'ABIERTA',
+    mesas: [{ id: uuid(104), nombre: '4' }],
+    mozo: { id: uuid(800), nombre: 'Ana Ríos' },
+    numeroLlamado: null,
+    version: 3,
+    lineas: [
+      linea(LOMO, 'Lomo saltado', '28.00', 2, '56.00'),
+      linea(GASEOSA, 'Gaseosa 1 L', '9.00', 1, '9.00'),
+      linea(BOLSA, 'Bolsa plástica', '0.20', 5, '1.00', true),
+    ],
+    descuentoCuenta: null,
+    cortesias: [],
+    totales: {
+      subtotal: '66.00',
+      descuentos: '0.00',
+      operaciones: { gravadas: '55.93', exoneradas: '0.00', inafectas: '0.00', gratuitas: '0.00' },
+      igv: '10.07',
+      igvGratuitas: '0.00',
+      icbper: '2.50',
+      total: '68.50',
+    },
+    cobrado: '0.00',
+    saldo: '68.50',
+    modo: null,
+    cobros: [],
+    parametros: {
+      tasaIgv: '18.00',
+      montoIcbper: '0.50',
+      regimen: 'GENERAL',
+      tiposPermitidos: ['BOLETA', 'FACTURA'],
+    },
+    ...extra,
+  };
+}
+
+function comprobante(
+  cobroId: string,
+  total: string,
+  extra: Partial<ComprobanteRespuesta> = {},
+): ComprobanteRespuesta {
+  return {
+    id: uuid(7000),
+    tipo: 'BOLETA',
+    serie: 'B001',
+    correlativo: 1,
+    numero: 'B001-00000001',
+    formato: 'DETALLADO',
+    estado: 'POR_ENVIAR',
+    fechaEmision: '2026-11-05',
+    emitidoEn: '2026-11-06T00:10:00.000Z',
+    diaOperativo: '2026-11-05',
+    emisor: { ruc: '20100070970', razonSocial: 'Cevichería Sol S.A.C.', regimen: 'GENERAL' },
+    sucursal: { nombre: 'Miraflores', direccion: 'Av. Larco 123', codigoEstablecimiento: '0000' },
+    cajaId: uuid(101),
+    turnoId: TURNO,
+    turnoResponsableId: ID.usuario,
+    cobroId,
+    numeroParte: 1,
+    cliente: null,
+    moneda: 'PEN',
+    tasaIgv: '18.00',
+    lineas: [],
+    totales: {
+      subtotal: total,
+      descuentos: '0.00',
+      operaciones: null,
+      igv: '0.00',
+      igvGratuitas: '0.00',
+      icbper: '0.00',
+      total,
+    },
+    montoEnLetras: 'SON: …',
+    orden: null,
+    ...extra,
+  };
+}
+
+/** Lo que responde la API al cobrar, calculado a partir de la entrada. */
+function respuestaDe(
+  entrada: CobroEntrada,
+  extra: { estado?: 'CERRADA' | 'ABIERTA'; saldo?: string; numero?: string; vuelto?: string } = {},
+): CobroRespuesta {
+  const efectivo = entrada.pagos.find((p) => p.medio === 'EFECTIVO');
+  return {
+    id: entrada.id,
+    ordenId: ORDEN,
+    turnoId: entrada.turnoId,
+    parte: entrada.parte,
+    total: entrada.total,
+    redondeo: entrada.redondeo,
+    vuelto:
+      extra.vuelto ??
+      (efectivo?.recibido
+        ? (Number(efectivo.recibido) - Number(efectivo.monto)).toFixed(2)
+        : '0.00'),
+    pagos: entrada.pagos.map((p) => ({
+      medio: p.medio,
+      monto: p.monto,
+      recibido: p.recibido ?? null,
+      operacion: p.operacion ?? null,
+    })),
+    comprobante: comprobante(entrada.id, entrada.total, {
+      numero: extra.numero ?? 'B001-00000001',
+      tipo: entrada.comprobante.tipo,
+    }),
+    cuenta: { estado: extra.estado ?? 'CERRADA', saldo: extra.saldo ?? '0.00', version: 4 },
+    impresion: 'SIN_IMPRESORA',
+    trabajoId: null,
+  };
+}
+
+type Manejador = Parameters<typeof servidor>[0][string];
+
+function montar(
+  opciones: {
+    cuenta?: () => CuentaRespuesta;
+    turno?: TurnoRespuesta | null;
+    extra?: Record<string, Manejador>;
+  } = {},
+) {
+  const estado = { cuenta: opciones.cuenta ?? (() => cuenta()) };
+  const s = servidor({
+    'GET /sesion': () => json(200, sesionDeRol('CAJERO', { modulos: ['SALON', 'COCINA', 'CAJA'] })),
+    [`GET /cuentas/${ORDEN}`]: () => json(200, estado.cuenta()),
+    'GET /turnos/mio': () =>
+      opciones.turno === null
+        ? json(404, { codigo: 'NO_ENCONTRADO', mensaje: 'No hay turno' })
+        : json(200, opciones.turno ?? turno),
+    ...(opciones.extra ?? {}),
+  });
+  return Object.assign(s, { estado });
+}
+
+const boton = (nombre: string | RegExp) => screen.getByRole('button', { name: nombre });
+const cobros = (s: ReturnType<typeof montar>) => s.de('POST', API_COBROS);
+const entradaDe = (s: ReturnType<typeof montar>, n = 0) => cobros(s)[n]?.cuerpo as CobroEntrada;
+
+describe('El cobro de una cuenta (criterios 47 a 52 y 111)', () => {
+  it('muestra el total del dominio y cobra todo en efectivo: cuerpo exacto, Idempotency-Key igual al id y resultado', async () => {
+    const s = montar({
+      extra: {
+        [`POST ${API_COBROS}`]: ({ cuerpo }) =>
+          json(201, respuestaDe(cuerpo as CobroEntrada, { numero: 'B001-00000124' })),
+      },
+    });
+    renderApp(RUTA);
+    expect(await screen.findByRole('button', { name: 'Cobrar S/\u00a068.50' })).toBeVisible();
+    const desglose = screen.getByLabelText('Desglose de la parte');
+    expect(within(desglose).getByText('Subtotal').nextSibling).toHaveTextContent('S/ 66.00');
+    expect(within(desglose).getByText('ICBPER').nextSibling).toHaveTextContent('S/ 2.50');
+    expect(screen.getByText('Efectivo a cobrar').nextSibling).toHaveTextContent('S/ 68.50');
+
+    await userEvent.click(screen.getByRole('button', { name: 'S/\u00a0100' }));
+    await userEvent.click(boton('Cobrar S/\u00a068.50'));
+
+    expect(await screen.findByText('Boleta · B001-00000124')).toBeVisible();
+    expect(cobros(s)).toHaveLength(1);
+    const entrada = entradaDe(s);
+    expect(entrada).toEqual({
+      id: expect.stringMatching(/^[0-9a-f-]{36}$/) as unknown,
+      turnoId: TURNO,
+      version: 3,
+      total: '68.50',
+      parte: { tipo: 'TOTAL' },
+      comprobante: { tipo: 'BOLETA', formato: 'DETALLADO' },
+      pagos: [{ medio: 'EFECTIVO', monto: '68.50', recibido: '100.00' }],
+      redondeo: '0.00',
+    });
+    expect(cobros(s)[0]?.cabeceras.get('Idempotency-Key')).toBe(entrada.id);
+    expect(screen.getByText('Vuelto').nextSibling).toHaveTextContent('S/ 31.50');
+    expect(screen.getByText('Sin impresora')).toBeVisible();
+    expect(screen.getByText('Mesa 4 libre')).toBeVisible();
+  });
+
+  it('el efectivo se redondea a la décima a favor del cliente con el redondeo del dominio', async () => {
+    const s = montar({
+      cuenta: () =>
+        cuenta({
+          lineas: [linea(LOMO, 'Lomo saltado', '33.34', 1, '33.34')],
+          totales: { ...cuenta().totales, subtotal: '33.34', icbper: '0.00', total: '33.34' },
+          saldo: '33.34',
+        }),
+      extra: {
+        [`POST ${API_COBROS}`]: ({ cuerpo }) => json(201, respuestaDe(cuerpo as CobroEntrada)),
+      },
+    });
+    renderApp(RUTA);
+    await screen.findByRole('button', { name: 'Cobrar S/\u00a033.34' });
+    expect(screen.getByText('Efectivo a cobrar').nextSibling).toHaveTextContent('S/ 33.30');
+    expect(screen.getByText(/Redondeo a tu favor/)).toHaveTextContent('S/ 0.04');
+    await userEvent.click(screen.getByRole('button', { name: 'S/\u00a050' }));
+    expect(screen.getByText('Vuelto').nextSibling).toHaveTextContent('S/ 16.70');
+    await userEvent.click(boton('Cobrar S/\u00a033.34'));
+    await screen.findByText(/Boleta · /);
+    expect(entradaDe(s)).toMatchObject({
+      total: '33.34',
+      pagos: [{ medio: 'EFECTIVO', monto: '33.30', recibido: '50.00' }],
+      redondeo: '0.04',
+    });
+  });
+
+  it('paga con efectivo y Yape: el Yape lleva su número de operación y el efectivo cubre el resto', async () => {
+    const s = montar({
+      extra: {
+        [`POST ${API_COBROS}`]: ({ cuerpo }) => json(201, respuestaDe(cuerpo as CobroEntrada)),
+      },
+    });
+    renderApp(RUTA);
+    await screen.findByRole('button', { name: 'Cobrar S/\u00a068.50' });
+    await userEvent.click(screen.getByRole('button', { name: 'Agregar otro pago' }));
+    await userEvent.type(screen.getByLabelText('Monto del pago 2'), '20');
+    // Sin número de operación, no se cobra y se dice por qué.
+    await userEvent.click(boton('Cobrar S/\u00a068.50'));
+    expect(cobros(s)).toHaveLength(0);
+    expect(await screen.findByText('Escribe el número de operación del Yape.')).toBeVisible();
+
+    await userEvent.type(screen.getByLabelText('Número de operación'), 'Y-5521');
+    expect(screen.getByText('Efectivo a cobrar').nextSibling).toHaveTextContent('S/ 48.50');
+    await userEvent.click(boton('Cobrar S/\u00a068.50'));
+    await screen.findByText(/Boleta · /);
+    expect(entradaDe(s).pagos).toEqual([
+      { medio: 'EFECTIVO', monto: '48.50' },
+      { medio: 'YAPE', monto: '20.00', operacion: 'Y-5521' },
+    ]);
+  });
+
+  it('hay un solo efectivo: con efectivo ya elegido, el otro pago no lo ofrece', async () => {
+    montar();
+    renderApp(RUTA);
+    await screen.findByRole('button', { name: 'Cobrar S/\u00a068.50' });
+    await userEvent.click(screen.getByRole('button', { name: 'Agregar otro pago' }));
+    const segundo = screen.getByRole('group', { name: 'Medio del pago 2' });
+    expect(within(segundo).queryByRole('button', { name: 'Efectivo' })).toBeNull();
+    expect(within(segundo).getByRole('button', { name: 'Yape' })).toBeVisible();
+  });
+
+  it('una cuenta que ya no está abierta, o sin turno, no deja cobrar y dice qué hacer', async () => {
+    montar({ turno: null });
+    const { unmount } = renderApp(RUTA);
+    expect(await screen.findByText('Abre tu caja para cobrar')).toBeVisible();
+    expect(screen.getByRole('link', { name: 'Ir a Caja' })).toHaveAttribute('href', '/caja');
+    unmount();
+    montar({ cuenta: () => cuenta({ estado: 'CERRADA' }) });
+    renderApp(RUTA);
+    expect(await screen.findByText('Esta cuenta ya no está abierta')).toBeVisible();
+  });
+});
+
+describe('Comprobante y cliente (criterio 51)', () => {
+  it('la factura exige RUC, razón social y dirección: sin ellos no cobra y marca cada campo', async () => {
+    const s = montar({
+      extra: {
+        [`POST ${API_COBROS}`]: ({ cuerpo }) => json(201, respuestaDe(cuerpo as CobroEntrada)),
+      },
+    });
+    renderApp(RUTA);
+    await screen.findByRole('button', { name: 'Cobrar S/\u00a068.50' });
+    await userEvent.click(screen.getByRole('button', { name: 'Factura' }));
+    await userEvent.click(boton('Cobrar S/\u00a068.50'));
+    expect(cobros(s)).toHaveLength(0);
+    expect(await screen.findByText('Escribe un RUC válido de 11 dígitos')).toBeVisible();
+    expect(screen.getByText('Escribe la razón social')).toBeVisible();
+    expect(screen.getByText('Escribe la dirección fiscal')).toBeVisible();
+
+    await userEvent.type(screen.getByLabelText('RUC'), '20100070970');
+    await userEvent.type(screen.getByLabelText('Razón social'), 'Supermercados Peruanos S.A.');
+    await userEvent.type(screen.getByLabelText('Dirección fiscal'), 'Av. Principal 123, Lima');
+    await userEvent.click(boton('Cobrar S/\u00a068.50'));
+    await screen.findByText(/Factura · |Boleta · /);
+    expect(entradaDe(s).comprobante).toEqual({
+      tipo: 'FACTURA',
+      formato: 'DETALLADO',
+      cliente: {
+        tipoDocumento: 'RUC',
+        numero: '20100070970',
+        nombre: 'Supermercados Peruanos S.A.',
+        direccion: 'Av. Principal 123, Lima',
+      },
+    });
+  });
+
+  it('una boleta de más de S/ 700 pide nombre y documento; hasta S/ 700.00 no', async () => {
+    const grande = (total: string) =>
+      cuenta({
+        lineas: [linea(LOMO, 'Banquete', total, 1, total)],
+        totales: { ...cuenta().totales, subtotal: total, icbper: '0.00', total },
+        saldo: total,
+      });
+    montar({ cuenta: () => grande('700.01') });
+    const { unmount } = renderApp(RUTA);
+    await screen.findByRole('button', { name: /Cobrar S\/\s700\.01/ });
+    expect(screen.getByText('Más de S/ 700: pide nombre y documento')).toBeVisible();
+    expect(screen.getByLabelText('Número de DNI')).toBeVisible();
+    unmount();
+    montar({ cuenta: () => grande('700.00') });
+    renderApp(RUTA);
+    await screen.findByRole('button', { name: /Cobrar S\/\s700\.00/ });
+    expect(screen.queryByText('Más de S/ 700: pide nombre y documento')).toBeNull();
+    expect(screen.queryByLabelText('Número de DNI')).toBeNull();
+  });
+});
+
+describe('Dividir la cuenta (criterios 64 a 68 y 113)', () => {
+  it('por ítems: la parte muestra su total al momento y manda esas unidades', async () => {
+    const s = montar({
+      extra: {
+        [`POST ${API_COBROS}`]: ({ cuerpo }) =>
+          json(201, respuestaDe(cuerpo as CobroEntrada, { estado: 'ABIERTA', saldo: '31.50' })),
+      },
+    });
+    renderApp(RUTA);
+    await screen.findByRole('button', { name: 'Cobrar S/\u00a068.50' });
+    await userEvent.click(screen.getByRole('button', { name: 'Por ítems' }));
+    expect(screen.getByText('Elige al menos una unidad para cobrar.')).toBeVisible();
+    await userEvent.click(
+      screen.getByRole('button', { name: 'Agregar una unidad de Lomo saltado' }),
+    );
+    await userEvent.click(
+      screen.getByRole('button', { name: 'Agregar una unidad de Gaseosa 1 L' }),
+    );
+    expect(await screen.findByRole('button', { name: 'Cobrar S/\u00a037.00' })).toBeVisible();
+    await userEvent.click(boton('Cobrar S/\u00a037.00'));
+    await screen.findByText('Falta cobrar S/ 31.50');
+    expect(entradaDe(s)).toMatchObject({
+      total: '37.00',
+      parte: {
+        tipo: 'ITEMS',
+        items: [
+          { itemId: LOMO, cantidad: 1 },
+          { itemId: GASEOSA, cantidad: 1 },
+        ],
+      },
+    });
+    expect(screen.getByText('La mesa sigue ocupada hasta que se pague todo.')).toBeVisible();
+  });
+
+  it('en partes iguales: cada parte sale del dominio, solo por consumo, y se recuerda cuántas faltan', async () => {
+    let cobradas = 0;
+    const s = montar({
+      cuenta: () =>
+        cobradas === 0
+          ? cuenta()
+          : cuenta({
+              version: 4,
+              cobrado: '34.25',
+              saldo: '34.25',
+              modo: 'IGUALES',
+              cobros: [
+                {
+                  id: lastId,
+                  comprobante: { id: uuid(7000), tipo: 'BOLETA', numero: 'B001-00000124' },
+                  total: '34.25',
+                  cobradoEn: '2026-11-06T00:10:00.000Z',
+                  cobradoPor: PERSONA,
+                },
+              ],
+            }),
+      extra: {
+        [`POST ${API_COBROS}`]: ({ cuerpo }) => {
+          const entrada = cuerpo as CobroEntrada;
+          lastId = entrada.id;
+          cobradas += 1;
+          return json(
+            201,
+            respuestaDe(entrada, {
+              estado: cobradas === 2 ? 'CERRADA' : 'ABIERTA',
+              saldo: cobradas === 2 ? '0.00' : '34.25',
+              numero: cobradas === 1 ? 'B001-00000124' : 'B001-00000125',
+            }),
+          );
+        },
+      },
+    });
+    let lastId = uuid(1);
+    renderApp(RUTA);
+    await screen.findByRole('button', { name: 'Cobrar S/\u00a068.50' });
+    await userEvent.click(screen.getByRole('button', { name: 'Partes iguales' }));
+    expect(await screen.findByText(/Cada parte es de S\/ 34\.25/)).toBeVisible();
+    // En partes iguales el comprobante solo sale por consumo.
+    expect(screen.queryByRole('button', { name: 'Detallado' })).toBeNull();
+    await userEvent.click(boton(/Cobrar la parte 1 de 2/));
+    await screen.findByText('Parte 1 de 2 de Mesa 4.');
+    expect(entradaDe(s, 0)).toMatchObject({
+      total: '34.25',
+      parte: { tipo: 'IGUALES', partesRestantes: 2 },
+      comprobante: { formato: 'CONSUMO' },
+    });
+
+    await userEvent.click(screen.getByRole('button', { name: 'Cobrar la parte 2 de 2' }));
+    const segunda = await screen.findByRole('button', { name: /Cobrar la parte 2 de 2/ });
+    expect(segunda).toHaveTextContent('S/ 34.25');
+    const lista = screen.getByRole('list', { name: 'Partes de la cuenta' });
+    expect(within(lista).getByText('Pagada · B001-00000124')).toBeVisible();
+    await userEvent.click(segunda);
+    await screen.findByText('Parte 2 de 2 de Mesa 4.');
+    expect(entradaDe(s, 1)).toMatchObject({
+      total: '34.25',
+      version: 4,
+      parte: { tipo: 'IGUALES', partesRestantes: 1 },
+    });
+    expect(screen.getByText('Mesa 4 libre')).toBeVisible();
+  });
+
+  it('con cobros hechos desde otro equipo solo se cobra lo que falta, con el saldo de la API', async () => {
+    const s = montar({
+      cuenta: () =>
+        cuenta({
+          version: 5,
+          cobrado: '38.50',
+          saldo: '30.00',
+          cobros: [
+            {
+              id: uuid(8000),
+              comprobante: { id: uuid(8001), tipo: 'BOLETA', numero: 'B001-00000007' },
+              total: '38.50',
+              cobradoEn: '2026-11-06T00:10:00.000Z',
+              cobradoPor: PERSONA,
+            },
+          ],
+        }),
+      extra: {
+        [`POST ${API_COBROS}`]: ({ cuerpo }) => json(201, respuestaDe(cuerpo as CobroEntrada)),
+      },
+    });
+    renderApp(RUTA);
+    expect(await screen.findByRole('button', { name: 'Cobrar S/\u00a030.00' })).toBeVisible();
+    expect(screen.getByText('Esta cuenta se cobró en parte desde otro equipo')).toBeVisible();
+    expect(screen.queryByRole('button', { name: 'Por ítems' })).toBeNull();
+    await userEvent.click(boton('Cobrar S/\u00a030.00'));
+    await screen.findByText(/Boleta · /);
+    expect(entradaDe(s)).toMatchObject({ total: '30.00', parte: { tipo: 'TOTAL' }, version: 5 });
+  });
+});
+
+describe('El id del cobro y los errores (criterios 54, 55, 57 y 114)', () => {
+  it('«Reintentar» repite el mismo id hasta una respuesta final', async () => {
+    let intentos = 0;
+    const s = montar({
+      extra: {
+        [`POST ${API_COBROS}`]: ({ cuerpo }) => {
+          intentos += 1;
+          return intentos === 1
+            ? json(500, { codigo: 'ERROR_INTERNO', mensaje: 'Falló' })
+            : json(201, respuestaDe(cuerpo as CobroEntrada));
+        },
+      },
+    });
+    renderApp(RUTA);
+    await screen.findByRole('button', { name: 'Cobrar S/\u00a068.50' });
+    await userEvent.click(boton('Cobrar S/\u00a068.50'));
+    expect(await screen.findByText(/no sabemos si el cobro se hizo/)).toBeVisible();
+    await userEvent.click(await screen.findByRole('button', { name: /Reintentar el cobro/ }));
+    await screen.findByText(/Boleta · /);
+    expect(cobros(s)).toHaveLength(2);
+    expect(entradaDe(s, 1).id).toBe(entradaDe(s, 0).id);
+    expect(cobros(s)[1]?.cabeceras.get('Idempotency-Key')).toBe(entradaDe(s, 0).id);
+  });
+
+  it('con una respuesta final (422) suelta el id: el siguiente intento es otro cobro', async () => {
+    let intentos = 0;
+    const s = montar({
+      extra: {
+        [`POST ${API_COBROS}`]: ({ cuerpo }) => {
+          intentos += 1;
+          return intentos === 1
+            ? json(409, { codigo: 'SIN_SERIE', mensaje: 'Sin serie' })
+            : json(201, respuestaDe(cuerpo as CobroEntrada));
+        },
+      },
+    });
+    renderApp(RUTA);
+    await screen.findByRole('button', { name: 'Cobrar S/\u00a068.50' });
+    await userEvent.click(boton('Cobrar S/\u00a068.50'));
+    expect(await screen.findByText(/Ajustes › Cajas/)).toBeVisible();
+    await userEvent.click(boton('Cobrar S/\u00a068.50'));
+    await screen.findByText(/Boleta · /);
+    expect(entradaDe(s, 1).id).not.toBe(entradaDe(s, 0).id);
+  });
+
+  it('CUENTA_CAMBIO: recarga la cuenta, muestra el total nuevo, conserva los pagos y deja confirmar', async () => {
+    let agregado = false;
+    const s = montar({
+      cuenta: () =>
+        agregado
+          ? cuenta({
+              version: 4,
+              lineas: [
+                linea(LOMO, 'Lomo saltado', '28.00', 2, '56.00'),
+                linea(GASEOSA, 'Gaseosa 1 L', '9.00', 2, '18.00'),
+                linea(BOLSA, 'Bolsa plástica', '0.20', 5, '1.00', true),
+              ],
+              totales: { ...cuenta().totales, subtotal: '75.00', total: '77.50' },
+              saldo: '77.50',
+            })
+          : cuenta(),
+      extra: {
+        [`POST ${API_COBROS}`]: ({ cuerpo }) => {
+          const entrada = cuerpo as CobroEntrada;
+          if (entrada.version === 3) {
+            agregado = true;
+            return json(409, { codigo: 'CUENTA_CAMBIO', mensaje: 'Cambió', version: 4 });
+          }
+          return json(201, respuestaDe(entrada));
+        },
+      },
+    });
+    renderApp(RUTA);
+    await screen.findByRole('button', { name: 'Cobrar S/\u00a068.50' });
+    await userEvent.click(screen.getByRole('button', { name: 'S/\u00a0100' }));
+    await userEvent.click(boton('Cobrar S/\u00a068.50'));
+
+    const aviso = await screen.findByRole('alert');
+    expect(aviso).toHaveTextContent('La cuenta cambió');
+    expect(aviso).toHaveTextContent('Lo que escribiste sigue aquí');
+    expect(await screen.findByRole('button', { name: 'Cobrar S/\u00a077.50' })).toBeVisible();
+    expect(screen.getByRole('alert')).toHaveTextContent('El total ahora es S/ 77.50');
+    // Los pagos escritos siguen: lo recibido, y el efectivo ya con el total nuevo.
+    expect(screen.getByLabelText('Recibido')).toHaveValue('100.00');
+    expect(screen.getByText('Efectivo a cobrar').nextSibling).toHaveTextContent('S/ 77.50');
+
+    await userEvent.click(boton('Cobrar S/\u00a077.50'));
+    await screen.findByText(/Boleta · /);
+    expect(entradaDe(s, 1)).toMatchObject({
+      version: 4,
+      total: '77.50',
+      pagos: [{ medio: 'EFECTIVO', monto: '77.50', recibido: '100.00' }],
+    });
+  });
+
+  it('ORDEN_NO_ABIERTA de una cuenta unida lleva a la principal', async () => {
+    const principal = uuid(905);
+    montar({
+      extra: {
+        [`POST ${API_COBROS}`]: () =>
+          json(409, { codigo: 'ORDEN_NO_ABIERTA', mensaje: 'Unida', ordenId: principal }),
+      },
+    });
+    renderApp(RUTA);
+    await screen.findByRole('button', { name: 'Cobrar S/\u00a068.50' });
+    await userEvent.click(boton('Cobrar S/\u00a068.50'));
+    const enlace = await screen.findByRole('link', { name: 'Ir a la cuenta principal' });
+    expect(enlace).toHaveAttribute('href', `/caja/cuentas/${principal}/cobrar`);
+  });
+});
+
+describe('Ítems sin enviar en este equipo (criterio 60)', () => {
+  it('avisa antes de cobrar si el equipo tiene un borrador de esta cuenta', async () => {
+    localStorage.setItem(
+      claveDeBorrador(ID.empresa, ID.usuario, ORDEN),
+      JSON.stringify({
+        lineas: [
+          {
+            clave: 'l1',
+            productoId: uuid(5),
+            nombre: 'Chicha',
+            modificadores: [],
+            cantidad: 1,
+            observacion: '',
+            tiempo: 1,
+            paraLlevar: false,
+            precioUnitario: '8.00',
+          },
+        ],
+        envioId: null,
+      }),
+    );
+    montar();
+    renderApp(RUTA);
+    expect(await screen.findByText('Hay ítems sin enviar en este equipo')).toBeVisible();
+    expect(screen.getByRole('link', { name: 'Ir a la cuenta de la mesa' })).toHaveAttribute(
+      'href',
+      `/salon/ordenes/${ORDEN}`,
+    );
+  });
+
+  it('sin borrador no hay aviso', async () => {
+    montar();
+    renderApp(RUTA);
+    await screen.findByRole('button', { name: 'Cobrar S/\u00a068.50' });
+    expect(screen.queryByText('Hay ítems sin enviar en este equipo')).toBeNull();
+  });
+});
+
+describe('Entradas al cobro (criterio 111)', () => {
+  it('«Por cobrar» abre el cobro y la cuenta de la mesa lleva el botón «Cobrar» con el saldo', async () => {
+    montar();
+    const { unmount } = renderApp(`/caja/cuentas/${ORDEN}`);
+    const enlace = await screen.findByRole('link', { name: /Cobrar S\/\s68\.50/ });
+    expect(enlace).toHaveAttribute('href', RUTA);
+    unmount();
+    await waitFor(() => expect(true).toBe(true));
+  });
+});

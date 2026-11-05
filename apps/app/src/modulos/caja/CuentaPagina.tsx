@@ -7,12 +7,15 @@ import {
   EsqueletoDeLista,
   EstadoVacio,
   EtiquetaDeEstado,
+  Icono,
   IconoNota,
+  IconoPago,
   IconoPendiente,
+  claseBoton,
 } from '@restaurante/ui';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
-import { useLocation, useParams } from 'react-router-dom';
+import { Link, useLocation, useParams } from 'react-router-dom';
 import { Pagina } from '../../componentes/Pagina';
 import { ErrorApi, mensajeDeError } from '../../lib/errores';
 import { montoEnSoles, montoEsCero } from '../../lib/monto';
@@ -22,6 +25,7 @@ import { useSesionActiva } from '../acceso/sesion';
 import { ETIQUETA_DE_ESTADO } from '../salon/ordenes';
 import { rutaDeOrden } from '../salon/salon';
 import { CortesiaHoja, DescuentoHoja } from './AjusteHoja';
+import { rutaDeCobro } from './cobro';
 import {
   admiteCortesia,
   admiteDescuento,
@@ -99,6 +103,7 @@ function Cuenta({ ordenId, atras }: { ordenId: string; atras: { a: string; etiqu
   const puedeDescuento = usePermiso('APLICAR_DESCUENTO') !== 'prohibido';
   const puedeCortesia = usePermiso('APLICAR_CORTESIA') !== 'prohibido';
   const puedeQuitar = usePermiso('ATENDER_MESA') !== 'prohibido';
+  const puedeCobrar = usePermiso('COBRAR') !== 'prohibido';
 
   const [accion, setAccion] = useState<Accion | null>(null);
   const [hecho, setHecho] = useState<string | null>(null);
@@ -278,6 +283,19 @@ function Cuenta({ ordenId, atras }: { ordenId: string; atras: { a: string; etiqu
         ) : null}
 
         {cuenta.lineas.length > 0 ? <Desglose cuenta={cuenta} /> : null}
+
+        {puedeCobrar &&
+        (cuenta.estado === 'ABIERTA' || cuenta.estado === 'EN_PRECUENTA') &&
+        cuenta.lineas.length > 0 ? (
+          <Link
+            to={rutaDeCobro(ordenId)}
+            state={{ desde: 'cuenta' }}
+            className={claseBoton('principal', true)}
+          >
+            <Icono icono={IconoPago} tamano={20} />
+            {`Cobrar ${montoEnSoles(cuenta.saldo) ?? ''}`}
+          </Link>
+        ) : null}
       </div>
 
       {accion?.tipo === 'DESCUENTO' ? (

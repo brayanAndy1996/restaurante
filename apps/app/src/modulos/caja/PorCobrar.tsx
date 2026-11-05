@@ -15,14 +15,14 @@ import { horaDeLima } from '../../lib/formato';
 import { montoEnSoles } from '../../lib/monto';
 import { useIntervaloDeSondeo } from '../../lib/tiempo-real';
 import { tituloDeMesas } from '../salon/ordenes';
-import { claveDePorCobrar, listarPorCobrar, rutaDeCuenta } from './cuenta';
+import { rutaDeCobro } from './cobro';
+import { claveDePorCobrar, listarPorCobrar } from './cuenta';
 import { mensajeDeCaja } from './turno';
 import './cuenta-caja.css';
 
 /**
  * «Por cobrar» (criterios 37 y 110 de 006): las cuentas abiertas de la sucursal, de la más antigua a la más nueva, con
- * su saldo. Cada una abre su cuenta, donde se aplican los descuentos y las cortesías antes de cobrar. El cobro llega
- * en la entrega siguiente.
+ * su saldo. Cada una abre su cobro; los descuentos y las cortesías se aplican desde su cuenta antes de cobrar.
  */
 export function PorCobrar({ sucursalId }: { sucursalId: string }) {
   const clientes = useQueryClient();
@@ -65,7 +65,7 @@ export function PorCobrar({ sucursalId }: { sucursalId: string }) {
         return (
           <li key={c.ordenId}>
             <Link
-              to={rutaDeCuenta(c.ordenId)}
+              to={rutaDeCobro(c.ordenId)}
               state={{ desde: 'caja' }}
               className={claseFila()}
               aria-label={`${titulo}, saldo ${montoEnSoles(c.saldo) ?? ''}`}
