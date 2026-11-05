@@ -1,6 +1,6 @@
 import { Logger } from '@nestjs/common';
 import { createAdapter } from '@socket.io/postgres-adapter';
-import { Client, Pool, type ClientConfig } from 'pg';
+import { Client, Pool, type ClientConfig, type PoolClient } from 'pg';
 
 /** Tabla auxiliar del adaptador, en el esquema `tiempo_real` (migración `202610300004-tiempo-real.ts`). */
 export const TABLA_DEL_ADAPTADOR = 'tiempo_real.socket_io_attachments';
@@ -33,6 +33,12 @@ export class PoolDelAdaptador {
      * Cliente de `pg` que no tumba el proceso si la conexión se cae. El adaptador toma una conexión del pool y no
      * la suelta mientras escucha el canal; el pool solo vigila las que están libres, así que sin un oyente de
      * `error` una caída de la base lanzaría una excepción sin captura. El adaptador reconecta solo (`end`).
+     *
+     * Al terminar la conexión también se **suelta del pool**: `pg-pool` solo vigila a los clientes libres, así que
+     * el que escuchaba (y que el adaptador nunca devuelve) seguiría contando como uno de los 2 cupos para siempre.
+     * Tras un reinicio de la base el adaptador reconecta y el nuevo oyente toma el otro cupo; sin cupo para
+     * `pg_notify`, todo `publicar` falla con «timeout exceeded when trying to connect» y los avisos en tiempo real
+     * (como `trabajo.nuevo` al puente) se pierden hasta reiniciar la API.
      */
     class ClienteDelAdaptador extends Client {
       constructor(configuracion?: ClientConfig) {
@@ -42,6 +48,13 @@ export class PoolDelAdaptador {
           logger.warn(`Se perdió una conexión del adaptador de tiempo real: ${error.message}`);
         });
         this.once('end', () => clientes.delete(this));
+        this.on('end', () => {
+          try {
+            (this as unknown as PoolClient).release(true);
+          } catch {
+            // Ya estaba libre (el pool lo retira solo) o nunca llegó a entregarse: no hay nada que soltar.
+          }
+        });
       }
     }
     this.pool = new Pool({
