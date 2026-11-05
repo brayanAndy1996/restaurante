@@ -469,6 +469,8 @@ describe('criterios 36 y 37 · la cuenta', () => {
 
   it('GET /cuentas lista las órdenes abiertas de la más antigua a la más nueva, con ETag y 304', async () => {
     const primera = await cuentaCon(ctx, A(), 'S3', [['lomo', 1]]);
+    // El reloj de las pruebas es manual: sin avanzarlo las dos órdenes se abren en el mismo instante.
+    ctx.reloj.avanzar(1_000);
     const segunda = await cuentaCon(ctx, A(), 'S3', [['gaseosa', 2]]);
     const token = A().token.cajeroS3!;
     const res = await api(ctx, token, 'get', '/cuentas');

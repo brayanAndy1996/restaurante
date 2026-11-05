@@ -13,12 +13,14 @@ import { MesasConsultaService } from '../salon';
 import { SesionActual, UsuariosConsultaService } from '../seguridad';
 import { bloquearOrden, exigirOrdenAbierta } from './bloqueos-orden';
 import {
+  cuentaDeDatos,
+  descuentoQueNoSeAdmite,
   leerDatosDeCuentas,
   personasDeCuenta,
   respuestasDeCuenta,
   type DatosDeCuenta,
 } from './cuenta-de-orden';
-import { ordenNoEncontrada } from './errores-pedidos';
+import { operacionConcurrente, ordenNoEncontrada } from './errores-pedidos';
 
 /**
  * Lo que la caja necesita de las órdenes (historia 006, "Interfaces de la API"). Pedidos es dueño de las órdenes, los
@@ -191,6 +193,10 @@ export class CuentasDePedidos {
 
     return filas.map((fila) => {
       const cuenta = datos.get(fila.id)!;
+      // Criterio 45a: ninguna ruta responde 500 por un `RangeError` de `calcularCuenta`. Las escrituras no dejan una
+      // cuenta así (cada una valida antes); si una lectura sin bloqueo vio las tablas en instantes distintos de una
+      // escritura en curso, es un 409 que se repite.
+      if (descuentoQueNoSeAdmite(cuentaDeDatos(cuenta))) throw operacionConcurrente();
       const respuestas = respuestasDeCuenta(cuenta, nombres);
       return {
         ordenId: fila.id,
