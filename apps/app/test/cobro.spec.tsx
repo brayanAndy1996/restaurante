@@ -12,6 +12,7 @@ import { guardarTokenDeSesion } from '../src/lib/almacen';
 import { espera } from '../src/lib/api';
 import { claveDeBorrador } from '../src/modulos/salon/borrador';
 import { ID, json, renderApp, servidor } from './ayudas';
+import { detalleDeParte } from './ayudas-caja';
 import { cartaDeEjemplo } from './ayudas-comandero';
 import { itemDeOrden, ordenDeMesa, sesionDeRol, uuid } from './ayudas-salon';
 
@@ -436,6 +437,7 @@ describe('Dividir la cuenta (criterios 64 a 68 y 113)', () => {
                   total: '34.25',
                   cobradoEn: '2026-11-06T00:10:00.000Z',
                   cobradoPor: PERSONA,
+                  detalleParte: detalleDeParte('34.25', 'IGUALES'),
                 },
               ],
             }),
@@ -499,6 +501,7 @@ describe('Dividir la cuenta (criterios 64 a 68 y 113)', () => {
               total: '38.50',
               cobradoEn: '2026-11-06T00:10:00.000Z',
               cobradoPor: PERSONA,
+              detalleParte: detalleDeParte('38.50', 'ITEMS'),
             },
           ],
         }),

@@ -17,6 +17,8 @@ import {
   parteEntradaSchema,
   precuentaRespuestaSchema,
   comandaKdsSchema,
+  cuentaRespuestaSchema,
+  parteCalculadaSchema,
   serieEntradaDeTipoSchema,
   serieEntradaSchema,
   serieRespuestaSchema,
@@ -506,6 +508,103 @@ describe('campos opcionales de 004 que gana 006 (criterios 44, 82 y 89)', () => 
       orden: { ...orden, numeroLlamado: 23 },
     });
     expect(conLlamado.orden.numeroLlamado).toBe(23);
+  });
+});
+
+describe('cuentaRespuesta · cobros[].detalleParte (criterios 36 y 65)', () => {
+  const totales = {
+    subtotal: '28.00',
+    descuentos: '0.00',
+    operaciones: { gravadas: '23.73', exoneradas: '0.00', inafectas: '0.00', gratuitas: '0.00' },
+    igv: '4.27',
+    igvGratuitas: '0.00',
+    icbper: '0.00',
+    total: '28.00',
+  };
+  const parte = {
+    tipo: 'ITEMS',
+    formato: 'DETALLADO',
+    lineas: [
+      {
+        itemId: ID_2,
+        cantidad: 1,
+        afectacion: 'GRAVADO',
+        bruto: '28.00',
+        descuento: '0.00',
+        neto: '28.00',
+        base: '23.73',
+        igv: '4.27',
+        bolsas: 0,
+        icbper: '0.00',
+        gratuita: null,
+      },
+      {
+        itemId: null,
+        cantidad: 1,
+        afectacion: 'GRAVADO',
+        bruto: '9.00',
+        descuento: '0.00',
+        neto: '0.00',
+        base: '0.00',
+        igv: '0.00',
+        bolsas: 0,
+        icbper: '0.00',
+        gratuita: { cantidad: 1, valorReferencial: '9.00', base: '7.63', igv: '1.37' },
+      },
+    ],
+    porItem: [{ itemId: ID_2, cantidad: 1, neto: '28.00', bolsas: 0 }],
+    totales,
+    cierraLaCuenta: false,
+  };
+  const cobro = {
+    id: ID_1,
+    comprobante: { id: ID_3, tipo: 'BOLETA', numero: 'B001-00000001' },
+    total: '28.00',
+    cobradoEn: '2026-11-02T15:00:00.000Z',
+    cobradoPor: null,
+    detalleParte: parte,
+  };
+  const cuenta = {
+    ordenId: ID_1,
+    tipo: 'MESA',
+    estado: 'ABIERTA',
+    mesas: [{ id: ID_2, nombre: 'Mesa 1' }],
+    mozo: null,
+    numeroLlamado: null,
+    version: 3,
+    lineas: [],
+    descuentoCuenta: null,
+    cortesias: [],
+    totales,
+    cobrado: '28.00',
+    saldo: '41.20',
+    modo: 'ITEMS',
+    cobros: [cobro],
+    parametros: {
+      tasaIgv: '18.00',
+      montoIcbper: '0.50',
+      regimen: 'GENERAL',
+      tiposPermitidos: ['BOLETA', 'FACTURA'],
+    },
+  };
+
+  it('acepta la parte completa de cada cobro y la devuelve sin perder nada', () => {
+    const resultado = cuentaRespuestaSchema.safeParse(cuenta);
+    expect(resultado.success).toBe(true);
+    expect(resultado.data?.cobros[0]?.detalleParte).toEqual(parte);
+    expect(parteCalculadaSchema.safeParse(parte).success).toBe(true);
+  });
+
+  it('exige el detalle de cada cobro y que sus montos sean texto', () => {
+    const { detalleParte: _quitado, ...sinDetalle } = cobro;
+    expect(cuentaRespuestaSchema.safeParse({ ...cuenta, cobros: [sinDetalle] }).success).toBe(
+      false,
+    );
+    expect(
+      parteCalculadaSchema.safeParse({ ...parte, totales: { ...totales, total: 28 } }).success,
+    ).toBe(false);
+    expect(parteCalculadaSchema.safeParse({ ...parte, tipo: 'MITAD' }).success).toBe(false);
+    expect(parteCalculadaSchema.safeParse({ ...parte, cierraLaCuenta: 'no' }).success).toBe(false);
   });
 });
 

@@ -12,6 +12,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { guardarTokenDeSesion } from '../src/lib/almacen';
 import { espera } from '../src/lib/api';
 import { ID, json, renderApp, servidor } from './ayudas';
+import { detalleDeParte } from './ayudas-caja';
 import { cartaDeEjemplo } from './ayudas-comandero';
 import { itemDeOrden, ordenDeMesa, sesionDeRol, uuid } from './ayudas-salon';
 
@@ -262,6 +263,7 @@ describe('La cuenta con su desglose (criterios 36 y 111)', () => {
             total: '10.00',
             cobradoEn: '2026-11-05T17:00:00.000Z',
             cobradoPor: PERSONA,
+            detalleParte: detalleDeParte('10.00', 'ITEMS'),
           },
         ],
       }),

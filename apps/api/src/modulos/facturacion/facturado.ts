@@ -23,4 +23,23 @@ export class FacturadoService {
     );
     return filas.map((f) => f.detalle_parte);
   }
+
+  /**
+   * La parte de cada comprobante dado (`detalle_parte`), por su id: para la cuenta (`cobros[].detalleParte`). Se guarda
+   * el resultado de `calcularParte` tal cual, con su marca `valida`; aquí se quita para devolver solo la `ParteCalculada`.
+   */
+  async detalleDeComprobantes(ids: readonly string[]): Promise<Map<string, ParteCalculada>> {
+    if (ids.length === 0) return new Map();
+    const filas = await this.conexion.query<{ id: string; detalle_parte: ParteCalculada }>(
+      `SELECT id, detalle_parte FROM comprobante
+        WHERE id = ANY($1::uuid[]) AND detalle_parte IS NOT NULL`,
+      { bind: [ids], type: QueryTypes.SELECT },
+    );
+    return new Map(
+      filas.map((f) => {
+        const { valida: _valida, ...parte } = f.detalle_parte as ParteCalculada & { valida?: true };
+        return [f.id, parte];
+      }),
+    );
+  }
 }

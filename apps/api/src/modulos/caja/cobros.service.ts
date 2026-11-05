@@ -281,16 +281,18 @@ export class CobrosService {
     );
     if (filas.length === 0) return [];
     const comprobantes = await this.comprobantes.numerosDe(filas.map((f) => f.comprobante_id));
+    const detalles = await this.facturado.detalleDeComprobantes(filas.map((f) => f.comprobante_id));
     const nombres = await this.usuarios.nombres(
       filas.flatMap((f) => (f.creado_por_usuario_id === null ? [] : [f.creado_por_usuario_id])),
     );
     return filas
       .flatMap((f) => {
         const c = comprobantes.get(f.comprobante_id);
-        return c === undefined ? [] : [{ f, c }];
+        const detalleParte = detalles.get(f.comprobante_id);
+        return c === undefined || detalleParte === undefined ? [] : [{ f, c, detalleParte }];
       })
       .sort((a, b) => a.c.numeroParte - b.c.numeroParte)
-      .map(({ f, c }) => ({
+      .map(({ f, c, detalleParte }) => ({
         id: f.id,
         comprobante: { id: c.id, tipo: c.tipo, numero: c.numero },
         total: f.total,
@@ -299,6 +301,7 @@ export class CobrosService {
           f.creado_por_usuario_id === null
             ? null
             : { id: f.creado_por_usuario_id, nombre: nombres.get(f.creado_por_usuario_id) ?? '' },
+        detalleParte,
       }));
   }
 

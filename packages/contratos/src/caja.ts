@@ -17,6 +17,7 @@ import { z } from 'zod';
 import {
   comprobanteEntradaSchema,
   comprobanteRespuestaSchema,
+  formatoComprobanteSchema,
   totalesCuentaSchema,
 } from './comprobantes';
 import { afectacionIgvSchema } from './carta';
@@ -359,12 +360,58 @@ export const cuentaLineaRespuestaSchema = z.object({
   icbper: z.string(),
 });
 
+/** Una línea del comprobante de una parte (`LineaDeParte` de `packages/dominio/caja`); los montos van como texto. */
+export const lineaDeParteSchema = z.object({
+  /** `null` en las líneas "Por consumo" (una por afectación). */
+  itemId: uuidSchema.nullable(),
+  cantidad: z.number().int(),
+  afectacion: afectacionIgvSchema,
+  bruto: z.string(),
+  descuento: z.string(),
+  neto: z.string(),
+  base: z.string(),
+  igv: z.string(),
+  bolsas: z.number().int(),
+  icbper: z.string(),
+  gratuita: z
+    .object({
+      cantidad: z.number().int(),
+      valorReferencial: z.string(),
+      base: z.string(),
+      igv: z.string(),
+    })
+    .nullable(),
+});
+
+/** Lo que una parte toma de un ítem (`ItemDeParte`). */
+export const itemDeParteSchema = z.object({
+  itemId: uuidSchema,
+  cantidad: z.number().int(),
+  neto: z.string(),
+  bolsas: z.number().int(),
+});
+
+/**
+ * Una parte cobrada tal como la devolvió `calcularParte` y la guardó facturación (`ParteCalculada` de
+ * `packages/dominio/caja`): la `partesAnteriores` de la siguiente parte.
+ */
+export const parteCalculadaSchema = z.object({
+  tipo: tipoParteSchema,
+  formato: formatoComprobanteSchema,
+  lineas: z.array(lineaDeParteSchema),
+  porItem: z.array(itemDeParteSchema),
+  totales: totalesCuentaSchema,
+  cierraLaCuenta: z.boolean(),
+});
+
 export const cobroDeCuentaSchema = z.object({
   id: uuidSchema,
   comprobante: z.object({ id: uuidSchema, tipo: z.enum(TIPOS_COMPROBANTE), numero: z.string() }),
   total: z.string(),
   cobradoEn: instanteSchema,
   cobradoPor: personaRefSchema.nullable(),
+  /** La parte completa de este cobro (la del comprobante): permite calcular la siguiente desde cualquier equipo. */
+  detalleParte: parteCalculadaSchema,
 });
 
 /** `GET /cuentas/:ordenId`: la orden vista para cobrar. */
