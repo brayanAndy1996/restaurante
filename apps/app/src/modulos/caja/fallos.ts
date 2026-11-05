@@ -85,6 +85,11 @@ export function falloDeCuenta(
       return {
         texto: `${(campo('itemId') ?? campo('cantidad') ?? error.message).replace(/\.?$/, '.')} Revisa la cantidad o elige otro ítem.`,
       };
+    case 'CUENTA_COBRADA_EN_PARTE':
+      return {
+        texto:
+          'Esta cuenta ya tiene cobros y este cambio no cuadra con lo cobrado, así que no se hizo. Lo ya cobrado solo se corrige con una nota de crédito.',
+      };
     case 'CUENTA_EN_COBRO':
       return {
         texto:

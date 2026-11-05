@@ -39,7 +39,7 @@ import {
   type Seleccion,
 } from './cobro';
 import { ComprobantePanel } from './ComprobantePanel';
-import { claveDeCuenta, leerCuenta, tituloDeCuenta } from './cuenta';
+import { claveDeCuenta, leerCuenta, rutaDeCuenta, sePuedeAjustar, tituloDeCuenta } from './cuenta';
 import {
   COBRO_VACIO,
   anterioresConocidas,
@@ -499,6 +499,16 @@ function Cobro({ ordenId, empresaId, usuarioId, sucursalId, atras }: PropsCobro)
         />
 
         <DesgloseDeLaParte cuenta={cuenta} parte={parte} />
+
+        {sePuedeAjustar(cuenta) ? (
+          <Link
+            to={rutaDeCuenta(ordenId)}
+            state={{ desde: 'cobro' }}
+            className={claseBoton('texto')}
+          >
+            Descuentos y cortesías
+          </Link>
+        ) : null}
 
         {parte?.ok && montoEsCero(parte.total) ? (
           <Aviso tipo="info" titulo="Esta parte no se cobra">

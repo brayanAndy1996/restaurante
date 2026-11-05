@@ -20,6 +20,8 @@ import {
   type PagoEscrito,
 } from '../src/modulos/caja/cobro';
 import { ErrorApi } from '../src/lib/errores';
+import { falloDeCuenta } from '../src/modulos/caja/fallos';
+import { demuestraQueNoSeGuardo } from '../src/modulos/salon/enviar-borrador';
 
 // spec: 006-caja-cobro, criterios 21, 47, 50, 51, 55, 64 a 66 y 111 a 114 (lógica pura del cobro; pruebas no
 // protegidas). Los montos que se esperan son los ejemplos del criterio 21 y de la cuenta C.
@@ -415,5 +417,24 @@ describe('los errores del cobro en palabras (criterios 49 a 63 y 114)', () => {
     expect(falloDeCobro(error('SIN_CONEXION', 0)).repetir).toBe(true);
     expect(falloDeCobro(error('ERROR_INTERNO', 500)).repetir).toBe(true);
     expect(falloDeCobro(error('CONFLICTO')).repetir).toBe(true);
+  });
+});
+
+describe('los cambios que ya cobrados rechazan, en palabras (criterios 86 a 88)', () => {
+  const error = (codigo: string) => new ErrorApi({ estado: 409, codigo, mensaje: codigo });
+
+  it('anular algo que ya se cobró se dice en palabras y manda a la nota de crédito', () => {
+    expect(falloDeCuenta(error('CUENTA_COBRADA_EN_PARTE'))?.texto).toMatch(
+      /ya tiene cobros.*nota de crédito/,
+    );
+  });
+
+  it('anular o unir una cuenta con cobros: CUENTA_EN_COBRO', () => {
+    expect(falloDeCuenta(error('CUENTA_EN_COBRO'))?.texto).toMatch(/ya tiene cobros/);
+  });
+
+  it('un envío rechazado por lo ya cobrado no se guardó: el próximo «Enviar» usa otro id', () => {
+    expect(demuestraQueNoSeGuardo(error('CUENTA_COBRADA_EN_PARTE'))).toBe(true);
+    expect(demuestraQueNoSeGuardo(error('CONFLICTO'))).toBe(false);
   });
 });

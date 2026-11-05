@@ -59,7 +59,7 @@ type Accion =
 
 /** Desde dónde se llegó, para volver al mismo lugar. */
 interface EstadoDeLlegada {
-  desde?: 'caja';
+  desde?: 'caja' | 'cobro';
 }
 
 /**
@@ -75,7 +75,9 @@ export function CuentaPagina() {
   const atras =
     llegada.desde === 'caja'
       ? { a: '/caja?ver=por-cobrar', etiqueta: 'Caja' }
-      : { a: rutaDeOrden(id), etiqueta: 'Cuenta' };
+      : llegada.desde === 'cobro'
+        ? { a: rutaDeCobro(id), etiqueta: 'Cobro' }
+        : { a: rutaDeOrden(id), etiqueta: 'Cuenta' };
   if (!sesion.sucursal) {
     return (
       <Pagina titulo="Cuenta" atras={atras}>

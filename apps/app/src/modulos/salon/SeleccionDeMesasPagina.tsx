@@ -69,6 +69,8 @@ const MENSAJES = {
   MESA_OCUPADA:
     'Esa mesa acaba de ocuparse. Elige otra libre, o usa «Unir» para juntar las cuentas.',
   ORDEN_NO_ABIERTA: 'Esta cuenta ya no está abierta. Actualizamos la pantalla.',
+  CUENTA_EN_COBRO:
+    'Esta cuenta ya tiene cobros, así que no se puede unir. Cóbrala completa; mover la cuenta a otra mesa sí se puede.',
   NO_ENCONTRADO: 'Una de las mesas ya no existe. Actualizamos el salón.',
   CONFLICTO: 'Otra persona está cambiando estas mesas a la vez. Vuelve a intentarlo.',
   PROHIBIDO: 'Tu rol no puede mover ni unir mesas.',

@@ -30,7 +30,7 @@ import { montoEnSoles } from '../../lib/monto';
 import { CLAVES_TIEMPO_REAL } from '../../lib/tiempo-real';
 import { usePermiso } from '../acceso/permisos';
 import { avisoDeImpresion, useEstadoDeImpresion } from '../impresion/estado';
-import { veLaCuenta } from '../acceso/navegacion';
+import { veLaCaja, veLaCuenta } from '../acceso/navegacion';
 import { useSesion, useSesionActiva } from '../acceso/sesion';
 import { rutaDeCuenta } from '../caja/cuenta';
 import {
@@ -186,6 +186,7 @@ function Cuenta({
   const puedeAtender = usePermiso('ATENDER_MESA') !== 'prohibido';
   const puedeMoverUnir = usePermiso('MOVER_UNIR_MESAS') !== 'prohibido';
   const puedeDescontar = usePermiso('APLICAR_DESCUENTO') !== 'prohibido';
+  const puedeCobrar = usePermiso('COBRAR') !== 'prohibido';
   const puedeRegalar = usePermiso('APLICAR_CORTESIA') !== 'prohibido';
   const { sesion } = useSesion();
 
@@ -342,6 +343,9 @@ function Cuenta({
     (puedeDescontar || puedeRegalar) &&
     veLaCuenta(sesion) &&
     sePuedePedirPrecuenta(orden);
+
+  // Cobrar (006, criterio 111): para quien tiene `COBRAR` con el módulo de Caja; el cobro es otra pantalla.
+  const ofreceCobrar = puedeCobrar && veLaCaja(sesion) && sePuedePedirPrecuenta(orden);
 
   return (
     <Pagina
@@ -539,12 +543,17 @@ function Cuenta({
         </div>
       ) : null}
 
-      {abierta && (ofrecePrecuenta || puedeMoverUnir || ofreceDescuentos) ? (
+      {abierta && (ofrecePrecuenta || puedeMoverUnir || ofreceDescuentos || ofreceCobrar) ? (
         <section
           className="cuenta__acciones"
           aria-label="Descuentos, pre-cuenta, mover y unir"
           ref={seccionDePrecuenta}
         >
+          {ofreceCobrar ? (
+            <Link to={`${rutaDeCuenta(ordenId)}/cobrar`} className={claseBoton('principal', true)}>
+              Cobrar
+            </Link>
+          ) : null}
           {ofreceDescuentos ? (
             <Link to={rutaDeCuenta(ordenId)} className={claseBoton()}>
               Descuentos y cortesías

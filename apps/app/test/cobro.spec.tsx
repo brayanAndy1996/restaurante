@@ -5,14 +5,15 @@ import type {
   CuentaRespuesta,
   TurnoRespuesta,
 } from '@restaurante/contratos';
-import { screen, waitFor, within } from '@testing-library/react';
+import { screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { guardarTokenDeSesion } from '../src/lib/almacen';
 import { espera } from '../src/lib/api';
 import { claveDeBorrador } from '../src/modulos/salon/borrador';
 import { ID, json, renderApp, servidor } from './ayudas';
-import { sesionDeRol, uuid } from './ayudas-salon';
+import { cartaDeEjemplo } from './ayudas-comandero';
+import { itemDeOrden, ordenDeMesa, sesionDeRol, uuid } from './ayudas-salon';
 
 // spec: 006-caja-cobro, criterios 47 a 68, 60 y 111 a 114 en la interfaz (pruebas no protegidas de la pantalla del
 // cobro). Los montos que se esperan son los de `packages/dominio` para la cuenta C de 004.
@@ -665,12 +666,37 @@ describe('Ítems sin enviar en este equipo (criterio 60)', () => {
 });
 
 describe('Entradas al cobro (criterio 111)', () => {
-  it('«Por cobrar» abre el cobro y la cuenta de la mesa lleva el botón «Cobrar» con el saldo', async () => {
+  it('la cuenta de la caja lleva «Cobrar» con el saldo y abre el cobro', async () => {
     montar();
-    const { unmount } = renderApp(`/caja/cuentas/${ORDEN}`);
+    renderApp(`/caja/cuentas/${ORDEN}`);
     const enlace = await screen.findByRole('link', { name: /Cobrar S\/\s68\.50/ });
     expect(enlace).toHaveAttribute('href', RUTA);
+  });
+
+  it('la cuenta de la mesa lleva «Cobrar» para el Cajero con el plan de Caja, y no para el Mozo', async () => {
+    const orden = ordenDeMesa(4, {
+      total: '65.00',
+      items: [itemDeOrden(1, { cantidad: 2, cantidadVigente: 2, totalVigente: '56.00' })],
+    });
+    const base = {
+      'GET /ordenes/*': () => json(200, orden),
+      'GET /carta/sucursal': () => json(200, cartaDeEjemplo(), { ETag: '"c1"' }),
+    };
+    servidor({
+      ...base,
+      'GET /sesion': () =>
+        json(200, sesionDeRol('CAJERO', { modulos: ['SALON', 'COCINA', 'CAJA'] })),
+    });
+    const { unmount } = renderApp(`/salon/ordenes/${ORDEN}`);
+    const enlace = await screen.findByRole('link', { name: 'Cobrar' });
+    expect(enlace).toHaveAttribute('href', RUTA);
     unmount();
-    await waitFor(() => expect(true).toBe(true));
+    servidor({
+      ...base,
+      'GET /sesion': () => json(200, sesionDeRol('MOZO', { modulos: ['SALON', 'CAJA'] })),
+    });
+    renderApp(`/salon/ordenes/${ORDEN}`);
+    await screen.findByRole('button', { name: 'Pedir pre-cuenta' });
+    expect(screen.queryByRole('link', { name: 'Cobrar' })).toBeNull();
   });
 });
