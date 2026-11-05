@@ -20,6 +20,7 @@ import { useEnvioPendiente } from '../../lib/envios';
 import { ErrorApi, erroresPorCampo, mensajeDeError } from '../../lib/errores';
 import { CLAVES_TIEMPO_REAL } from '../../lib/tiempo-real';
 import { usePermiso } from '../acceso/permisos';
+import { falloDeCuenta } from '../caja/fallos';
 import {
   OPCIONES_DE_DESTINO,
   anularItem,
@@ -252,6 +253,13 @@ function Formulario({ objetivo, orden, onHecho }: PropsAnular) {
         (error.codigo === 'AUTORIZACION_INVALIDA' || error.codigo === 'CLAVE_REQUERIDA')
       ) {
         setFallo('La clave del supervisor no valió. Vuelve a pedirla.');
+      } else if (
+        error instanceof ErrorApi &&
+        (error.codigo === 'DESCUENTO_INVALIDO' || error.codigo === 'CONFLICTO')
+      ) {
+        // Un descuento que la cuenta ya no admite o una cortesía que no cabría (criterio 45a de 006): la API dice
+        // por qué en palabras y no se anuló nada ni se gastó la clave.
+        setFallo(falloDeCuenta(error)?.texto ?? mensajeDeError(error, MENSAJES));
       } else {
         setFallo(mensajeDeError(error, MENSAJES));
       }

@@ -74,6 +74,39 @@
   text-align: right;
 }
 
+/* Descuentos y cortesías: cada uno con su monto, entre las líneas y el total */
+.precuenta__ajustes {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espacio-sm);
+  margin: 0;
+}
+.precuenta__ajuste {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--espacio-md);
+}
+.precuenta__ajuste dt {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  font-size: 1rem;
+  line-height: 1.5rem;
+  overflow-wrap: anywhere;
+}
+.precuenta__ajuste dt small {
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+  color: var(--color-tinta-suave);
+}
+.precuenta__ajuste dd {
+  flex: none;
+  margin: 0;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
 /* El total: lo único grande, con IGV incluido y sin desglose */
 .precuenta__total {
   display: flex;

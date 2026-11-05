@@ -30,7 +30,9 @@ import { montoEnSoles } from '../../lib/monto';
 import { CLAVES_TIEMPO_REAL } from '../../lib/tiempo-real';
 import { usePermiso } from '../acceso/permisos';
 import { avisoDeImpresion, useEstadoDeImpresion } from '../impresion/estado';
-import { useSesionActiva } from '../acceso/sesion';
+import { veLaCuenta } from '../acceso/navegacion';
+import { useSesion, useSesionActiva } from '../acceso/sesion';
+import { rutaDeCuenta } from '../caja/cuenta';
 import {
   claveDeBorrador,
   pasarBorrador,
@@ -183,6 +185,9 @@ function Cuenta({
   const puedeLiberar = usePermiso('ATENDER_MESA') !== 'prohibido';
   const puedeAtender = usePermiso('ATENDER_MESA') !== 'prohibido';
   const puedeMoverUnir = usePermiso('MOVER_UNIR_MESAS') !== 'prohibido';
+  const puedeDescontar = usePermiso('APLICAR_DESCUENTO') !== 'prohibido';
+  const puedeRegalar = usePermiso('APLICAR_CORTESIA') !== 'prohibido';
+  const { sesion } = useSesion();
 
   // «Pidieron la cuenta»: al llegar, la pre-cuenta queda a la vista aunque la cuenta sea larga.
   const seccionDePrecuenta = useRef<HTMLElement>(null);
@@ -331,6 +336,12 @@ function Cuenta({
     puedeAnularOrden && (sePuedeAnularOrden(orden) || (conConsumo && abierta));
   const ofrecePrecuenta = puedeAtender && sePuedePedirPrecuenta(orden);
   const enPrecuenta = orden.estado === 'EN_PRECUENTA' ? orden.precuentaVigente : null;
+  // Descuentos y cortesías (006, criterio 111): su pantalla sale de la cuenta que lee la caja.
+  const ofreceDescuentos =
+    puedeAtender &&
+    (puedeDescontar || puedeRegalar) &&
+    veLaCuenta(sesion) &&
+    sePuedePedirPrecuenta(orden);
 
   return (
     <Pagina
@@ -528,12 +539,17 @@ function Cuenta({
         </div>
       ) : null}
 
-      {abierta && (ofrecePrecuenta || puedeMoverUnir) ? (
+      {abierta && (ofrecePrecuenta || puedeMoverUnir || ofreceDescuentos) ? (
         <section
           className="cuenta__acciones"
-          aria-label="Pre-cuenta, mover y unir"
+          aria-label="Descuentos, pre-cuenta, mover y unir"
           ref={seccionDePrecuenta}
         >
+          {ofreceDescuentos ? (
+            <Link to={rutaDeCuenta(ordenId)} className={claseBoton()}>
+              Descuentos y cortesías
+            </Link>
+          ) : null}
           {ofrecePrecuenta ? (
             <>
               {enPrecuenta ? (

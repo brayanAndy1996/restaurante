@@ -14,17 +14,24 @@ import {
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Pagina } from '../../componentes/Pagina';
+import { usePermiso } from '../acceso/permisos';
+import { useSesionActiva } from '../acceso/sesion';
 import { useIntervaloDeSondeo } from '../../lib/tiempo-real';
 import { CerrarCaja } from './CerrarCaja';
 import { Movimientos } from './Movimientos';
+import { PorCobrar } from './PorCobrar';
 import { ReporteDeCaja } from './ReporteDeCaja';
 import { claveReporte, horaDelTurno, leerReporte, mensajeDeCaja, soles } from './turno';
 
-type Vista = 'movimientos' | 'reporte-x';
+type Vista = 'por-cobrar' | 'movimientos' | 'reporte-x';
 
 const VISTAS: readonly OpcionDeSegmento<Vista>[] = [
   { valor: 'movimientos', etiqueta: 'Movimientos' },
   { valor: 'reporte-x', etiqueta: 'Reporte X' },
+];
+const VISTAS_CON_COBRO: readonly OpcionDeSegmento<Vista>[] = [
+  { valor: 'por-cobrar', etiqueta: 'Por cobrar' },
+  ...VISTAS,
 ];
 
 interface Props {
@@ -34,15 +41,24 @@ interface Props {
 
 /**
  * `/caja` con turno abierto (criterio 110 de 006): de qué caja es, desde cuándo y con qué fondo; el cambio entre
- * "Movimientos" y "Reporte X"; y, separado por una junta, "Cerrar caja". "Por cobrar" y "Mostrador" llegan con el
- * cobro. El cierre es una vista aparte (`?paso=cierre`) para que el botón de volver del celular regrese al turno.
+ * "Por cobrar" (para quien cobra), "Movimientos" y "Reporte X"; y, separado por una junta, "Cerrar caja". "Mostrador"
+ * y el cobro mismo llegan después. El cierre es una vista aparte (`?paso=cierre`) para que el botón de volver del celular regrese al turno.
  */
 export function MiTurno({ turno, onCerrada }: Props) {
   const [parametros, ponerParametros] = useSearchParams();
   const navegar = useNavigate();
   const sondeo = useIntervaloDeSondeo();
   const cerrando = parametros.get('paso') === 'cierre';
-  const vista: Vista = parametros.get('ver') === 'reporte-x' ? 'reporte-x' : 'movimientos';
+  const puedeCobrar = usePermiso('COBRAR') !== 'prohibido';
+  const sucursalId = useSesionActiva().sucursal?.id ?? '';
+  const pedida = parametros.get('ver');
+  // «Por cobrar» se ofrece a quien cobra; la vista por defecto sigue siendo «Movimientos» hasta que llegue el cobro.
+  const vista: Vista =
+    pedida === 'reporte-x'
+      ? 'reporte-x'
+      : pedida === 'por-cobrar' && puedeCobrar
+        ? 'por-cobrar'
+        : 'movimientos';
 
   // El reporte trae la lista de movimientos y, en el X, lo que debería haber. La pantalla de cierre no lo pide ni lo
   // muestra (arqueo a ciegas): se monta aparte, sin esta consulta.
@@ -89,12 +105,14 @@ export function MiTurno({ turno, onCerrada }: Props) {
 
         <Segmentos
           etiqueta="Secciones de tu turno"
-          opciones={VISTAS}
+          opciones={puedeCobrar ? VISTAS_CON_COBRO : VISTAS}
           valor={vista}
           onCambio={(valor) => ponerParametros({ ver: valor }, { replace: true })}
         />
 
-        {vista === 'movimientos' ? (
+        {vista === 'por-cobrar' ? (
+          <PorCobrar sucursalId={sucursalId} />
+        ) : vista === 'movimientos' ? (
           <Movimientos
             turno={turno}
             reporte={reporte.data}

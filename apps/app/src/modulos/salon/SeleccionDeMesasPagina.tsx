@@ -27,6 +27,7 @@ import { preferenciaDelSalon, type VistaDelSalon } from '../../lib/almacen';
 import { nuevaClaveDeIdempotencia } from '../../lib/api';
 import { useEnvioPendiente } from '../../lib/envios';
 import { ErrorApi, mensajeDeError } from '../../lib/errores';
+import { falloDeCuenta } from '../caja/fallos';
 import { useAnchoDe } from '../../lib/medidas';
 import { CLAVES_TIEMPO_REAL } from '../../lib/tiempo-real';
 import { usePermiso } from '../acceso/permisos';
@@ -329,7 +330,12 @@ function ElegirMesas({
       void clientes.invalidateQueries({ queryKey: CLAVES_TIEMPO_REAL.orden(ordenId) });
       if (!envio.sigueMontada()) return;
       setConfirmando(false);
-      setFallo(mensajeDeError(error, MENSAJES));
+      // Unir una cuenta con descuento de cuenta (criterio 45a de 006): la API dice qué quitar antes.
+      setFallo(
+        (error instanceof ErrorApi && error.codigo === 'DESCUENTO_INVALIDO'
+          ? falloDeCuenta(error)?.texto
+          : undefined) ?? mensajeDeError(error, MENSAJES),
+      );
       // Una mesa que ya no vale se suelta; el resto de la elección se conserva.
       if (error instanceof ErrorApi && error.codigo === 'MESA_OCUPADA') setElegidas([]);
     } finally {

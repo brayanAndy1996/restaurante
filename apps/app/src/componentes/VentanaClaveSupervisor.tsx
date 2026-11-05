@@ -1,4 +1,8 @@
-import { autorizacionRespuestaSchema, type AutorizacionRespuesta } from '@restaurante/contratos';
+import {
+  autorizacionRespuestaSchema,
+  type AutorizacionRespuesta,
+  type ObjetivoAutorizacion,
+} from '@restaurante/contratos';
 import type { Accion } from '@restaurante/dominio';
 import {
   Aviso,
@@ -16,6 +20,7 @@ import { ahoraDelServidor, api } from '../lib/api';
 import { ErrorApi, mensajeDeError } from '../lib/errores';
 import { relojDeCuenta } from '../lib/formato';
 import { useSegundosHasta } from '../lib/tiempo';
+import { describirObjetivo, type ContextoDeObjetivo } from './objetivo-de-clave';
 
 /** Atajos de un toque para el motivo: lo más frecuente en el salón. Cada pantalla puede pasar los suyos. */
 export const ATAJOS_DE_MOTIVO = [
@@ -43,7 +48,15 @@ export interface PropsVentanaClaveSupervisor {
    * Qué se autoriza, con el dato que la hace reconocible, para que el supervisor lo lea antes de dar su
    * clave ("Anular ítem: Ceviche mixto x1 · S/ 38.00").
    */
-  descripcion: string;
+  descripcion?: string;
+  /**
+   * Lo que la clave autoriza con exactitud (descuentos y cortesías, historia 006): se manda tal cual en
+   * `POST /autorizaciones` y es lo que la ventana muestra (con `contexto`); `descripcion` ya no se usa. La clave
+   * que se obtiene solo sirve para ese objetivo.
+   */
+  objetivo?: ObjetivoAutorizacion;
+  /** Nombres del ítem y de la mesa para decir el `objetivo` con palabras. */
+  contexto?: ContextoDeObjetivo;
   /** Motivos de un toque; por defecto `ATAJOS_DE_MOTIVO`. */
   atajos?: readonly string[];
   /**
@@ -71,12 +84,18 @@ const motivoFijo = (motivo: string | undefined) => (motivo?.trim() ? motivo.trim
 function Contenido({
   accion,
   descripcion,
+  objetivo,
+  contexto,
   atajos,
   motivo: motivoDado,
   onAutorizada,
   onCancelar,
 }: PropsContenido) {
   const fijo = motivoFijo(motivoDado);
+  // Con objetivo, lo que se lee sale del mismo objeto que se manda: no pueden decir cosas distintas.
+  const queSeAutoriza = objetivo
+    ? describirObjetivo(objetivo, contexto ?? { mesa: '' })
+    : (descripcion ?? '');
   const [motivo, setMotivo] = useState(fijo ?? '');
   const motivoActual = useRef(fijo ?? '');
   const [errorMotivo, setErrorMotivo] = useState<string | null>(null);
@@ -139,7 +158,12 @@ function Contenido({
       try {
         const respuesta = await api.post(
           '/autorizaciones',
-          { accion, motivo: motivoLimpio, pin: pinCompleto },
+          {
+            accion,
+            motivo: motivoLimpio,
+            pin: pinCompleto,
+            ...(objetivo ? { objetivo } : {}),
+          },
           { esquema: autorizacionRespuestaSchema, idempotente: true, reintentos: 2 },
         );
         poner('');
@@ -165,7 +189,7 @@ function Contenido({
         if (montado.current) setEnviando(false);
       }
     },
-    [accion, onAutorizada, poner],
+    [accion, objetivo, onAutorizada, poner],
   );
 
   const ocupado = enviando || bloqueado;
@@ -235,7 +259,7 @@ function Contenido({
     <div className="formulario clave">
       <div className="clave__accion">
         <span className="texto-ayuda">Se autoriza (queda registrado con tu nombre)</span>
-        <b>{descripcion}</b>
+        <b>{queSeAutoriza}</b>
         {fijo ? <span className="clave__motivo">Motivo: {fijo}</span> : null}
       </div>
 

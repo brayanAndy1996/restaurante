@@ -10,7 +10,7 @@ import { IngresoPagina } from './modulos/acceso/IngresoPagina';
 import { InicioPagina } from './modulos/acceso/InicioPagina';
 import { PinPagina } from './modulos/acceso/PinPagina';
 import { RecordarEquipoAutomatico } from './modulos/acceso/RecordarEquipo';
-import { veElSalon, veLaCaja, veLaCocina } from './modulos/acceso/navegacion';
+import { veElSalon, veLaCaja, veLaCocina, veLaCuenta } from './modulos/acceso/navegacion';
 import { usePermiso } from './modulos/acceso/permisos';
 import { useSesion } from './modulos/acceso/sesion';
 import { PlataformaIngresoPagina } from './modulos/plataforma/PlataformaIngresoPagina';
@@ -118,6 +118,10 @@ const UnirMesasPagina = lazy(() =>
 // Caja (006): abrir, mi turno, movimientos, reporte X y cierre. Todo el módulo se baja al abrir la pantalla.
 const CajaPagina = lazy(() =>
   import('./modulos/caja/CajaPagina').then((m) => ({ default: m.CajaPagina })),
+);
+// La cuenta con sus descuentos y cortesías (006): otro bloque, que solo se baja al abrirla desde la mesa o «Por cobrar».
+const CuentaPagina = lazy(() =>
+  import('./modulos/caja/CuentaPagina').then((m) => ({ default: m.CuentaPagina })),
 );
 const CocinaPagina = lazy(() =>
   import('./modulos/cocina/CocinaPagina').then((m) => ({ default: m.CocinaPagina })),
@@ -271,6 +275,17 @@ function RutaDeCaja() {
   return <Outlet />;
 }
 
+/**
+ * La cuenta con sus descuentos y cortesías la ve quien tiene `ATENDER_MESA` con su rol en la sucursal activa y el
+ * módulo de Caja en su plan (el Mozo llega desde la cuenta de la mesa). La guarda solo ordena la pantalla: la API
+ * decide.
+ */
+function RutaDeCuenta() {
+  const { sesion } = useSesion();
+  if (!veLaCuenta(sesion)) return <Navigate to="/" replace />;
+  return <Outlet />;
+}
+
 function Cargando() {
   return <PantallaDeCarga />;
 }
@@ -318,6 +333,9 @@ export function App() {
               </Route>
               <Route element={<RutaDeCaja />}>
                 <Route path="/caja" element={<CajaPagina />} />
+              </Route>
+              <Route element={<RutaDeCuenta />}>
+                <Route path="/caja/cuentas/:id" element={<CuentaPagina />} />
               </Route>
               <Route element={<RutaDeCocina />}>
                 <Route path="/cocina" element={<CocinaPagina />} />

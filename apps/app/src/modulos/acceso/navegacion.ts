@@ -41,6 +41,14 @@ export function veLaCaja(sesion: SesionDeNavegacion | null | undefined): boolean
 }
 
 /**
+ * La cuenta con sus descuentos y cortesías (`/caja/cuentas/:id`, criterio 36 de 006): quien atiende mesas
+ * (`ATENDER_MESA`), si la sucursal tiene el módulo de Caja, que es de donde sale `GET /cuentas/:ordenId`.
+ */
+export function veLaCuenta(sesion: SesionDeNavegacion | null | undefined): boolean {
+  return sesion ? puede(sesion, 'ATENDER_MESA', 'CAJA') : false;
+}
+
+/**
  * "Disponibilidad" va dentro de Cocina para el Administrador (su barra ya tiene cinco destinos, criterio 108 de
  * 006). Si el plan no le da Cocina, vuelve a la barra: es la única puerta.
  */
