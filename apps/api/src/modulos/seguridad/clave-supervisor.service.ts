@@ -74,7 +74,10 @@ function exigirObjetivoCoherente(entrada: AutorizacionEntrada): void {
   const esperada = entrada.objetivo.tipo === 'DESCUENTO' ? 'APLICAR_DESCUENTO' : 'APLICAR_CORTESIA';
   if (entrada.accion !== esperada) {
     throw new ErrorAplicacion(400, 'DATOS_INVALIDOS', 'Los datos enviados no son válidos', [
-      { campo: 'objetivo', mensaje: `El objetivo ${entrada.objetivo.tipo} solo vale para ${esperada}` },
+      {
+        campo: 'objetivo',
+        mensaje: `El objetivo ${entrada.objetivo.tipo} solo vale para ${esperada}`,
+      },
     ]);
   }
 }

@@ -22,7 +22,10 @@ export function normalizarObjetivo(objetivo: ObjetivoAutorizacion): ObjetivoAuto
       tipo: 'DESCUENTO',
       ordenId: objetivo.ordenId.toLowerCase(),
       itemId: objetivo.itemId === null ? null : objetivo.itemId.toLowerCase(),
-      descuento: { tipo: objetivo.descuento.tipo, valor: normalizarValor(objetivo.descuento.valor) },
+      descuento: {
+        tipo: objetivo.descuento.tipo,
+        valor: normalizarValor(objetivo.descuento.valor),
+      },
     };
   }
   return {
