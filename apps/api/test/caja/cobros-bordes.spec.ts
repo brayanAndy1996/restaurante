@@ -98,6 +98,28 @@ describe('réplica por id', () => {
   });
 });
 
+describe('réplica por id y dueño del turno (M11)', () => {
+  it('otro Cajero que repite el id de un cobro ajeno recibe 409 TURNO_AJENO, no la respuesta guardada; el Supervisor sí la recibe', async () => {
+    const cuenta = await cuentaC(ctx, A());
+    const turnoId = await turno();
+    const cuerpo = cuerpoDeCobro({
+      turnoId,
+      version: await versionDe(cuenta.ordenId),
+      total: '69.20',
+    });
+    const hecho = await cobrarCrudo(ctx, A().token.cajero!, cuenta.ordenId, cuerpo);
+    exigirEstado(hecho, 201, 'Cobrar');
+    esperarError(
+      await cobrarCrudo(ctx, A().token.cajero2!, cuenta.ordenId, cuerpo),
+      409,
+      'TURNO_AJENO',
+    );
+    const delSupervisor = await cobrarCrudo(ctx, A().token.supervisor!, cuenta.ordenId, cuerpo);
+    exigirEstado(delSupervisor, 201, 'Réplica del Supervisor');
+    expect(delSupervisor.body).toEqual(hecho.body);
+  });
+});
+
 describe('la cuenta con cobros', () => {
   it('GET /cuentas/:ordenId lista los cobros en el orden de sus partes, con el comprobante y quién cobró', async () => {
     const cuenta = await cuentaC(ctx, A());

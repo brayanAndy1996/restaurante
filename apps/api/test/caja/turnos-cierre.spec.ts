@@ -215,6 +215,22 @@ describe('criterio 29 · reporte X con comprobantes', () => {
   });
 });
 
+describe('criterio 28 · réplica de un movimiento y dueño del turno (M11)', () => {
+  it('otro Cajero que repite el id de un movimiento ajeno recibe 409 TURNO_AJENO; el Supervisor recibe lo guardado', async () => {
+    const cajas = await A().cajas();
+    const t = await abrirTurno(ctx, A().token.cajero!, cajas.S1!.caja1, '10.00');
+    const cuerpo = { id: randomUUID(), tipo: 'INGRESO', monto: '5.00', motivo: 'Prueba' };
+    const ruta = `/turnos/${t}/movimientos`;
+    const hecho = await escribir(ctx, A().token.cajero!, 'post', ruta, cuerpo);
+    exigirEstado(hecho, 201, 'Ingreso');
+    esperarError(await escribir(ctx, A().token.cajero2!, 'post', ruta, cuerpo), 409, 'TURNO_AJENO');
+    const replica = await escribir(ctx, A().token.supervisor!, 'post', ruta, cuerpo);
+    exigirEstado(replica, 201, 'Réplica del Supervisor');
+    expect(replica.body).toEqual(hecho.body);
+    exigirEstado(await cerrar(A().token.cajero!, t, { EFECTIVO: '15.00' }), 200, 'Cerrar');
+  });
+});
+
 describe('criterios 31 a 35 · cierre con movimientos', () => {
   it('arqueo a ciegas: sin motivo es 422 con solo los medios que no cuadran y sin ningún monto; con motivo cierra y guarda el conteo', async () => {
     const cajas = await A().cajas();

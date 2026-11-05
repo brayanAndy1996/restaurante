@@ -229,6 +229,8 @@ export class TurnosService {
       ) {
         throw idDeClienteReutilizado();
       }
+      // La réplica se reconoce antes de mirar el estado del turno, pero no antes de su dueño (criterio 100).
+      this.exigirResponsableOSupervisor(previo);
       return this.movimientoARespuesta(existente);
     }
 

@@ -170,6 +170,7 @@ export interface FilaTurnoDeCobro {
 interface FilaReplica {
   orden_id: string;
   sucursal_id: string;
+  responsable_id: string;
   huella_entrada: Buffer;
   respuesta: CobroRespuesta;
 }
@@ -502,7 +503,7 @@ export class CobrosService {
     huella: Buffer,
   ): Promise<CobroRespuesta | undefined> {
     const filas = await this.conexion.query<FilaReplica>(
-      `SELECT c.orden_id, t.sucursal_id, c.huella_entrada, c.respuesta
+      `SELECT c.orden_id, t.sucursal_id, t.responsable_id, c.huella_entrada, c.respuesta
          FROM cobro c JOIN turno t ON t.id = c.turno_id AND t.empresa_id = c.empresa_id
         WHERE c.id = $1`,
       { bind: [id], type: QueryTypes.SELECT },
@@ -516,7 +517,21 @@ export class CobrosService {
     ) {
       throw idDeClienteReutilizado();
     }
+    // La respuesta guardada trae el comprobante y los pagos de ese turno: solo la ve quien puede cobrar en él.
+    if (!this.veTodosLosTurnos() && previo.responsable_id !== this.sesion.principal().usuarioId) {
+      throw turnoAjeno();
+    }
     return previo.respuesta;
+  }
+
+  /** El Supervisor y el Administrador cobran (y ven las réplicas) en el turno de cualquier Cajero de la sucursal. */
+  private veTodosLosTurnos(): boolean {
+    const principal = this.sesion.principal();
+    return (
+      principal.esAdministrador ||
+      principal.rol === 'SUPERVISOR' ||
+      principal.rol === 'ADMINISTRADOR'
+    );
   }
 
   /**
@@ -532,12 +547,9 @@ export class CobrosService {
     );
     const turno = filas[0];
     if (turno === undefined) throw noEncontrado('El turno');
-    const principal = this.sesion.principal();
-    const veTodos =
-      principal.esAdministrador ||
-      principal.rol === 'SUPERVISOR' ||
-      principal.rol === 'ADMINISTRADOR';
-    if (!veTodos && turno.responsable_id !== principal.usuarioId) throw turnoAjeno();
+    if (!this.veTodosLosTurnos() && turno.responsable_id !== this.sesion.principal().usuarioId) {
+      throw turnoAjeno();
+    }
     if (turno.estado !== 'ABIERTO') throw turnoCerrado();
     return turno;
   }
