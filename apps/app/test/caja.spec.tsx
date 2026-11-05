@@ -12,7 +12,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { guardarTokenDeSesion } from '../src/lib/almacen';
 import { espera } from '../src/lib/api';
 import { ID, json, renderApp, servidor, type Manejador } from './ayudas';
-import { mesa, salon, sesionDeRol, uuid, zona } from './ayudas-salon';
+import { sesionDeRol, uuid } from './ayudas-salon';
 
 // spec: 006-caja-cobro, criterios 24 a 35 y 108 a 110, 116 en la interfaz (pruebas no protegidas de la pantalla de
 // caja: abrir, movimientos, reporte X y cierre con conteo a ciegas).
@@ -785,17 +785,16 @@ describe('Cerrar caja: conteo a ciegas, diferencias y bloqueo (criterios 31 a 35
   it('con cuentas abiertas (409 CIERRE_BLOQUEADO) dice cuántas, lista cada una con su enlace y conserva el conteo', async () => {
     const ordenA = uuid(701);
     const ordenB = uuid(702);
-    const conOrden = (n: number, id: string, nombre: string, total: string) => ({
-      ...mesa(n, nombre),
-      estado: 'OCUPADA' as const,
-      orden: {
-        id,
-        mozo: { id: uuid(31), nombre: 'Lucía' },
-        comensales: 2,
-        abiertaEn: '2026-11-04T23:10:00.000Z',
-        total,
-        mesas: [{ id: uuid(100 + n), nombre }],
-      },
+    const resumen = (id: string, mesa: string, saldo: string) => ({
+      ordenId: id,
+      tipo: 'MESA' as const,
+      mesas: [{ id: uuid(100 + Number(mesa)), nombre: mesa }],
+      mozo: { id: uuid(31), nombre: 'Lucía' },
+      abiertaEn: '2026-11-04T23:10:00.000Z',
+      estado: 'ABIERTA' as const,
+      total: saldo,
+      saldo,
+      modo: null,
     });
     api(
       {
@@ -803,18 +802,8 @@ describe('Cerrar caja: conteo a ciegas, diferencias y bloqueo (criterios 31 a 35
         cierre: () => conflicto('CIERRE_BLOQUEADO', 'Hay cuentas abiertas', 409, { ordenes: 2 }),
       },
       {
-        'GET /salon': () =>
-          json(
-            200,
-            salon([
-              zona(uuid(1), 'Salón', [
-                mesa(1, '1'),
-                conOrden(4, ordenA, '4', '69.20'),
-                conOrden(6, ordenB, '6', '38.00'),
-              ]),
-            ]),
-            { ETag: '"a"' },
-          ),
+        'GET /cuentas': () =>
+          json(200, [resumen(ordenA, '4', '69.20'), resumen(ordenB, '6', '38.00')]),
       },
     );
     await aCerrar();
@@ -833,8 +822,8 @@ describe('Cerrar caja: conteo a ciegas, diferencias y bloqueo (criterios 31 a 35
     const lista = await screen.findByRole('list', { name: 'Cuentas abiertas' });
     const enlaces = within(lista).getAllByRole('link');
     expect(enlaces.map((e) => e.getAttribute('href'))).toEqual([
-      `/salon/ordenes/${ordenA}`,
-      `/salon/ordenes/${ordenB}`,
+      `/caja/cuentas/${ordenA}`,
+      `/caja/cuentas/${ordenB}`,
     ]);
     expect(within(lista).getByText('Mesa 4')).toBeInTheDocument();
     expect(within(lista).getByText(/Lucía · S\/ 69.20/)).toBeInTheDocument();

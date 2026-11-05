@@ -1,9 +1,9 @@
-import type { CajaRespuesta, SalonRespuesta } from '@restaurante/contratos';
+import type { CajaRespuesta } from '@restaurante/contratos';
 import { describe, expect, it } from 'vitest';
 import {
   CONTEO_VACIO,
   cajaInicial,
-  cuentasAbiertasDelSalon,
+  cuentasAbiertas,
   cuerpoDeCierre,
   etiquetaDeMesas,
   medioDeCampoDeConteo,
@@ -220,48 +220,28 @@ describe('cuentas que bloquean el cierre (criterio 116)', () => {
     expect(etiquetaDeMesas([])).toBe('Cuenta sin mesa');
   });
 
-  it('lista cada cuenta del mapa una sola vez, aunque ocupe varias mesas', () => {
-    const orden = (id: string, mesas: string[], total: string) => ({
-      id,
-      mozo: { id: uuid(9), nombre: 'Lucía' },
-      comensales: 2,
-      abiertaEn: '2026-11-04T23:00:00.000Z',
-      total,
+  it('lista cada cuenta de GET /cuentas una vez, con sus mesas y lo que falta cobrar', () => {
+    const cuenta = (id: string, mesas: string[], saldo: string, mozo = 'Lucía') => ({
+      ordenId: id,
+      tipo: mesas.length > 0 ? ('MESA' as const) : ('MOSTRADOR' as const),
       mesas: mesas.map((nombre, i) => ({ id: uuid(50 + i), nombre })),
+      mozo: mozo ? { id: uuid(9), nombre: mozo } : null,
+      abiertaEn: '2026-11-04T23:00:00.000Z',
+      estado: 'ABIERTA' as const,
+      total: saldo,
+      saldo,
+      modo: null,
     });
-    const mesa = (n: number, o: ReturnType<typeof orden> | null) => ({
-      id: uuid(100 + n),
-      nombre: String(n),
-      capacidad: 4,
-      forma: 'CUADRADA' as const,
-      columna: n,
-      fila: 1,
-      estado: o ? ('OCUPADA' as const) : ('LIBRE' as const),
-      orden: o,
-    });
-    const unida = orden(uuid(701), ['4', '5'], '69.20');
-    const salon = {
-      sucursalId: uuid(1),
-      ahora: '2026-11-04T23:30:00.000Z',
-      mozos: [],
-      zonas: [
-        {
-          id: uuid(2),
-          nombre: 'Salón',
-          columnas: 3,
-          filas: 1,
-          mesas: [
-            mesa(1, null),
-            mesa(4, unida),
-            mesa(5, unida),
-            mesa(6, orden(uuid(702), ['6'], '12.5')),
-          ],
-        },
-      ],
-    } as SalonRespuesta;
-    expect(cuentasAbiertasDelSalon(salon)).toEqual([
-      { ordenId: uuid(701), texto: 'Mesas 4 y 5', detalle: 'Lucía · S/ 69.20' },
-      { ordenId: uuid(702), texto: 'Mesa 6', detalle: 'Lucía · S/ 12.50' },
+    expect(
+      cuentasAbiertas([
+        cuenta(uuid(701), ['4', '5'], '69.20'),
+        cuenta(uuid(702), ['6'], '12.5'),
+        cuenta(uuid(703), [], '8.00', ''),
+      ]),
+    ).toEqual([
+      { ordenId: uuid(701), texto: 'Mesas 4 y 5', detalle: 'Lucía · S/\u00a069.20' },
+      { ordenId: uuid(702), texto: 'Mesa 6', detalle: 'Lucía · S/\u00a012.50' },
+      { ordenId: uuid(703), texto: 'Mostrador', detalle: 'S/\u00a08.00' },
     ]);
   });
 });

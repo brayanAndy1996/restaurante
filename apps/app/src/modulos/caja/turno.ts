@@ -2,7 +2,7 @@ import {
   cajaRespuestaSchema,
   movimientoRespuestaSchema,
   reporteCajaSchema,
-  salonRespuestaSchema,
+  cuentaResumenSchema,
   turnoRespuestaSchema,
   type CajaRespuesta,
   type CierreEntrada,
@@ -10,7 +10,7 @@ import {
   type MovimientoEntrada,
   type MovimientoRespuesta,
   type ReporteCaja,
-  type SalonRespuesta,
+  type CuentaResumen,
   type TurnoRespuesta,
 } from '@restaurante/contratos';
 import { MEDIOS_PAGO, type MedioPago } from '@restaurante/dominio';
@@ -384,30 +384,23 @@ export function etiquetaDeMesas(nombres: readonly string[]): string {
 }
 
 /**
- * Las cuentas abiertas que se ven en el mapa del salón, una vez cada una (una cuenta con varias mesas ocupa varias).
- * `GET /cuentas` (la lista de "Por cobrar") todavía no existe: hasta entonces el mapa es la lista de órdenes
- * abiertas que la pantalla puede mostrar; el total que dijo `CIERRE_BLOQUEADO` es el que manda.
+ * Las cuentas abiertas de la sucursal (`GET /cuentas`, la misma lista de «Por cobrar»), una fila por cuenta: con mesa
+ * («Mesas 4 y 5») o de mostrador («Llamado 23», o «Mostrador» si todavía no tiene número). El detalle es quién la
+ * atiende y lo que falta cobrar.
  */
-export function cuentasAbiertasDelSalon(salon: SalonRespuesta): CuentaAbierta[] {
-  const vistas = new Set<string>();
-  const cuentas: CuentaAbierta[] = [];
-  for (const zona of salon.zonas) {
-    for (const mesa of zona.mesas) {
-      const orden = mesa.orden;
-      if (!orden || vistas.has(orden.id)) continue;
-      vistas.add(orden.id);
-      cuentas.push({
-        ordenId: orden.id,
-        texto: etiquetaDeMesas(orden.mesas.map((m) => m.nombre)),
-        detalle: `${orden.mozo.nombre} · ${soles(orden.total)}`,
-      });
-    }
-  }
-  return cuentas;
+export function cuentasAbiertas(cuentas: readonly CuentaResumen[]): CuentaAbierta[] {
+  return cuentas.map((c) => ({
+    ordenId: c.ordenId,
+    texto: c.mesas.length > 0 ? etiquetaDeMesas(c.mesas.map((m) => m.nombre)) : 'Mostrador',
+    detalle: [c.mozo?.nombre, soles(c.saldo)].filter(Boolean).join(' · '),
+  }));
 }
 
-export const leerSalonParaCierre = (senal?: AbortSignal) =>
-  api.get('/salon', { esquema: salonRespuestaSchema, ...(senal ? { senal } : {}) });
+export const leerCuentasParaCierre = (senal?: AbortSignal) =>
+  api.get<CuentaResumen[]>('/cuentas', {
+    esquema: listaDe(cuentaResumenSchema),
+    ...(senal ? { senal } : {}),
+  });
 
 /**
  * Un `id` de operación (turno, movimiento) que se conserva mientras la respuesta no sea final: si el envío se

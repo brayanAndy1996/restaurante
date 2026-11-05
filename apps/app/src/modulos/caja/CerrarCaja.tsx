@@ -24,7 +24,7 @@ import { nuevaClaveDeIdempotencia } from '../../lib/api';
 import { useEnvioPendiente } from '../../lib/envios';
 import { ErrorApi } from '../../lib/errores';
 import { montoEsCero } from '../../lib/monto';
-import { rutaDeOrden } from '../salon/salon';
+import { rutaDeCuenta } from './cuenta';
 import {
   ATAJOS_DE_MOTIVO,
   AYUDA_DE_CONTEO,
@@ -32,9 +32,9 @@ import {
   CONTEO_VACIO,
   NOMBRE_DE_MEDIO,
   cerrarTurno,
-  cuentasAbiertasDelSalon,
+  cuentasAbiertas,
   cuerpoDeCierre,
-  leerSalonParaCierre,
+  leerCuentasParaCierre,
   medioDeCampoDeConteo,
   mediosConDiferencia,
   mensajeDeCaja,
@@ -58,13 +58,13 @@ type Errores = Partial<Record<MedioPago, string>>;
 /** Las cuentas que impiden cerrar, con un enlace a cada una (criterio 116). */
 function CuentasAbiertas({ ordenes }: { ordenes: number }) {
   const salon = useQuery({
-    queryKey: ['turno', 'cierre-bloqueado', 'salon'],
-    queryFn: ({ signal }) => leerSalonParaCierre(signal),
+    queryKey: ['turno', 'cierre-bloqueado', 'cuentas'],
+    queryFn: ({ signal }) => leerCuentasParaCierre(signal),
     // Es un dato que la persona necesita fresco y no se reutiliza.
     gcTime: 0,
     retry: false,
   });
-  const cuentas = salon.data ? cuentasAbiertasDelSalon(salon.data) : [];
+  const cuentas = salon.data ? cuentasAbiertas(salon.data) : [];
   const restantes = Math.max(0, ordenes - cuentas.length);
   return (
     <section className="turno__bloqueo" aria-labelledby="cuentas-abiertas-titulo">
@@ -77,7 +77,7 @@ function CuentasAbiertas({ ordenes }: { ordenes: number }) {
         <ListaDeFilas etiqueta="Cuentas abiertas">
           {cuentas.map((c) => (
             <li key={c.ordenId}>
-              <Link to={rutaDeOrden(c.ordenId)} className={claseFila()}>
+              <Link to={rutaDeCuenta(c.ordenId)} state={{ desde: 'caja' }} className={claseFila()}>
                 <ContenidoDeFila
                   titulo={c.texto}
                   ayuda={c.detalle}
