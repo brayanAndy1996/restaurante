@@ -268,7 +268,7 @@ function Mostrador({
   if (hecha) {
     const { respuesta } = hecha;
     return (
-      <Pagina titulo="Venta de mostrador">
+      <Pagina key="resultado" titulo="Venta">
         <ResultadoDeCobro
           respuesta={respuesta.cobro}
           titulo={`Llamado ${respuesta.venta.numeroLlamado}`}

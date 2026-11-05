@@ -104,9 +104,9 @@ export function PorEnviar({ borrador, onEditar, modo }: Props) {
         </p>
       ) : null}
 
-      {borrador.lineas.length > 0 ? (
+      {borrador.lineas.length > 0 && !deMostrador ? (
         <div className="por-enviar__total">
-          <span>{deMostrador ? 'Total de la venta' : 'Total por enviar'}</span>
+          <span>Total por enviar</span>
           <b>{montoEnSoles(totalDelBorrador(borrador.lineas))}</b>
         </div>
       ) : null}

@@ -77,7 +77,7 @@ export function ResultadoDeCobro({
 
       <dl className="desglose" aria-label="Lo que se cobró">
         <div className="desglose__fila">
-          <dt>Total de la parte</dt>
+          <dt>{deMostrador ? 'Total de la venta' : 'Total de la parte'}</dt>
           <dd>{montoEnSoles(respuesta.total)}</dd>
         </div>
         {respuesta.pagos.map((p, i) => (
