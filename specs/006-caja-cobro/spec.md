@@ -6,7 +6,7 @@
   - **Quedan para otras secciones:** RF-79 a RF-83 y HU-35 a HU-37 (reportes y exportación, sección de reportes: aquí solo quedan los datos); el registro posterior de las ventas hechas con el talonario de contingencia (pregunta 23); el cobro de pedidos de delivery (sección de delivery: el cobro de esta sección sirve igual para una orden `DELIVERY`).
   - Fuente de negocio: `fuentes.md` de esta carpeta (requerimientos rev. 45, diseño rev. 29) y las decisiones de 002 a 005 que siguen vigentes. Donde las fuentes no alcanzan, los criterios están escritos con la recomendación de cada pregunta de "Preguntas abiertas" y la citan como "pregunta N".
 - **Ruta crítica:** sí, casi toda, confirmada por el orquestador el 2026-11-04: P1 a P6 en 6a y P7 a P9 en 6b. Ver "Clasificación de ruta crítica".
-- **Estado:** aprobado por el usuario el 2026-11-04 con las recomendaciones de las 24 preguntas (las marcadas para el contador quedan por confirmar con él); en curso 6a.
+- **Estado:** aprobado por el usuario el 2026-11-04 con las recomendaciones de las 24 preguntas (las marcadas para el contador quedan por confirmar con él); 6a terminada (2026-11-05); 6b pendiente (se precisa con el PSE elegido).
 
 ## Objetivo
 
@@ -598,6 +598,7 @@ Nuevos tras la revisión T26 de la entrega 6a (2026-11-05), pendientes de la dec
 - **Montos menores de una décima no se pagan en efectivo** (criterio 21). Una cuenta, o el resto de una parte, de S/ 0.01 a 0.09 queda en `efectivo` `"0.00"` con el redondeo y todo pago debe ser mayor que cero: solo se cobra con tarjeta, Yape o Plin. Es raro (casi siempre el resto de una división) y no descuadra nada.
 - **El puente puede imprimir dos veces el mismo ticket** (riesgo de 3b). `GET /puente/trabajos` entrega los trabajos pendientes sin reservarlos: si el puente reintenta la petición antes de confirmar la impresión, recibe otra vez el mismo trabajo. El pulso de gaveta sale una sola vez (se marca `entregado_en` en la primera entrega, criterio 94); el papel puede salir dos veces. Se corrige, si hace falta, en 3b o en la app 3c.
 - **Decisión, no riesgo: reimpresión de 004 sin el módulo del plan.** `POST /impresion/trabajos/:id/reimpresion` exige el permiso y el alcance de caja o facturación pero no el módulo: una sucursal sin `FACTURACION` o sin `CAJA` podía reimprimir comprobantes, X y Z ya emitidos. Se corrige en el código: exige `FACTURACION` para `COMPROBANTE` y `CAJA` para `REPORTE_X` y `REPORTE_Z` (criterio 90).
+- **Revertir la 6a solo en una base sin trabajos de impresión de caja.** El `down` de `202611040007-impresion-caja.ts` se niega por diseño si ya hay trabajos de impresión de los tipos nuevos (`COMPROBANTE`, `GAVETA`, `REPORTE_X` y `REPORTE_Z`): vuelve a poner el `CHECK` de tipos sin ellos y falla. Revertir la 6a solo es posible en una base sin esos datos. Verificado en T27: el ciclo subir, revertir y volver a subir las ocho migraciones da el mismo esquema en una base sin datos.
 
 ## Preguntas abiertas
 

@@ -1,8 +1,8 @@
 # Guía de uso con ejemplos: El Fogón, de cero a la primera mesa cobrada
 
-Esta guía recorre todo lo que hoy existe en `main` (plataforma y acceso, carta, salón y cocina, e
+Esta guía recorre lo que hoy existe en `main` (plataforma y acceso, carta, salón y cocina, e
 impresión), con datos concretos para escribir y con la explicación de **para qué sirve** cada cosa en
-un restaurante real.
+un restaurante real. El capítulo 6 (caja) está en la rama de trabajo `claude/upbeat-wright-q09k0n`, todavía no en `main`; la carta web (5a y 5b) todavía no tiene capítulo.
 
 Es más detallada que el recorrido de `DESPLIEGUE-LOCAL.md`, sección 5. Antes de empezar, el sistema
 tiene que estar corriendo en tu computadora (ver `docs/aprendizaje/00-levantar-el-proyecto.md`).
@@ -15,16 +15,19 @@ mesas, cocina e impresión. Al final atenderemos la mesa 4 de principio a fin.
 
 ## Orden recomendado
 
-| Paso | Archivo                                            | Qué haces                                                         | Tiempo |
-| ---- | -------------------------------------------------- | ----------------------------------------------------------------- | ------ |
-| 1    | [01-acceso-y-usuarios.md](01-acceso-y-usuarios.md) | Primer ingreso, PIN, equipos recordados, crear personal, horarios | 20 min |
-| 2    | [02-carta.md](02-carta.md)                         | Estaciones, familias, productos, modificadores, combos, menú      | 40 min |
-| 3    | [03-salon-y-cocina.md](03-salon-y-cocina.md)       | Mapa de mesas y una atención completa con la cocina               | 30 min |
-| 4    | [04-impresion.md](04-impresion.md)                 | Impresoras, destinos y el simulador de puente                     | 20 min |
-| 5    | [05-plataforma.md](05-plataforma.md)               | Lo que hace nuestro equipo: empresas, suscripciones y soporte     | 15 min |
+| Paso | Archivo                                            | Qué haces                                                                                | Tiempo |
+| ---- | -------------------------------------------------- | ---------------------------------------------------------------------------------------- | ------ |
+| 1    | [01-acceso-y-usuarios.md](01-acceso-y-usuarios.md) | Primer ingreso, PIN, equipos recordados, crear personal, horarios                        | 20 min |
+| 2    | [02-carta.md](02-carta.md)                         | Estaciones, familias, productos, modificadores, combos, menú                             | 40 min |
+| 3    | [03-salon-y-cocina.md](03-salon-y-cocina.md)       | Mapa de mesas y una atención completa con la cocina                                      | 30 min |
+| 4    | [04-impresion.md](04-impresion.md)                 | Impresoras, destinos y el simulador de puente                                            | 20 min |
+| 5    | [05-plataforma.md](05-plataforma.md)               | Lo que hace nuestro equipo: empresas, suscripciones y soporte                            | 15 min |
+| 6    | [06-caja-y-cobro.md](06-caja-y-cobro.md)           | Caja: tasa, cajas y series, turno, cobro, descuentos, mostrador, X y Z (rama de trabajo) | 40 min |
 
 Los pasos 3 y 4 necesitan la carta del paso 2: la base de datos empieza **sin carta, sin mesas y sin
 impresoras**.
+
+El paso 6 necesita la carta del paso 2 y una mesa con comanda (paso 3). La caja empieza sin cajas, sin series y sin tasa de IGV: el capítulo las crea.
 
 ## Datos de demostración que ya existen
 
@@ -55,6 +58,8 @@ contraseña `Superadmin-Demo-1`.
 | Cocina/Barra  | Cocina y Disponibilidad                        |
 | Supervisor    | Salón, Cocina y Disponibilidad                 |
 | Administrador | Salón, Cocina, Carta, Disponibilidad y Ajustes |
+
+Con la caja (capítulo 6, en la rama de trabajo), el menú suma «Caja» para quien cobra u opera la caja: el Cajero ve Salón, Caja y Carta; el Supervisor, Salón, Caja, Cocina y Disponibilidad; el Administrador, Salón, Caja, Cocina, Carta y Ajustes, con Disponibilidad dentro de Cocina.
 
 ## Consejos para practicar
 

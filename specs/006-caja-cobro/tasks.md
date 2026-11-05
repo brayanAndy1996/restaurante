@@ -108,7 +108,7 @@ Commit propio.
 
 ### Fase D · Ataque, revisión, verificación y cierre (6a)
 
-- [ ] T25 · adversarial · Ataque con `spec.md`, `plan.md` y el código, sin las notas de quien implementó. Áreas sugeridas:
+- [x] T25 · adversarial · Ataque con `spec.md`, `plan.md` y el código, sin las notas de quien implementó. Áreas sugeridas:
   - **Montos:** céntimos que se pierden o sobran en prorrateos, partes iguales con bolsas y afectaciones mixtas, partes por ítems con descuento, Nuevo RUS, cortesías; totales que no cuadran con Σ líneas; montos en el límite de `NUMERIC(10,2)`; cuentas que cambian entre partes.
   - **Cobro:** cobrar dos veces lo mismo (réplicas con cuerpos distintos, ids nuevos, dos cajas, dos pestañas), cobrar con un total o una versión viejos, vuelto con tarjeta, redondeo inventado, pagos que no cuadran por un céntimo, cobrar en un turno ajeno o cerrado, cobrar una orden unida o de otra sucursal, cobrar y enviar a la vez, cerrar una orden con ítems sin cobrar.
   - **Caja:** cerrar el último turno con mesas abiertas (concurrencia, dos turnos), dos turnos en una caja o de una persona, abrir suspendido, egresos y movimientos en un turno cerrado, un esperado que no es el de la base, ver el esperado de otro turno siendo Cajero.
@@ -117,15 +117,15 @@ Commit propio.
   - **Aislamiento:** ids y series de B, eventos que crucen salas.
   - **Gaveta e impresión:** abrir la gaveta dos veces, con un texto que imite el bloque, con una reimpresión o con un trabajo tardío.
   Cada falla vuelve como prueba nueva (test-writer, con las reglas de la fase B) y a la fase C. (criterios 4, 5, 8 a 22, 24 a 35, 38 a 107)
-- [ ] T26 · revisor · Comparar el cambio con `spec.md`, `plan.md` y `CLAUDE.md`: módulos dueños de sus tablas (caja no lee `orden`, `item`, `serie` ni `comprobante`; facturación no lee `cobro`; pedidos no lee nada de caja y usa el puerto `COBROS`); montos solo con `packages/dominio` y `NUMERIC`; orden fijo de bloqueos; efectos y eventos con `alConfirmar`; reloj de la API en todo cálculo de fecha (nunca `now()` de la base para la fecha de emisión ni el día operativo); tablas con `sqlTablaDeEmpresaTrazable` y `llaveDeEquipo: true`; privilegios de `comprobante` por columna; ninguna tarea de la fase C sobre los archivos de la fase B (el orquestador lo verifica además con `git diff`); presupuesto de la PWA (si no se cumple, propone el ajuste con su motivo).
-- [ ] T27 · tester y documentador · Tester: suite completa, lint, tipos, build, presupuesto y E2E; prueba de carga de 50 cobros concurrentes en una sucursal (plan, "Riesgos"); `pnpm db:migrar`, `pnpm db:revertir` de las ocho migraciones (la 8, `202611040008-impresion-de-operaciones-de-caja.ts`, entró en C6) y otra vez `pnpm db:migrar`, con el esquema idéntico; `db:preparar` dos veces sin errores. Documentador: commit de cierre de 6a y documentación (README: módulos caja y facturación, cómo configurar cajas, series y tasa, el orden de cerrojos (el consultivo por id del cliente primero, `plan.md` "Orden de los cerrojos"), que 6a no se usa con clientes reales sin 6b); estado de `spec.md` a "6a terminada (fecha); 6b pendiente". El orquestador lleva a los documentos compartidos los "Cambios propuestos" que tocan a 6a.
+- [x] T26 · revisor · Comparar el cambio con `spec.md`, `plan.md` y `CLAUDE.md`: módulos dueños de sus tablas (caja no lee `orden`, `item`, `serie` ni `comprobante`; facturación no lee `cobro`; pedidos no lee nada de caja y usa el puerto `COBROS`); montos solo con `packages/dominio` y `NUMERIC`; orden fijo de bloqueos; efectos y eventos con `alConfirmar`; reloj de la API en todo cálculo de fecha (nunca `now()` de la base para la fecha de emisión ni el día operativo); tablas con `sqlTablaDeEmpresaTrazable` y `llaveDeEquipo: true`; privilegios de `comprobante` por columna; ninguna tarea de la fase C sobre los archivos de la fase B (el orquestador lo verifica además con `git diff`); presupuesto de la PWA (si no se cumple, propone el ajuste con su motivo).
+- [x] T27 · tester y documentador · Tester: suite completa, lint, tipos, build, presupuesto y E2E; prueba de carga de 50 cobros concurrentes en una sucursal (plan, "Riesgos"); `pnpm db:migrar`, `pnpm db:revertir` de las ocho migraciones (la 8, `202611040008-impresion-de-operaciones-de-caja.ts`, entró en C6) y otra vez `pnpm db:migrar`, con el esquema idéntico; `db:preparar` dos veces sin errores. Documentador: commit de cierre de 6a y documentación (README: módulos caja y facturación, cómo configurar cajas, series y tasa, el orden de cerrojos (el consultivo por id del cliente primero, `plan.md` "Orden de los cerrojos"), que 6a no se usa con clientes reales sin 6b); estado de `spec.md` a "6a terminada (fecha); 6b pendiente". El orquestador lleva a los documentos compartidos los "Cambios propuestos" que tocan a 6a.
 
 ### Solo ruta crítica (6a)
 
 - [x] Pruebas escritas por test-writer y confirmadas en rojo (P1 a P6, R1)
 - [x] Pruebas en verde tras la implementación (T8, T11, T14, T17, T20, T24)
-- [ ] Ataque adversarial sin fallas abiertas (T25)
-- [ ] El orquestador verifica con `git diff` que la fase C no tocó los archivos de la fase B
+- [x] Ataque adversarial sin fallas abiertas (T25)
+- [x] El orquestador verifica con `git diff` que la fase C no tocó los archivos de la fase B
 
 ---
 

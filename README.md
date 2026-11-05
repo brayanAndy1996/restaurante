@@ -3,7 +3,7 @@
 Sistema en la nube para restaurantes pequeños del Perú, alquilado por sucursal. Monorepo con pnpm y
 Turborepo: `apps/api` (NestJS + Sequelize + PostgreSQL), `packages/dominio` (reglas puras),
 `packages/contratos` (esquemas zod) y `packages/config`. La PWA del personal (`apps/app`) y la carta web de los clientes (`apps/web`) ya existen; el puente Android
-llega en historias posteriores. En `apps/api/src/modulos/` están además los módulos `carta-web` (configuración de la carta y carta pública) y `llamados` (llamados desde la mesa, dueño de la tabla `llamado`); los QR de las mesas viven en `salon`. El diseño y los requerimientos viven en los documentos compartidos
+llega en historias posteriores. En `apps/api/src/modulos/` están además los módulos `carta-web` (configuración de la carta y carta pública) y `llamados` (llamados desde la mesa, dueño de la tabla `llamado`) y, desde la 6a, `caja` y `facturacion` (ver «Caja, cobro y comprobante (6a)»); los QR de las mesas viven en `salon`. El diseño y los requerimientos viven en los documentos compartidos
 que enlaza `CLAUDE.md`; las historias, en `specs/NNN-nombre/`.
 
 ## Estado
@@ -62,12 +62,16 @@ La entrega 5a de la especificación 005, «Carta web y pedido desde la mesa con 
 - **QR de las mesas** (RF-84, HU-42): cada mesa tiene su código, que abre `CARTA_WEB_URL/m/<código>`. La hoja se imprime desde Ajustes › Mapa de mesas, y cambiar el QR de una mesa deja sin efecto el anterior.
 - **Llamados desde la mesa** (RF-85 a RF-88, HU-40 y HU-41): la API recibe el pedido de la mesa, «Llamar al mozo» y «Pedir la cuenta», y los muestra en Salón › Llamados con aviso en vivo. El mozo atiende (si la mesa está libre, la abre), revisa el pedido con el cliente, lo pasa a la cuenta o lo descarta. Nada llega a cocina hasta que alguien pulsa «Enviar». Un llamado pendiente vence a los 15 minutos, cada mesa tiene uno pendiente a la vez y hay límites por mesa y por conexión.
 
-La entrega 5b de la especificación 005, «Carta web y pedido desde la mesa» (`apps/web`, Next.js), está terminada en la misma rama de trabajo; todavía no está en `main`. Lo construido:
+La entrega 5b de la especificación 005, «Carta web y pedido desde la mesa» (`apps/web`, Next.js), está terminada y ya está en `main`. Lo construido:
 
 - **Carta por sucursal** (RF-40, RF-41): `CARTA_WEB_URL/<empresa>/<sucursal>`, con logo, color, fotos, horario y solo lo que se puede pedir ahora. Se actualiza sola cuando se agota algo y tiene vista previa al compartir.
 - **Modo mesa** (HU-40, RF-85, RF-86): el QR de cada mesa abre `CARTA_WEB_URL/m/<código>`. El cliente arma su pedido y lo manda al mozo, llama al mozo o pide la cuenta, y ve con palabras el estado de su llamado. Nada se cobra y nada llega a cocina hasta que el mozo pulsa «Enviar».
 
 Ver «Carta web y pedido desde la mesa (5b)» más abajo.
+
+La entrega 6a de la especificación 006, «Caja, cobro y comprobante sin PSE» (HU-25, HU-26, HU-28 y HU-30 completas; HU-18 y HU-03 en lo que toca a venta de mostrador, descuentos y cortesías), está terminada en la rama `claude/upbeat-wright-q09k0n` y todavía no está en `main`. Su especificación, plan y tareas están en [`specs/006-caja-cobro/`](specs/006-caja-cobro/). Incluye la revisión y tres rondas de ataque adversarial sobre la ruta crítica (montos, cobro, caja, comprobantes, permisos y aislamiento). Ver «Caja, cobro y comprobante (6a)» más abajo.
+
+**La 6a no se usa con clientes reales sin la 6b:** sus comprobantes quedan «por enviar» hasta que exista el envío a SUNAT (por un PSE, con sus plazos).
 
 ## Requisitos
 
@@ -427,6 +431,87 @@ E2E_API_URL=http://localhost:3000 pnpm --filter @restaurante/web e2e
 Con `E2E_API_URL`, Playwright levanta la API y la PWA del personal (puerto 5174) si no están corriendo, y solo corre `punta-a-punta.spec.ts`.
 
 Documentos de la carta: [`apps/web/README.md`](apps/web/README.md) (scripts, variables, rutas y regla de peso), [`apps/web/PRODUCT.md`](apps/web/PRODUCT.md) y [`apps/web/DESIGN.md`](apps/web/DESIGN.md) (producto y diseño, aprobados el 2026-11-03), y [`DESPLIEGUE-LOCAL.md`](DESPLIEGUE-LOCAL.md) (cómo probarla paso a paso).
+
+## Caja, cobro y comprobante (6a)
+
+La 6a incluye la API, la pantalla **Caja** de la PWA (con la venta de mostrador), Ajustes › Cajas y Ajustes › Emisores, y el ticket. Mientras no esté la 6b, el comprobante queda «por enviar»: **esta sección no se usa con clientes reales sin la 6b**. Para probarla en local, sigue el capítulo 6 de [`docs/guia-de-uso/`](docs/guia-de-uso/06-caja-y-cobro.md) o la sección 5 de [`DESPLIEGUE-LOCAL.md`](DESPLIEGUE-LOCAL.md).
+
+### Qué hace
+
+- **Turno de caja** (HU-25, RF-50, RF-53 a RF-55): se abre con un fondo en efectivo. Una caja tiene un solo turno abierto, y una persona, uno en la sucursal. Los ingresos y egresos de efectivo llevan motivo. El **reporte X** muestra el turno en cualquier momento, sin cerrarlo.
+- **Cierre Z a ciegas** (RF-55, HU-30): quien cierra cuenta cada medio de pago sin ver el esperado. Si algún medio no cuadra, el aviso dice solo cuál, sin montos, y pide el motivo de cada uno; la diferencia exacta se ve en la Z ya cerrada. El último turno de la sucursal no se cierra con cuentas abiertas o en pre-cuenta (409 `CIERRE_BLOQUEADO`).
+- **Cobro con varios medios** (HU-26, RF-51): efectivo, tarjeta de crédito o débito, Yape y Plin, con su número de operación fuera del efectivo. El efectivo da vuelto, y su total se redondea hacia abajo a la décima a favor del cliente. El servidor recalcula la cuenta con los precios guardados: si cambió desde que el cajero la vio, responde `CUENTA_CAMBIO` y no cobra nada.
+- **División de la cuenta** (HU-28, RF-52): por ítems y, después, en partes iguales del saldo. El equipo recuerda en cuántas partes se dividió; desde otro equipo se pide confirmarlo antes de cobrar.
+- **Descuentos y cortesías** (HU-03, RF-33): por ítem o por cuenta, en porcentaje (hasta 99.99 %) o en monto. Cada uno pide la clave del supervisor, atada a esa cuenta, ese ítem y ese monto. Las cortesías salen como operación gratuita, con su valor de carta.
+- **Venta de mostrador** (HU-18, RF-34): se cobra antes de enviarse a cocina. La comanda lleva un número de llamado («Llamado N»), que empieza en 1 cada día operativo.
+- **Comprobante** (HU-26, RF-59, RF-60, RF-61): boleta o factura, detallada o por consumo, con serie y correlativo sin saltos ni duplicados, también con dos cajas cobrando a la vez. El IGV por línea, el ICBPER, los descuentos y los redondeos se calculan en `packages/dominio`. La cuota de comprobantes del plan (RF-05) se consume al emitir.
+- **Ticket e impresión** (RF-56, RF-64): el ticket del comprobante lleva un QR. La gaveta se abre al cobrar en efectivo, al abrir el turno con fondo y en cada ingreso o egreso, si la impresora de la caja tiene gaveta. El X y la Z salen en esa impresora. **Imprimir otra vez** saca una copia marcada REIMPRESIÓN, sin abrir la gaveta.
+
+### Configurar una sucursal para cobrar
+
+1. **Tasa de IGV** (Ajustes › Emisores): para cada emisor, la tasa con su fecha «Desde». La da el contador (la general o la reducida que corresponda); no hay valor por defecto. Sin tasa, la caja avisa de que falta y no cobra. No se crea ni se cambia una tasa con una fecha «desde» igual o anterior a la de un comprobante ya emitido por ese emisor. Un emisor del Nuevo RUS no usa tasa.
+2. **Cajas y series** (Ajustes › Cajas): crea cada caja con su nombre y, si la tiene, su impresora. Si no tiene, usa la impresora de caja de la sucursal, y si tampoco hay, cobra sin imprimir. Cada caja necesita una serie de boleta (`B` y tres caracteres, por ejemplo `B001`) y otra de factura (`F001`). El primer número se elige solo al crear la serie, para seguir una serie que el RUC ya usó en otro sistema; después, la serie no cambia de número. Una serie no se repite para el mismo emisor, ni en otra caja ni en otra sucursal. Una sucursal tiene hasta 10 cajas activas.
+3. **Primeros pasos.** Si falta algo para cobrar, la pantalla Caja lo dice, con una acción por cada paso que falta.
+4. **Quién cobra.** El Cajero (con `COBRAR` y `OPERAR_CAJA`), el Supervisor y el Administrador. El Supervisor y el Administrador también cobran en el turno de otra persona; el Cajero, no.
+
+### Orden de los cerrojos
+
+El cobro toma sus cerrojos siempre en el mismo orden, para no cruzarse con los envíos de comanda ni con el cierre (`specs/006-caja-cobro/plan.md`, «Orden de los cerrojos»):
+
+1. Un cerrojo consultivo por el `id` del cobro (la clave lleva la empresa), para que las réplicas simultáneas se turnen.
+2. La orden de la cuenta (`FOR UPDATE`).
+3. El turno (`FOR SHARE`).
+4. El emisor (`FOR SHARE`), al leer su tasa.
+5. La serie (`UPDATE … RETURNING`). El número se toma dentro de la misma transacción: una reversión no deja huecos.
+6. El consumo de la cuota del plan.
+
+El cierre del turno toma los turnos abiertos de la sucursal con `FOR UPDATE`, en orden de id, y no usa cerrojo consultivo. El cambio de tasa espera a los cobros en curso del emisor hasta 3 segundos y, si no puede, responde 409 `CONFLICTO` sin guardar nada.
+
+### Módulos, tablas y puertos
+
+- **`caja`** es dueño de `caja`, `turno`, `turno_conteo`, `movimiento_caja`, `cobro` y `pago`: cajas, turnos, cobros, reporte X y Z. No lee `orden`, `item`, `serie` ni `comprobante`.
+- **`facturacion`** es dueño de `serie`, `comprobante` y `comprobante_linea`: series, numeración y comprobantes. Cada comprobante guarda el detalle calculado de su parte (`detalle_parte`) y no admite cambios de montos. No lee `cobro`.
+- **`pedidos`** cambia: `descuento`, `cortesia` y `contador_llamado`, y columnas nuevas en `orden` (lo cobrado) e `item` (lo facturado). No lee nada de caja.
+- Además, `plataforma` tiene `emisor_tasa_igv`, `seguridad` tiene la columna `autorizacion.objetivo` e `impresion` suma los tipos de trabajo `COMPROBANTE`, `REPORTE_X`, `REPORTE_Z` y `GAVETA`.
+
+Ningún módulo lee las tablas de otro. Lo que necesita viaja por un servicio o por un puerto:
+
+- **`COBROS`** (definido por `pedidos`, implementado por `caja`): antes de enviar, anular o unir una orden con cobros, `pedidos` pregunta si la cuenta resultante puede seguir cobrándose. Si no, responde 409 `CUENTA_COBRADA_EN_PARTE`.
+- **`RegistroImpresoraDeCaja`, `RegistroPagosDeCobro` y `RegistroAlcanceDeTurnos`** (definidos por `facturacion`, registrados por `caja` al arrancar): la impresora de una caja, los pagos de un cobro y el responsable de un turno, para reimprimir y filtrar comprobantes sin leer `caja`.
+- **Fecha del último comprobante de un emisor** (puerto de `plataforma`, registrado por `facturacion`): para que cambiar una tasa no toque ventas ya emitidas.
+
+Si un puerto no está registrado, falla cerrado: el cambio se rechaza.
+
+### Para el contador
+
+Estos puntos están en «Preguntas abiertas» de [`specs/006-caja-cobro/spec.md`](specs/006-caja-cobro/spec.md). Si el contador responde otra cosa, cambia una función de `packages/dominio` y sus pruebas protegidas, no la estructura.
+
+- **Pregunta 4, redondeo del efectivo:** el total en efectivo se trunca a la décima a favor del cliente, y los céntimos del resto no se cobran.
+- **Pregunta 5, ICBPER:** S/ 0.50 por bolsa desde 2023, en la tabla por fecha de `packages/dominio`.
+- **Pregunta 6, tasa de IGV:** la fecha «desde» y el porcentaje los confirma el contador por emisor.
+- **Pregunta 7, Nuevo RUS:** boletas sin IGV: el total es el precio, con el ICBPER igual.
+- **Pregunta 8, cortesías:** operación gratuita con su valor de carta, en el primer comprobante de la cuenta. No hay cortesías de bolsas.
+- **Pregunta 21 (6b):** si el ticket puede salir con el QR antes de que llegue la respuesta del PSE.
+
+La spec también deja al contador el comprobante por consumo y las boletas de más de S/ 700, que piden nombre y documento.
+
+### Límites conocidos
+
+- Un saldo de S/ 0.01 a 0.09 no se puede cobrar en efectivo (en efectivo solo se cobran décimas enteras): se cobra con tarjeta, Yape o Plin.
+- Una cuenta con descuento por cuenta y una parte ya cobrada no admite cambios: se cobra el resto y la mesa se abre otra vez.
+- El pulso de la gaveta se pierde si el puente está desconectado más de 120 segundos.
+- La migración `202611040007-impresion-caja.ts` no se revierte si ya hay trabajos de impresión de caja (`COMPROBANTE`, `GAVETA`, `REPORTE_X` o `REPORTE_Z`): revertir la 6a solo es posible en una base sin esos datos.
+
+### Pruebas
+
+- **Protegidas:** `apps/api/test/caja-critica/` (la API contra PostgreSQL real, con el emulador de impresora donde se mira el papel o la gaveta) y `packages/dominio/test/caja/` (montos). Las de desarrollo están en `apps/api/test/caja/` y `packages/dominio/test/caja-desarrollo/`.
+- **E2E:** `apps/app/e2e/caja.spec.ts` recorre el turno, el cobro con dos medios, la división, el descuento con clave, el mostrador, el X y la Z. Corre en dos proyectos de Playwright: `celular` (360 × 740) y `tablet` (768 × 1024). Necesita la base preparada y con la semilla, como las demás E2E de la PWA.
+
+```bash
+pnpm --filter @restaurante/dominio test                              # reglas puras de caja
+pnpm --filter @restaurante/api exec vitest run test/caja-critica     # pruebas protegidas de caja (necesitan DATABASE_ADMIN_URL)
+pnpm --filter @restaurante/app e2e caja.spec.ts                      # E2E de caja, en celular y en tableta
+```
 
 ## Pruebas
 
