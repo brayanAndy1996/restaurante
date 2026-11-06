@@ -11,6 +11,7 @@ import { EnlacesComprobante } from './enlaces';
 import { BarridoEnviosPse } from './envios/barrido-envios';
 import { EnviosService } from './envios/envios.service';
 import { ProcesadorEnviosPse } from './envios/procesador-envios';
+import { TrabajoEnSegundoPlano } from './envios/trabajo-en-segundo-plano';
 import { PanelController } from './panel.controller';
 import { PanelService } from './panel.service';
 import { CargaPadron } from './padron/carga-padron';
@@ -59,6 +60,7 @@ import { UltimaEmisionDeComprobantes } from './ultima-emision-de-comprobantes';
     EnviosService,
     ProcesadorEnviosPse,
     BarridoEnviosPse,
+    TrabajoEnSegundoPlano,
     PanelService,
     ReemisionService,
     EnlacesComprobante,
@@ -78,6 +80,7 @@ import { UltimaEmisionDeComprobantes } from './ultima-emision-de-comprobantes';
     EnviosService,
     ProcesadorEnviosPse,
     BarridoEnviosPse,
+    TrabajoEnSegundoPlano,
     CargaPadron,
   ],
 })

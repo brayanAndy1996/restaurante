@@ -38,9 +38,6 @@ importers:
       '@socket.io/postgres-adapter':
         specifier: 0.5.0
         version: 0.5.0(socket.io-adapter@2.5.8)
-      '@socket.io/postgres-emitter':
-        specifier: 0.1.1
-        version: 0.1.1
       aws4fetch:
         specifier: 1.0.20
         version: 1.0.20
@@ -2161,9 +2158,6 @@ packages:
     engines: {node: '>=12.0.0'}
     peerDependencies:
       socket.io-adapter: ^2.5.4
-
-  '@socket.io/postgres-emitter@0.1.1':
-    resolution: {integrity: sha512-9XYfp871EWLXoeJtzC9t+h9JIEVPKX1RhFsZlFagrAaaiFFhLcJKTi7e1lgWSY8jCZb4VGoboAG1RR7kCpZKCQ==}
 
   '@standard-schema/spec@1.1.0':
     resolution: {integrity: sha512-l2aFy5jALhniG5HgqrD6jXLi/rUWrKvqN/qJx6yoJsgKhblVd+iqqU4RCXavm/jPityDo5TCvKMnpjKnOriy0w==}
@@ -7100,13 +7094,6 @@ snapshots:
       socket.io-adapter: 2.5.8
     transitivePeerDependencies:
       - pg-native
-      - supports-color
-
-  '@socket.io/postgres-emitter@0.1.1':
-    dependencies:
-      '@msgpack/msgpack': 2.8.0
-      debug: 4.3.7
-    transitivePeerDependencies:
       - supports-color
 
   '@standard-schema/spec@1.1.0': {}

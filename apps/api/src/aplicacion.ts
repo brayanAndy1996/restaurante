@@ -7,6 +7,7 @@ import { AppModule } from './app.module';
 import {
   cargarEntorno,
   exigirEntornoDeProduccion,
+  exigirEntornoDelWorker,
   exigirEntornoDeTiempoReal,
 } from './config/entorno';
 import {
@@ -93,6 +94,9 @@ export async function crearAplicacion(
   const tiempoRealHabilitado =
     opciones.tiempoReal?.habilitado ?? entorno.TIEMPO_REAL === 'habilitado';
   exigirEntornoDeTiempoReal(entorno, tiempoRealHabilitado); // con el tiempo real exige DATABASE_TIEMPO_REAL_URL
+  // `WORKER=habilitado` (nunca con NODE_ENV=test): la API trabaja los envíos al PSE y necesita las conexiones del worker.
+  const workerEnLaApi = entorno.WORKER === 'habilitado';
+  if (workerEnLaApi) exigirEntornoDelWorker(entorno);
   const app = await NestFactory.create<NestExpressApplication>(
     AppModule.registrar({
       controladoresExtra: opciones.controladoresExtra,
@@ -104,6 +108,7 @@ export async function crearAplicacion(
       colaPse: opciones.colaPse,
       almacenComprobantes: opciones.almacenComprobantes,
       tiempoReal: { habilitado: tiempoRealHabilitado },
+      worker: { autoIniciar: workerEnLaApi, mantenimientoDeCola: workerEnLaApi },
     }),
     {
       // En pruebas se silencia el registro de Nest; los errores de arranque se propagan como excepción.

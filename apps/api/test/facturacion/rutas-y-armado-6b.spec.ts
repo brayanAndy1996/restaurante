@@ -1,11 +1,11 @@
 import type { INestApplication } from '@nestjs/common';
 import request from 'supertest';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { crearAplicacion } from '../../src/aplicacion';
 import { crearWorker } from '../../src/crear-worker';
 import { CONECTOR_PSE, SimuladorPse } from '../../src/modulos/facturacion';
 import { PERMISO, PUBLICA, REQUIERE_MODULO } from '../../src/modulos/seguridad';
-import { SUPERADMINISTRADOR } from '../../src/modulos/plataforma';
+import { EmpresasConsulta, SUPERADMINISTRADOR } from '../../src/modulos/plataforma';
 import { ALMACEN_COMPROBANTES, AlmacenComprobantesEnMemoria } from '../../src/nucleo/archivos';
 import { COLA_PSE, ColaEnMemoria } from '../../src/nucleo/colas';
 import { fijarEntornoDePrueba, rutasDeNest } from '../utilidades';
@@ -137,7 +137,7 @@ describe('rutas de la entrega 6b (fase A)', () => {
   });
 });
 
-describe('crearWorker (fase A)', () => {
+describe('crearWorker', () => {
   it('arma el contexto sin HTTP con las piezas que se le pasan y se cierra', async () => {
     fijarEntornoDePrueba();
     const pse = new SimuladorPse();
@@ -153,8 +153,16 @@ describe('crearWorker (fase A)', () => {
           '22222222-2222-2222-2222-222222222222',
         ),
       ).resolves.toBeUndefined();
-      await expect(worker.barrido.barrerAhora()).rejects.toThrow('No implementado');
-      await expect(worker.iniciar()).rejects.toThrow('No implementado');
+      // El barrido recorre las empresas (aquí ninguna: otros archivos comparten la base) y el worker arranca y se
+      // detiene sin dejar nada vivo.
+      vi.spyOn(worker.contexto.get(EmpresasConsulta), 'ids').mockResolvedValue([]);
+      await expect(worker.barrido.barrerAhora()).resolves.toEqual({
+        reencolados: 0,
+        detenidos: 0,
+        alertas: 0,
+        pdfPendientes: 0,
+      });
+      await expect(worker.iniciar()).resolves.toBeUndefined();
     } finally {
       await worker.cerrar();
     }

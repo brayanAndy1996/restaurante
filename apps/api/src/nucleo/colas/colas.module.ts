@@ -2,7 +2,7 @@ import { DynamicModule, Global, Inject, Module, type OnModuleInit } from '@nestj
 import { ENTORNO, type Entorno } from '../../config/entorno';
 import { verificarRolDeFacturacion } from '../base-de-datos';
 import { ColaEnMemoria } from './cola-en-memoria';
-import { ColaPgBoss } from './cola-pg-boss';
+import { ColaPgBoss, type OpcionesColaPgBoss } from './cola-pg-boss';
 import { COLA_PSE, type ColaPse } from './cola-pse';
 
 /**
@@ -22,7 +22,7 @@ export class ColasModule implements OnModuleInit {
     await verificarRolDeFacturacion(this.entorno.DATABASE_COLAS_URL, 'colas', 'DATABASE_COLAS_URL');
   }
 
-  static registrar(cola?: ColaPse): DynamicModule {
+  static registrar(cola?: ColaPse, opciones: OpcionesColaPgBoss = {}): DynamicModule {
     return {
       module: ColasModule,
       providers: [
@@ -34,7 +34,7 @@ export class ColasModule implements OnModuleInit {
               useFactory: (entorno: Entorno): ColaPse =>
                 entorno.NODE_ENV === 'test' || entorno.DATABASE_COLAS_URL === undefined
                   ? new ColaEnMemoria()
-                  : new ColaPgBoss(entorno.DATABASE_COLAS_URL),
+                  : new ColaPgBoss(entorno.DATABASE_COLAS_URL, opciones),
             },
       ],
       exports: [COLA_PSE],

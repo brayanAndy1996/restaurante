@@ -18,7 +18,11 @@ import { AuditoriaModule } from './modulos/auditoria';
 import { CajaModule } from './modulos/caja';
 import { CartaModule } from './modulos/carta';
 import { CartaWebModule } from './modulos/carta-web';
-import { FacturacionModule } from './modulos/facturacion';
+import {
+  FacturacionModule,
+  OpcionesWorkerModule,
+  type OpcionesWorker,
+} from './modulos/facturacion';
 import { ConectorPseModule, type ConectorPse } from './modulos/facturacion/pse';
 import { ImpresionModule } from './modulos/impresion';
 import { LlamadosModule } from './modulos/llamados';
@@ -50,6 +54,11 @@ export interface OpcionesAppModule {
   almacenComprobantes?: AlmacenComprobantes;
   /** Si la API sirve Socket.IO; por defecto no (`crearAplicacion` lo decide con `TIEMPO_REAL` del entorno). */
   tiempoReal?: { habilitado: boolean };
+  /**
+   * Si este proceso trabaja en segundo plano (historia 006, criterio 125): `autoIniciar` para `WORKER=habilitado` dentro
+   * de la API y `mantenimientoDeCola` para el mantenimiento de pg-boss. Por defecto ninguno (la API de las pruebas).
+   */
+  worker?: OpcionesWorker;
 }
 
 @Module({
@@ -88,7 +97,12 @@ export class AppModule {
         ArchivosModule.registrar(opciones.almacenArchivos),
         InventarioModule.registrar(opciones.inventario),
         CifradoModule,
-        ColasModule.registrar(opciones.colaPse),
+        OpcionesWorkerModule.registrar(
+          opciones.worker ?? { autoIniciar: false, mantenimientoDeCola: false },
+        ),
+        ColasModule.registrar(opciones.colaPse, {
+          mantenimiento: opciones.worker?.mantenimientoDeCola ?? false,
+        }),
         AlmacenComprobantesModule.registrar(opciones.almacenComprobantes),
         ConectorPseModule.registrar(opciones.pse),
         TiempoRealModule.registrar({ habilitado: tiempoReal }),

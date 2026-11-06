@@ -7,6 +7,7 @@ import {
   BarridoEnviosPse,
   CargaPadron,
   ProcesadorEnviosPse,
+  TrabajoEnSegundoPlano,
   type ConectorPse,
 } from './modulos/facturacion';
 import type { InventarioPuerto } from './modulos/pedidos';
@@ -15,7 +16,7 @@ import type { AlmacenArchivos, AlmacenComprobantes } from './nucleo/archivos';
 import type { ColaPse } from './nucleo/colas';
 import type { PublicadorEventos } from './nucleo/eventos';
 import type { Reloj } from './nucleo/reloj';
-import { noImplementado } from './nucleo/errores/no-implementado';
+import { EmisorDelWorker } from './nucleo/tiempo-real';
 
 export interface OpcionesWorker {
   /** Conector del PSE (`CONECTOR_PSE`); por defecto un `SimuladorPse`. Las pruebas pasan uno con sus reglas. */
@@ -26,7 +27,10 @@ export interface OpcionesWorker {
   almacenComprobantes?: AlmacenComprobantes;
   /** Reloj; por defecto el del sistema. Las pruebas pasan el mismo `RelojManual` de la API. */
   reloj?: Reloj;
-  /** Publicador de eventos de tiempo real; por defecto el nulo. En producción el worker publica con el emisor de PostgreSQL (T31). */
+  /**
+   * Publicador de eventos de tiempo real; por defecto el emisor de PostgreSQL (`DATABASE_TIEMPO_REAL_URL`, rol
+   * `restaurante_tiempo_real`) si está definida y, si no, el nulo. Las pruebas pasan el mismo `PublicadorEnMemoria`.
+   */
   publicadorEventos?: PublicadorEventos;
   almacenArchivos?: AlmacenArchivos;
   inventario?: InventarioPuerto;
@@ -43,9 +47,9 @@ export interface WorkerEnvios {
   barrido: BarridoEnviosPse;
   carga: CargaPadron;
   /**
-   * Empieza a trabajar: registra el procesador en la cola, arranca el barrido de 60 segundos y programa la carga diaria
-   * del padrón. Con `NODE_ENV=test` las pruebas no lo llaman: corren el procesador y el barrido a mano. Fase A: lanza
-   * `Error('No implementado')` hasta T31.
+   * Empieza a trabajar: registra el procesador en la cola y arranca el barrido de 60 segundos (la carga diaria del
+   * padrón la programa T36). Con `NODE_ENV=test` las pruebas de la historia no lo llaman: corren el procesador y el
+   * barrido a mano (criterio 137).
    */
   iniciar(): Promise<void>;
   /** Detiene el barrido y la cola, y cierra el contexto (los pools incluidos). */
@@ -67,29 +71,52 @@ export async function crearWorker(opciones: OpcionesWorker = {}): Promise<Worker
       'DATABASE_REFERENCIA_URL',
     );
   }
+  // El worker no sirve Socket.IO: sus eventos salen por el canal de PostgreSQL (criterio 172).
+  let emisor: EmisorDelWorker | null = null;
+  let publicadorEventos = opciones.publicadorEventos;
+  if (publicadorEventos === undefined && entorno.DATABASE_TIEMPO_REAL_URL !== undefined) {
+    emisor = new EmisorDelWorker(entorno.DATABASE_TIEMPO_REAL_URL);
+    try {
+      await emisor.verificar();
+    } catch (error) {
+      await emisor.cerrar();
+      throw error;
+    }
+    publicadorEventos = emisor;
+  }
   const contexto = await NestFactory.createApplicationContext(
     AppModule.registrar({
       reloj: opciones.reloj,
-      publicadorEventos: opciones.publicadorEventos,
+      publicadorEventos,
       almacenArchivos: opciones.almacenArchivos,
       inventario: opciones.inventario,
       pse: opciones.pse,
       colaPse: opciones.colaPse,
       almacenComprobantes: opciones.almacenComprobantes,
       tiempoReal: { habilitado: false },
+      // El worker no arranca solo (`iniciar()`), pero su cola sí corre el mantenimiento de pg-boss.
+      worker: { autoIniciar: false, mantenimientoDeCola: true },
     }),
     {
       logger: entorno.NODE_ENV === 'test' ? false : ['error', 'warn', 'log'],
       abortOnError: false,
     },
-  );
+  ).catch(async (error: unknown) => {
+    await emisor?.cerrar();
+    throw error;
+  });
   new Logger('Worker').log('Contexto del worker listo');
+  const trabajo = contexto.get(TrabajoEnSegundoPlano);
   return {
     contexto,
     procesador: contexto.get(ProcesadorEnviosPse),
     barrido: contexto.get(BarridoEnviosPse),
     carga: contexto.get(CargaPadron),
-    iniciar: () => Promise.reject(noImplementado()),
-    cerrar: () => contexto.close(),
+    iniciar: () => trabajo.iniciar(),
+    cerrar: async () => {
+      await trabajo.detener();
+      await contexto.close();
+      await emisor?.cerrar();
+    },
   };
 }

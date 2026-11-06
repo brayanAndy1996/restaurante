@@ -20,6 +20,7 @@ import type {
   ResultadoPse,
 } from '../pse/conector-pse';
 import { RegistroDeConectores } from '../pse/registro-de-conectores';
+import { publicarAlerta } from './alertas';
 import {
   aplicarResultado,
   esAceptado,
@@ -352,29 +353,18 @@ export class ProcesadorEnviosPse {
     if (salida.alertaNueva !== null) {
       const motivo = salida.alertaNueva;
       this.contexto.alConfirmar(() =>
-        this.publicarAlerta(empresaId, comprobanteId, tomado.sucursalId, motivo),
+        publicarAlerta(this.publicador, {
+          empresaId,
+          comprobanteId,
+          sucursalId: tomado.sucursalId,
+          motivo,
+        }),
       );
     }
     if (salida.proximoIntentoEn !== null) {
       const startAfter = salida.proximoIntentoEn;
       this.contexto.alConfirmar(() => this.encolarSiguiente(empresaId, comprobanteId, startAfter));
     }
-  }
-
-  /** El aviso `facturacion.alerta` y el registro `pse.alerta` (criterio 133): solo ids y el motivo. */
-  private async publicarAlerta(
-    empresaId: string,
-    comprobanteId: string,
-    sucursalId: string,
-    motivo: AlertaComprobante,
-  ): Promise<void> {
-    this.logger.warn(JSON.stringify({ evento: 'pse.alerta', motivo, empresaId, comprobanteId }));
-    await this.publicador.publicar({
-      empresaId,
-      sala: { tipo: 'sucursal', sucursalId },
-      nombre: 'facturacion.alerta',
-      datos: { sucursalId },
-    });
   }
 
   /** El siguiente intento en la cola; si falla, el barrido lo recoge (criterio 126). */

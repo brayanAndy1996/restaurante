@@ -523,9 +523,13 @@ export function exigirEntornoDeProduccion(entorno: Entorno): void {
 /**
  * Lo que el worker de envíos exige para arrancar como proceso aparte (historia 006, 6b): la conexión de la cola
  * (`DATABASE_COLAS_URL`, rol `restaurante_colas`) y la de la carga del padrón (`DATABASE_REFERENCIA_URL`, rol
- * `restaurante_referencia`). Lanza `EntornoInvalidoError` con todo lo que falte.
+ * `restaurante_referencia`). Como proceso aparte (`procesoAparte`) exige además la del tiempo real
+ * (`DATABASE_TIEMPO_REAL_URL`). Lanza `EntornoInvalidoError` con todo lo que falte.
  */
-export function exigirEntornoDelWorker(entorno: Entorno): void {
+export function exigirEntornoDelWorker(
+  entorno: Entorno,
+  opciones: { procesoAparte?: boolean } = {},
+): void {
   const problemas: string[] = [];
   if (entorno.DATABASE_COLAS_URL === undefined) {
     problemas.push(
@@ -537,6 +541,13 @@ export function exigirEntornoDelWorker(entorno: Entorno): void {
     problemas.push(
       'DATABASE_REFERENCIA_URL es obligatoria para el worker: es la conexión de la carga del padrón de RUC, con el ' +
         'rol restaurante_referencia (ver db:preparar)',
+    );
+  }
+  // Como proceso aparte el worker no sirve Socket.IO: publica por el canal de PostgreSQL (criterio 172).
+  if (opciones.procesoAparte === true && entorno.DATABASE_TIEMPO_REAL_URL === undefined) {
+    problemas.push(
+      'DATABASE_TIEMPO_REAL_URL es obligatoria para el worker como proceso aparte: es la conexión con la que publica ' +
+        'los eventos de tiempo real, con el rol restaurante_tiempo_real (ver db:preparar)',
     );
   }
   if (problemas.length > 0) throw new EntornoInvalidoError(problemas);
