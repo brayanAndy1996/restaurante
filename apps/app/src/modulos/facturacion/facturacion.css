@@ -1,0 +1,37 @@
+/* El estado del comprobante ante SUNAT en el resultado del cobro (criterio 173). */
+.estado-sunat {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espacio-sm);
+}
+.estado-sunat__fila {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--espacio-sm) var(--espacio-md);
+  min-height: var(--alto-control);
+  padding: var(--espacio-sm) var(--espacio-lg);
+  background: var(--color-baldosa);
+  border: 1px solid var(--color-junta);
+  border-radius: var(--radio-baldosa);
+}
+.estado-sunat__titulo {
+  font-size: 1.0625rem;
+  line-height: 1.5rem;
+  font-weight: 600;
+}
+.estado-sunat__icono--ok {
+  color: var(--color-exito);
+}
+.estado-sunat__icono--info,
+.estado-sunat__icono--neutro {
+  color: var(--color-tinta-suave);
+}
+.estado-sunat__texto {
+  margin: 0;
+  font-size: 0.9375rem;
+  line-height: 1.375rem;
+}
+.estado-sunat .ui-aviso__cuerpo > * + * {
+  margin-top: var(--espacio-sm);
+}

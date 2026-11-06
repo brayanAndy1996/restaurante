@@ -17,6 +17,7 @@ import { VigilanteDeInactividad } from '../modulos/acceso/inactividad';
 import { destinosDeNavegacion, veElSalon, type IdDeDestino } from '../modulos/acceso/navegacion';
 import { useSesion } from '../modulos/acceso/sesion';
 import { AvisosDeListoDeSesion, BannerDeAvisosDeListo } from './AvisosDeListo';
+import { AvisosDeFacturacionDeSesion } from './AvisosDeFacturacionDeSesion';
 import { BannerDeImpresion } from './BannerDeImpresion';
 import {
   BannerDeConexion,
@@ -67,6 +68,7 @@ export function AppLayout() {
         <BannerDeSoporte />
         <BannerDeSuscripcion />
         <BannerDeImpresion />
+        <AvisosDeFacturacionDeSesion />
         <BannerDeAvisosDeListo />
         {veElSalon(sesion) ? (
           <Suspense fallback={null}>

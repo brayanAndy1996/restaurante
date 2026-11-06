@@ -33,6 +33,8 @@ export class ErrorApi extends Error {
   readonly ordenes: number | undefined;
   /** Solo en `DIFERENCIA_SIN_MOTIVO` (006): lo contado y la diferencia de cada medio, sin el esperado. */
   readonly diferencias: DiferenciaDeArqueo[] | undefined;
+  /** Solo en `YA_REEMPLAZADO` (006, 6b): el comprobante que ya reemplazó al rechazado. */
+  readonly comprobanteId: string | undefined;
 
   constructor(datos: {
     estado: number;
@@ -49,6 +51,7 @@ export class ErrorApi extends Error {
     turnoId?: string;
     ordenes?: number;
     diferencias?: DiferenciaDeArqueo[];
+    comprobanteId?: string;
   }) {
     super(datos.mensaje);
     this.name = 'ErrorApi';
@@ -65,6 +68,7 @@ export class ErrorApi extends Error {
     this.turnoId = datos.turnoId;
     this.ordenes = datos.ordenes;
     this.diferencias = datos.diferencias;
+    this.comprobanteId = datos.comprobanteId;
   }
 
   /** `true` si el servidor no llegó a contestar (red caída, tiempo agotado). */
@@ -94,6 +98,7 @@ export function errorDeRespuesta(estado: number, cuerpo: unknown, reintentada = 
       ...(e.turnoId === undefined ? {} : { turnoId: e.turnoId }),
       ...(e.ordenes === undefined ? {} : { ordenes: e.ordenes }),
       ...(e.diferencias === undefined ? {} : { diferencias: e.diferencias }),
+      ...(e.comprobanteId === undefined ? {} : { comprobanteId: e.comprobanteId }),
       reintentada,
     });
   }

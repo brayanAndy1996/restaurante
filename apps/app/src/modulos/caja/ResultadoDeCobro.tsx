@@ -3,6 +3,7 @@ import { Aviso, Boton, IconoExito, IconoImpresora, claseBoton } from '@restauran
 import { Link } from 'react-router-dom';
 import { montoEnSoles, montoEsCero } from '../../lib/monto';
 import { AvisoPendiente } from '../../componentes/PendienteDeEnvio';
+import { EstadoDelComprobante } from '../facturacion/EstadoDelComprobante';
 import { NOMBRE_DE_MEDIO_DE_PAGO } from './cobro';
 import { EstadoDeLaImpresion, imprimirComprobante, useImpresionDeCaja } from './impresion-caja';
 
@@ -72,6 +73,8 @@ export function ResultadoDeCobro({
           ) : null}
         </div>
       ) : null}
+
+      <EstadoDelComprobante comprobante={comprobante} />
 
       <dl className="desglose" aria-label="Lo que se cobró">
         <div className="desglose__fila">

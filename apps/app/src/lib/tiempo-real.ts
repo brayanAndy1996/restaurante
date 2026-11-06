@@ -42,6 +42,12 @@ export const CLAVES_TIEMPO_REAL = {
   llamados: ['llamados'] as const,
   /** El turno de caja (006): mi turno, las cajas, el reporte y las cuentas que bloquean el cierre. */
   turno: ['turno'] as const,
+  /** La facturación electrónica (006, 6b): las alertas, el panel y cada comprobante con su envío. */
+  facturacion: ['facturacion'] as const,
+  facturacionAlertas: ['facturacion', 'alertas'] as const,
+  facturacionPanel: ['facturacion', 'panel'] as const,
+  facturacionComprobante: (comprobanteId: string) =>
+    ['facturacion', 'comprobante', comprobanteId] as const,
 } as const;
 
 /** Cada cuánto se refrescan las pantallas en vivo cuando no hay conexión de Socket.IO (criterio 97). */
@@ -134,7 +140,9 @@ export type NombreDeEvento =
   | 'impresion.estado'
   | 'llamado.nuevo'
   | 'llamado.cambio'
-  | 'turno.cambio';
+  | 'turno.cambio'
+  | 'comprobante.estado'
+  | 'facturacion.alerta';
 
 const EVENTOS: readonly NombreDeEvento[] = [
   'salon.cambio',
@@ -149,6 +157,8 @@ const EVENTOS: readonly NombreDeEvento[] = [
   'llamado.nuevo',
   'llamado.cambio',
   'turno.cambio',
+  'comprobante.estado',
+  'facturacion.alerta',
 ];
 
 type OyenteDeEvento = (nombre: NombreDeEvento, datos: unknown) => void;
@@ -167,6 +177,12 @@ export function alRecibirEvento(oyente: OyenteDeEvento): () => void {
 export function datosDeCocinaListo(datos: unknown): EventoCocinaListo['datos'] | null {
   const analizado = eventoCocinaListoDatosSchema.safeParse(datos);
   return analizado.success ? analizado.data : null;
+}
+
+/** El `comprobanteId` de un `comprobante.estado` bien formado, o `null`. */
+function comprobanteIdDeEvento(datos: unknown): string | null {
+  const id = (datos as { comprobanteId?: unknown } | null | undefined)?.comprobanteId;
+  return typeof id === 'string' && id !== '' ? id : null;
 }
 
 function invalidar(
@@ -241,6 +257,23 @@ function alLlegarEvento(cliente: QueryClient, nombre: NombreDeEvento, datos: unk
       // Se abrió o cerró un turno, o hubo un movimiento (006): mi turno, la lista de cajas y el reporte lo vuelven a pedir.
       invalidar(cliente, CLAVES_TIEMPO_REAL.turno);
       break;
+    case 'comprobante.estado': {
+      // El worker cambió el estado de un comprobante (006, 6b, criterio 172): su resultado en pantalla, el panel y los
+      // conteos de las alertas lo vuelven a pedir. Solo se lee el id (sin esquemas: este archivo va en el paquete inicial).
+      const id = comprobanteIdDeEvento(datos);
+      invalidar(
+        cliente,
+        id ? CLAVES_TIEMPO_REAL.facturacionComprobante(id) : CLAVES_TIEMPO_REAL.facturacion,
+      );
+      invalidar(cliente, CLAVES_TIEMPO_REAL.facturacionPanel);
+      invalidar(cliente, CLAVES_TIEMPO_REAL.facturacionAlertas);
+      break;
+    }
+    case 'facturacion.alerta':
+      // Hay una alerta nueva (rechazo, demora, envío detenido o sin configurar): el aviso y el panel la vuelven a pedir.
+      invalidar(cliente, CLAVES_TIEMPO_REAL.facturacionAlertas);
+      invalidar(cliente, CLAVES_TIEMPO_REAL.facturacionPanel);
+      break;
   }
   oyentesDeEvento.forEach((oyente) => oyente(nombre, datos));
 }
@@ -255,6 +288,7 @@ function invalidarTodo(cliente: QueryClient): void {
   invalidar(cliente, CLAVES_TIEMPO_REAL.impresionEstado, opciones);
   invalidar(cliente, CLAVES_TIEMPO_REAL.llamados, opciones);
   invalidar(cliente, CLAVES_TIEMPO_REAL.turno, opciones);
+  invalidar(cliente, CLAVES_TIEMPO_REAL.facturacion, opciones);
 }
 
 // --- La conexión de la sesión ----------------------------------------------------------------

@@ -111,9 +111,10 @@ describe('la conexión de la sesión', () => {
       [...CLAVES_TIEMPO_REAL.impresionEstado],
       [...CLAVES_TIEMPO_REAL.llamados],
       [...CLAVES_TIEMPO_REAL.turno],
+      [...CLAVES_TIEMPO_REAL.facturacion],
     ]);
     // Si ya hay una lectura en camino, esa sirve: no se cancela para bajar lo mismo dos veces.
-    expect(opcionesDeInvalidacion).toEqual(Array(7).fill({ cancelRefetch: false }));
+    expect(opcionesDeInvalidacion).toEqual(Array(8).fill({ cancelRefetch: false }));
   });
 
   it('un aviso de cambio sí cancela la lectura en curso, que pudo salir antes del cambio', async () => {
@@ -285,6 +286,43 @@ describe('el estado de la impresión', () => {
     expect(invalidadas).toEqual([
       [...CLAVES_TIEMPO_REAL.impresionEstado],
       [...CLAVES_TIEMPO_REAL.impresoras],
+    ]);
+  });
+});
+
+describe('la facturación electrónica (006, 6b)', () => {
+  it('comprobante.estado vuelve a pedir ese comprobante, el panel y las alertas', async () => {
+    const socket = await abrir();
+    socket.conectar();
+    invalidadas.length = 0;
+    socket.desdeElServidor('comprobante.estado', {
+      comprobanteId: ORDEN,
+      estado: 'ACEPTADO',
+      sucursalId: ORDEN,
+    });
+    expect(invalidadas).toEqual([
+      [...CLAVES_TIEMPO_REAL.facturacionComprobante(ORDEN)],
+      [...CLAVES_TIEMPO_REAL.facturacionPanel],
+      [...CLAVES_TIEMPO_REAL.facturacionAlertas],
+    ]);
+  });
+
+  it('un comprobante.estado mal formado invalida más, nunca menos', async () => {
+    const socket = await abrir();
+    socket.conectar();
+    invalidadas.length = 0;
+    socket.desdeElServidor('comprobante.estado', { estado: 'ACEPTADO' });
+    expect(invalidadas[0]).toEqual([...CLAVES_TIEMPO_REAL.facturacion]);
+  });
+
+  it('facturacion.alerta vuelve a pedir las alertas y el panel', async () => {
+    const socket = await abrir();
+    socket.conectar();
+    invalidadas.length = 0;
+    socket.desdeElServidor('facturacion.alerta', { sucursalId: ORDEN });
+    expect(invalidadas).toEqual([
+      [...CLAVES_TIEMPO_REAL.facturacionAlertas],
+      [...CLAVES_TIEMPO_REAL.facturacionPanel],
     ]);
   });
 });
