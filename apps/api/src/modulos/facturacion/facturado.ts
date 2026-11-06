@@ -8,7 +8,8 @@ import { CONEXION_API } from '../../nucleo/base-de-datos';
  * anteriores tal como las devolvió `calcularParte` (`comprobante.detalle_parte`), en orden de `numero_parte`, leyendo
  * solo `comprobante`. Con la orden bloqueada no hay otra parte en vuelo. Sirve para que el cobro calcule "lo que
  * falta" y para que el puerto `COBROS` aplique `cambioDeCuentaPermitido`. No hay otra fuente de verdad para lo
- * cobrado; en 6b, si una nota de crédito anula partes, este es el único lugar que cambia.
+ * cobrado. En 6b una nota de crédito no cambia lo cobrado de la orden (criterio 156): solo cuentan los comprobantes
+ * nacidos de un cobro (`cobro_id` no nulo).
  */
 /**
  * La `ParteCalculada` sin la marca `valida` que `calcularParte` agrega a su resultado. Facturación guarda la parte sin
@@ -26,7 +27,7 @@ export class FacturadoService {
   async facturadoDeOrden(ordenId: string): Promise<ParteCalculada[]> {
     const filas = await this.conexion.query<{ detalle_parte: ParteCalculada }>(
       `SELECT detalle_parte FROM comprobante
-        WHERE orden_id = $1 AND detalle_parte IS NOT NULL
+        WHERE orden_id = $1 AND cobro_id IS NOT NULL AND detalle_parte IS NOT NULL
         ORDER BY numero_parte`,
       { bind: [ordenId], type: QueryTypes.SELECT },
     );

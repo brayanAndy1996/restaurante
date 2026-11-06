@@ -1,6 +1,6 @@
 import { Inject, Injectable } from '@nestjs/common';
 import type { SerieEntrada, SerieRespuesta } from '@restaurante/contratos';
-import type { TipoComprobante } from '@restaurante/dominio';
+import type { TipoSerie } from '@restaurante/dominio';
 import { QueryTypes, type Sequelize } from 'sequelize';
 import { CONEXION_API, SQLSTATE, restriccionDe, sqlstateDe } from '../../nucleo/base-de-datos';
 import { ContextoEmpresa } from '../../nucleo/contexto-empresa';
@@ -26,7 +26,7 @@ export interface ConfigurarSerie {
   cajaId: string;
   /** El emisor de la sucursal de la caja ahora (lo da plataforma): una serie pertenece al emisor con que se creó. */
   emisorId: string;
-  tipo: TipoComprobante;
+  tipo: TipoSerie;
   entrada: SerieEntrada;
 }
 
@@ -164,7 +164,7 @@ export class SeriesService {
     if (cajaIds.length === 0) return porCaja;
     const filas = await this.conexion.query<{
       caja_id: string;
-      tipo: TipoComprobante;
+      tipo: TipoSerie;
       serie: string;
       ultimo_numero: number;
       activa: boolean;
@@ -200,11 +200,7 @@ export class SeriesService {
    * transacción, unas pocas veces por si la serie cambia otra vez; `SIN_SERIE` solo si tras eso sigue sin haber
    * ninguna. No cambia el orden de bloqueos (la fila de la serie sigue siendo el último bloqueo del cobro).
    */
-  async tomarNumero(
-    cajaId: string,
-    tipo: TipoComprobante,
-    emisorId: string,
-  ): Promise<NumeroTomado> {
+  async tomarNumero(cajaId: string, tipo: TipoSerie, emisorId: string): Promise<NumeroTomado> {
     try {
       for (let intento = 1; intento <= INTENTOS_DE_NUMERACION; intento++) {
         const filas = await this.conexion.query<{

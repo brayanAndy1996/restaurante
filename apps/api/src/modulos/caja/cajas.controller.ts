@@ -10,7 +10,7 @@ import {
   type CajaRespuesta,
   type SerieEntrada,
 } from '@restaurante/contratos';
-import type { TipoComprobante } from '@restaurante/dominio';
+import type { TipoSerie } from '@restaurante/dominio';
 import { PipeUuid, PipeZod } from '../../nucleo/errores/pipes';
 import { Idempotente } from '../../nucleo/idempotencia';
 import { Permiso, RequiereModulo } from '../seguridad';
@@ -55,7 +55,8 @@ export class CajasController {
   }
 
   /**
-   * 200 `cajaRespuesta`; 400 (la serie no es `B…` para `BOLETA` ni `F…` para `FACTURA`); 403; 404; 409
+   * 200 `cajaRespuesta`; 400 (la serie no es `B…` para `BOLETA` y `NOTA_CREDITO_BOLETA` ni `F…` para `FACTURA` y
+   * `NOTA_CREDITO_FACTURA`); 403; 404; 409
    * `CONFLICTO` (serie de otra caja del emisor, o `primerNumero` distinto al guardado). Repetir lo que ya está activo
    * responde 200 sin auditoría.
    */
@@ -64,10 +65,10 @@ export class CajasController {
   configurarSerie(
     @Param('sucursalId', PipeUuid) sucursalId: string,
     @Param('cajaId', PipeUuid) cajaId: string,
-    @Param('tipo', new PipeZod(tipoSerieSchema)) tipo: TipoComprobante,
+    @Param('tipo', new PipeZod(tipoSerieSchema)) tipo: TipoSerie,
     @Body(new PipeZod(serieEntradaSchema)) entrada: SerieEntrada,
   ): Promise<CajaRespuesta> {
-    // El prefijo debe coincidir con el tipo de la ruta (`B…` para boletas, `F…` para facturas).
+    // El prefijo debe coincidir con el tipo de la ruta (`B…` para boletas y sus notas, `F…` para facturas y sus notas).
     const validada = new PipeZod(serieEntradaDeTipoSchema(tipo)).transform(entrada);
     return this.cajas.configurarSerie(sucursalId, cajaId, tipo, validada);
   }

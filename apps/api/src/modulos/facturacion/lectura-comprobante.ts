@@ -1,20 +1,22 @@
 import type { ComprobanteRespuesta } from '@restaurante/contratos';
 import type {
   RegimenTributario,
-  TipoComprobante,
   TipoDocumentoCliente,
+  TipoDocumentoElectronico,
 } from '@restaurante/dominio';
 import { QueryTypes, type Sequelize } from 'sequelize';
 
 /**
- * Lee un comprobante de la tabla y lo arma con la forma de `comprobanteRespuesta` (historia 006, criterios 69 y 77).
- * Corre en la transacción de la empresa del contexto: la RLS hace que uno de otra empresa sea indistinguible de uno
- * inexistente (devuelve `null`). Dos consultas fijas, sin importar cuántas líneas tenga.
+ * Lee un comprobante de la tabla y lo arma con la forma de `comprobanteRespuesta` (historia 006, criterios 69 y 77, y
+ * los campos de 6b de los criterios 122, 127, 134, 143 y 159). Corre en la transacción de la empresa del contexto: la
+ * RLS hace que uno de otra empresa sea indistinguible de uno inexistente (devuelve `null`). Dos consultas fijas, sin
+ * importar cuántas líneas tenga. `notasCredito` y `acreditado` (criterio 148) los agrega quien emite notas de crédito
+ * (T39/T40); aquí quedan sin definir.
  */
 
 interface FilaComprobante {
   id: string;
-  tipo: TipoComprobante;
+  tipo: TipoDocumentoElectronico;
   serie: string;
   numero: number;
   formato: 'DETALLADO' | 'CONSUMO';
@@ -25,9 +27,9 @@ interface FilaComprobante {
   emisor: { ruc: string; razonSocial: string; regimen: RegimenTributario };
   sucursal: { nombre: string; direccion: string; codigoEstablecimiento: string };
   caja_id: string;
-  turno_id: string;
+  turno_id: string | null;
   turno_responsable_id: string;
-  cobro_id: string;
+  cobro_id: string | null;
   numero_parte: number | null;
   cliente_tipo_documento: TipoDocumentoCliente | null;
   cliente_numero: string | null;
@@ -49,6 +51,31 @@ interface FilaComprobante {
   mesas: string[] | null;
   mozo_nombre: string | null;
   numero_llamado: number | null;
+  // 6b
+  simulado: boolean;
+  tipo_nota: 'ANULACION' | 'DEVOLUCION' | null;
+  motivo_nota: string | null;
+  motivo_reemplazo: 'REEMISION' | 'CAMBIO_A_FACTURA' | null;
+  cambio_a_factura: boolean;
+  afecta_a_id: string | null;
+  afecta_a_tipo: TipoDocumentoElectronico | null;
+  afecta_a_serie: string | null;
+  afecta_a_numero: number | null;
+  reemplaza_a_id: string | null;
+  reemplaza_a_serie: string | null;
+  reemplaza_a_numero: number | null;
+  reemplazado_por_id: string | null;
+  reemplazado_por_serie: string | null;
+  reemplazado_por_numero: number | null;
+  enviado_en: Date | null;
+  aceptado_en: Date | null;
+  rechazado_en: Date | null;
+  anulado_en: Date | null;
+  sunat_codigo: string | null;
+  sunat_mensaje: string | null;
+  sunat_observaciones: Array<{ codigo: string; mensaje: string }> | null;
+  hash: string | null;
+  tiene_pdf: boolean;
 }
 
 interface FilaLinea {
@@ -69,6 +96,7 @@ interface FilaLinea {
   afectacion: 'GRAVADO' | 'EXONERADO' | 'INAFECTO';
   gratuita: boolean;
   valor_referencial: string | null;
+  posicion_origen: number | null;
 }
 
 const COLUMNAS = `c.id, c.tipo, c.serie, c.numero, c.formato, c.estado,
@@ -80,14 +108,28 @@ const COLUMNAS = `c.id, c.tipo, c.serie, c.numero, c.formato, c.estado,
        c.op_gravadas::text AS op_gravadas, c.op_exoneradas::text AS op_exoneradas,
        c.op_inafectas::text AS op_inafectas, c.op_gratuitas::text AS op_gratuitas,
        c.igv::text AS igv, c.igv_gratuitas::text AS igv_gratuitas, c.icbper::text AS icbper,
-       c.total::text AS total, c.monto_en_letras, c.orden_id, c.mesas, c.mozo_nombre, c.numero_llamado`;
+       c.total::text AS total, c.monto_en_letras, c.orden_id, c.mesas, c.mozo_nombre, c.numero_llamado,
+       c.simulado, c.tipo_nota, c.motivo_nota, c.motivo_reemplazo,
+       (c.afecta_a_id IS NOT NULL AND EXISTS (
+          SELECT 1 FROM comprobante f
+           WHERE f.reemplaza_a_id = c.afecta_a_id AND f.motivo_reemplazo = 'CAMBIO_A_FACTURA')) AS cambio_a_factura,
+       a.id AS afecta_a_id, a.tipo AS afecta_a_tipo, a.serie AS afecta_a_serie, a.numero AS afecta_a_numero,
+       r.id AS reemplaza_a_id, r.serie AS reemplaza_a_serie, r.numero AS reemplaza_a_numero,
+       p.id AS reemplazado_por_id, p.serie AS reemplazado_por_serie, p.numero AS reemplazado_por_numero,
+       c.enviado_en, c.aceptado_en, c.rechazado_en, c.anulado_en, c.sunat_codigo, c.sunat_mensaje,
+       c.sunat_observaciones, c.hash, (c.pdf_clave IS NOT NULL) AS tiene_pdf`;
+
+const UNIONES = `FROM comprobante c
+       LEFT JOIN comprobante a ON a.id = c.afecta_a_id
+       LEFT JOIN comprobante r ON r.id = c.reemplaza_a_id
+       LEFT JOIN comprobante p ON p.reemplaza_a_id = c.id`;
 
 export async function leerComprobante(
   conexion: Sequelize,
   id: string,
 ): Promise<ComprobanteRespuesta | null> {
   const filas = await conexion.query<FilaComprobante>(
-    `SELECT ${COLUMNAS} FROM comprobante c WHERE c.id = $1`,
+    `SELECT ${COLUMNAS} ${UNIONES} WHERE c.id = $1`,
     { bind: [id], type: QueryTypes.SELECT },
   );
   const c = filas[0];
@@ -96,7 +138,7 @@ export async function leerComprobante(
     `SELECT posicion, item_id, descripcion, cantidad, unidad, precio_unitario::text AS precio_unitario,
             valor_unitario::text AS valor_unitario, bruto::text AS bruto, descuento::text AS descuento,
             neto::text AS neto, base::text AS base, igv::text AS igv, bolsas, icbper::text AS icbper,
-            afectacion, gratuita, valor_referencial::text AS valor_referencial
+            afectacion, gratuita, valor_referencial::text AS valor_referencial, posicion_origen
        FROM comprobante_linea WHERE comprobante_id = $1 ORDER BY posicion`,
     { bind: [id], type: QueryTypes.SELECT },
   );
@@ -148,6 +190,7 @@ export async function leerComprobante(
       afectacion: l.afectacion,
       gratuita: l.gratuita,
       valorReferencial: l.valor_referencial,
+      posicionOrigen: l.posicion_origen,
     })),
     totales: {
       subtotal: c.subtotal,
@@ -175,6 +218,57 @@ export async function leerComprobante(
             mozo: c.mozo_nombre,
             numeroLlamado: c.numero_llamado,
           },
+    origen:
+      c.cobro_id !== null
+        ? 'COBRO'
+        : c.afecta_a_id !== null
+          ? 'NOTA_CREDITO'
+          : c.motivo_reemplazo === 'CAMBIO_A_FACTURA'
+            ? 'CAMBIO_A_FACTURA'
+            : 'REEMISION',
+    simulado: c.simulado,
+    afectaA:
+      c.afecta_a_id === null
+        ? null
+        : {
+            id: c.afecta_a_id,
+            tipo: c.afecta_a_tipo!,
+            numero: textoDelNumero(c.afecta_a_serie!, c.afecta_a_numero!),
+          },
+    nota:
+      c.tipo_nota === null
+        ? null
+        : { tipo: c.tipo_nota, motivo: c.motivo_nota!, cambioAFactura: c.cambio_a_factura },
+    reemplazaA:
+      c.reemplaza_a_id === null
+        ? null
+        : {
+            id: c.reemplaza_a_id,
+            numero: textoDelNumero(c.reemplaza_a_serie!, c.reemplaza_a_numero!),
+          },
+    reemplazadoPor:
+      c.reemplazado_por_id === null
+        ? null
+        : {
+            id: c.reemplazado_por_id,
+            numero: textoDelNumero(c.reemplazado_por_serie!, c.reemplazado_por_numero!),
+          },
+    sunat:
+      c.sunat_codigo === null && c.sunat_mensaje === null
+        ? null
+        : {
+            codigo: c.sunat_codigo,
+            mensaje: c.sunat_mensaje,
+            observaciones: c.sunat_observaciones ?? [],
+            hash: c.hash,
+          },
+    marcas: {
+      enviadoEn: c.enviado_en?.toISOString() ?? null,
+      aceptadoEn: c.aceptado_en?.toISOString() ?? null,
+      rechazadoEn: c.rechazado_en?.toISOString() ?? null,
+      anuladoEn: c.anulado_en?.toISOString() ?? null,
+    },
+    pdfDisponible: c.tiene_pdf,
   };
 }
 

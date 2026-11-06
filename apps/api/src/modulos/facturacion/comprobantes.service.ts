@@ -5,7 +5,11 @@ import type {
   ComprobantesConsulta,
   ImpresionDeCajaRespuesta,
 } from '@restaurante/contratos';
-import { TIPOS_COMPROBANTE, type TipoComprobante } from '@restaurante/dominio';
+import {
+  TIPOS_COMPROBANTE,
+  type TipoComprobante,
+  type TipoDocumentoElectronico,
+} from '@restaurante/dominio';
 import { QueryTypes, type Sequelize } from 'sequelize';
 import { CONEXION_API } from '../../nucleo/base-de-datos';
 import { ErrorAplicacion } from '../../nucleo/errores/error-aplicacion';
@@ -32,6 +36,8 @@ export interface ResumenTributarioDeTurno {
   cortesias: string;
   igv: string;
   icbper: string;
+  /** Las notas de crédito emitidas con este turno (6b, criterio 136): no son ventas, van aparte. */
+  notasCredito: { cantidad: number; total: string };
 }
 
 /**
@@ -72,16 +78,17 @@ export class ComprobantesService {
 
   /**
    * 404 si el comprobante es de otra sucursal, de otra empresa o no existe; 403 si es del turno de otro Cajero.
-   * Devuelve la caja y el cobro del comprobante.
+   * Devuelve la caja y el cobro del comprobante (`null` en las notas de crédito, las reemisiones y las facturas de un
+   * cambio, que no nacen de un cobro).
    */
   private async exigirVisible(
     id: string,
-  ): Promise<{ sucursalId: string; cajaId: string; cobroId: string }> {
+  ): Promise<{ sucursalId: string; cajaId: string; cobroId: string | null }> {
     const filas = await this.conexion.query<{
       sucursal_id: string;
       turno_responsable_id: string;
       caja_id: string;
-      cobro_id: string;
+      cobro_id: string | null;
     }>(
       'SELECT sucursal_id, turno_responsable_id, caja_id, cobro_id FROM comprobante WHERE id = $1',
       {
@@ -114,7 +121,7 @@ export class ComprobantesService {
     }
     const filas = await this.conexion.query<{
       id: string;
-      tipo: TipoComprobante;
+      tipo: TipoDocumentoElectronico;
       serie: string;
       numero: number;
       estado: ComprobanteResumen['estado'];
@@ -122,7 +129,7 @@ export class ComprobantesService {
       emitido_en: Date;
       cliente_nombre: string | null;
       caja_id: string;
-      turno_id: string;
+      turno_id: string | null;
       orden_id: string | null;
     }>(
       `SELECT id, tipo, serie, numero, estado, total::text AS total, emitido_en, cliente_nombre, caja_id, turno_id,
@@ -213,7 +220,7 @@ export class ComprobantesService {
       const sinPulso = original.documento.bloques.filter((b) => b.tipo !== 'gaveta');
       documento = conMarcas({ ...original.documento, bloques: sinPulso }, { reimpresion: true });
     } else {
-      const cobro = await this.pagos.deCobro(visible.cobroId);
+      const cobro = visible.cobroId === null ? null : await this.pagos.deCobro(visible.cobroId);
       documento = conMarcas(
         documentoDeComprobante(comprobante, {
           hora: horaLocal(new Date(comprobante.emitidoEn)),
@@ -252,9 +259,12 @@ export class ComprobantesService {
   }
 
   /**
-   * El resumen tributario de un turno para el X y la Z (una consulta, montos en `NUMERIC`): cuántos comprobantes, su
-   * total (lo emitido, con ICBPER y sin restar el redondeo), el total por tipo, los descuentos, el valor referencial de
-   * las cortesías (suma de las líneas gratuitas, así cuenta también con un emisor Nuevo RUS), el IGV y el ICBPER.
+   * El resumen tributario de un turno para el X y la Z (montos en `NUMERIC`): cuántos comprobantes, su total (lo
+   * emitido, con ICBPER y sin restar el redondeo), el total por tipo, los descuentos, el valor referencial de las
+   * cortesías (suma de las líneas gratuitas, así cuenta también con un emisor Nuevo RUS), el IGV y el ICBPER. Suma solo
+   * los comprobantes nacidos de un cobro (`cobro_id` no nulo, 6b criterio 136): ni las notas de crédito, ni las
+   * reemisiones, ni las facturas de un cambio son dinero nuevo, y el estado ante SUNAT no cuenta. Las notas de crédito
+   * emitidas con el turno se devuelven aparte en `notasCredito`.
    */
   async resumenDeTurno(turnoId: string): Promise<ResumenTributarioDeTurno> {
     const filas = await this.conexion.query<{
@@ -276,8 +286,13 @@ export class ComprobantesService {
               coalesce(sum(c.igv), 0)::numeric(14, 2)::text AS igv,
               coalesce(sum(c.icbper), 0)::numeric(14, 2)::text AS icbper
          FROM comprobante c
-        WHERE c.turno_id = $1
+        WHERE c.turno_id = $1 AND c.cobro_id IS NOT NULL
         GROUP BY ROLLUP (c.tipo)`,
+      { bind: [turnoId], type: QueryTypes.SELECT },
+    );
+    const notas = await this.conexion.query<{ cantidad: number; total: string }>(
+      `SELECT count(*)::int AS cantidad, coalesce(sum(total), 0)::numeric(14, 2)::text AS total
+         FROM comprobante WHERE turno_id = $1 AND afecta_a_id IS NOT NULL`,
       { bind: [turnoId], type: QueryTypes.SELECT },
     );
     const total = filas.find((f) => f.es_total);
@@ -293,6 +308,7 @@ export class ComprobantesService {
       cortesias: total?.cortesias ?? '0.00',
       igv: total?.igv ?? '0.00',
       icbper: total?.icbper ?? '0.00',
+      notasCredito: { cantidad: notas[0]?.cantidad ?? 0, total: notas[0]?.total ?? '0.00' },
     };
   }
 }

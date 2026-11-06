@@ -497,7 +497,7 @@ describe('criterios 3 a 5 · series', () => {
       ctx,
       admin(),
       'put',
-      `/sucursales/${A().S1}/cajas/${cajas.S1!.caja1}/series/NOTA_CREDITO_BOLETA`,
+      `/sucursales/${A().S1}/cajas/${cajas.S1!.caja1}/series/NOTA_DEBITO`,
       { serie: 'B832' },
     );
     esperarError(tipo, 400, 'DATOS_INVALIDOS');
