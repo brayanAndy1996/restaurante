@@ -304,6 +304,7 @@ describe('criterio 143 y 144 · los tres tipos y la respuesta', () => {
     expect(detalle.notasCredito).toEqual([
       {
         id: notaId,
+        notaId: res.id,
         tipo: 'ANULACION',
         numero: (res.nota as Libre).numero,
         estado: 'ACEPTADO',
@@ -383,6 +384,7 @@ describe('criterio 143 y 144 · los tres tipos y la respuesta', () => {
     expect(detalle.notasCredito).toEqual([
       {
         id: nota1.id,
+        notaId: primera.id,
         tipo: 'DEVOLUCION',
         numero: nota1.numero,
         estado: 'ACEPTADO',
