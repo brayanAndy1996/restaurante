@@ -1,5 +1,6 @@
 // spec: 002-plataforma-y-acceso (pruebas protegidas)
 // Ajustado por 004-salon-cocina, decisión 11 (2026-10-29): inactividad aparte para Cocina/Barra.
+// Ajustado por 006-caja-cobro, entrega 6b, criterio 160 (2026-11-06): se admite `GET /publico/comprobantes/:sello`, y solo esa.
 //
 // P1 · Sesión, resolutor de empresa por sesión y rutas protegidas por defecto (criterios 1 a 9).
 // Las pruebas con etiqueta [C1], [C2] o [C3] dependen de funciones de grupos posteriores de la fase C.
@@ -15,6 +16,7 @@ import {
   HORA_INICIAL,
   MINUTO,
   RUTAS_PUBLICAS,
+  RUTA_PUBLICA_DE_6B,
   UUID_CERO,
   accesosPorHttp,
   armarToken,
@@ -95,7 +97,11 @@ describe('criterio 1 · rutas protegidas por defecto', () => {
     const publicas = rutasDeNest(esc.app)
       .filter((r) => Reflect.getMetadata(PUBLICA, r.controlador.prototype[r.manejador]) === true)
       .map((r) => `${r.metodo} ${r.ruta}`);
-    expect([...publicas].sort()).toEqual([...RUTAS_PUBLICAS].sort());
+    // 006, 6b, criterio 160: `GET /publico/comprobantes/:sello` se admite (una vez como máximo), y solo esa.
+    expect(publicas.filter((p) => p === RUTA_PUBLICA_DE_6B).length).toBeLessThanOrEqual(1);
+    expect([...publicas.filter((p) => p !== RUTA_PUBLICA_DE_6B)].sort()).toEqual(
+      [...RUTAS_PUBLICAS].sort(),
+    );
     // La sonda, sin decorador, no es pública.
     expect(publicas).not.toContain('GET /sonda-acceso');
   });
