@@ -121,9 +121,11 @@ function fechaCorta(fecha: string): string {
 
 /**
  * El texto del QR con los datos que ya se conocen (formato de SUNAT): RUC del emisor, tipo, serie, número, IGV, total,
- * fecha de emisión y documento del cliente (`0` y `-` sin cliente). Nunca pasa del máximo de un QR.
+ * fecha de emisión y documento del cliente (`0` y `-` sin cliente). El ticket no lleva el `hash` (llega después de
+ * imprimirlo); el PDF, que se arma al aceptarse, lo agrega al final si el PSE lo dio (criterio 159). Nunca pasa del máximo
+ * de un QR.
  */
-export function textoDelQr(c: ComprobanteParaTicket): string {
+export function textoDelQr(c: ComprobanteParaTicket, hash: string | null = null): string {
   const cliente = c.cliente;
   const texto = [
     c.emisor.ruc,
@@ -135,6 +137,7 @@ export function textoDelQr(c: ComprobanteParaTicket): string {
     c.fechaEmision,
     cliente === null ? '0' : CODIGO_DE_DOCUMENTO[cliente.tipoDocumento],
     cliente === null ? '-' : cliente.numero,
+    ...(hash === null ? [] : [hash]),
     '',
   ]
     .map((parte) => limpiarTexto(parte.replace(/\|/g, ' ')))

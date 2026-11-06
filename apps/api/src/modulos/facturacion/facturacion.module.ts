@@ -19,6 +19,7 @@ import { PanelService } from './panel.service';
 import { CargaPadron } from './padron/carga-padron';
 import { PadronController } from './padron/padron.controller';
 import { PadronService } from './padron/padron.service';
+import { ArchivadorDePdf } from './pdf/archivador-de-pdf';
 import { PdfComprobantes } from './pdf/pdf-comprobantes';
 import { RegistroDeConectores } from './pse/registro-de-conectores';
 import { ReemisionService } from './reemision.service';
@@ -69,6 +70,7 @@ import { UltimaEmisionDeComprobantes } from './ultima-emision-de-comprobantes';
     ReemisionService,
     EnlacesComprobante,
     PdfComprobantes,
+    ArchivadorDePdf,
     CargaPadron,
     PadronService,
   ],

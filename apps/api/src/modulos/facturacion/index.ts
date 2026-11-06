@@ -34,6 +34,7 @@ export {
 export type { OpcionesWorker } from './envios/trabajo-en-segundo-plano';
 export { EnlacesComprobante } from './enlaces';
 export { PdfComprobantes } from './pdf/pdf-comprobantes';
+export { ArchivadorDePdf } from './pdf/archivador-de-pdf';
 export { CargaPadron, ACTOR_WORKER_PADRON } from './padron/carga-padron';
 export type { ResultadoCargaPadron } from './padron/carga-padron';
 export { PadronService } from './padron/padron.service';

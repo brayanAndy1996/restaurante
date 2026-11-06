@@ -10,6 +10,7 @@ export {
   documentoDeReporteCaja,
   documentoDePrueba,
   renderizarTicket,
+  textoDelQr,
 } from './escpos';
 export type {
   ComandaParaTicket,

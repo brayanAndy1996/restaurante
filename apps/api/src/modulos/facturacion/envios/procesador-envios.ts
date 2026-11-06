@@ -19,6 +19,7 @@ import type {
   ResultadoConsultaPse,
   ResultadoPse,
 } from '../pse/conector-pse';
+import { ArchivadorDePdf } from '../pdf/archivador-de-pdf';
 import { RegistroDeConectores } from '../pse/registro-de-conectores';
 import { publicarAlerta } from './alertas';
 import {
@@ -80,6 +81,9 @@ interface FilaDeEnvio {
  *    resultado (`resultado-pse.ts`); si el arriendo venció y otro worker lo tomó, descarta su resultado (la llamada fue
  *    idempotente por identificador). Los eventos y el siguiente encolado salen con `alConfirmar`.
  *
+ * Con un `ACEPTADO` confirmado, después del paso 3 arma el PDF y lo guarda (`ArchivadorDePdf`, criterio 159), fuera de toda
+ * transacción.
+ *
  * Ninguna llamada al PSE ocurre dentro de una transacción. Cada transacción fija la empresa del trabajo y actúa como
  * `worker:envio-pse`. Las esperas, el arriendo y los plazos usan el reloj de la API.
  */
@@ -96,6 +100,7 @@ export class ProcesadorEnviosPse {
     @Inject(ALMACEN_COMPROBANTES) private readonly almacen: AlmacenComprobantes,
     @Inject(COLA_PSE) private readonly cola: ColaPse,
     @Inject(PUBLICADOR_EVENTOS) private readonly publicador: PublicadorEventos,
+    @Inject(ArchivadorDePdf) private readonly pdf: ArchivadorDePdf,
   ) {}
 
   /**
@@ -114,11 +119,14 @@ export class ProcesadorEnviosPse {
 
     const { llamadas, resultado, archivos } = await this.llamar(empresaId, comprobanteId, tomado);
 
-    await this.contexto.ejecutar(
+    const quedoAceptado = await this.contexto.ejecutar(
       empresaId,
       () => this.guardar(empresaId, comprobanteId, tomado, llamadas, resultado, archivos),
       { actor: { sistema: ACTOR_WORKER_ENVIO_PSE } },
     );
+    // Con el `ACEPTADO` ya confirmado, el PDF se arma fuera de toda transacción (criterio 159). Si falla, el barrido lo
+    // vuelve a intentar: el estado no se pierde.
+    if (quedoAceptado) await this.pdf.generar(empresaId, comprobanteId);
   }
 
   // ----------------------------------------------------------------------------------------------
@@ -298,7 +306,7 @@ export class ProcesadorEnviosPse {
     llamadas: LlamadaHecha[],
     resultado: ResultadoPse,
     archivos: ClavesDeArchivos,
-  ): Promise<void> {
+  ): Promise<boolean> {
     const filas = await this.conexion.query<{
       intento_en_curso: string | null;
       alerta: AlertaComprobante | null;
@@ -317,7 +325,7 @@ export class ProcesadorEnviosPse {
       this.logger.warn(
         JSON.stringify({ evento: 'pse.resultado_descartado', empresaId, comprobanteId }),
       );
-      return;
+      return false;
     }
 
     const ahora = this.reloj.ahora();
@@ -384,6 +392,7 @@ export class ProcesadorEnviosPse {
       const startAfter = salida.proximoIntentoEn;
       this.contexto.alConfirmar(() => this.encolarSiguiente(empresaId, comprobanteId, startAfter));
     }
+    return salida.cambioElEstado && salida.estadoComprobante === 'ACEPTADO';
   }
 
   /**

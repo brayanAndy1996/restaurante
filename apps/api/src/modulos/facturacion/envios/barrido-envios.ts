@@ -15,6 +15,7 @@ import { PUBLICADOR_EVENTOS, type PublicadorEventos } from '../../../nucleo/even
 import { RELOJ, type Reloj } from '../../../nucleo/reloj';
 import { EmpresasConsulta } from '../../plataforma';
 import { publicarAlerta } from './alertas';
+import { ArchivadorDePdf } from '../pdf/archivador-de-pdf';
 import { ACTOR_WORKER_ENVIO_PSE } from './procesador-envios';
 
 /** Lo que hizo una vuelta del barrido (criterios 126, 130 y 133). */
@@ -25,7 +26,7 @@ export interface ResultadoDelBarrido {
   detenidos: number;
   /** Alertas nuevas publicadas. */
   alertas: number;
-  /** PDF de comprobantes `ACEPTADO` que se volvieron a encolar. */
+  /** PDF de comprobantes `ACEPTADO` (o `ANULADO`) que estaban sin PDF y se volvieron a armar. */
   pdfPendientes: number;
 }
 
@@ -58,7 +59,9 @@ interface FilaRevisada {
  * - **detiene** los envíos que llegaron a `plazo_hasta` sin respuesta final (criterio 130);
  * - **vuelve a encolar** los envíos `PENDIENTE` o `ESPERANDO_RESPUESTA` cuyo `proximo_intento_en` ya pasó y que no tienen
  *   un arriendo vigente (hasta 500 por empresa y vuelta), después de confirmar la transacción;
- * - **levanta las alertas por tiempo** con `alertaDe` (`alertado_en` y `alerta` evitan repetirlas) y las publica.
+ * - **levanta las alertas por tiempo** con `alertaDe` (`alertado_en` y `alerta` evitan repetirlas) y las publica;
+ * - **arma el PDF** de los comprobantes aceptados que se quedaron sin él (hasta 20 por empresa y vuelta), fuera de la
+ *   transacción (criterio 159).
  *
  * Una empresa nunca toca los envíos de otra: cada una corre en su propia transacción con su RLS. El barrido no bloquea
  * comprobantes. Con varias instancias del worker, los `UPDATE` condicionados y el `singletonKey` de la cola evitan dobles
@@ -77,6 +80,7 @@ export class BarridoEnviosPse {
     @Inject(COLA_PSE) private readonly cola: ColaPse,
     @Inject(PUBLICADOR_EVENTOS) private readonly publicador: PublicadorEventos,
     @Inject(EmpresasConsulta) private readonly empresas: EmpresasConsulta,
+    @Inject(ArchivadorDePdf) private readonly pdf: ArchivadorDePdf,
   ) {}
 
   /** Una vuelta completa sobre todas las empresas. Una empresa que falla no impide las demás. */
@@ -144,16 +148,21 @@ export class BarridoEnviosPse {
       alertas: 0,
       pdfPendientes: 0,
     };
-    await this.contexto.ejecutar(
+    const sinPdf = await this.contexto.ejecutar(
       empresaId,
       async () => {
         const ahora = this.reloj.ahora();
         resultado.detenidos = await this.detenerVencidos(ahora);
         await this.reencolar(empresaId, ahora, resultado);
         resultado.alertas = await this.alertar(empresaId, ahora);
+        return this.pdf.pendientes();
       },
       { actor: { sistema: ACTOR_WORKER_ENVIO_PSE } },
     );
+    // (d) Los aceptados que se quedaron sin PDF se arman ahora, ya fuera de la transacción (criterio 159).
+    for (const comprobanteId of sinPdf) {
+      if (await this.pdf.generar(empresaId, comprobanteId)) resultado.pdfPendientes += 1;
+    }
     return resultado;
   }
 
