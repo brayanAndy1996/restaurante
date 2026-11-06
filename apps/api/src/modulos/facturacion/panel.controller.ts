@@ -13,6 +13,7 @@ import {
   alertasConsultaSchema,
   panelConsultaSchema,
   reemisionEntradaSchema,
+  reintentoEntradaSchema,
   type AlertasRespuesta,
   type ComprobanteDetalle,
   type EnlaceComprobanteRespuesta,
@@ -58,13 +59,16 @@ export class PanelController {
     return this.panel.detalle(id);
   }
 
-  /** 202 `envioRespuesta`; 403; 404; 409 `ENVIO_TERMINADO`. */
+  /** 202 `envioRespuesta`; 400 (cualquier cuerpo no vacío); 403; 404; 409 `ENVIO_TERMINADO`. */
   @Post('comprobantes/:id/reintento')
   @IdempotenteObligatoria()
   @HttpCode(202)
   @RequiereModulo('FACTURACION')
   @Permiso('COBRAR')
-  reintentar(@Param('id', PipeUuid) id: string): Promise<EnvioPseRespuesta> {
+  reintentar(
+    @Param('id', PipeUuid) id: string,
+    @Body(new PipeZod(reintentoEntradaSchema)) _cuerpo: unknown,
+  ): Promise<EnvioPseRespuesta> {
     return this.panel.reintentar(id);
   }
 

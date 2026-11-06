@@ -90,12 +90,35 @@ interface Cursor {
 const codificarCursor = (cursor: Cursor): string =>
   Buffer.from(JSON.stringify(cursor), 'utf8').toString('base64url');
 
+/** `AAAA-MM-DDTHH:MM:SS.ffffffZ` con una fecha y una hora que existen (no mes 13, ni 30 de febrero, ni las 99:99). */
+function esInstanteReal(texto: string): boolean {
+  const partes = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})\.\d{6}Z$/.exec(texto);
+  if (partes === null) return false;
+  const [anio, mes, dia, hora, minuto, segundo] = partes.slice(1).map(Number) as [
+    number,
+    number,
+    number,
+    number,
+    number,
+    number,
+  ];
+  const fecha = new Date(Date.UTC(anio, mes - 1, dia, hora, minuto, segundo));
+  return (
+    fecha.getUTCFullYear() === anio &&
+    fecha.getUTCMonth() === mes - 1 &&
+    fecha.getUTCDate() === dia &&
+    fecha.getUTCHours() === hora &&
+    fecha.getUTCMinutes() === minuto &&
+    fecha.getUTCSeconds() === segundo
+  );
+}
+
 function decodificarCursor(texto: string): Cursor {
   try {
     const dato = JSON.parse(Buffer.from(texto, 'base64url').toString('utf8')) as Partial<Cursor>;
     if (
       typeof dato.t === 'string' &&
-      /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}Z$/.test(dato.t) &&
+      esInstanteReal(dato.t) &&
       typeof dato.i === 'string' &&
       /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(dato.i)
     ) {
@@ -335,6 +358,13 @@ export class PanelService {
     if (fila.estado !== 'ACEPTADO' && fila.estado !== 'ANULADO') throw pdfNoDisponible();
     if (fila.pdf_clave === null) {
       throw pdfNoDisponible('El PDF se está preparando; inténtalo de nuevo en un minuto');
+    }
+    // Solo se sirve un archivo que cuelga de la carpeta de este comprobante (criterios 165 y 167): una clave que apunte a otra
+    // empresa o a otro comprobante es como no tener PDF, igual que en la ruta pública.
+    if (
+      !fila.pdf_clave.startsWith(`comprobantes/${this.contexto.empresaActual()}/${comprobanteId}/`)
+    ) {
+      throw pdfNoDisponible();
     }
     return { numero: textoDelNumero(fila.serie, fila.numero), clave: fila.pdf_clave };
   }

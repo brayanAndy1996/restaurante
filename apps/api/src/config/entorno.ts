@@ -1,3 +1,4 @@
+import { isAbsolute, relative, resolve, sep } from 'node:path';
 import { z } from 'zod';
 
 /** Token de Nest con el entorno ya validado. */
@@ -356,6 +357,20 @@ function validarArchivos(
       'ARCHIVOS_DRIVER=disco solo vale con NODE_ENV=development: ' +
         'usa r2 (producción) o memoria (pruebas)',
     );
+  }
+  // Con el almacén en disco, la API sirve ARCHIVOS_DIRECTORIO en `/archivos`: la carpeta privada de los comprobantes no puede
+  // ser esa ni quedar dentro de ella, o sus XML, CDR y PDF saldrían por una URL pública.
+  if (driver === 'disco' || (driver === undefined && env.NODE_ENV === 'development')) {
+    const publica = resolve(env.ARCHIVOS_DIRECTORIO ?? ARCHIVOS_DIRECTORIO_LOCAL);
+    const privada = resolve(
+      env.ARCHIVOS_COMPROBANTES_DIRECTORIO ?? ARCHIVOS_COMPROBANTES_DIRECTORIO_LOCAL,
+    );
+    const ruta = relative(publica, privada);
+    if (ruta === '' || (ruta !== '..' && !ruta.startsWith(`..${sep}`) && !isAbsolute(ruta))) {
+      problemas.push(
+        'ARCHIVOS_COMPROBANTES_DIRECTORIO no puede ser ARCHIVOS_DIRECTORIO ni estar dentro de ella: la API sirve esa carpeta en /archivos y la de los comprobantes es privada',
+      );
+    }
   }
   if (driver === 'r2') {
     for (const variable of VARIABLES_R2) {

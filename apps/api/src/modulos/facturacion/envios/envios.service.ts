@@ -77,8 +77,9 @@ export class EnviosService {
   }
 
   /**
-   * Reintento manual (criterio 132): pone `proximo_intento_en` en el instante actual (y saca de `DETENIDO` a `PENDIENTE`)
-   * y encola el trabajo después de confirmar, como ya hace el barrido. Un envío `TERMINADO` es 409 `ENVIO_TERMINADO`; con
+   * Reintento manual (criterio 132): pone `proximo_intento_en` en el instante actual (y saca de `DETENIDO` a `PENDIENTE`),
+   * deja la marca `reintento_manual_en` (mientras la tenga, el barrido no detiene el envío por plazo: el worker hace ese
+   * intento y la limpia al tomarlo) y encola el trabajo después de confirmar, como ya hace el barrido. Un envío `TERMINADO` es 409 `ENVIO_TERMINADO`; con
    * un arriendo vigente (un worker lo está enviando) no cambia nada. No se audita: queda en la trazabilidad de `envio_pse`.
    * Quien llama ya comprobó que el comprobante existe y que quien pide puede verlo.
    */
@@ -107,7 +108,7 @@ export class EnviosService {
     if (!enCurso) {
       await this.conexion.query(
         `UPDATE envio_pse
-            SET proximo_intento_en = $2,
+            SET proximo_intento_en = $2, reintento_manual_en = $2,
                 estado = CASE WHEN estado = 'DETENIDO' THEN 'PENDIENTE' ELSE estado END,
                 actualizado_en = $2
           WHERE id = $1`,

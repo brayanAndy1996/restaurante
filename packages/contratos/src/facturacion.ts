@@ -230,15 +230,21 @@ export const pagoDevolucionEntradaSchema = z
     }
   });
 
+/** `POST /facturacion/comprobantes/:id/reintento` (criterio 132): sin cuerpo o con `{}`; cualquier otra cosa es 400. */
+export const reintentoEntradaSchema = z.strictObject({}).optional();
+
 export const devolucionEntradaSchema = z.strictObject({
   turnoId: uuidSchema,
   pagos: z.array(pagoDevolucionEntradaSchema).min(1).max(5),
   redondeo: montoNoNegativoSchema,
 });
 
-/** Una línea del comprobante original que se devuelve: su `posicion` y las unidades (criterio 144). */
+/** La posición más alta de una línea de comprobante que una nota puede acreditar (criterio 144). */
+export const POSICION_MAXIMA_LINEA = 9999;
+
+/** Una línea del comprobante original que se devuelve: su `posicion` (1 a 9999) y las unidades (criterio 144). */
 export const lineaNotaEntradaSchema = z.strictObject({
-  posicion: z.number().int().min(1),
+  posicion: z.number().int().min(1).max(POSICION_MAXIMA_LINEA),
   cantidad: z.number().int().min(1).max(CANTIDAD_MAXIMA_LINEA),
 });
 

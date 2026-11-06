@@ -8,6 +8,7 @@ import {
 } from '../../../nucleo/archivos';
 import { CONEXION_API } from '../../../nucleo/base-de-datos';
 import { ContextoEmpresa } from '../../../nucleo/contexto-empresa';
+import { RELOJ, type Reloj } from '../../../nucleo/reloj';
 import { leerComprobante } from '../lectura-comprobante';
 import { RegistroDeConectores } from '../pse/registro-de-conectores';
 import { PdfComprobantes } from './pdf-comprobantes';
@@ -18,6 +19,11 @@ const ACTOR_DEL_PDF = 'worker:envio-pse';
 /** Cuántos comprobantes sin PDF recoge una vuelta del barrido por empresa (criterio 159). */
 export const MAXIMO_PDF_POR_EMPRESA_Y_VUELTA = 20;
 
+/** Cuánto espera el barrido para volver a intentar el PDF de un comprobante que falló en una vuelta (criterio 159). */
+export const ESPERA_TRAS_FALLO_DE_PDF_MS = 10 * 60_000;
+/** Tope de fallos recordados; pasado, se olvidan todos (el barrido los vuelve a aprender). */
+const MAXIMO_DE_FALLOS_RECORDADOS = 10_000;
+
 /**
  * Arma el PDF de un comprobante aceptado y lo deja en el almacén privado (historia 006, entrega 6b, criterio 159). Lo
  * llama el worker justo después de guardar el `ACEPTADO` y, para los que se quedaron sin PDF, el barrido.
@@ -27,10 +33,16 @@ export const MAXIMO_PDF_POR_EMPRESA_Y_VUELTA = 20;
  * (`comprobantes/<empresaId>/<comprobanteId>/representacion.pdf`, así que repetirlo sobrescribe lo mismo) y otra
  * transacción corta anota `pdf_clave` solo si todavía no estaba. Si algo falla, el `ACEPTADO` ya está guardado y el
  * barrido lo vuelve a intentar: este servicio nunca lanza (el registro lleva ids, no datos de clientes).
+ *
+ * Los que fallan en el barrido (`recordarFallo`) no se vuelven a ofrecer durante `ESPERA_TRAS_FALLO_DE_PDF_MS`: así, los
+ * comprobantes cuyo PDF falla siempre no ocupan el cupo de cada vuelta y no bloquean a los aceptados nuevos. El recuerdo es
+ * del proceso (sin tabla): al reiniciar el worker se vuelven a intentar, que es inocuo porque el PDF es idempotente.
  */
 @Injectable()
 export class ArchivadorDePdf {
   private readonly logger = new Logger(ArchivadorDePdf.name);
+  /** comprobanteId → instante (ms, reloj de la API) del último fallo del barrido. */
+  private readonly fallos = new Map<string, number>();
 
   constructor(
     @Inject(CONEXION_API) private readonly conexion: Sequelize,
@@ -38,6 +50,7 @@ export class ArchivadorDePdf {
     @Inject(ALMACEN_COMPROBANTES) private readonly almacen: AlmacenComprobantes,
     @Inject(PdfComprobantes) private readonly pdf: PdfComprobantes,
     @Inject(RegistroDeConectores) private readonly conectores: RegistroDeConectores,
+    @Inject(RELOJ) private readonly reloj: Reloj,
   ) {}
 
   /**
@@ -73,15 +86,31 @@ export class ArchivadorDePdf {
     }
   }
 
-  /** Los comprobantes aceptados (o anulados) de la empresa del contexto que siguen sin PDF; los más viejos primero. */
+  /** El barrido anota que el PDF de este comprobante falló ahora: no se le ofrece de nuevo hasta pasada la espera. */
+  recordarFallo(comprobanteId: string): void {
+    if (this.fallos.size >= MAXIMO_DE_FALLOS_RECORDADOS) this.fallos.clear();
+    this.fallos.set(comprobanteId, this.reloj.ahora().getTime());
+  }
+
+  /**
+   * Los comprobantes aceptados (o anulados) de la empresa del contexto que siguen sin PDF, los más viejos primero, sin los que
+   * fallaron en el barrido hace menos de `ESPERA_TRAS_FALLO_DE_PDF_MS`.
+   */
   async pendientes(limite = MAXIMO_PDF_POR_EMPRESA_Y_VUELTA): Promise<string[]> {
+    const ahora = this.reloj.ahora().getTime();
+    const recientes: string[] = [];
+    for (const [id, instante] of this.fallos) {
+      if (ahora - instante >= ESPERA_TRAS_FALLO_DE_PDF_MS) this.fallos.delete(id);
+      else recientes.push(id);
+    }
     const filas = await this.conexion.query<{ id: string }>(
       `SELECT id
          FROM comprobante
         WHERE estado IN ('ACEPTADO', 'ANULADO') AND pdf_clave IS NULL
+          AND id <> ALL ($1::uuid[])
         ORDER BY emitido_en, id
         LIMIT ${Math.trunc(limite)}`,
-      { type: QueryTypes.SELECT },
+      { bind: [recientes], type: QueryTypes.SELECT },
     );
     return filas.map((f) => f.id);
   }

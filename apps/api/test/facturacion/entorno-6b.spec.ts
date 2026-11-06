@@ -132,6 +132,54 @@ describe('validación de formato', () => {
       /bucket distinto/,
     );
   });
+
+  describe('con el almacén en disco la carpeta de los comprobantes no queda dentro de la que sirve /archivos', () => {
+    const desarrollo = { ...base, NODE_ENV: 'development' };
+    const conCarpetas = (publica?: string, privada?: string) => ({
+      ...desarrollo,
+      ...(publica === undefined ? {} : { ARCHIVOS_DIRECTORIO: publica }),
+      ...(privada === undefined ? {} : { ARCHIVOS_COMPROBANTES_DIRECTORIO: privada }),
+    });
+
+    it('los valores por defecto (hermanas) y carpetas separadas pasan', () => {
+      expect(() => cargarEntorno(desarrollo)).not.toThrow();
+      expect(() => cargarEntorno(conCarpetas('/datos/fotos', '/datos/privado'))).not.toThrow();
+      expect(() =>
+        cargarEntorno(conCarpetas('/datos/fotos', '/datos/fotos-privadas')),
+      ).not.toThrow();
+      expect(() => cargarEntorno(conCarpetas('./archivos', './archivos-privados'))).not.toThrow();
+    });
+
+    it.each([
+      ['la misma carpeta', '/datos/fotos', '/datos/fotos'],
+      ['una subcarpeta', '/datos/fotos', '/datos/fotos/privado'],
+      [
+        'una subcarpeta con rutas relativas y ..',
+        './archivos',
+        './archivos/../archivos/comprobantes',
+      ],
+      [
+        'la carpeta por defecto de las fotos con otra raíz privada dentro',
+        undefined,
+        './archivos/privado',
+      ],
+    ])('rechaza %s', (_nombre, publica, privada) => {
+      expect(() => cargarEntorno(conCarpetas(publica, privada))).toThrow(
+        /ARCHIVOS_COMPROBANTES_DIRECTORIO no puede ser ARCHIVOS_DIRECTORIO ni estar dentro/,
+      );
+    });
+
+    it('con memoria (pruebas) no se exige: no se sirve ninguna carpeta', () => {
+      expect(() =>
+        cargarEntorno({
+          ...base,
+          NODE_ENV: 'test',
+          ARCHIVOS_DIRECTORIO: '/datos/fotos',
+          ARCHIVOS_COMPROBANTES_DIRECTORIO: '/datos/fotos/privado',
+        }),
+      ).not.toThrow();
+    });
+  });
 });
 
 describe('exigirEntornoDeProduccion', () => {

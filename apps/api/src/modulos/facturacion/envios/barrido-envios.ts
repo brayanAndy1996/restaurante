@@ -2,7 +2,6 @@ import { Inject, Injectable, Logger } from '@nestjs/common';
 import {
   alertaDe,
   MINUTOS_ALERTA_PENDIENTE,
-  type AlertaComprobante,
   type EstadoComprobante,
   type EstadoEnvioPse,
   type ResultadoEnvioPse,
@@ -14,6 +13,7 @@ import { ContextoEmpresa } from '../../../nucleo/contexto-empresa';
 import { PUBLICADOR_EVENTOS, type PublicadorEventos } from '../../../nucleo/eventos';
 import { RELOJ, type Reloj } from '../../../nucleo/reloj';
 import { EmpresasConsulta } from '../../plataforma';
+import { sqlAlerta } from './alertas-sql';
 import { publicarAlerta } from './alertas';
 import { ArchivadorDePdf } from '../pdf/archivador-de-pdf';
 import { ACTOR_WORKER_ENVIO_PSE } from './procesador-envios';
@@ -46,7 +46,6 @@ interface FilaRevisada {
   sucursal_id: string;
   estado_envio: EstadoEnvioPse;
   ultimo_resultado: ResultadoEnvioPse | null;
-  alerta: AlertaComprobante | null;
   estado: EstadoComprobante;
   emitido_en: Date;
   reemplazado: boolean;
@@ -162,11 +161,16 @@ export class BarridoEnviosPse {
     // (d) Los aceptados que se quedaron sin PDF se arman ahora, ya fuera de la transacción (criterio 159).
     for (const comprobanteId of sinPdf) {
       if (await this.pdf.generar(empresaId, comprobanteId)) resultado.pdfPendientes += 1;
+      else this.pdf.recordarFallo(comprobanteId);
     }
     return resultado;
   }
 
-  /** (b) Los envíos que llegaron a su plazo sin terminar quedan `DETENIDO`, sin arriendo (criterio 130). */
+  /**
+   * (b) Los envíos que llegaron a su plazo sin terminar quedan `DETENIDO`, sin arriendo (criterio 130). Uno con la marca de
+   * reintento manual (`reintento_manual_en`, criterio 132) no se detiene: el worker aún no hizo ese intento y es él quien, si
+   * falla pasado el plazo, lo vuelve a dejar `DETENIDO`.
+   */
   private async detenerVencidos(ahora: Date): Promise<number> {
     const filas = await this.conexion.query<{ id: string }>(
       `UPDATE envio_pse
@@ -175,6 +179,7 @@ export class BarridoEnviosPse {
         WHERE estado IN ('PENDIENTE', 'ESPERANDO_RESPUESTA')
           AND plazo_hasta <= $1
           AND (en_curso_hasta IS NULL OR en_curso_hasta < $1)
+          AND reintento_manual_en IS NULL
         RETURNING id`,
       { bind: [ahora], type: QueryTypes.SELECT },
     );
@@ -217,19 +222,28 @@ export class BarridoEnviosPse {
     });
   }
 
-  /** (c) Las alertas nuevas (demora, plazo vencido, configuración, rechazo) se marcan y se publican una sola vez. */
+  /**
+   * (c) Las alertas nuevas (demora, plazo vencido, configuración, rechazo) se marcan y se publican una sola vez por
+   * comprobante y motivo (criterio 133). La consulta ya excluye los comprobantes cuyo motivo actual se publicó antes (`alerta`
+   * más `alertas_previas`): los ya tratados no ocupan el cupo de la vuelta y los nuevos nunca quedan esperando detrás.
+   */
   private async alertar(empresaId: string, ahora: Date): Promise<number> {
     const filas = await this.conexion.query<FilaRevisada>(
-      `SELECT e.id AS envio_id, e.comprobante_id, c.sucursal_id, e.estado AS estado_envio, e.ultimo_resultado,
-              e.alerta, c.estado, c.emitido_en,
-              EXISTS (SELECT 1 FROM comprobante r WHERE r.reemplaza_a_id = c.id) AS reemplazado
-         FROM envio_pse e
-         JOIN comprobante c ON c.id = e.comprobante_id AND c.empresa_id = e.empresa_id
-        WHERE (c.estado IN ('POR_ENVIAR', 'ENVIADO')
-               AND (e.estado = 'DETENIDO' OR e.ultimo_resultado = 'ERROR_CONFIGURACION'
-                    OR c.emitido_en < $1::timestamptz - interval '${MINUTOS_ALERTA_PENDIENTE} minutes'))
-           OR (c.estado = 'RECHAZADO' AND e.alerta IS NULL AND c.rechazado_en >= $2)
-        ORDER BY c.emitido_en, e.id
+      `SELECT t.envio_id, t.comprobante_id, t.sucursal_id, t.estado_envio, t.ultimo_resultado, t.estado, t.emitido_en,
+              t.reemplazado
+         FROM (SELECT e.id AS envio_id, e.comprobante_id, c.sucursal_id, e.estado AS estado_envio, e.ultimo_resultado,
+                      e.alerta, e.alertas_previas, c.estado, c.emitido_en,
+                      EXISTS (SELECT 1 FROM comprobante r WHERE r.reemplaza_a_id = c.id) AS reemplazado,
+                      ${sqlAlerta('$1')} AS motivo
+                 FROM envio_pse e
+                 JOIN comprobante c ON c.id = e.comprobante_id AND c.empresa_id = e.empresa_id
+                WHERE (c.estado IN ('POR_ENVIAR', 'ENVIADO')
+                       AND (e.estado = 'DETENIDO' OR e.ultimo_resultado = 'ERROR_CONFIGURACION'
+                            OR c.emitido_en < $1::timestamptz - interval '${MINUTOS_ALERTA_PENDIENTE} minutes'))
+                   OR (c.estado = 'RECHAZADO' AND c.rechazado_en >= $2)) t
+        WHERE t.motivo IS NOT NULL
+          AND NOT (t.motivo = ANY (t.alertas_previas || COALESCE(t.alerta, '')))
+        ORDER BY t.emitido_en, t.envio_id
         LIMIT ${MAXIMO_REVISADOS_POR_EMPRESA}`,
       {
         bind: [ahora, new Date(ahora.getTime() - DIAS_DE_RECHAZOS_REVISADOS * MS_POR_DIA)],
@@ -248,11 +262,15 @@ export class BarridoEnviosPse {
         },
         ahora,
       );
-      if (motivo === null || motivo === fila.alerta) continue;
-      // Condicionado: con dos workers a la vez, solo uno marca (y publica) la alerta.
+      if (motivo === null) continue;
+      // Condicionado: con dos workers a la vez, solo uno marca (y publica) la alerta. El motivo anterior pasa a las previas.
       const marcadas = await this.conexion.query<{ id: string }>(
-        `UPDATE envio_pse SET alertado_en = $2, alerta = $3, actualizado_en = $2
-          WHERE id = $1 AND alerta IS DISTINCT FROM $3
+        `UPDATE envio_pse
+            SET alertado_en = $2, actualizado_en = $2,
+                alertas_previas = CASE WHEN alerta IS NULL THEN alertas_previas
+                                       ELSE array_append(alertas_previas, alerta) END,
+                alerta = $3
+          WHERE id = $1 AND NOT ($3 = ANY (alertas_previas || COALESCE(alerta, '')))
           RETURNING id`,
         { bind: [fila.envio_id, ahora, motivo], type: QueryTypes.SELECT },
       );

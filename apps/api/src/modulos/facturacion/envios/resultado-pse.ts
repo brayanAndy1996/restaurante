@@ -91,8 +91,8 @@ export interface EnvioParaGuardar {
   plazoHasta: Date;
   estadoComprobante: EstadoComprobante;
   emitidoEn: Date;
-  /** La última alerta publicada de este comprobante. */
-  alertaPublicada: AlertaComprobante | null;
+  /** Los motivos de alerta ya publicados de este comprobante (el último y los previos, criterio 133). */
+  alertasPublicadas: readonly AlertaComprobante[];
 }
 
 export interface EntradaDeResultado {
@@ -112,7 +112,7 @@ export interface SalidaDeResultado {
   estadoEnvio: EstadoEnvioPse;
   /** Cuándo toca el siguiente intento; `null` si el envío terminó o se detuvo. */
   proximoIntentoEn: Date | null;
-  /** Una alerta nueva (otro motivo que el ya publicado) que hay que publicar después de confirmar; `null` si no hay. */
+  /** Una alerta nueva (un motivo que no se había publicado antes) que hay que publicar después de confirmar; `null` si no hay. */
   alertaNueva: AlertaComprobante | null;
 }
 
@@ -274,13 +274,15 @@ export async function aplicarResultado(
     },
     ahora,
   );
-  const alertaNueva = alerta !== null && alerta !== envio.alertaPublicada ? alerta : null;
+  const alertaNueva = alerta !== null && !envio.alertasPublicadas.includes(alerta) ? alerta : null;
 
   await conexion.query(
     `UPDATE envio_pse
         SET estado = $2, proximo_intento_en = $3, ultimo_resultado = $4, ultimo_error = $5,
             en_curso_hasta = NULL, intento_en_curso = NULL, actualizado_en = $6,
             alertado_en = CASE WHEN $7::text IS NULL THEN alertado_en ELSE $6 END,
+            alertas_previas = CASE WHEN $7::text IS NULL OR alerta IS NULL THEN alertas_previas
+                                   ELSE array_append(alertas_previas, alerta) END,
             alerta = COALESCE($7::text, alerta)
       WHERE id = $1`,
     {

@@ -49,7 +49,7 @@ interface EnvioTomado {
   plazoHasta: Date;
   estadoComprobante: EstadoComprobante;
   emitidoEn: Date;
-  alertaPublicada: AlertaComprobante | null;
+  alertasPublicadas: AlertaComprobante[];
   documento: DocumentoPse;
   conector: ConectorDeEmisor;
 }
@@ -63,10 +63,19 @@ interface FilaDeEnvio {
   en_curso_hasta: Date | null;
   intento_en_curso: string | null;
   alerta: AlertaComprobante | null;
+  alertas_previas: AlertaComprobante[];
   emisor_id: string;
   sucursal_id: string;
   estado_comprobante: EstadoComprobante;
   emitido_en: Date;
+}
+
+/** Los motivos ya publicados de un comprobante: los previos más el último (criterio 133). */
+function motivosPublicados(
+  alerta: AlertaComprobante | null,
+  previas: AlertaComprobante[],
+): AlertaComprobante[] {
+  return alerta === null || previas.includes(alerta) ? previas : [...previas, alerta];
 }
 
 /**
@@ -77,9 +86,9 @@ interface FilaDeEnvio {
  *    `intento_en_curso`, suma un intento y arma el documento y el conector del emisor.
  * 2. **Llamar** (sin transacción): el primer intento emite; los demás consultan primero y solo con `NO_EXISTE` emiten
  *    (criterio 128). Un `ACEPTADO` con XML o CDR los guarda en el almacén privado antes del paso 3.
- * 3. **Guardar** (transacción corta): vuelve a tomar la fila y solo si el `intento_en_curso` sigue siendo el suyo aplica el
- *    resultado (`resultado-pse.ts`); si el arriendo venció y otro worker lo tomó, descarta su resultado (la llamada fue
- *    idempotente por identificador). Los eventos y el siguiente encolado salen con `alConfirmar`.
+ * 3. **Guardar** (transacción corta): vuelve a tomar la fila y aplica el resultado (`resultado-pse.ts`) si el
+ *    `intento_en_curso` sigue siendo el suyo o está libre (el barrido detuvo el envío por plazo) y el resultado es final;
+ *    si el arriendo venció y otro worker lo tomó, descarta su resultado (la llamada fue idempotente por identificador). Los eventos y el siguiente encolado salen con `alConfirmar`.
  *
  * Con un `ACEPTADO` confirmado, después del paso 3 arma el PDF y lo guarda (`ArchivadorDePdf`, criterio 159), fuera de toda
  * transacción.
@@ -136,7 +145,7 @@ export class ProcesadorEnviosPse {
   private async tomar(comprobanteId: string): Promise<EnvioTomado | null> {
     const filas = await this.conexion.query<FilaDeEnvio>(
       `SELECT e.id AS envio_id, e.estado, e.intentos, e.proximo_intento_en, e.plazo_hasta, e.en_curso_hasta,
-              e.intento_en_curso, e.alerta, c.emisor_id, c.sucursal_id, c.estado AS estado_comprobante, c.emitido_en
+              e.intento_en_curso, e.alerta, e.alertas_previas, c.emisor_id, c.sucursal_id, c.estado AS estado_comprobante, c.emitido_en
          FROM envio_pse e
          JOIN comprobante c ON c.id = e.comprobante_id AND c.empresa_id = e.empresa_id
         WHERE e.comprobante_id = $1
@@ -162,7 +171,8 @@ export class ProcesadorEnviosPse {
     const intentoEnCurso = randomUUID();
     await this.conexion.query(
       `UPDATE envio_pse
-          SET en_curso_hasta = $2, intento_en_curso = $3, intentos = intentos + 1, actualizado_en = $4
+          SET en_curso_hasta = $2, intento_en_curso = $3, intentos = intentos + 1, reintento_manual_en = NULL,
+              actualizado_en = $4
         WHERE id = $1`,
       {
         bind: [fila.envio_id, new Date(ahora.getTime() + ARRIENDO_ENVIO_MS), intentoEnCurso, ahora],
@@ -177,7 +187,7 @@ export class ProcesadorEnviosPse {
       plazoHasta: fila.plazo_hasta,
       estadoComprobante: fila.estado_comprobante,
       emitidoEn: fila.emitido_en,
-      alertaPublicada: fila.alerta,
+      alertasPublicadas: motivosPublicados(fila.alerta, fila.alertas_previas),
       documento: armarDocumentoPse(comprobante),
       conector: await this.conectores.para(fila.emisor_id),
     };
@@ -308,11 +318,13 @@ export class ProcesadorEnviosPse {
     archivos: ClavesDeArchivos,
   ): Promise<boolean> {
     const filas = await this.conexion.query<{
+      estado: EstadoEnvioPse;
       intento_en_curso: string | null;
       alerta: AlertaComprobante | null;
+      alertas_previas: AlertaComprobante[];
       estado_comprobante: EstadoComprobante;
     }>(
-      `SELECT e.intento_en_curso, e.alerta, c.estado AS estado_comprobante
+      `SELECT e.estado, e.intento_en_curso, e.alerta, e.alertas_previas, c.estado AS estado_comprobante
          FROM envio_pse e
          JOIN comprobante c ON c.id = e.comprobante_id AND c.empresa_id = e.empresa_id
         WHERE e.id = $1
@@ -320,8 +332,18 @@ export class ProcesadorEnviosPse {
       { bind: [tomado.envioId], type: QueryTypes.SELECT },
     );
     const actual = filas[0];
-    // Otro worker tomó el envío (el arriendo venció) o ya terminó: este resultado se descarta sin escribir nada.
-    if (actual === undefined || actual.intento_en_curso !== tomado.intentoEnCurso) {
+    // Otro worker tomó el envío (el arriendo venció y hay un `intento_en_curso` ajeno) o ya terminó: este resultado se
+    // descarta sin escribir nada. Si el arriendo está libre porque el barrido detuvo el envío por plazo mientras esta llamada
+    // seguía en curso (criterio 125, paso 3), un resultado final (`ACEPTADO` o `RECHAZADO`) sí se aplica: es lo que el PSE
+    // ya hizo con el documento. Un resultado no final con el arriendo libre se descarta: el envío ya tiene su rumbo.
+    if (
+      actual === undefined ||
+      actual.estado === 'TERMINADO' ||
+      (actual.intento_en_curso !== null && actual.intento_en_curso !== tomado.intentoEnCurso) ||
+      (actual.intento_en_curso === null &&
+        resultado.tipo !== 'ACEPTADO' &&
+        resultado.tipo !== 'RECHAZADO')
+    ) {
       this.logger.warn(
         JSON.stringify({ evento: 'pse.resultado_descartado', empresaId, comprobanteId }),
       );
@@ -339,7 +361,7 @@ export class ProcesadorEnviosPse {
         plazoHasta: tomado.plazoHasta,
         estadoComprobante: actual.estado_comprobante,
         emitidoEn: tomado.emitidoEn,
-        alertaPublicada: actual.alerta,
+        alertasPublicadas: motivosPublicados(actual.alerta, actual.alertas_previas),
       },
       llamadas,
       resultado,
