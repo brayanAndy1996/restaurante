@@ -1,4 +1,7 @@
 // spec: 005-carta-web-mesa (pruebas protegidas)
+// Ajustado por 006-caja-cobro, entrega 6b, criterio 160 (2026-11-06): `GET /publico/comprobantes/:sello` (el enlace del
+// PDF de un comprobante) es una ruta pública de 6b y no de 005; se clasifica aparte y 005 sigue exigiendo exactamente su
+// tabla para el resto de `/publico/*`.
 //
 // P4 (parte 1) · Permisos de las rutas de la carta web, los QR y los llamados (ruta crítica), criterios 58 y 59 (y
 // el 11 en lo que toca a la clasificación de las rutas públicas; el 5 en lo que toca a la configuración):
@@ -261,13 +264,20 @@ const publicas = RUTAS.filter((r) => r.acceso === 'PUBLICA');
 /** `:id`, `:sucursalId`, `:codigo`… valen lo mismo para comparar con la tabla de endpoints. */
 const normal = (ruta: string) => ruta.replace(/:[A-Za-z]+/g, ':p');
 
+/**
+ * Las rutas de `/publico/comprobantes…` son de 006 (6b, criterio 160), no de 005: se clasifican en su propia prueba más
+ * abajo, que admite que `GET /publico/comprobantes/:sello` esté registrada o no y no admite ninguna otra ruta ahí.
+ */
+const esRutaPublicaDe6b = (ruta: string): boolean =>
+  ruta === '/publico/comprobantes' || ruta.startsWith('/publico/comprobantes/');
+
 /** Las rutas que cubre el criterio 58. */
 const esRutaDe005 = (ruta: string): boolean =>
   ruta === '/llamados' ||
   ruta.startsWith('/llamados/') ||
   ruta === '/carta-web' ||
   ruta.startsWith('/carta-web/') ||
-  ruta.startsWith('/publico/') ||
+  (ruta.startsWith('/publico/') && !esRutaPublicaDe6b(ruta)) ||
   /^\/sucursales\/:[A-Za-z]+\/qr-mesas$/.test(ruta) ||
   /^\/sucursales\/:[A-Za-z]+\/mesas\/:[A-Za-z]+\/qr$/.test(ruta);
 
@@ -378,6 +388,29 @@ describe('criterio 58 · toda ruta de llamados, carta web, QR y públicas está 
       if (!vistas.has(clave)) problemas.push(`${clave}: falta la ruta`);
     }
     expect(registradas.length).toBeGreaterThan(0);
+    exigirSinFallos(problemas);
+  });
+});
+
+describe('criterio 58 · la ruta pública de 6b se clasifica aparte (006, criterio 160)', () => {
+  it('bajo /publico/comprobantes solo puede estar GET /publico/comprobantes/:sello, @Publica() y sin permiso ni módulo', () => {
+    const de6b = rutasDeNest(ctx.app).filter((r) => esRutaPublicaDe6b(r.ruta));
+    const problemas: string[] = [];
+    for (const r of de6b) {
+      const clave = `${r.metodo} ${normal(r.ruta)}`;
+      if (clave !== 'GET /publico/comprobantes/:p') {
+        problemas.push(`${clave}: ruta pública no admitida bajo /publico/comprobantes`);
+        continue;
+      }
+      const manejador = r.controlador.prototype[r.manejador] as object;
+      const leer = <T>(llave: string): T | undefined =>
+        (Reflect.getMetadata(llave, manejador) as T | undefined) ??
+        (Reflect.getMetadata(llave, r.controlador) as T | undefined);
+      if (leer<boolean>(PUBLICA) !== true) problemas.push(`${clave}: debe ser @Publica()`);
+      if (leer<string>(PERMISO) !== undefined) problemas.push(`${clave}: no lleva @Permiso`);
+      if (leer<string>(REQUIERE_MODULO) !== undefined) problemas.push(`${clave}: no exige módulo`);
+    }
+    expect(de6b.length).toBeLessThanOrEqual(1);
     exigirSinFallos(problemas);
   });
 });

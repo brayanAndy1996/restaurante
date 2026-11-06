@@ -1,5 +1,7 @@
 // spec: 004-salon-cocina (pruebas protegidas)
 // Ajustado por 005-carta-web-mesa (2026-11-03): rutas públicas de la carta web y del modo mesa.
+// Ajustado por 006-caja-cobro, entrega 6b, criterio 160 (2026-11-06): la lista cerrada de rutas públicas admite además
+// `GET /publico/comprobantes/:sello` (el enlace del PDF para WhatsApp), y solo esa.
 //
 // P6 (parte 2) · Aislamiento y permisos del puente de impresión (ruta crítica), entrega 3b, criterios 129 a 133 y las
 // salas del 110 al 112:
@@ -230,6 +232,12 @@ const RUTAS_3B: [string, ClaseDeRuta][] = [
   ['POST /puente/latido', 'PUENTE'],
 ];
 
+/**
+ * La única ruta pública que 006 (6b, criterio 160) suma a la lista cerrada: el PDF de un comprobante por su enlace con
+ * sello. Se admite que esté registrada o no (la fase C de 6b la registra); ninguna otra ruta pública se admite.
+ */
+const RUTA_PUBLICA_DE_6B = 'GET /publico/comprobantes/:sello';
+
 /** La lista cerrada de rutas públicas de 002 (criterio 1). */
 const RUTAS_PUBLICAS = [
   'GET /health',
@@ -316,7 +324,11 @@ describe('criterio 129 · toda ruta de 3b está clasificada', () => {
           Reflect.getMetadata(PUBLICA, r.controlador.prototype[r.manejador] as object) === true,
       )
       .map((r) => `${r.metodo} ${r.ruta}`);
-    expect([...publicas].sort()).toEqual([...RUTAS_PUBLICAS].sort());
+    // Criterio 160 de 006 (6b): la ruta del enlace del PDF puede estar y no cuenta como "otra" ruta pública; cualquier
+    // otra (incluida otra variante de `/publico/comprobantes`) hace fallar la comparación.
+    expect(publicas.filter((p) => p === RUTA_PUBLICA_DE_6B).length).toBeLessThanOrEqual(1);
+    const sinLaDe6b = publicas.filter((p) => p !== RUTA_PUBLICA_DE_6B);
+    expect([...sinLaDe6b].sort()).toEqual([...RUTAS_PUBLICAS].sort());
   });
 });
 
