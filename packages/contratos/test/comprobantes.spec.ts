@@ -65,6 +65,8 @@ const linea = {
   afectacion: 'GRAVADO',
   gratuita: false,
   valorReferencial: null,
+  baseReferencial: null,
+  igvReferencial: null,
 };
 
 const comprobante = {
@@ -117,7 +119,17 @@ describe('comprobanteRespuesta (criterios 69 y 77) con los campos de 6b', () => 
       reemplazaA: null,
       reemplazadoPor: null,
       notasCredito: [],
-      acreditado: [{ posicion: 1, cantidad: 1, neto: '28.00', bolsas: 0, icbper: '0.00' }],
+      acreditado: [
+        {
+          posicion: 1,
+          cantidad: 1,
+          neto: '28.00',
+          base: '23.73',
+          igv: '4.27',
+          bolsas: 0,
+          icbper: '0.00',
+        },
+      ],
       sunat: { codigo: '0', mensaje: 'Aceptado', observaciones: [], hash: null },
       marcas: { enviadoEn: null, aceptadoEn: null, rechazadoEn: null, anuladoEn: null },
       pdfDisponible: false,
@@ -163,6 +175,27 @@ describe('comprobanteRespuesta (criterios 69 y 77)', () => {
         orden: { id: ID_1, mesas: [], mozo: null, numeroLlamado: 23 },
       }).success,
     ).toBe(true);
+  });
+
+  it('una línea gratuita trae su base e IGV referenciales; sin ellos la respuesta no vale (criterio 147)', () => {
+    const gratuita = {
+      ...linea,
+      bruto: '0.00',
+      neto: '0.00',
+      base: '0.00',
+      igv: '0.00',
+      gratuita: true,
+      valorReferencial: '12.00',
+      baseReferencial: '10.17',
+      igvReferencial: '1.83',
+    };
+    expect(
+      comprobanteRespuestaSchema.safeParse({ ...comprobante, lineas: [linea, gratuita] }).success,
+    ).toBe(true);
+    const { baseReferencial: _b, ...sinBase } = gratuita;
+    expect(
+      comprobanteRespuestaSchema.safeParse({ ...comprobante, lineas: [sinBase] }).success,
+    ).toBe(false);
   });
 
   it('rechaza una moneda distinta de PEN, un estado desconocido y un tipo que no es un documento electrónico', () => {

@@ -125,6 +125,8 @@ export function lineaDeComprobante(
     afectacion: 'GRAVADO',
     gratuita: false,
     valorReferencial: null,
+    baseReferencial: null,
+    igvReferencial: null,
     posicionOrigen: null,
     ...extra,
   };
@@ -179,6 +181,8 @@ export function boletaAceptada(extra: Partial<ComprobanteDetalle> = {}): Comprob
         igv: '0.00',
         gratuita: true,
         valorReferencial: '12.00',
+        baseReferencial: '10.17',
+        igvReferencial: '1.83',
       }),
     ],
     totales: {

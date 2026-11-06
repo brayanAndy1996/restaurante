@@ -106,6 +106,13 @@ export const comprobanteLineaRespuestaSchema = z.object({
   gratuita: z.boolean(),
   valorReferencial: z.string().nullable(),
   /**
+   * La base y el IGV con los que se guardó el valor referencial de una cortesía (`base + igv = valorReferencial`,
+   * criterio 69); `null` en las líneas que no son gratuitas. Se leen de lo guardado: la PWA no los deriva al calcular
+   * la nota de crédito (criterio 147).
+   */
+  baseReferencial: z.string().nullable(),
+  igvReferencial: z.string().nullable(),
+  /**
    * 6b: en una línea de nota de crédito, la `posicion` de la línea del original que acredita; `null` en las demás.
    * Opcional hasta que la API de 6b la emita (T30).
    */

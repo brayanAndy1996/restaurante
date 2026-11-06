@@ -53,6 +53,8 @@ function boleta(cambios: Partial<ComprobanteRespuesta> = {}): ComprobanteRespues
         afectacion: 'GRAVADO',
         gratuita: false,
         valorReferencial: null,
+        baseReferencial: null,
+        igvReferencial: null,
         posicionOrigen: null,
       },
       {
@@ -73,6 +75,8 @@ function boleta(cambios: Partial<ComprobanteRespuesta> = {}): ComprobanteRespues
         afectacion: 'EXONERADO',
         gratuita: true,
         valorReferencial: '3.00',
+        baseReferencial: '3.00',
+        igvReferencial: '0.00',
       },
     ],
     totales: {

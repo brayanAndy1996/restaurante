@@ -183,8 +183,29 @@ describe('La nota que se arma con calcularNotaCredito (criterio 147)', () => {
 
   it('una línea gratuita sin valor referencial es un comprobante que no se puede leer', () => {
     const roto = boletaAceptada();
-    roto.lineas = roto.lineas.map((l) => (l.gratuita ? { ...l, valorReferencial: null } : l));
+    roto.lineas = roto.lineas.map((l) =>
+      l.gratuita
+        ? { ...l, valorReferencial: null, baseReferencial: null, igvReferencial: null }
+        : l,
+    );
     expect(calcularLaNota(roto, 'ANULACION', {})).toEqual({ ok: false, motivo: 'DATOS' });
+  });
+
+  it('la anulación copia la base y el IGV referenciales tal como vienen del comprobante, sin derivarlos', () => {
+    const guardado = boletaAceptada();
+    // Valores que `desglosar` no daría con la tasa del comprobante: si se recalcularan, saldrían otros.
+    guardado.lineas = guardado.lineas.map((l) =>
+      l.gratuita ? { ...l, baseReferencial: '10.20', igvReferencial: '1.80' } : l,
+    );
+    const nota = calcularLaNota(guardado, 'ANULACION', {});
+    expect(nota.ok).toBe(true);
+    if (!nota.ok) return;
+    expect(nota.lineas[3]).toMatchObject({
+      gratuita: true,
+      valorReferencial: '12.00',
+      baseReferencial: '10.20',
+      igvReferencial: '1.80',
+    });
   });
 
   it('un monto con más de 2 decimales en el comprobante no se calcula (RangeError del dominio)', () => {

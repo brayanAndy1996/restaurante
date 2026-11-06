@@ -11,7 +11,6 @@ import {
 import type { MedioPago, TipoNotaCredito } from '@restaurante/dominio';
 import {
   calcularNotaCredito,
-  desglosar,
   sumarMontos,
   type LineaAcreditada,
   type LineaDeNotaCalculada,
@@ -115,37 +114,34 @@ export const sePuedeEmitirNota = (comprobante: ComprobanteDetalle): boolean =>
 
 // --- La nota que se arma ---------------------------------------------------------------------------------
 
-/** El comprobante como lo entiende el dominio. Las líneas gratuitas llevan su base e IGV referenciales (criterio 69). */
+/**
+ * El comprobante como lo entiende el dominio. Las líneas gratuitas llevan el valor, la base y el IGV referenciales tal
+ * como la API los guardó (criterio 69): no se derivan aquí.
+ */
 function originalDe(comprobante: ComprobanteDetalle): OriginalDeNota {
   return {
     tasaIgv: comprobante.tasaIgv,
-    lineas: comprobante.lineas.map((l) => {
-      // La API los guarda aparte pero no los devuelve: salen de `desglosar`, que es con lo que se calcularon.
-      const referencial = l.gratuita
-        ? desglosar(l.valorReferencial ?? '', l.afectacion, comprobante.tasaIgv)
-        : null;
-      return {
-        posicion: l.posicion,
-        cantidad: l.cantidad,
-        precioUnitario: l.precioUnitario,
-        afectacion: l.afectacion,
-        bruto: l.bruto,
-        descuento: l.descuento,
-        neto: l.neto,
-        base: l.base,
-        igv: l.igv,
-        bolsas: l.bolsas,
-        icbper: l.icbper,
-        gratuita: l.gratuita,
-        ...(referencial
-          ? {
-              valorReferencial: l.valorReferencial,
-              baseReferencial: referencial.base,
-              igvReferencial: referencial.igv,
-            }
-          : {}),
-      };
-    }),
+    lineas: comprobante.lineas.map((l) => ({
+      posicion: l.posicion,
+      cantidad: l.cantidad,
+      precioUnitario: l.precioUnitario,
+      afectacion: l.afectacion,
+      bruto: l.bruto,
+      descuento: l.descuento,
+      neto: l.neto,
+      base: l.base,
+      igv: l.igv,
+      bolsas: l.bolsas,
+      icbper: l.icbper,
+      gratuita: l.gratuita,
+      ...(l.gratuita
+        ? {
+            valorReferencial: l.valorReferencial,
+            baseReferencial: l.baseReferencial,
+            igvReferencial: l.igvReferencial,
+          }
+        : {}),
+    })),
   };
 }
 

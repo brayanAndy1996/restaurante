@@ -97,6 +97,8 @@ interface FilaLinea {
   afectacion: 'GRAVADO' | 'EXONERADO' | 'INAFECTO';
   gratuita: boolean;
   valor_referencial: string | null;
+  base_referencial: string | null;
+  igv_referencial: string | null;
   posicion_origen: number | null;
 }
 
@@ -139,7 +141,8 @@ export async function leerComprobante(
     `SELECT posicion, item_id, descripcion, cantidad, unidad, precio_unitario::text AS precio_unitario,
             valor_unitario::text AS valor_unitario, bruto::text AS bruto, descuento::text AS descuento,
             neto::text AS neto, base::text AS base, igv::text AS igv, bolsas, icbper::text AS icbper,
-            afectacion, gratuita, valor_referencial::text AS valor_referencial, posicion_origen
+            afectacion, gratuita, valor_referencial::text AS valor_referencial,
+            base_referencial::text AS base_referencial, igv_referencial::text AS igv_referencial, posicion_origen
        FROM comprobante_linea WHERE comprobante_id = $1 ORDER BY posicion`,
     { bind: [id], type: QueryTypes.SELECT },
   );
@@ -192,6 +195,8 @@ export async function leerComprobante(
       afectacion: l.afectacion,
       gratuita: l.gratuita,
       valorReferencial: l.valor_referencial,
+      baseReferencial: l.base_referencial,
+      igvReferencial: l.igv_referencial,
       posicionOrigen: l.posicion_origen,
     })),
     totales: {
