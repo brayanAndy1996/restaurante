@@ -2,12 +2,13 @@ import {
   impresionDeCajaRespuestaSchema,
   type ImpresionDeCajaRespuesta,
 } from '@restaurante/contratos';
-import { EtiquetaDeEstado, IconoImpresora, claseBoton } from '@restaurante/ui';
+import { Aviso, Boton, EtiquetaDeEstado, IconoImpresora, claseBoton } from '@restaurante/ui';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api, nuevaClaveDeIdempotencia } from '../../lib/api';
 import { MUTACION_SIN_PAUSA, useEnvioPendiente, type ExtraDeEscritura } from '../../lib/envios';
+import { AvisoPendiente } from '../../componentes/PendienteDeEnvio';
 import { mensajeDeError } from '../../lib/errores';
 import { useSesionActiva } from '../acceso/sesion';
 import { PREFIJO_DE_TRABAJOS, claveTrabajos, listarTrabajos } from '../impresion/trabajos';
@@ -161,4 +162,46 @@ export function useImpresionDeCaja(
   }
 
   return { imprimir, enCurso, resultado, fallo, pendiente: envio.pendiente };
+}
+
+interface PropsImprimirOtraVez {
+  comprobanteId: string;
+  /** Lo que ya dijo la emisión del ticket (el cobro): se muestra hasta que se pida una copia. */
+  inicial?: { impresion: EstadoDeImpresion | undefined; trabajoId: string | null | undefined };
+}
+
+/**
+ * «Imprimir otra vez» de un comprobante (criterios 90 y 174): una copia con la marca «REIMPRESIÓN», sin abrir la gaveta.
+ * Dice a qué impresora salió o por qué no (sin impresora, sin permiso) y no duplica la copia si la red se corta.
+ * La copia que se acaba de pedir manda sobre el estado de la emisión: la última impresión es la que importa.
+ */
+export function ImprimirOtraVez({ comprobanteId, inicial }: PropsImprimirOtraVez) {
+  const reimpresion = useImpresionDeCaja(imprimirComprobante);
+  const estado = reimpresion.resultado ?? inicial;
+  return (
+    <div className="reimpresion">
+      {estado ? (
+        <EstadoDeLaImpresion
+          impresion={estado.impresion}
+          trabajoId={estado.trabajoId}
+          {...(reimpresion.resultado ? { que: 'otra copia' } : {})}
+        />
+      ) : null}
+      <AvisoPendiente pendiente={reimpresion.pendiente} />
+      <Boton
+        bloque
+        icono={IconoImpresora}
+        cargando={reimpresion.enCurso}
+        textoCargando={reimpresion.pendiente ? 'Pendiente de envío' : 'Imprimiendo…'}
+        onClick={() => void reimpresion.imprimir(comprobanteId)}
+      >
+        Imprimir otra vez
+      </Boton>
+      {reimpresion.fallo ? (
+        <Aviso tipo="error" titulo="No pudimos imprimir otra vez">
+          {reimpresion.fallo.mensaje}
+        </Aviso>
+      ) : null}
+    </div>
+  );
 }

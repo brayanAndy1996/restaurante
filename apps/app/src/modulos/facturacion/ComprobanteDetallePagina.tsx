@@ -18,6 +18,8 @@ import { fechaDeLima, horaDeLima } from '../../lib/formato';
 import { montoEnSoles } from '../../lib/monto';
 import { CLAVES_TIEMPO_REAL, useIntervaloDeSondeo } from '../../lib/tiempo-real';
 import { usePermiso } from '../acceso/permisos';
+import { ImprimirOtraVez } from '../caja/impresion-caja';
+import { AccionesDelDocumento } from './AccionesDelDocumento';
 import { EstadoDelComprobante } from './EstadoDelComprobante';
 import {
   NOMBRE_DE_ESTADO_DE_ENVIO,
@@ -283,12 +285,25 @@ function DetalleCargado({ base, atras, volver, comprobante }: PropsCargado) {
           </Suspense>
         ) : null}
 
+        {puedeCobrar ? <CopiaParaElCliente comprobante={comprobante} /> : null}
+
         <Resumen comprobante={comprobante} />
         <RespuestaDeSunat comprobante={comprobante} />
         <EnvioYIntentos comprobante={comprobante} />
         <Relacionados base={base} volver={volver} comprobante={comprobante} />
       </div>
     </Pagina>
+  );
+}
+
+/** Imprimir otra vez, ver el PDF y compartirlo por WhatsApp (criterios 161 y 174). */
+function CopiaParaElCliente({ comprobante }: { comprobante: ComprobanteDetalle }) {
+  return (
+    <section className="detalle__bloque" aria-labelledby="detalle-copia">
+      <h2 id="detalle-copia">Copia para el cliente</h2>
+      <ImprimirOtraVez comprobanteId={comprobante.id} />
+      <AccionesDelDocumento comprobante={comprobante} />
+    </section>
   );
 }
 

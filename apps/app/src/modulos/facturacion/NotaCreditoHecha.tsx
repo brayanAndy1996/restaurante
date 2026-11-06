@@ -9,6 +9,7 @@ import { Link } from 'react-router-dom';
 import { montoEnSoles, montoEsCero } from '../../lib/monto';
 import { NOMBRE_DE_MEDIO_DE_PAGO } from '../caja/cobro';
 import { EstadoDeLaImpresion } from '../caja/impresion-caja';
+import { AccionesDelDocumento } from './AccionesDelDocumento';
 import { EstadoDelComprobante } from './EstadoDelComprobante';
 import { NOMBRE_DE_TIPO_DOCUMENTO, rutaDelDetalle } from './facturacion';
 import { TITULO_DE_TIPO_DE_NOTA } from './notas-credito';
@@ -27,7 +28,13 @@ interface Props {
 }
 
 /** Un comprobante nuevo con su número, su marca de simulado y su estado ante SUNAT en vivo (criterio 173). */
-function DocumentoNuevo({ comprobante }: { comprobante: ComprobanteRespuesta }) {
+function DocumentoNuevo({
+  comprobante,
+  conNumero,
+}: {
+  comprobante: ComprobanteRespuesta;
+  conNumero?: boolean;
+}) {
   return (
     <div className="nota-hecha__documento">
       <p className="nota-hecha__numero">
@@ -35,6 +42,7 @@ function DocumentoNuevo({ comprobante }: { comprobante: ComprobanteRespuesta }) 
       </p>
       {comprobante.simulado ? <EtiquetaDeEstado tono="alerta">Simulado</EtiquetaDeEstado> : null}
       <EstadoDelComprobante comprobante={comprobante} />
+      <AccionesDelDocumento comprobante={comprobante} {...(conNumero ? { conNumero } : {})} />
     </div>
   );
 }
@@ -53,8 +61,8 @@ export function NotaCreditoHecha({ respuesta, tipo, original, base, volver, onLi
         </Aviso>
       </div>
 
-      <DocumentoNuevo comprobante={nota} />
-      {factura ? <DocumentoNuevo comprobante={factura} /> : null}
+      <DocumentoNuevo comprobante={nota} conNumero={factura !== null} />
+      {factura ? <DocumentoNuevo comprobante={factura} conNumero /> : null}
 
       <dl className="desglose" aria-label="Lo que se devolvió">
         {devolucion ? (

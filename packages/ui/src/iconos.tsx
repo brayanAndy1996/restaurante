@@ -87,6 +87,8 @@ export {
   ConciergeBell as IconoLlamarMozo,
   ClipboardList as IconoPedido,
   Receipt as IconoCuenta,
+  FileText as IconoDocumento,
+  Share2 as IconoCompartir,
 } from 'lucide-react';
 
 interface PropsIcono {

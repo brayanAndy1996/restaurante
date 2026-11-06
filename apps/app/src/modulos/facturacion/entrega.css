@@ -1,0 +1,41 @@
+/* «Ver PDF» y «Compartir por WhatsApp» (006, 6b, criterio 161): botones juntos, el celular opcional debajo. */
+.entrega {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espacio-sm);
+  align-self: stretch;
+  min-width: 0;
+}
+.entrega__botones {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--espacio-sm);
+}
+.entrega__ayuda {
+  margin: 0;
+}
+/* El celular se pide en el sitio, bajo el botón que lo abrió: sin hoja ni diálogo para un campo opcional. */
+.entrega__whatsapp {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espacio-md);
+  padding: var(--espacio-md);
+  background: var(--color-baldosa);
+  border: 1px solid var(--color-junta);
+  border-radius: var(--radio-baldosa);
+}
+.entrega__enlace {
+  display: flex;
+  align-items: center;
+  min-height: var(--alto-control);
+  color: var(--color-accion);
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+}
+
+@media (min-width: 600px) {
+  .entrega__botones {
+    grid-template-columns: 1fr 1fr;
+  }
+}

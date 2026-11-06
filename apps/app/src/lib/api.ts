@@ -68,6 +68,11 @@ export interface OpcionesApi<T> {
   etag?: string;
   /** Recibe la respuesta HTTP (200 o 304) antes de leer su cuerpo; sirve para leer cabeceras como `ETag`. */
   alRespuesta?: (respuesta: Response) => void;
+  /**
+   * La respuesta buena es un archivo (por ejemplo, el PDF de un comprobante): se devuelve su `Blob` en lugar de
+   * leerla como JSON. Los errores siguen llegando como `ErrorApi`.
+   */
+  comoBlob?: boolean;
 }
 
 /** Espera entre intentos, en milisegundos. El primer intento sale de inmediato. */
@@ -163,7 +168,9 @@ export async function llamar<T = void>(ruta: string, opciones: OpcionesApi<T> = 
   const ambito = opciones.ambito ?? 'empresa';
   const token = opciones.sinToken ? null : tokenDe(ambito);
 
-  const cabeceras: Record<string, string> = { Accept: 'application/json' };
+  const cabeceras: Record<string, string> = {
+    Accept: opciones.comoBlob ? 'application/pdf, application/json;q=0.9' : 'application/json',
+  };
   if (token) cabeceras.Authorization = `Bearer ${token}`;
   // Una sesión PIN trae el equipo en cada petición (criterio 37); `equipo` explícito manda sobre ella.
   const equipo = opciones.equipo ?? (token && ambito === 'empresa' ? equipoDeSesion() : null);
@@ -218,6 +225,7 @@ export async function llamar<T = void>(ruta: string, opciones: OpcionesApi<T> = 
 
         if (respuesta.ok) {
           opciones.alRespuesta?.(respuesta);
+          if (opciones.comoBlob) return (await respuesta.blob()) as T;
           const texto = await respuesta.text();
           const json = leerJson(texto);
           if (!opciones.esquema) return json as T;

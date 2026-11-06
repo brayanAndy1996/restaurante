@@ -1,11 +1,11 @@
 import type { CobroRespuesta } from '@restaurante/contratos';
-import { Aviso, Boton, IconoExito, IconoImpresora, claseBoton } from '@restaurante/ui';
+import { Aviso, Boton, IconoExito, claseBoton } from '@restaurante/ui';
 import { Link } from 'react-router-dom';
 import { montoEnSoles, montoEsCero } from '../../lib/monto';
-import { AvisoPendiente } from '../../componentes/PendienteDeEnvio';
+import { AccionesDelDocumento } from '../facturacion/AccionesDelDocumento';
 import { EstadoDelComprobante } from '../facturacion/EstadoDelComprobante';
 import { NOMBRE_DE_MEDIO_DE_PAGO } from './cobro';
-import { EstadoDeLaImpresion, imprimirComprobante, useImpresionDeCaja } from './impresion-caja';
+import { ImprimirOtraVez } from './impresion-caja';
 
 interface Props {
   respuesta: CobroRespuesta;
@@ -40,9 +40,6 @@ export function ResultadoDeCobro({
   const efectivo = respuesta.pagos.find((p) => p.medio === 'EFECTIVO');
   const hayVuelto = !montoEsCero(respuesta.vuelto);
   const deMostrador = llamado !== undefined;
-  const reimpresion = useImpresionDeCaja(imprimirComprobante);
-  // La copia que se acaba de pedir manda sobre el estado del cobro: la última impresión es la que importa.
-  const estado = reimpresion.resultado ?? respuesta;
   return (
     <div className="resultado">
       {deMostrador ? (
@@ -96,26 +93,11 @@ export function ResultadoDeCobro({
       </dl>
 
       <div className="resultado__impresion">
-        <EstadoDeLaImpresion
-          impresion={estado.impresion}
-          trabajoId={estado.trabajoId}
-          {...(reimpresion.resultado ? { que: 'otra copia' } : {})}
+        <ImprimirOtraVez
+          comprobanteId={comprobante.id}
+          inicial={{ impresion: respuesta.impresion, trabajoId: respuesta.trabajoId }}
         />
-        <AvisoPendiente pendiente={reimpresion.pendiente} />
-        <Boton
-          bloque
-          icono={IconoImpresora}
-          cargando={reimpresion.enCurso}
-          textoCargando={reimpresion.pendiente ? 'Pendiente de envío' : 'Imprimiendo…'}
-          onClick={() => void reimpresion.imprimir(comprobante.id)}
-        >
-          Imprimir otra vez
-        </Boton>
-        {reimpresion.fallo ? (
-          <Aviso tipo="error" titulo="No pudimos imprimir otra vez">
-            {reimpresion.fallo.mensaje}
-          </Aviso>
-        ) : null}
+        <AccionesDelDocumento comprobante={comprobante} />
       </div>
 
       {deMostrador ? null : cerrada ? (
