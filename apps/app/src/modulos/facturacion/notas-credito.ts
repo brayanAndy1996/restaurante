@@ -350,7 +350,8 @@ export const huellaDelCuerpoDeNota = (entrada: NotaCreditoEntrada): string =>
   ]);
 
 /**
- * La API contestó que no, y no por un corte ni por un cruce con otra operación: el `id` ya no hace falta. Un 422
+ * La API contestó que no, y no por un corte, un cruce con otra operación ni un rechazo previo a la réplica por `id`
+ * (400, 401, 403, 404 y 409 `SUCURSAL_NO_ELEGIDA`): el `id` ya no hace falta. Un 422
  * `CLAVE_IDEMPOTENCIA_REUTILIZADA` no cuenta: dice que el `id` ya se usó, es decir, que la nota puede ya estar emitida, y
  * el `id` se conserva hasta que la persona revise el comprobante.
  */
@@ -361,9 +362,17 @@ export function esRespuestaFinal(error: unknown): boolean {
     error.codigo !== 'CONFLICTO' &&
     error.codigo !== 'ENVIO_CANCELADO' &&
     error.codigo !== 'CLAVE_IDEMPOTENCIA_REUTILIZADA' &&
+    !(RECHAZOS_PREVIOS_A_LA_REPLICA as readonly number[]).includes(error.estado) &&
+    !(error.estado === 409 && error.codigo === 'SUCURSAL_NO_ELEGIDA') &&
     error.estado < 500
   );
 }
+
+/**
+ * Los rechazos que la API da antes de reconocer el `id` (400 de forma, 401, 403 de permiso o de clave, 404): no dicen nada
+ * de si la nota con ese `id` ya salió, así que no son una respuesta final del intento y el `id` se conserva.
+ */
+const RECHAZOS_PREVIOS_A_LA_REPLICA = [400, 401, 403, 404] as const;
 
 // --- Errores en palabras ---------------------------------------------------------------------------------
 

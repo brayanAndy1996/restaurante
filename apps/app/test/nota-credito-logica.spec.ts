@@ -362,7 +362,24 @@ describe('Los errores en palabras', () => {
   it('solo una respuesta de la API que dice «no» suelta el id; un corte, un 5xx o un cruce, no', () => {
     expect(esRespuestaFinal(error(422, 'NOTA_CREDITO_INVALIDA'))).toBe(true);
     expect(esRespuestaFinal(error(409, 'NOTA_CREDITO_CAMBIO'))).toBe(true);
-    expect(esRespuestaFinal(error(403, 'AUTORIZACION_INVALIDA'))).toBe(true);
+    // Los rechazos que la API da antes de reconocer el id no dicen si la nota ya salió: el id se conserva.
+    for (const [estado, codigo] of [
+      [403, 'AUTORIZACION_INVALIDA'],
+      [403, 'CLAVE_REQUERIDA'],
+      [403, 'PROHIBIDO'],
+      [403, 'MODULO_NO_INCLUIDO'],
+      [401, 'NO_AUTENTICADO'],
+      [400, 'DATOS_INVALIDOS'],
+      [404, 'NO_ENCONTRADO'],
+      [409, 'SUCURSAL_NO_ELEGIDA'],
+    ] as const) {
+      expect(esRespuestaFinal(error(estado, codigo)), `${estado} ${codigo}`).toBe(false);
+    }
+    // Los demás 4xx sí son finales.
+    expect(esRespuestaFinal(error(422, 'DEVOLUCION_INVALIDA'))).toBe(true);
+    expect(esRespuestaFinal(error(422, 'REFERENCIA_INVALIDA'))).toBe(true);
+    expect(esRespuestaFinal(error(422, 'NADA_QUE_ACREDITAR'))).toBe(true);
+    expect(esRespuestaFinal(error(409, 'COMPROBANTE_ANULADO'))).toBe(true);
     expect(esRespuestaFinal(error(0, 'SIN_CONEXION'))).toBe(false);
     expect(esRespuestaFinal(error(500, 'ERROR_INTERNO'))).toBe(false);
     expect(esRespuestaFinal(error(409, 'CONFLICTO'))).toBe(false);
