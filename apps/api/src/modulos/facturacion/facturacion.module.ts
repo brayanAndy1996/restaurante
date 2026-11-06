@@ -9,6 +9,7 @@ import { ComprobantesService } from './comprobantes.service';
 import { EmisionService } from './emision.service';
 import { EnlacesComprobante } from './enlaces';
 import { BarridoEnviosPse } from './envios/barrido-envios';
+import { EnviosService } from './envios/envios.service';
 import { ProcesadorEnviosPse } from './envios/procesador-envios';
 import { PanelController } from './panel.controller';
 import { PanelService } from './panel.service';
@@ -55,6 +56,7 @@ import { UltimaEmisionDeComprobantes } from './ultima-emision-de-comprobantes';
     AlcanceDeReimpresionDeComprobantes,
     // Entrega 6b (fase A: firmas que lanzan «No implementado»).
     RegistroDeConectores,
+    EnviosService,
     ProcesadorEnviosPse,
     BarridoEnviosPse,
     PanelService,
@@ -73,6 +75,7 @@ import { UltimaEmisionDeComprobantes } from './ultima-emision-de-comprobantes';
     RegistroPagosDeCobro,
     RegistroAlcanceDeTurnos,
     RegistroDeConectores,
+    EnviosService,
     ProcesadorEnviosPse,
     BarridoEnviosPse,
     CargaPadron,

@@ -32,6 +32,7 @@ import {
   type DatosParaComprobante,
 } from '../plataforma';
 import { sinMarcaDeValida } from './facturado';
+import { EnviosService } from './envios/envios.service';
 import { leerComprobante } from './lectura-comprobante';
 import { SeriesService } from './series.service';
 
@@ -172,6 +173,7 @@ export class EmisionService {
     @Inject(SucursalesConsultaService) private readonly sucursales: SucursalesConsultaService,
     @Inject(SuscripcionService) private readonly suscripciones: SuscripcionService,
     @Inject(IMPRESION) private readonly impresion: ImpresionPuerto,
+    @Inject(EnviosService) private readonly envios: EnviosService,
   ) {}
 
   /**
@@ -197,6 +199,8 @@ export class EmisionService {
         'Cambió el día mientras se cobraba; inténtalo de nuevo',
       );
     }
+    // 6b: el modo de PSE del emisor en este instante (lectura sin bloqueo), copiado al comprobante (criterio 122).
+    const simulado = (await this.emisores.modoPse(emisor.id)) === 'SIMULADO';
     const totales = datos.parte.totales;
     const operaciones = totales.operaciones;
     const cliente = datos.cliente;
@@ -206,13 +210,13 @@ export class EmisionService {
          numero, formato, fecha_emision, emitido_en, dia_operativo, emisor, sucursal, cliente_tipo_documento,
          cliente_numero, cliente_nombre, cliente_direccion, tasa_igv, subtotal, descuentos, op_gravadas,
          op_exoneradas, op_inafectas, op_gratuitas, igv, igv_gratuitas, icbper, total, monto_en_letras, orden_id,
-         mesas, mozo_nombre, numero_llamado, numero_parte, detalle_parte, estado, creado_en, actualizado_en)
+         mesas, mozo_nombre, numero_llamado, numero_parte, detalle_parte, estado, simulado, creado_en, actualizado_en)
        VALUES (
          $1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
          $11, $12, $13::date, $14, $15::date, $16::jsonb, $17::jsonb, $18,
          $19, $20, $21, $22::numeric, $23::numeric, $24::numeric, $25::numeric,
          $26::numeric, $27::numeric, $28::numeric, $29::numeric, $30::numeric, $31::numeric, $32::numeric, $33, $34,
-         $35::text[], $36, $37, $38, $39::jsonb, 'POR_ENVIAR', $14, $14)
+         $35::text[], $36, $37, $38, $39::jsonb, 'POR_ENVIAR', $40, $14, $14)
        RETURNING id`,
       {
         bind: [
@@ -263,12 +267,15 @@ export class EmisionService {
           datos.orden?.numeroLlamado ?? null,
           datos.orden === null ? null : datos.numeroParte,
           JSON.stringify(sinMarcaDeValida(datos.parte)),
+          simulado,
         ],
         type: QueryTypes.SELECT,
       },
     );
     const comprobanteId = filas[0]!.id;
     await this.insertarLineas(comprobanteId, datos);
+    // 6b: el envío se registra en esta transacción y se encola después de confirmarla (criterio 124).
+    await this.envios.registrar(comprobanteId, datos.tipo, fechaLima(instante), instante);
     await this.suscripciones.registrarComprobanteEmitido(datos.sucursalId, instante);
     const comprobante = await leerComprobante(this.conexion, comprobanteId);
     if (comprobante === null) throw new Error('El comprobante recién emitido no se puede leer');
