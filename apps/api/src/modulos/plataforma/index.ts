@@ -52,3 +52,5 @@ export { ConfiguracionPseService } from './configuracion-pse.service';
 export { EmpresasConsulta } from './empresas-consulta';
 export { FacturacionPlataformaService } from './facturacion-plataforma.service';
 export type { ConfiguracionPseDescifrada } from './emisores.service';
+export { AlertasDeFacturacion } from './alertas-de-facturacion';
+export type { ConteoDeAlertas, ContarAlertasDeEmpresa } from './alertas-de-facturacion';

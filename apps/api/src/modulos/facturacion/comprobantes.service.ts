@@ -81,7 +81,7 @@ export class ComprobantesService {
    * Devuelve la caja y el cobro del comprobante (`null` en las notas de crédito, las reemisiones y las facturas de un
    * cambio, que no nacen de un cobro).
    */
-  private async exigirVisible(
+  async exigirVisible(
     id: string,
   ): Promise<{ sucursalId: string; cajaId: string; cobroId: string | null }> {
     const filas = await this.conexion.query<{

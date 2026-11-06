@@ -2,7 +2,9 @@ import { Module } from '@nestjs/common';
 import { AuditoriaModule } from '../auditoria';
 import { PlataformaModule } from '../plataforma';
 import { SeguridadModule } from '../seguridad';
+import { ResolutorDeAlcanceDelPanel } from './alcance-del-panel';
 import { RegistroAlcanceDeTurnos } from './alcance-de-turnos';
+import { AlertasParaPlataforma } from './alertas-para-plataforma';
 import { AlcanceDeReimpresionDeComprobantes } from './alcance-de-reimpresion-de-comprobantes';
 import { ComprobantesController } from './comprobantes.controller';
 import { ComprobantesService } from './comprobantes.service';
@@ -62,6 +64,8 @@ import { UltimaEmisionDeComprobantes } from './ultima-emision-de-comprobantes';
     BarridoEnviosPse,
     TrabajoEnSegundoPlano,
     PanelService,
+    ResolutorDeAlcanceDelPanel,
+    AlertasParaPlataforma,
     ReemisionService,
     EnlacesComprobante,
     PdfComprobantes,

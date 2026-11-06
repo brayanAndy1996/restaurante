@@ -130,6 +130,31 @@ export class EmisoresService {
     return filas[0]?.modo ?? null;
   }
 
+  /**
+   * Si algún emisor de las sucursales dadas está en modo `SIMULADO` (criterio 122): el aviso permanente de la PWA. Un
+   * emisor sin configuración no cuenta. Una sola consulta.
+   */
+  async hayModoSimulado(sucursalIds: readonly string[]): Promise<boolean> {
+    if (sucursalIds.length === 0) return false;
+    const filas = await this.conexion.query<{ simulado: boolean }>(
+      `SELECT EXISTS (
+         SELECT 1 FROM sucursal s
+           JOIN configuracion_pse c ON c.emisor_id = s.emisor_id AND c.empresa_id = s.empresa_id
+          WHERE s.id = ANY($1::uuid[]) AND c.modo = 'SIMULADO') AS simulado`,
+      { bind: [[...sucursalIds]], type: QueryTypes.SELECT },
+    );
+    return filas[0]?.simulado === true;
+  }
+
+  /**
+   * Toma la fila del emisor con `FOR SHARE` hasta el final de la transacción (reemisión y notas de crédito, plan,
+   * «Orden de los cerrojos»): choca con el cambio de tasa, así que «la última fecha de emisión del emisor» que mira
+   * `configurarTasaIgv` ya incluye a esta emisión. 404 si el emisor no es de la empresa.
+   */
+  async bloquearParaEmitir(emisorId: string): Promise<void> {
+    await this.exigirEmisor(emisorId, 'compartido');
+  }
+
   async listar(): Promise<EmisorRespuesta[]> {
     const filas = await this.modelos.Emisor.findAll({
       order: [

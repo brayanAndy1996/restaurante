@@ -14,6 +14,16 @@ const sequelizeDe = (transaccion: Transaction) =>
 export class EmpresasConsulta {
   constructor(@Inject(OperacionPlataforma) private readonly operacion: OperacionPlataforma) {}
 
+  /** Los ids y nombres de todas las empresas, por nombre (el tablero de alertas del superadministrador, criterio 133). */
+  lista(): Promise<{ id: string; nombre: string }[]> {
+    return this.operacion.consultar(async (transaccion) =>
+      sequelizeDe(transaccion).query<{ id: string; nombre: string }>(
+        'SELECT id, nombre FROM empresa ORDER BY lower(nombre), id',
+        { transaction: transaccion, type: QueryTypes.SELECT },
+      ),
+    );
+  }
+
   /** Los ids de todas las empresas, en orden. */
   ids(): Promise<string[]> {
     return this.operacion.consultar(async (transaccion) => {

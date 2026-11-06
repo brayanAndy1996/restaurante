@@ -14,6 +14,7 @@ import {
   crearConexionPlataforma,
 } from '../../nucleo/base-de-datos/conexion-plataforma';
 import { AuditoriaModule } from '../auditoria';
+import { AlertasDeFacturacion } from './alertas-de-facturacion';
 import { MODELOS_API, MODELOS_PLATAFORMA, definirModelos } from './modelos';
 import { ConfiguracionPseController } from './configuracion-pse.controller';
 import { ConfiguracionPseService } from './configuracion-pse.service';
@@ -86,6 +87,7 @@ import { SuscripcionesPlataformaService } from './suscripciones-plataforma.servi
     ConfiguracionPseService,
     FacturacionPlataformaService,
     EmpresasConsulta,
+    AlertasDeFacturacion,
   ],
   exports: [
     OperacionPlataforma,
@@ -100,6 +102,7 @@ import { SuscripcionesPlataformaService } from './suscripciones-plataforma.servi
     ConfiguracionPseService,
     FacturacionPlataformaService,
     EmpresasConsulta,
+    AlertasDeFacturacion,
   ],
 })
 export class PlataformaModule implements OnModuleInit, OnApplicationShutdown {
