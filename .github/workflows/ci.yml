@@ -30,6 +30,11 @@ jobs:
       DB_PASSWORD_API: api_ci
       DB_PASSWORD_PLATAFORMA: plataforma_ci
       DB_PASSWORD_TIEMPO_REAL: tiempo_real_ci
+      # Facturación electrónica (historia 006, 6b): los roles de la cola de envíos y de la carga del padrón. Las pruebas
+      # no necesitan más variables de 6b: con NODE_ENV=test la cola es en memoria, el PSE es el simulador y la clave de
+      # cifrado y la URL pública de la API tienen valores de prueba.
+      DB_PASSWORD_COLAS: colas_ci
+      DB_PASSWORD_REFERENCIA: referencia_ci
       # Valores solo para CI (no son secretos de producción).
       PIN_PEPPER: Y2ktcGluLXBlcHBlci1zb2xvLXBhcmEtcHJ1ZWJhcyEh
       ORIGENES_PERMITIDOS: http://localhost:5173
@@ -90,11 +95,22 @@ jobs:
       DB_PASSWORD_API: api_ci
       DB_PASSWORD_PLATAFORMA: plataforma_ci
       DB_PASSWORD_TIEMPO_REAL: tiempo_real_ci
+      DB_PASSWORD_COLAS: colas_ci
+      DB_PASSWORD_REFERENCIA: referencia_ci
       DATABASE_URL: postgres://restaurante_api:api_ci@localhost:5432/restaurante
       DATABASE_PLATAFORMA_URL: postgres://restaurante_plataforma:plataforma_ci@localhost:5432/restaurante
       DATABASE_MIGRADOR_URL: postgres://restaurante_migrador:migrador_ci@localhost:5432/restaurante
       DATABASE_TIEMPO_REAL_URL: postgres://restaurante_tiempo_real:tiempo_real_ci@localhost:5432/restaurante
+      # Facturación electrónica (historia 006, 6b; T45): el worker de envíos corre dentro de la API con pg-boss de verdad
+      # (rol restaurante_colas), el padrón de RUC de ejemplo se carga con restaurante_referencia y el PSE es el simulador.
+      DATABASE_COLAS_URL: postgres://restaurante_colas:colas_ci@localhost:5432/restaurante
+      DATABASE_REFERENCIA_URL: postgres://restaurante_referencia:referencia_ci@localhost:5432/restaurante
+      WORKER: habilitado
+      PSE_CONECTOR: simulador
+      PADRON_RUC_URL: file://${{ github.workspace }}/apps/api/test/soporte/padron-ejemplo.zip
+      API_URL_PUBLICA: http://localhost:3000
       # Valores solo para CI (no son secretos de producción).
+      CLAVE_CIFRADO: Y2ktY2xhdmUtY2lmcmFkby1zb2xvLXBhcmEtcHJ1ZWJhcyEh
       PIN_PEPPER: Y2ktcGluLXBlcHBlci1zb2xvLXBhcmEtcHJ1ZWJhcyEh
       # La PWA de la E2E de la carta web corre en el 5174 (el 5173 es el de la E2E de la PWA).
       ORIGENES_PERMITIDOS: http://localhost:5173,http://localhost:5174
