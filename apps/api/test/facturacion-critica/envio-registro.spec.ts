@@ -30,6 +30,7 @@ import {
   escribir,
   estadoDe,
   exigirEstado,
+  exigirPse,
   fallarElTicketDelCobro,
   fechaEmisionDe,
   filas,
@@ -62,7 +63,8 @@ afterAll(async () => {
   await ctx?.cerrar();
   await cerrarAdmin();
 });
-beforeEach(() => {
+beforeEach(async () => {
+  await exigirPse(esc);
   ctx.pse.reglas.limpiar();
   ctx.pse.reiniciar();
   ctx.cola.vaciar();

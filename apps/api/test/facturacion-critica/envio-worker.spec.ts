@@ -25,6 +25,7 @@ import {
   crearEscenarioFact,
   envioDe,
   exigirEstado,
+  exigirPse,
   filas,
   idPse,
   intentosDe,
@@ -57,7 +58,8 @@ afterAll(async () => {
   await apiSql?.end();
   await cerrarAdmin();
 });
-beforeEach(() => {
+beforeEach(async () => {
+  await exigirPse(esc);
   ctx.pse.reglas.limpiar();
   ctx.pse.reiniciar();
   ctx.cola.vaciar();

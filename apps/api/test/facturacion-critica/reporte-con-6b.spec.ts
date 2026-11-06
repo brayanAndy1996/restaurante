@@ -29,6 +29,7 @@ import {
   cuentaC,
   escribir,
   exigirEstado,
+  exigirPse,
   limitarBarrido,
   procesar,
   seriesDeNotas,
@@ -56,7 +57,8 @@ afterAll(async () => {
   await ctx?.cerrar();
   await cerrarAdmin();
 });
-beforeEach(() => {
+beforeEach(async () => {
+  await exigirPse(esc);
   ctx.pse.reglas.limpiar();
 });
 

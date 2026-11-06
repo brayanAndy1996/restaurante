@@ -21,6 +21,7 @@ import {
   CLIENTE_RUC,
   comprobanteFila,
   crearEscenarioFact,
+  exigirPse,
   envioDe,
   filas,
   intentosDe,
@@ -50,7 +51,8 @@ afterAll(async () => {
   await ctx?.cerrar();
   await cerrarAdmin();
 });
-beforeEach(() => {
+beforeEach(async () => {
+  await exigirPse(esc);
   ctx.pse.reglas.limpiar();
   ctx.pse.reiniciar();
   ctx.cola.vaciar();

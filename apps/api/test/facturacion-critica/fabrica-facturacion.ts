@@ -208,11 +208,22 @@ export async function crearEscenarioFact(
 ): Promise<Escenario> {
   const esc = await crearEscenario(ctx);
   if (opciones.conPse !== false && !process.env.P7_SIN_PSE) {
-    await activarSimulado(ctx, esc, esc.A);
-    await activarSimulado(ctx, esc, esc.B);
+    // La configuración se hace aparte y se exige en el `beforeEach` de cada archivo (`exigirPse`): si falla, falla cada
+    // prueba con el mismo motivo en lugar de quedar omitidas.
+    const lista = (async () => {
+      await activarSimulado(ctx, esc, esc.A);
+      await activarSimulado(ctx, esc, esc.B);
+    })();
+    lista.catch(() => undefined);
+    pseListo.set(esc, lista);
   }
   return esc;
 }
+
+const pseListo = new WeakMap<object, Promise<void>>();
+
+/** Espera la configuración de PSE de `crearEscenarioFact` (y falla con su error si no se pudo). */
+export const exigirPse = (esc: Escenario): Promise<void> => pseListo.get(esc) ?? Promise.resolve();
 
 // ------------------------------------------------------------------------------------------------
 // Cobros y comprobantes

@@ -17,7 +17,7 @@
 // Hoy falla porque las tablas y las columnas de 6b todavía no existen.
 import { randomUUID } from 'node:crypto';
 import type { Client } from 'pg';
-import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { enTransaccion, errorDe } from '../aislamiento/fabrica';
 import { abrirCliente } from '../utilidades';
 import {
@@ -29,6 +29,7 @@ import {
   crearEscenarioFact,
   escribir,
   exigirEstado,
+  exigirPse,
   filas,
   procesar,
   seriesDeNotas,
@@ -112,6 +113,10 @@ afterAll(async () => {
   await admin?.end();
   await apiCliente?.end();
   await cerrarAdmin();
+});
+
+beforeEach(async () => {
+  await exigirPse(esc);
 });
 
 const idsDe = async (tabla: string, empresaId: string): Promise<string[]> =>

@@ -33,6 +33,7 @@ import {
   escribir,
   esperarError,
   exigirEstado,
+  exigirPse,
   filas,
   filasDeAuditoria,
   ik,
@@ -70,7 +71,8 @@ afterAll(async () => {
   await ctx?.cerrar();
   await cerrarAdmin();
 });
-beforeEach(() => {
+beforeEach(async () => {
+  await exigirPse(esc);
   ctx.pse.reglas.limpiar();
   ctx.pse.reiniciar();
   ctx.cola.vaciar();

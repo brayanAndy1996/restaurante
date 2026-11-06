@@ -34,6 +34,7 @@ import {
   crearEscenarioFact,
   eventosPublicados,
   exigirEstado,
+  exigirPse,
   limitarBarrido,
   procesar,
   turnoDe,
@@ -60,7 +61,8 @@ afterAll(async () => {
   await ctx?.cerrar();
   await cerrarAdmin();
 });
-beforeEach(() => {
+beforeEach(async () => {
+  await exigirPse(esc);
   ctx.pse.reglas.limpiar();
 });
 

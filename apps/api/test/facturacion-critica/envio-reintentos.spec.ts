@@ -25,6 +25,7 @@ import {
   envioDe,
   escribir,
   exigirEstado,
+  exigirPse,
   finDelDiaLima,
   fechaEmisionDe,
   intentosDe,
@@ -55,7 +56,8 @@ afterAll(async () => {
   await ctx?.cerrar();
   await cerrarAdmin();
 });
-beforeEach(() => {
+beforeEach(async () => {
+  await exigirPse(esc);
   ctx.pse.reglas.limpiar();
   ctx.pse.reiniciar();
   ctx.cola.vaciar();

@@ -25,6 +25,7 @@ import {
   cobrarLomo,
   comprobanteFila,
   crearEscenarioFact,
+  exigirPse,
   envioDe,
   eventosPublicados,
   filas,
@@ -58,7 +59,8 @@ afterAll(async () => {
   await ctx?.cerrar();
   await cerrarAdmin();
 });
-beforeEach(() => {
+beforeEach(async () => {
+  await exigirPse(esc);
   ctx.pse.reglas.limpiar();
   ctx.cola.vaciar();
   ctx.publicador.limpiar();
