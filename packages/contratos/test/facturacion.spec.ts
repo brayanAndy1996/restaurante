@@ -318,6 +318,19 @@ describe('padrón (criterios 138 y 139)', () => {
       expect(padronRucParametroSchema.safeParse(malo).success, malo).toBe(false);
     }
   });
+
+  it('un RUC mal formado falla en el campo `ruc` (no con el campo vacío)', () => {
+    for (const malo of ['2010007097', '20100070971', 'abcdefghijk', '', '20%']) {
+      const resultado = padronRucParametroSchema.safeParse(malo);
+      expect(resultado.success, malo).toBe(false);
+      if (!resultado.success) {
+        expect(
+          resultado.error.issues.map((i) => i.path.join('.')),
+          malo,
+        ).toEqual(['ruc']);
+      }
+    }
+  });
 });
 
 describe('autorización de una nota de crédito (criterio 145)', () => {

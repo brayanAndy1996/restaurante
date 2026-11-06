@@ -341,8 +341,11 @@ export const enlaceComprobanteRespuestaSchema = z.object({
 /** El `:ruc` de `GET /padron/ruc/:ruc`: 11 dígitos con dígito verificador válido (si no, 400 con `campos.ruc`). */
 export const padronRucParametroSchema = z
   .string()
-  .regex(/^\d{11}$/, 'El RUC tiene 11 dígitos')
-  .refine((ruc) => validarRuc(ruc), 'RUC inválido (prefijo y dígito verificador)');
+  .refine((ruc) => /^\d{11}$/.test(ruc) && validarRuc(ruc), {
+    // El esquema es de un texto suelto: sin `path`, el error saldría con el campo vacío en lugar de `ruc`.
+    path: ['ruc'],
+    message: 'El RUC debe tener 11 dígitos, con prefijo y dígito verificador válidos',
+  });
 
 export const padronRucRespuestaSchema = z.object({
   ruc: z.string(),

@@ -32,6 +32,19 @@ const RUTAS_6B = [
   'POST /plataforma/padron/carga',
 ];
 
+/** Rutas de 6b que ya llevan `@Permiso` y `@RequiereModulo` (T36: la búsqueda del padrón). */
+const CLASIFICADAS = [
+  'GET /padron/ruc/:ruc',
+  // T32: el panel, el reintento, la reemisión, el PDF, el enlace y las alertas.
+  'GET /facturacion/comprobantes',
+  'GET /facturacion/comprobantes/:id',
+  'POST /facturacion/comprobantes/:id/reintento',
+  'POST /facturacion/comprobantes/:id/reemision',
+  'GET /facturacion/comprobantes/:id/pdf',
+  'GET /facturacion/comprobantes/:id/enlace',
+  'GET /facturacion/alertas',
+];
+
 /** Los prefijos de 6a que la clasificación protegida de 6a (criterio 98) vigila. */
 const PREFIJOS_6A = [
   '/turnos',
@@ -78,7 +91,8 @@ describe('rutas de la entrega 6b (fase A)', () => {
   it('sin @Permiso ni @RequiereModulo todavía (se agregan en la fase C), ninguna pública', () => {
     const de6b = rutasDeNest(app).filter((r) => RUTAS_6B.includes(`${r.metodo} ${r.ruta}`));
     expect(de6b).toHaveLength(RUTAS_6B.length);
-    for (const r of de6b) {
+    // Las que ya tienen su acceso (la fase C las va clasificando; la clasificación completa es de las pruebas protegidas).
+    for (const r of de6b.filter((r) => !CLASIFICADAS.includes(`${r.metodo} ${r.ruta}`))) {
       const manejador = r.controlador.prototype[r.manejador] as object;
       const leer = (llave: string) =>
         Reflect.getMetadata(llave, manejador) ?? Reflect.getMetadata(llave, r.controlador);
