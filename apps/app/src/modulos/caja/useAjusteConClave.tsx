@@ -159,10 +159,16 @@ export function useAjusteConClave(opciones: { recordarComo?: string } = {}) {
     if (intento.current?.id === id) intento.current = null;
   }
 
+  /** El `id` del intento recordado (el de la escritura que se mandó y aún no tiene respuesta final), si lo hay. */
+  function idDelIntento(): string | null {
+    return intento.current?.id ?? null;
+  }
+
   return {
     ejecutar,
     soltar,
     soltarSiEs,
+    idDelIntento,
     ventana,
     pendiente: envio.pendiente,
     sigueMontada: envio.sigueMontada,

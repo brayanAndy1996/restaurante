@@ -99,9 +99,10 @@
   margin: 0;
   font-size: 1.0625rem;
   line-height: 1.5rem;
+  font-weight: 600;
   font-variant-numeric: tabular-nums;
 }
-.nota-hecha__numero b {
+.nota-hecha__nobreak {
   white-space: nowrap;
 }
 .nota-hecha__acciones {

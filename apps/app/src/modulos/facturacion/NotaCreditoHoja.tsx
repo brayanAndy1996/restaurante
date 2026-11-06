@@ -1,8 +1,4 @@
-import type {
-  ComprobanteDetalle,
-  NotaCreditoEntrada,
-  NotaCreditoRespuesta,
-} from '@restaurante/contratos';
+import type { ComprobanteDetalle, NotaCreditoEntrada } from '@restaurante/contratos';
 import type { TipoNotaCredito } from '@restaurante/dominio';
 import {
   Aviso,
@@ -32,8 +28,8 @@ import {
   listarCajasActivas,
 } from '../caja/turno';
 import { useAjusteConClave } from '../caja/useAjusteConClave';
-import { claveComprobante, NOMBRE_DE_TIPO_DOCUMENTO } from './facturacion';
-import { NotaCreditoHecha } from './NotaCreditoHecha';
+import { claveComprobante, leerComprobante, NOMBRE_DE_TIPO_DOCUMENTO } from './facturacion';
+import { NotaCreditoHecha, type NotaEmitida } from './NotaCreditoHecha';
 import {
   NOMBRE_DE_TIPO_DE_NOTA,
   calcularLaNota,
@@ -105,7 +101,7 @@ interface Props {
 
 /** Lo que se muestra cuando la nota ya salió. */
 interface Hecha {
-  respuesta: NotaCreditoRespuesta;
+  respuesta: NotaEmitida;
   tipo: TipoNotaCredito;
 }
 
@@ -126,13 +122,46 @@ export function NotaCreditoHoja({ comprobante, base, volver, onCerrar }: Props) 
   const permiso = usePermiso('EMITIR_NOTA_CREDITO');
   const ajuste = useAjusteConClave({ recordarComo: `nota-credito:${comprobante.id}` });
 
-  // Si el comprobante (cargado o releído) ya muestra la nota que este equipo mandó, esa nota salió: su `id` ya no se
-  // repite (una segunda devolución idéntica, legítima, es otra nota con otro `id` y otra clave de idempotencia).
-  const { soltarSiEs } = ajuste;
+  // Si el comprobante (cargado o releído) ya muestra la nota que este equipo mandó, esa nota salió y su `id` ya no se repite
+  // (una segunda devolución idéntica, legítima, es otra nota con otro `id` y otra clave de idempotencia).
+  //  - Con esta hoja abierta y un envío suyo sin respuesta (un 500, un corte), la hoja muestra la nota emitida, leída por
+  //    su comprobante, igual que tras un 201: así nadie toca «Emitir» otra vez y saca una segunda nota.
+  //  - Si la hoja se abre después, el `id` se suelta en silencio.
+  const { soltarSiEs, idDelIntento } = ajuste;
   const notasDelComprobante = comprobante.notasCredito;
+  const tipoEnviado = useRef<TipoNotaCredito | null>(null);
+  const leyendoLaNota = useRef(false);
   useEffect(() => {
-    for (const nota of notasDelComprobante ?? []) soltarSiEs(nota.notaId);
-  }, [notasDelComprobante, soltarSiEs]);
+    const id = idDelIntento();
+    const emitida =
+      id === null ? undefined : (notasDelComprobante ?? []).find((n) => n.notaId === id);
+    if (id === null || emitida === undefined) return;
+    const tipoDeLaNota = tipoEnviado.current;
+    if (tipoDeLaNota === null) {
+      soltarSiEs(id);
+      return;
+    }
+    if (leyendoLaNota.current) return;
+    leyendoLaNota.current = true;
+    void (async () => {
+      try {
+        const detalle = await clientes.fetchQuery({
+          queryKey: claveComprobante(emitida.id),
+          queryFn: ({ signal }) => leerComprobante(emitida.id, signal),
+          staleTime: 0,
+        });
+        soltarSiEs(id);
+        if (!ajuste.sigueMontada()) return;
+        setEnviando(false);
+        setHecha({ respuesta: { nota: detalle }, tipo: tipoDeLaNota });
+      } catch {
+        // Sin poder leer la nota se sigue como estaba: la próxima relectura lo intenta otra vez.
+        leyendoLaNota.current = false;
+      }
+    })();
+    // `ajuste` cambia en cada vuelta; lo que cuenta es lo que trae el comprobante.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [notasDelComprobante]);
 
   const tipos = tiposDeNota(comprobante);
   const [tipoElegido, setTipoElegido] = useState<TipoNotaCredito | null>(null);
@@ -243,6 +272,7 @@ export function NotaCreditoHoja({ comprobante, base, volver, onCerrar }: Props) 
     if (enviando || tipo === null || nota === null || !nota.ok) return;
     setFallo(null);
     setIntentado(true);
+    tipoEnviado.current = tipo;
     const motivoLimpio = motivo.trim();
     if (revisarMotivo(motivo)) return;
     if (esCambio && !padron.validado.ok) return;
@@ -326,6 +356,11 @@ export function NotaCreditoHoja({ comprobante, base, volver, onCerrar }: Props) 
     requestAnimationFrame(() => alertaDeFallo.current?.scrollIntoView?.({ block: 'nearest' }));
   }
 
+  /** Cambiar lo escrito quita el aviso del último fallo, salvo el de «revisar el comprobante»: ese sigue hasta revisar. */
+  function limpiarFallo() {
+    if (!porRevisar) setFallo(null);
+  }
+
   /** La nota puede ya estar emitida: se vuelve a leer el comprobante y se cierra la hoja para verlo. */
   async function revisarElComprobante() {
     await clientes.invalidateQueries({ queryKey: claveComprobante(comprobante.id) });
@@ -364,7 +399,7 @@ export function NotaCreditoHoja({ comprobante, base, volver, onCerrar }: Props) 
                   valor={tipo}
                   onCambio={(nuevo) => {
                     setTipoElegido(nuevo);
-                    setFallo(null);
+                    limpiarFallo();
                   }}
                 />
               ) : null}
@@ -402,7 +437,7 @@ export function NotaCreditoHoja({ comprobante, base, volver, onCerrar }: Props) 
                             maximo={l.faltan}
                             onCambio={(valor) => {
                               setUnidades((previas) => ({ ...previas, [l.posicion]: valor }));
-                              setFallo(null);
+                              limpiarFallo();
                             }}
                           />
                         ) : null}

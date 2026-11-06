@@ -427,7 +427,7 @@ describe('La ventana de clave muestra lo que se autoriza y manda exactamente eso
     // El resultado: la nota con su estado en vivo y lo devuelto por medio.
     expect(await screen.findByText('Nota de crédito emitida')).toBeVisible();
     expect(screen.getByText('Devolución de boleta B001-00000124.')).toBeVisible();
-    expect(screen.getByText('BC01-00000003')).toBeVisible();
+    expect(screen.getByText(/BC01-00000003/)).toBeVisible();
     expect(await screen.findByText('Enviando a SUNAT…')).toBeVisible();
     const devuelto = screen.getByLabelText('Lo que se devolvió');
     expect(within(devuelto).getByText('Devuelto en efectivo').nextSibling).toHaveTextContent(
@@ -1281,8 +1281,8 @@ describe('Cambio de boleta por factura (criterios 143, 151 y 176)', () => {
     // El resultado trae la nota y la factura nueva, cada una con su estado en vivo.
     expect(await screen.findByText('Nota de crédito emitida')).toBeVisible();
     expect(screen.getByText('Cambio a factura de boleta B001-00000124.')).toBeVisible();
-    expect(screen.getByText('BC01-00000003')).toBeVisible();
-    expect(screen.getByText('F001-00000031')).toBeVisible();
+    expect(screen.getByText(/BC01-00000003/)).toBeVisible();
+    expect(screen.getByText(/F001-00000031/)).toBeVisible();
   });
 
   it('un RUC de baja pide «Emitir igual» antes de mandar', async () => {

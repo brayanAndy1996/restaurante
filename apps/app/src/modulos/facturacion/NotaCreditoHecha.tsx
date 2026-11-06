@@ -16,8 +16,20 @@ import { TITULO_DE_TIPO_DE_NOTA } from './notas-credito';
 import '../caja/cuenta-caja.css';
 import './nota-credito.css';
 
+/**
+ * Lo que se muestra de una nota emitida. Viene de la respuesta del envío (`NotaCreditoRespuesta`) o, si esa respuesta no
+ * llegó pero el comprobante releído ya trae la nota, solo de la nota: entonces `devolucion` e `impresion` no se saben.
+ */
+export interface NotaEmitida {
+  nota: ComprobanteRespuesta;
+  factura?: ComprobanteRespuesta | null | undefined;
+  devolucion?: NotaCreditoRespuesta['devolucion'] | undefined;
+  impresion?: NotaCreditoRespuesta['impresion'] | undefined;
+  trabajoIds?: readonly string[] | undefined;
+}
+
 interface Props {
-  respuesta: NotaCreditoRespuesta;
+  respuesta: NotaEmitida;
   tipo: TipoNotaCredito;
   /** El comprobante que se acreditó. */
   original: Pick<ComprobanteDetalle, 'tipo' | 'numero'>;
@@ -38,7 +50,9 @@ function DocumentoNuevo({
   return (
     <div className="nota-hecha__documento">
       <p className="nota-hecha__numero">
-        {NOMBRE_DE_TIPO_DOCUMENTO[comprobante.tipo]} · <b>{comprobante.numero}</b>
+        {`${NOMBRE_DE_TIPO_DOCUMENTO[comprobante.tipo]} `}
+        {/* El número no se parte en el guion al cambiar de línea (360 px). */}
+        <span className="nota-hecha__nobreak">{`· ${comprobante.numero}`}</span>
       </p>
       {comprobante.simulado ? <EtiquetaDeEstado tono="alerta">Simulado</EtiquetaDeEstado> : null}
       <EstadoDelComprobante comprobante={comprobante} />
@@ -52,7 +66,9 @@ function DocumentoNuevo({
  * nueva en un cambio) con su estado ante SUNAT en vivo, lo que se devolvió por medio y si salió el ticket.
  */
 export function NotaCreditoHecha({ respuesta, tipo, original, base, volver, onListo }: Props) {
-  const { nota, factura, devolucion } = respuesta;
+  const { nota, devolucion } = respuesta;
+  const factura = respuesta.factura ?? null;
+  const trabajoIds = respuesta.trabajoIds ?? [];
   return (
     <div className="nota-hecha">
       <div role="status">
@@ -64,35 +80,45 @@ export function NotaCreditoHecha({ respuesta, tipo, original, base, volver, onLi
       <DocumentoNuevo comprobante={nota} conNumero={factura !== null} />
       {factura ? <DocumentoNuevo comprobante={factura} conNumero /> : null}
 
-      <dl className="desglose" aria-label="Lo que se devolvió">
-        {devolucion ? (
-          <>
-            {devolucion.pagos.map((p, i) => (
-              <div key={`${p.medio}${i}`} className="desglose__fila">
-                <dt>{`Devuelto en ${NOMBRE_DE_MEDIO_DE_PAGO[p.medio].toLowerCase()}`}</dt>
-                <dd>{montoEnSoles(p.monto)}</dd>
-              </div>
-            ))}
-            {!montoEsCero(devolucion.redondeo) ? (
-              <div className="desglose__fila desglose__fila--ayuda">
-                <dt>Redondeo</dt>
-                <dd>{montoEnSoles(devolucion.redondeo)}</dd>
-              </div>
-            ) : null}
-          </>
-        ) : (
-          <div className="desglose__fila">
-            <dt>Devolución de dinero</dt>
-            <dd>Ninguna</dd>
-          </div>
-        )}
-      </dl>
+      {tipo === 'CAMBIO_A_FACTURA' && respuesta.factura === undefined ? (
+        <p className="texto-ayuda">La factura nueva está en Comprobantes.</p>
+      ) : null}
 
-      <EstadoDeLaImpresion
-        impresion={respuesta.impresion}
-        trabajoId={respuesta.trabajoIds[0] ?? null}
-        que={respuesta.trabajoIds.length > 1 ? 'los tickets' : 'el ticket'}
-      />
+      {devolucion === undefined ? (
+        <p className="texto-ayuda">Lo que se devolvió está en la nota de crédito.</p>
+      ) : (
+        <dl className="desglose" aria-label="Lo que se devolvió">
+          {devolucion ? (
+            <>
+              {devolucion.pagos.map((p, i) => (
+                <div key={`${p.medio}${i}`} className="desglose__fila">
+                  <dt>{`Devuelto en ${NOMBRE_DE_MEDIO_DE_PAGO[p.medio].toLowerCase()}`}</dt>
+                  <dd>{montoEnSoles(p.monto)}</dd>
+                </div>
+              ))}
+              {!montoEsCero(devolucion.redondeo) ? (
+                <div className="desglose__fila desglose__fila--ayuda">
+                  <dt>Redondeo</dt>
+                  <dd>{montoEnSoles(devolucion.redondeo)}</dd>
+                </div>
+              ) : null}
+            </>
+          ) : (
+            <div className="desglose__fila">
+              <dt>Devolución de dinero</dt>
+              <dd>Ninguna</dd>
+            </div>
+          )}
+        </dl>
+      )}
+
+      {respuesta.impresion ? (
+        <EstadoDeLaImpresion
+          impresion={respuesta.impresion}
+          trabajoId={trabajoIds[0] ?? null}
+          que={trabajoIds.length > 1 ? 'los tickets' : 'el ticket'}
+        />
+      ) : null}
 
       <div className="nota-hecha__acciones">
         <Boton variante="principal" bloque onClick={onListo}>
