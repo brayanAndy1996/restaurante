@@ -29,6 +29,9 @@ import {
   abrirTurno,
   api,
   cobrar,
+  type Cierres,
+  impresoraDeCaja,
+  sesionContrasena,
   cuentaC,
   cuentaCon,
   efectivo,
@@ -509,4 +512,25 @@ export async function fallarElTicketDeLaNota(originalId: string): Promise<() => 
     await c.query(`DROP TRIGGER IF EXISTS ${nombre} ON trabajo_impresion`);
     await c.query(`DROP FUNCTION IF EXISTS ${nombre}()`);
   };
+}
+
+const conImpresora = new WeakMap<object, Promise<void>>();
+
+/**
+ * Deja la impresora de caja (su emulador) en S1 de A, una sola vez por escenario: la falla inyectada por
+ * `fallarElTicketDeLaNota` salta al encolar el ticket, así que la caja necesita su impresora. Sirve a las cajas de S1 (la
+ * de la sucursal) y es la propia de la caja 1.
+ */
+export function impresoraEnS1(ctx: AppP5, esc: Escenario, cierres: Cierres): Promise<void> {
+  let p = conImpresora.get(esc);
+  if (!p) {
+    p = (async () => {
+      const admin = await sesionContrasena(ctx, esc.A.base.admin, null);
+      await impresoraDeCaja(ctx, cierres, admin, esc.A.S1, 'Caja de S1', {
+        cajaId: (await esc.A.cajas()).S1!.caja1,
+      });
+    })();
+    conImpresora.set(esc, p);
+  }
+  return p;
 }

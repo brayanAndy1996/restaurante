@@ -44,6 +44,7 @@ import {
   egresosDe,
   emitirAceptado,
   fallarElTicketDeLaNota,
+  impresoraEnS1,
   notaCrudo,
   notasDelOriginal,
   prepararNotas,
@@ -118,7 +119,15 @@ describe('criterio 148 · lo que queda por acreditar con notas simultáneas', ()
     expect(await notasDelOriginal(o.comprobanteId)).toHaveLength(1);
     const detalle = await comprobanteDe(ctx, sup(), o.comprobanteId);
     expect(detalle.acreditado).toEqual([
-      { posicion: lomo, cantidad: 2, neto: '56.00', bolsas: 0, icbper: '0.00' },
+      {
+        posicion: lomo,
+        cantidad: 2,
+        neto: '56.00',
+        base: '47.46',
+        igv: '8.54',
+        bolsas: 0,
+        icbper: '0.00',
+      },
     ]);
   });
 
@@ -185,6 +194,8 @@ describe('criterio 148 · lo que queda por acreditar con notas simultáneas', ()
 // ------------------------------------------------------------------------------------------------
 describe('criterio 149 · sin saltos ni duplicados', () => {
   it('una nota que falla después de numerar no deja hueco: el número vuelve y la siguiente usa el mismo', async () => {
+    // La falla inyectada salta al encolar el ticket, así que las cajas de S1 necesitan su impresora.
+    await impresoraEnS1(ctx, esc, cierres);
     const mala = await boleta({ quien: 'cajero2', caja: 'caja2' });
     const buena = await boleta({ quien: 'cajero2', caja: 'caja2' });
     const antes = await ultimoDeSerie(mala.cajaId);

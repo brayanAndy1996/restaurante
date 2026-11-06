@@ -370,7 +370,15 @@ describe('criterio 143 y 144 · los tres tipos y la respuesta', () => {
     expect(await estadoDe(o.comprobanteId)).toBe('ACEPTADO');
     let detalle = await comprobanteDe(ctx, sup(), o.comprobanteId);
     expect(detalle.acreditado).toEqual([
-      { posicion: lomo, cantidad: 1, neto: '28.00', bolsas: 0, icbper: '0.00' },
+      {
+        posicion: lomo,
+        cantidad: 1,
+        neto: '28.00',
+        base: '23.73',
+        igv: '4.27',
+        bolsas: 0,
+        icbper: '0.00',
+      },
     ]);
     expect(detalle.notasCredito).toEqual([
       {
@@ -392,7 +400,15 @@ describe('criterio 143 y 144 · los tres tipos y la respuesta', () => {
     expect((segunda.nota as Libre).correlativo).toBe((nota1.correlativo as number) + 1);
     detalle = await comprobanteDe(ctx, sup(), o.comprobanteId);
     expect(detalle.acreditado).toEqual([
-      { posicion: lomo, cantidad: 2, neto: '56.00', bolsas: 0, icbper: '0.00' },
+      {
+        posicion: lomo,
+        cantidad: 2,
+        neto: '56.00',
+        base: '47.46',
+        igv: '8.54',
+        bolsas: 0,
+        icbper: '0.00',
+      },
     ]);
 
     const tercera = await notaCrudo(
@@ -449,7 +465,15 @@ describe('criterio 143 y 144 · los tres tipos y la respuesta', () => {
     });
     const detalle = await comprobanteDe(ctx, sup(), o.comprobanteId);
     expect(detalle.acreditado).toEqual([
-      { posicion: bolsa, cantidad: 1, neto: '0.10', bolsas: 1, icbper: '0.50' },
+      {
+        posicion: bolsa,
+        cantidad: 1,
+        neto: '0.10',
+        base: '0.08',
+        igv: '0.02',
+        bolsas: 1,
+        icbper: '0.50',
+      },
     ]);
   });
 

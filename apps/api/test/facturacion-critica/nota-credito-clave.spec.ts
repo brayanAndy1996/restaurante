@@ -13,6 +13,7 @@
 import { randomUUID } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import {
+  Cierres,
   cerrarAdmin,
   crearEscenario,
   equipoDe,
@@ -31,6 +32,7 @@ import {
   emitirAceptado,
   emitirNota,
   fallarElTicketDeLaNota,
+  impresoraEnS1,
   notaCrudo,
   notasDelOriginal,
   objetivoNota,
@@ -41,6 +43,7 @@ import {
 
 vi.setConfig({ testTimeout: 180_000, hookTimeout: 300_000 });
 
+const cierres = new Cierres();
 let ctx: AppNotas;
 let esc: Escenario;
 const A = () => esc.A;
@@ -52,6 +55,7 @@ beforeAll(async () => {
   esc = await crearEscenario(ctx);
 });
 afterAll(async () => {
+  await cierres.cerrarTodo();
   await ctx?.cerrar();
   await cerrarAdmin();
 });
@@ -279,6 +283,8 @@ describe('criterio 145 · la clave atada de la nota de crédito', () => {
   });
 
   it('si la nota falla después de numerar, se revierte todo y la autorización vuelve: se puede usar de nuevo', async () => {
+    // La falla inyectada salta al encolar el ticket, así que la caja necesita su impresora.
+    await impresoraEnS1(ctx, esc, cierres);
     const o = await boleta();
     const clave = await autorizarNota(
       ctx,

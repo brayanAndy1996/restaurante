@@ -134,6 +134,8 @@ describe('criterio 124 · registro del envío en la emisión', () => {
     await procesar(ctx, A().id, original.comprobanteId);
     expect(await estadoDe(original.comprobanteId)).toBe('ACEPTADO');
     ctx.cola.vaciar();
+    // El `emitir` del original quedó en las llamadas del simulador: no cuenta como llamada de la nota.
+    ctx.pse.reiniciar();
     const res = await anularComprobante(
       ctx,
       A().token.supervisor!,

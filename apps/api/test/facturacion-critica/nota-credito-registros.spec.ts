@@ -17,6 +17,7 @@ import { filasAuditoria } from '../acceso/fabrica-equipos';
 import { enTransaccion, errorDe } from '../aislamiento/fabrica';
 import {
   api,
+  Cierres,
   cerrarAdmin,
   crearEscenario,
   exigir,
@@ -34,6 +35,7 @@ import {
   emitirAceptado,
   emitirNota,
   fallarElTicketDeLaNota,
+  impresoraEnS1,
   notaCrudo,
   notasDelOriginal,
   objetivoNota,
@@ -44,6 +46,7 @@ import {
 
 vi.setConfig({ testTimeout: 180_000, hookTimeout: 300_000 });
 
+const cierres = new Cierres();
 let ctx: AppNotas;
 let esc: Escenario;
 let apiSql: Client;
@@ -56,6 +59,7 @@ beforeAll(async () => {
   apiSql = await abrirCliente('api');
 });
 afterAll(async () => {
+  await cierres.cerrarTodo();
   await apiSql?.end();
   await ctx?.cerrar();
   await cerrarAdmin();
@@ -205,6 +209,8 @@ describe('criterio 154 · auditoría', () => {
   });
 
   it('una nota que se revierte no deja fila de auditoría', async () => {
+    // La falla inyectada salta al encolar el ticket, así que la caja necesita su impresora (antes de medir).
+    await impresoraEnS1(ctx, esc, cierres);
     const o = await boleta();
     const antes = await totalDeFilasDeAuditoria();
     const quitar = await fallarElTicketDeLaNota(o.comprobanteId);
@@ -244,6 +250,8 @@ describe('criterio 155 · cuota del plan', () => {
   });
 
   it('la réplica no vuelve a contar y una nota revertida tampoco', async () => {
+    // La falla inyectada salta al encolar el ticket, así que la caja necesita su impresora (antes de medir).
+    await impresoraEnS1(ctx, esc, cierres);
     const o = await boleta();
     const mala = await boleta();
     const cuerpo = cuerpoNota({
