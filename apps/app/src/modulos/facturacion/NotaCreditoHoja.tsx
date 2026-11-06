@@ -137,7 +137,7 @@ export function NotaCreditoHoja({ comprobante, base, volver, onCerrar }: Props) 
   //  - Con esta hoja abierta y un envío suyo sin respuesta (un 500, un corte), la hoja muestra la nota emitida, leída por
   //    su comprobante, igual que tras un 201: así nadie toca «Emitir» otra vez y saca una segunda nota.
   //  - Si la hoja se abre después, el `id` se suelta en silencio.
-  const { soltarSiEs, soltarPorVista, idDelIntento } = ajuste;
+  const { soltarSiEs, soltarPorVista, retenerSiSigueVivo, idDelIntento } = ajuste;
   const notasDelComprobante = comprobante.notasCredito;
   const tipoEnviado = useRef<TipoNotaCredito | null>(null);
   // Esta hoja se abrió (o estuvo) esperando la respuesta de una nota anterior: si la nota aparece, la muestra.
@@ -148,8 +148,9 @@ export function NotaCreditoHoja({ comprobante, base, volver, onCerrar }: Props) 
     const emitida =
       id === null ? undefined : (notasDelComprobante ?? []).find((n) => n.notaId === id);
     if (id === null || emitida === undefined) return;
-    const tipoDeLaNota = tipoEnviado.current ?? (esperaba.current ? emitida.tipo : null);
-    if (tipoDeLaNota === null) {
+    // Solo una hoja que mandó un envío o que estuvo esperando uno muestra la nota; las demás solo sueltan el `id`. El `id` no
+    // se suelta mientras su envío siga vivo (su propia respuesta lo suelta).
+    if (tipoEnviado.current === null && !esperaba.current) {
       soltarPorVista(id);
       return;
     }
@@ -165,7 +166,11 @@ export function NotaCreditoHoja({ comprobante, base, volver, onCerrar }: Props) 
         soltarPorVista(id);
         if (!ajuste.sigueMontada()) return;
         setEnviando(false);
-        setHecha({ respuesta: { nota: detalle }, tipo: tipoDeLaNota });
+        // La nota se describe con lo que ella dice (tipo y si fue un cambio a factura), no con lo que la persona tenía elegido.
+        const tipoDeLaNota: TipoNotaCredito = detalle.nota?.cambioAFactura
+          ? 'CAMBIO_A_FACTURA'
+          : (detalle.nota?.tipo ?? emitida.tipo);
+        setHecha((previa) => previa ?? { respuesta: { nota: detalle }, tipo: tipoDeLaNota });
       } catch {
         // Sin poder leer la nota se sigue como estaba: la próxima relectura lo intenta otra vez.
         leyendoLaNota.current = false;
@@ -210,6 +215,12 @@ export function NotaCreditoHoja({ comprobante, base, volver, onCerrar }: Props) 
           tipo: tipoDeLaRespuesta(llegada.respuesta as NotaCreditoRespuesta),
         }
       : null;
+  // Una vez que la hoja muestra la nota queda fija: ninguna relectura ni respuesta tardía la devuelve al formulario.
+  useEffect(() => {
+    if (hechaPorLaEspera !== null) setHecha((previa) => previa ?? hechaPorLaEspera);
+    // Solo importa la respuesta que llega; `hechaPorLaEspera` se arma de nuevo en cada vuelta.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [llegada, esperadoId]);
   const hechaVista = hecha ?? hechaPorLaEspera;
   // La API reconoció el `id` con otra devolución: la nota puede ya estar emitida y no se emite otra hasta revisar.
   const [porRevisar, setPorRevisar] = useState(false);
@@ -437,7 +448,9 @@ export function NotaCreditoHoja({ comprobante, base, volver, onCerrar }: Props) 
         queryFn: ({ signal }) => leerComprobante(comprobante.id, signal),
         staleTime: 0,
       });
+      // Si el envío sigue vivo, se retiene hasta que termine: revisar no habilita otro envío mientras tanto.
       if (id !== null && (leido.notasCredito ?? []).some((n) => n.notaId === id)) {
+        retenerSiSigueVivo(id);
         soltarPorVista(id);
       }
       onCerrar();

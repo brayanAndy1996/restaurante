@@ -22,6 +22,12 @@ export interface ResultadoDeEnvio {
   respuesta: unknown;
 }
 const RESULTADOS = new Map<string, ResultadoDeEnvio>();
+/**
+ * Envíos vivos que la persona pidió revisar («Revisar el comprobante»): hasta que terminen, su intento no se suelta ni
+ * siquiera porque el comprobante ya muestre la nota, y ninguna hoja manda otro envío de ese comprobante.
+ */
+const RETENIDOS = new Set<string>();
+const llaveDe = (clave: string, id: string) => `${clave}|${id}`;
 const oyentes = new Set<() => void>();
 const avisar = () => oyentes.forEach((o) => o());
 
@@ -65,10 +71,22 @@ export function registrarEnvioVivo(clave: string, id: string): () => void {
     const actual = ENVIOS_VIVOS.get(clave);
     const n = (actual?.get(id) ?? 0) - 1;
     if (n > 0) actual?.set(id, n);
-    else actual?.delete(id);
+    else {
+      actual?.delete(id);
+      RETENIDOS.delete(llaveDe(clave, id));
+    }
     avisar();
   };
 }
+
+/** La persona revisó el comprobante con ese envío aún vivo: el intento se queda hasta que el envío termine. */
+export function retenerHastaSuRespuesta(clave: string, id: string): void {
+  RETENIDOS.add(llaveDe(clave, id));
+  avisar();
+}
+
+export const estaRetenido = (clave: string, id: string): boolean =>
+  RETENIDOS.has(llaveDe(clave, id)) && hayEnvioVivo(clave, id);
 
 /** ¿Hay un envío vivo del intento `clave` con ese `id`? */
 export const hayEnvioVivo = (clave: string, id: string): boolean =>
@@ -79,6 +97,7 @@ export function olvidarIntentosRecordados(): void {
   INTENTOS.clear();
   ENVIOS_VIVOS.clear();
   RESULTADOS.clear();
+  RETENIDOS.clear();
   avisar();
 }
 

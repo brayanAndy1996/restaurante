@@ -7,12 +7,14 @@ import { ahoraDelServidor, nuevaClaveDeIdempotencia } from '../../lib/api';
 import { useEnvioPendiente } from '../../lib/envios';
 import {
   alCambiarLosIntentos,
+  estaRetenido,
   guardarIntento,
   guardarResultadoDeEnvio,
   hayEnvioVivo,
   leerIntento,
   leerResultadoDeEnvio,
   registrarEnvioVivo,
+  retenerHastaSuRespuesta,
   type IntentoRecordado,
 } from '../../lib/intentos-recordados';
 import { ErrorApi } from '../../lib/errores';
@@ -166,8 +168,8 @@ export function useAjusteConClave(opciones: { recordarComo?: string } = {}) {
   }
 
   /**
-   * Suelta el intento recordado solo si es el de ese `id`: la respuesta final del envío con ese `id`, o el comprobante que ya
-   * muestra su nota. Otra pantalla pudo recordar otro intento mientras tanto (una respuesta tardía no lo borra).
+   * Suelta el intento recordado solo si es el de ese `id` y no queda un envío vivo con él: la respuesta final del envío con
+   * ese `id`, o el comprobante que ya muestra su nota cuando ese envío ya terminó. Otra pantalla pudo recordar otro intento mientras tanto (una respuesta tardía no lo borra).
    */
   function soltarSiEs(id: string) {
     // Con un envío vivo de ese `id` no se suelta: su respuesta final es la que lo suelta.
@@ -175,9 +177,18 @@ export function useAjusteConClave(opciones: { recordarComo?: string } = {}) {
     if (intento.current?.id === id) intento.current = null;
   }
 
-  /** La nota con ese `id` ya se ve en el comprobante leído: salió, y su envío (si sigue vivo) solo traerá la réplica. */
+  /**
+   * La nota con ese `id` ya se ve en el comprobante leído: salió, y su envío (si sigue vivo) solo traerá la réplica, así que el
+   * intento se suelta, salvo que la persona ya haya pedido revisarlo con el envío vivo (entonces espera su respuesta).
+   */
   function soltarPorVista(id: string) {
+    if (memoria !== undefined && estaRetenido(memoria, id)) return;
     if (intento.current?.id === id) intento.current = null;
+  }
+
+  /** La persona revisó el comprobante con ese envío todavía vivo: no se habilita otro hasta que termine. */
+  function retenerSiSigueVivo(id: string) {
+    if (memoria !== undefined && hayEnvioVivo(memoria, id)) retenerHastaSuRespuesta(memoria, id);
   }
 
   /** El `id` del intento recordado (el de la escritura que se mandó y aún no tiene respuesta final), si lo hay. */
@@ -199,9 +210,10 @@ export function useAjusteConClave(opciones: { recordarComo?: string } = {}) {
 
   return {
     ejecutar,
+    soltarPorVista,
+    retenerSiSigueVivo,
     esperandoRespuestaAnterior,
     resultadoDelEnvio,
-    soltarPorVista,
     soltarSiEs,
     idDelIntento,
     ventana,
