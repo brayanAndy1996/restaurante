@@ -43,6 +43,8 @@ const CLASIFICADAS = [
   'GET /facturacion/comprobantes/:id/pdf',
   'GET /facturacion/comprobantes/:id/enlace',
   'GET /facturacion/alertas',
+  // T40: la nota de crédito (`EMITIR_NOTA_CREDITO` y `FACTURACION`).
+  'POST /notas-credito',
 ];
 
 /** Los prefijos de 6a que la clasificación protegida de 6a (criterio 98) vigila. */
