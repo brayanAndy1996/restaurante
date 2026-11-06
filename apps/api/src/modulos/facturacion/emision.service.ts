@@ -614,10 +614,7 @@ export class EmisionService {
     try {
       return await this.series.tomarNumero(cajaId, tipo, emisorId);
     } catch (error) {
-      if (error instanceof ErrorAplicacion && error.getStatus() === 409) {
-        const cuerpo = error.getResponse() as { codigo?: string };
-        if (cuerpo.codigo === 'SIN_SERIE') throw sinSerieDeNotas();
-      }
+      if (error instanceof ErrorAplicacion && error.codigo === 'SIN_SERIE') throw sinSerieDeNotas();
       throw error;
     }
   }

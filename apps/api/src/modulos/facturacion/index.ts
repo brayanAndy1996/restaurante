@@ -14,7 +14,7 @@ export type {
   ResolutorImpresoraDeCaja,
   ResolutorPagosDeCobro,
 } from './impresora-de-caja';
-export { RegistroAlcanceDeTurnos } from './alcance-de-turnos';
+export { RegistroAlcanceDeTurnos, veTodosLosTurnos } from './alcance-de-turnos';
 export type { ResolutorResponsableDeTurno } from './alcance-de-turnos';
 export type {
   DatosDeReemision,

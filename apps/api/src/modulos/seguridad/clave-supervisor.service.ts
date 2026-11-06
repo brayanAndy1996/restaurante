@@ -65,13 +65,21 @@ interface FilaAutorizador {
  */
 const claveInvalida = () => new ErrorAplicacion(403, 'CLAVE_INVALIDA', 'La clave no es válida');
 
+/** La acción a la que se ata cada variante del objetivo de una autorización. */
+const ACCION_DEL_OBJETIVO = {
+  DESCUENTO: 'APLICAR_DESCUENTO',
+  CORTESIA: 'APLICAR_CORTESIA',
+  NOTA_CREDITO: 'EMITIR_NOTA_CREDITO',
+} as const;
+
 /**
- * Historia 006, criterio 40: el `objetivo` solo acompaña a las acciones que ata (un descuento a `APLICAR_DESCUENTO` y
- * una cortesía a `APLICAR_CORTESIA`); otra combinación es una entrada incoherente: 400 sin contar fallo.
+ * Historia 006, criterios 40 y 145: el `objetivo` solo acompaña a las acciones que ata (un descuento a
+ * `APLICAR_DESCUENTO`, una cortesía a `APLICAR_CORTESIA` y una nota de crédito a `EMITIR_NOTA_CREDITO`); otra
+ * combinación es una entrada incoherente: 400 sin contar fallo.
  */
 function exigirObjetivoCoherente(entrada: AutorizacionEntrada): void {
   if (entrada.objetivo === undefined) return;
-  const esperada = entrada.objetivo.tipo === 'DESCUENTO' ? 'APLICAR_DESCUENTO' : 'APLICAR_CORTESIA';
+  const esperada = ACCION_DEL_OBJETIVO[entrada.objetivo.tipo];
   if (entrada.accion !== esperada) {
     throw new ErrorAplicacion(400, 'DATOS_INVALIDOS', 'Los datos enviados no son válidos', [
       {
