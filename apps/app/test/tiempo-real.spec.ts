@@ -122,7 +122,7 @@ describe('la conexión de la sesión', () => {
     socket.conectar();
     opcionesDeInvalidacion.length = 0;
     socket.desdeElServidor('salon.cambio', { mesaIds: [], ordenId: ORDEN });
-    expect(opcionesDeInvalidacion).toEqual([undefined]);
+    expect(opcionesDeInvalidacion).toEqual([undefined, undefined]);
   });
 
   it('se cierra al salir de la sesión', async () => {
@@ -196,19 +196,39 @@ describe('qué consulta vuelve a pedirse con cada evento', () => {
   it('salon.cambio refresca el mapa', async () => {
     const socket = await conectada();
     socket.desdeElServidor('salon.cambio', { mesaIds: [], ordenId: ORDEN });
-    expect(invalidadas).toEqual([[...CLAVES_TIEMPO_REAL.salon]]);
+    expect(invalidadas).toEqual([[...CLAVES_TIEMPO_REAL.salon], [...CLAVES_TIEMPO_REAL.porCobrar]]);
   });
 
-  it('orden.cambio refresca esa orden y el mapa (que muestra su total)', async () => {
+  it('orden.cambio refresca esa orden, el mapa (que muestra su total) y «Por cobrar»', async () => {
     const socket = await conectada();
     socket.desdeElServidor('orden.cambio', { ordenId: ORDEN });
-    expect(invalidadas).toEqual([['orden', ORDEN], [...CLAVES_TIEMPO_REAL.salon]]);
+    expect(invalidadas).toEqual([
+      ['orden', ORDEN],
+      [...CLAVES_TIEMPO_REAL.salon],
+      [...CLAVES_TIEMPO_REAL.porCobrar],
+    ]);
   });
 
   it('un orden.cambio mal formado refresca todas las órdenes en vez de ninguna', async () => {
     const socket = await conectada();
     socket.desdeElServidor('orden.cambio', { nada: true });
-    expect(invalidadas).toEqual([['orden'], [...CLAVES_TIEMPO_REAL.salon]]);
+    expect(invalidadas).toEqual([
+      ['orden'],
+      [...CLAVES_TIEMPO_REAL.salon],
+      [...CLAVES_TIEMPO_REAL.porCobrar],
+    ]);
+  });
+
+  it('«Por cobrar» que no está en pantalla se descarta: al abrirla sale el esqueleto y no una cuenta vieja', async () => {
+    const clave = [...CLAVES_TIEMPO_REAL.porCobrar, S1];
+    cliente.setQueryData(clave, [{ ordenId: 'vieja' }]);
+    const socket = await conectada();
+    socket.desdeElServidor('salon.cambio', { mesaIds: [], ordenId: ORDEN });
+    expect(cliente.getQueryData(clave)).toBeUndefined();
+    // Lo de otras pantallas no se toca.
+    cliente.setQueryData(['salon', 'x'], 1);
+    socket.desdeElServidor('salon.cambio', { mesaIds: [], ordenId: ORDEN });
+    expect(cliente.getQueryData(['salon', 'x'])).toBe(1);
   });
 
   it('una comanda nueva refresca la cocina', async () => {
