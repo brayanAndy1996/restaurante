@@ -379,7 +379,7 @@ describe('criterios 133 y 135 · alertas y panel de la empresa B (una sucursal, 
       id: c1.comprobanteId,
       estado: 'ACEPTADO',
       simulado: true,
-      pdfDisponible: false,
+      pdfDisponible: true,
     });
     expect(detalle.envio).toMatchObject({ estado: 'TERMINADO', intentos: 3 });
     expect(detalle.intentos).toHaveLength(4);

@@ -59,6 +59,17 @@ beforeEach(async () => {
   ctx.publicador.limpiar();
 });
 
+/** Los archivos que entrega el PSE (XML y CDR) de un comprobante: el PDF propio (criterio 159) se trata aparte. */
+const archivosDelPse = (comprobanteId: string) =>
+  ctx.almacenC
+    .claves()
+    .filter((k) => k.includes(comprobanteId) && !k.endsWith('/representacion.pdf'));
+/** El PDF de un comprobante aceptado: una sola vez, bajo la clave fija de su empresa. */
+const pdfsDe = (comprobanteId: string) =>
+  ctx.almacenC
+    .claves()
+    .filter((k) => k.includes(comprobanteId) && k.endsWith('/representacion.pdf'));
+
 async function nuevoCobro(factura = false): Promise<Cobrado> {
   const turnoId = await turnoDe(ctx, A(), 'cajero', 'S1', 'caja1');
   return factura ? cobrarFactura(ctx, A(), { turnoId }) : cobrarLomo(ctx, A(), { turnoId });
@@ -151,7 +162,7 @@ describe('criterio 131 · el XML y el CDR en el almacén privado', () => {
     const c = await nuevoCobro();
     await procesar(ctx, A().id, c.comprobanteId);
     const base = `comprobantes/${A().id}/${c.comprobanteId}/`;
-    const claves = ctx.almacenC.claves().filter((k) => k.includes(c.comprobanteId));
+    const claves = archivosDelPse(c.comprobanteId);
     expect(claves).toHaveLength(2);
     expect(claves.every((k) => k.startsWith(base))).toBe(true);
     expect(claves.some((k) => k === `${base}documento.xml`)).toBe(true);
@@ -159,6 +170,9 @@ describe('criterio 131 · el XML y el CDR en el almacén privado', () => {
     const fila = await comprobanteFila(c.comprobanteId);
     expect(claves).toContain(fila.xml_clave);
     expect(claves).toContain(fila.cdr_clave);
+    // Además del XML y el CDR, el PDF propio de un aceptado, una sola vez.
+    expect(pdfsDe(c.comprobanteId)).toEqual([`${base}representacion.pdf`]);
+    expect(fila.pdf_clave).toBe(`${base}representacion.pdf`);
     // Ningún archivo de comprobante cae en el almacén (público) de las fotos.
     expect(ctx.almacen.claves().filter((k) => k.includes(c.comprobanteId))).toEqual([]);
     expect(ctx.almacen.claves().filter((k) => k.startsWith('comprobantes/'))).toEqual([]);
@@ -186,9 +200,8 @@ describe('criterio 131 · el XML y el CDR en el almacén privado', () => {
     expect(fila.xml_clave).toBe(`comprobantes/${A().id}/${c.comprobanteId}/documento.xml`);
     expect(fila.cdr_clave).toBeNull();
     expect(fila.referencia_pse).toBeNull();
-    expect(ctx.almacenC.claves().filter((k) => k.includes(c.comprobanteId))).toEqual([
-      fila.xml_clave,
-    ]);
+    expect(archivosDelPse(c.comprobanteId)).toEqual([fila.xml_clave]);
+    expect(pdfsDe(c.comprobanteId)).toHaveLength(1);
   });
 
   it('sin XML ni CDR no guarda ningún archivo', async () => {
@@ -213,7 +226,8 @@ describe('criterio 131 · el XML y el CDR en el almacén privado', () => {
     expect(fila.xml_clave).toBeNull();
     expect(fila.cdr_clave).toBeNull();
     expect(fila.hash).toBeNull();
-    expect(ctx.almacenC.claves().filter((k) => k.includes(c.comprobanteId))).toEqual([]);
+    expect(archivosDelPse(c.comprobanteId)).toEqual([]);
+    expect(pdfsDe(c.comprobanteId)).toHaveLength(1);
   });
 });
 
