@@ -1,5 +1,9 @@
 import { Inject, Injectable } from '@nestjs/common';
-import type { ClienteComprobanteEntrada, ComprobanteRespuesta } from '@restaurante/contratos';
+import type {
+  ClienteComprobanteEntrada,
+  ComprobanteRespuesta,
+  NotaCreditoEntradaValidada,
+} from '@restaurante/contratos';
 import {
   diaOperativo,
   fechaLima,
@@ -10,8 +14,11 @@ import {
   type MedioPago,
   type ParteCalculada,
   type TipoComprobante,
+  type TipoDocumentoElectronico,
+  type TipoNotaCredito,
 } from '@restaurante/dominio';
 import { QueryTypes, type Sequelize } from 'sequelize';
+import { noImplementado } from '../../nucleo/errores/no-implementado';
 import { CONEXION_API } from '../../nucleo/base-de-datos';
 import { ContextoEmpresa } from '../../nucleo/contexto-empresa';
 import { ErrorAplicacion } from '../../nucleo/errores/error-aplicacion';
@@ -103,6 +110,55 @@ export interface ComprobanteEmitido {
   impresion: 'EN_COLA' | 'SIN_IMPRESORA';
   /** El instante de la emisión: la fecha del comprobante y la hora del cobro. */
   emitidoEn: Date;
+}
+
+// ---------------------------------------------------------------------------------------------------
+// Entrega 6b: notas de crédito y reemisión (criterios 134, 143 a 157). Tipos provisionales de la fase A: T40 y T32 los
+// ajustan al implementar.
+// ---------------------------------------------------------------------------------------------------
+
+/**
+ * Una nota de crédito ya validada y calculada, con el original bloqueado (`prepararNotaCredito`). Caja la usa para tomar el
+ * turno de la devolución después del original y antes del emisor (plan, "Orden de los cerrojos"); es opaca para ella.
+ */
+export interface NotaCreditoPreparada {
+  originalId: string;
+  tipoNota: TipoNotaCredito;
+  motivo: string;
+  /** El total de la nota que recalculó el servidor (texto con 2 decimales). */
+  total: string;
+  /** La caja del comprobante original: la de la nota si no hay devolución. */
+  cajaDelOriginalId: string;
+  /** El responsable del turno del original: el de la nota si no hay devolución (criterio 169). */
+  responsableDelOriginalId: string;
+}
+
+/** Lo que caja pone al numerar la nota (`numerarNotaCredito`). */
+export interface DatosParaNumerarNota {
+  /** La caja de la operación: la del turno de la devolución o, sin devolución, la del original. */
+  cajaId: string;
+  /** El turno de la devolución y su responsable; `null` sin devolución. */
+  turno: { id: string; responsableId: string } | null;
+  /** La impresora de la caja ya resuelta (`ImpresionPuerto.impresoraDeLaCaja`); `null` si no hay. */
+  impresora: { id: string; gaveta: boolean } | null;
+  /** Lo que se devuelve en efectivo abre la gaveta con el ticket de la nota (criterio 150). */
+  devolucionEnEfectivo: boolean;
+  /** Los pagos de la devolución, para el ticket. */
+  pagos: readonly PagoParaTicket[];
+  redondeo: string;
+  cliente: ClienteComprobanteEntrada | null;
+}
+
+/** La nota emitida y, en un cambio a factura, la factura nueva (criterio 151). */
+export interface NotaCreditoEmitida {
+  nota: ComprobanteEmitido;
+  factura: ComprobanteEmitido | null;
+}
+
+/** Lo que pide "Emitir otro" (criterio 134). */
+export interface DatosDeReemision {
+  tipo: TipoDocumentoElectronico;
+  cliente?: ClienteComprobanteEntrada;
 }
 
 @Injectable()
@@ -223,6 +279,42 @@ export class EmisionService {
       impresion: trabajoId === null ? 'SIN_IMPRESORA' : 'EN_COLA',
       emitidoEn: instante,
     };
+  }
+
+  /**
+   * Primera mitad de una nota de crédito (historia 006, 6b, criterios 143 a 148): bloquea el original (`FOR UPDATE`),
+   * valida que se pueda acreditar (404 / 403 / 409 `COMPROBANTE_NO_ACEPTADO` / `COMPROBANTE_ANULADO` / 422
+   * `NOTA_CREDITO_INVALIDA`), lee las notas que cuentan, calcula con `calcularNotaCredito` y compara el total (409
+   * `NOTA_CREDITO_CAMBIO`). Fase A: lanza `Error('No implementado')` hasta T40.
+   */
+  prepararNotaCredito(entrada: NotaCreditoEntradaValidada): Promise<NotaCreditoPreparada> {
+    void entrada;
+    return Promise.reject(noImplementado());
+  }
+
+  /**
+   * Segunda mitad: toma el emisor `FOR SHARE`, numera con la serie de nota de la caja de la operación (y, en un cambio,
+   * después la serie `FACTURA`), inserta la nota (y la factura) con sus líneas, sus envíos, la cuota y los tickets
+   * (criterios 149 a 151, 155 y 157). Fase A: lanza `Error('No implementado')` hasta T40.
+   */
+  numerarNotaCredito(
+    preparada: NotaCreditoPreparada,
+    datos: DatosParaNumerarNota,
+  ): Promise<NotaCreditoEmitida> {
+    void preparada;
+    void datos;
+    return Promise.reject(noImplementado());
+  }
+
+  /**
+   * "Emitir otro" de un comprobante `RECHAZADO` (criterio 134): copia sus líneas y totales con otro número y registra su
+   * envío. 409 `COMPROBANTE_NO_RECHAZADO` / `YA_REEMPLAZADO` / `SIN_SERIE`. Fase A: lanza `Error('No implementado')` hasta
+   * T32.
+   */
+  reemitir(comprobanteId: string, datos: DatosDeReemision): Promise<ComprobanteEmitido> {
+    void comprobanteId;
+    void datos;
+    return Promise.reject(noImplementado());
   }
 
   /**

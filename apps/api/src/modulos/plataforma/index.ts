@@ -48,3 +48,7 @@ export { PlataformaSesionesController } from './plataforma-sesiones.controller';
 export { SuscripcionesController } from './suscripciones.controller';
 export { UltimaEmisionDeEmisor } from './ultima-emision';
 export type { ConsultaUltimaEmision } from './ultima-emision';
+export { ConfiguracionPseService } from './configuracion-pse.service';
+export { EmpresasConsulta } from './empresas-consulta';
+export { FacturacionPlataformaService } from './facturacion-plataforma.service';
+export type { ConfiguracionPseDescifrada } from './emisores.service';

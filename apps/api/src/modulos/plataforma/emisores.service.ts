@@ -10,6 +10,7 @@ import { QueryTypes, type Sequelize } from 'sequelize';
 import { CONEXION_API, SQLSTATE, sqlstateDe } from '../../nucleo/base-de-datos';
 import { ContextoEmpresa } from '../../nucleo/contexto-empresa';
 import { ErrorAplicacion } from '../../nucleo/errores/error-aplicacion';
+import { noImplementado } from '../../nucleo/errores/no-implementado';
 import { RELOJ, type Reloj } from '../../nucleo/reloj';
 import { AuditoriaService } from '../auditoria';
 import { MODELOS_API, type EmisorModelo, type Modelos } from './modelos';
@@ -43,6 +44,18 @@ export interface DatosParaComprobante {
 }
 
 /**
+ * La configuración del PSE de un emisor ya descifrada (historia 006, criterio 122): solo la usan `RegistroDeConectores` y el
+ * worker, y la credencial existe en memoria únicamente durante una llamada al PSE.
+ */
+export interface ConfiguracionPseDescifrada {
+  modo: 'SIMULADO' | 'REAL';
+  /** El `PSE_CONECTOR` con que se pasó a `REAL`; `null` en `SIMULADO`. */
+  conector: string | null;
+  /** `null` si no tiene credencial o si no se pudo descifrar (el intento termina en `ERROR_CONFIGURACION`). */
+  credencial: Readonly<Record<string, string>> | null;
+}
+
+/**
  * Emisores de la empresa del contexto activo (RF-01). Debe llamarse dentro de `ContextoEmpresa.ejecutar`:
  * los modelos son los de la conexión de la API, así que con contexto la RLS limita todo a la propia empresa.
  */
@@ -56,6 +69,16 @@ export class EmisoresService {
     @Inject(AuditoriaService) private readonly auditoria: AuditoriaService,
     @Inject(RELOJ) private readonly reloj: Reloj,
   ) {}
+
+  /**
+   * La configuración del PSE del emisor, con la credencial descifrada (historia 006, 6b, criterios 122 y 123); `null` si el
+   * emisor no tiene configuración. Con el contexto de la empresa de la petición o del trabajo (RLS). Fase A: lanza
+   * `Error('No implementado')` hasta T30.
+   */
+  configuracionPse(emisorId: string): Promise<ConfiguracionPseDescifrada | null> {
+    void emisorId;
+    return Promise.reject(noImplementado());
+  }
 
   async listar(): Promise<EmisorRespuesta[]> {
     const filas = await this.modelos.Emisor.findAll({

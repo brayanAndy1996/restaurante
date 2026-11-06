@@ -15,7 +15,12 @@ import {
 } from '../../nucleo/base-de-datos/conexion-plataforma';
 import { AuditoriaModule } from '../auditoria';
 import { MODELOS_API, MODELOS_PLATAFORMA, definirModelos } from './modelos';
+import { ConfiguracionPseController } from './configuracion-pse.controller';
+import { ConfiguracionPseService } from './configuracion-pse.service';
 import { EmisoresController } from './emisores.controller';
+import { EmpresasConsulta } from './empresas-consulta';
+import { FacturacionPlataformaController } from './facturacion-plataforma.controller';
+import { FacturacionPlataformaService } from './facturacion-plataforma.service';
 import { EmisoresService } from './emisores.service';
 import { OperacionPlataforma } from './operacion-plataforma';
 import { PlanesController } from './planes.controller';
@@ -48,6 +53,8 @@ import { SuscripcionesPlataformaService } from './suscripciones-plataforma.servi
     PlataformaEmpresasController,
     PlanesController,
     SuscripcionesController,
+    ConfiguracionPseController,
+    FacturacionPlataformaController,
   ],
   providers: [
     {
@@ -76,6 +83,9 @@ import { SuscripcionesPlataformaService } from './suscripciones-plataforma.servi
     PlanesService,
     SuscripcionesPlataformaService,
     SuperadministradorGuard,
+    ConfiguracionPseService,
+    FacturacionPlataformaService,
+    EmpresasConsulta,
   ],
   exports: [
     OperacionPlataforma,
@@ -87,6 +97,9 @@ import { SuscripcionesPlataformaService } from './suscripciones-plataforma.servi
     SuscripcionModule,
     SucursalesConsultaModule,
     SuperadministradorGuard,
+    ConfiguracionPseService,
+    FacturacionPlataformaService,
+    EmpresasConsulta,
   ],
 })
 export class PlataformaModule implements OnModuleInit, OnApplicationShutdown {
