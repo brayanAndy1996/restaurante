@@ -152,7 +152,19 @@ export async function turnoPorApi(request: APIRequestContext, page: Page) {
 /** Desde «Por cobrar» entra a la cuenta de una mesa y toca «Cobrar S/ …» hasta ver la pantalla del cobro. */
 export async function abrirElCobroDeLaMesa(page: Page, mesa: string): Promise<void> {
   await irACaja(page);
+  // «Por cobrar» enseña primero la lista que ya tenía y la renueva al abrirse: una cuenta de una mesa que se cobró y se volvió
+  // a abrir (otra orden con el mismo nombre de mesa) sigue ahí hasta que llega la lista nueva. Se espera esa respuesta
+  // para no tocar la cuenta vieja («Esta cuenta ya no está abierta»).
+  const listaNueva = page
+    .waitForResponse(
+      (r) => r.request().method() === 'GET' && new URL(r.url()).pathname === '/cuentas',
+      {
+        timeout: 5_000,
+      },
+    )
+    .catch(() => null);
   await page.getByRole('button', { name: 'Por cobrar', exact: true }).click();
+  await listaNueva;
   await page.getByRole('link', { name: new RegExp(`^Mesa ${mesa}, saldo`) }).click();
   await expect(
     page.getByRole('heading', { name: `Cobrar · Mesa ${mesa}`, level: 1 }),

@@ -70,9 +70,9 @@ const enTableta = () => test.info().project.name === 'tablet';
 const equipoBase = (): BrowserContextOptions => (enTableta() ? TABLETA : CELULAR);
 
 /**
- * DEFECTOS ENCONTRADOS POR ESTA PRUEBA EN LA PWA (se reportaron al orquestador; no se tocó el código de producción). Cada
- * prueba afectada se salta (`test.fixme`) mientras la constante valga `true`; al corregir el defecto se pone en `false` y
- * la prueba debe pasar sin más cambios.
+ * DEFECTOS ENCONTRADOS POR ESTA PRUEBA EN LA PWA. Ya están corregidos (las constantes valen `false` y las pruebas corren);
+ * se dejan como memoria de lo que cada prueba protege. Si reaparece uno, se pone su constante en `true` para saltar solo
+ * la prueba afectada mientras se arregla.
  *
  * 1. La hoja «Nota de crédito» se cierra sola. `ComprobanteDetallePagina` la monta con `notaAbierta && puedeNota`, y
  *    `puedeNota` deja de ser verdad apenas SUNAT acepta una nota de anulación o de cambio a factura (el original pasa a
@@ -83,8 +83,8 @@ const equipoBase = (): BrowserContextOptions => (enTableta() ? TABLETA : CELULAR
  *    rechazado otra vez → «Ver el comprobante nuevo», el detalle del nuevo sigue mostrando «Comprobante nuevo emitido»
  *    y no ofrece «Emitir otro» hasta recargar.
  */
-const DEFECTO_LA_HOJA_DE_NOTA_SE_CIERRA_SOLA = true;
-const DEFECTO_EL_DETALLE_CONSERVA_LA_REEMISION_ANTERIOR = true;
+const DEFECTO_LA_HOJA_DE_NOTA_SE_CIERRA_SOLA = false;
+const DEFECTO_EL_DETALLE_CONSERVA_LA_REEMISION_ANTERIOR = false;
 
 let e: EscenarioDeSalon;
 let emulador: EmuladorEscPos;
@@ -550,6 +550,8 @@ test('compartir por WhatsApp arma el enlace del PDF y un contexto sin sesión lo
       page.getByRole('button', { name: 'Abrir WhatsApp', exact: true }).click(),
     ]);
     await expect.poll(() => wa.length, { message: 'la pestaña fue a wa.me' }).toBeGreaterThan(0);
+    // Cerrar la pestaña mientras Chromium aún carga la página simulada puede dejar el cierre colgado: se espera a que termine.
+    await pestana.waitForLoadState('load');
     await pestana.close();
     const destino = new URL(wa[0]!);
     expect(destino.origin + destino.pathname).toBe('https://wa.me/51987654321');
@@ -600,6 +602,8 @@ test('compartir por WhatsApp arma el enlace del PDF y un contexto sin sesión lo
       page.getByRole('button', { name: 'Abrir WhatsApp', exact: true }).click(),
     ]);
     await expect.poll(() => wa.length).toBeGreaterThan(0);
+    // Cerrar la pestaña mientras Chromium aún carga la página simulada puede dejar el cierre colgado: se espera a que termine.
+    await pestana.waitForLoadState('load');
     await pestana.close();
     const destino = new URL(wa[0]!);
     expect(destino.origin + destino.pathname).toBe('https://wa.me/');

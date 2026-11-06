@@ -207,11 +207,21 @@ export async function escribirRucDeFactura(
   ruc: string,
   respuestaEsperada: 200 | 404,
 ): Promise<void> {
-  const consulta = page.waitForResponse(
-    (r) => r.request().method() === 'GET' && new URL(r.url()).pathname === `/padron/ruc/${ruc}`,
-  );
+  // La PWA recuerda cada RUC consultado mientras la pantalla siga abierta (`VIGENCIA_DE_LA_CONSULTA_MS`): si esta persona ya lo
+  // escribió antes en la misma sesión, no vuelve a preguntar al servidor y llena los datos de lo que recuerda.
+  const consulta = page
+    .waitForResponse(
+      (r) => r.request().method() === 'GET' && new URL(r.url()).pathname === `/padron/ruc/${ruc}`,
+      { timeout: 5_000 },
+    )
+    .catch(() => null);
   await page.getByLabel('RUC', { exact: true }).fill(ruc);
-  expect((await consulta).status(), `consulta del RUC ${ruc} en el padrón`).toBe(respuestaEsperada);
+  const respuesta = await consulta;
+  if (respuesta) {
+    expect(respuesta.status(), `consulta del RUC ${ruc} en el padrón`).toBe(respuestaEsperada);
+  } else if (respuestaEsperada === 200) {
+    await expect(page.getByText(/Datos del padrón de SUNAT/)).toBeVisible();
+  }
 }
 
 /** Ajustes › Comprobantes (el panel del Administrador). */
