@@ -2,6 +2,7 @@ import type { APIRequestContext, Locator, Page } from '@playwright/test';
 import { expect } from '@playwright/test';
 import { fechaDeLima, llamarApi } from './ayudas';
 import { tokenPorApi } from './ayudas-caja';
+import type { Escritura } from './ayudas-carta';
 import { destino, type EscenarioDeSalon } from './ayudas-salon';
 
 /**
@@ -246,3 +247,39 @@ export async function emitirComprobanteNuevo(page: Page): Promise<string> {
   expect(recibida.request().headers()['idempotency-key']).toMatch(/\S/);
   return ((await recibida.json()) as { comprobante: { numero: string } }).comprobante.numero;
 }
+
+// --- Lo que la PWA le manda a la API ---------------------------------------------------------------------
+
+/** Las escrituras de la caja y de la facturación de 6b: cobros, comprobantes, notas de crédito, reemisión y reintento. */
+const ESCRITURA_DE_FACTURACION =
+  /^\/(turnos|comprobantes|ventas-mostrador|impresion|autorizaciones|notas-credito)(\/|$)|^\/cuentas\/[^/]+\/(cobros|descuentos|cortesias)(\/|$)|^\/facturacion\/comprobantes\/[^/]+\/(reemision|reintento)$/;
+
+/** Anota cada escritura (`POST`, `PUT`, `PATCH`, `DELETE`) de la caja y la facturación que hace la PWA, con su clave. */
+export function vigilarEscriturasDeFacturacion(page: Page): Escritura[] {
+  const escrituras: Escritura[] = [];
+  page.on('request', (peticion) => {
+    const metodo = peticion.method();
+    if (metodo === 'GET' || metodo === 'OPTIONS') return;
+    const ruta = new URL(peticion.url()).pathname;
+    if (!ESCRITURA_DE_FACTURACION.test(ruta)) return;
+    escrituras.push({ metodo, ruta, clave: peticion.headers()['idempotency-key'] });
+  });
+  return escrituras;
+}
+
+/** Va a Caja › Comprobantes (el panel del Supervisor y del Cajero, con sus turnos) y espera la lista. */
+export async function irAlPanelDeCaja(page: Page): Promise<void> {
+  await destino(page, 'Caja').click();
+  await page.getByRole('link', { name: 'Comprobantes', exact: true }).click();
+  await expect(page).toHaveURL(/\/caja\/comprobantes(\?.*)?$/);
+  await expect(page.getByRole('heading', { name: 'Comprobantes', level: 1 })).toBeVisible();
+}
+
+/** El valor de una fila de un bloque del reporte de caja («Efectivo que entró o salió» › «Egresos»). */
+export const filaDelReporte = (page: Page, bloque: string, etiqueta: string): Locator =>
+  page
+    .locator('.reporte__bloque')
+    .filter({ has: page.getByRole('heading', { name: bloque, exact: true }) })
+    .locator('.reporte__fila')
+    .filter({ has: page.locator('.reporte__etiqueta', { hasText: etiqueta }) })
+    .locator('.reporte__valor');

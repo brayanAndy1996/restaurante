@@ -20,7 +20,7 @@ import {
   esperarTicketCon,
   irACaja,
   prepararImpresionDeCaja,
-  vigilarEscriturasDeCaja,
+  darClaveDeSupervisor,
 } from './ayudas-caja';
 import { afirmarPantallaDeCelular, entrarEnCelular } from './ayudas-carta';
 import {
@@ -33,11 +33,18 @@ import {
   estadoDelComprobanteNuevo,
   limpiarElSimulador,
   rechazarRucEnElSimulador,
+  vigilarEscriturasDeFacturacion,
+  irAlPanelDeCaja,
+  filaDelReporte,
   abrirComprobanteDelPanel,
   prepararLaFacturacion,
 } from './ayudas-facturacion';
 import { crearSalonPorApi } from './ayudas-impresion';
-import { crearEscenarioDeSalon, type EscenarioDeSalon } from './ayudas-salon';
+import {
+  afirmarClavesDelSalon,
+  crearEscenarioDeSalon,
+  type EscenarioDeSalon,
+} from './ayudas-salon';
 
 /**
  * Facturación electrónica de la entrega 6b (historia 006, tarea T45, criterio 179), de punta a punta y sin ningún
@@ -68,7 +75,7 @@ const abiertos: BrowserContext[] = [];
 interface Persona {
   contexto: BrowserContext;
   page: Page;
-  escrituras: ReturnType<typeof vigilarEscriturasDeCaja>;
+  escrituras: ReturnType<typeof vigilarEscriturasDeFacturacion>;
 }
 let cajero: Persona;
 let mozo: Persona;
@@ -99,7 +106,7 @@ async function entrar(
 ): Promise<Persona> {
   const { contexto, page } = await entrarEnCelular(browser, persona, sucursal, opciones);
   abiertos.push(contexto);
-  return { contexto, page, escrituras: vigilarEscriturasDeCaja(page) };
+  return { contexto, page, escrituras: vigilarEscriturasDeFacturacion(page) };
 }
 
 const captura = (nombre: string) =>
@@ -299,4 +306,96 @@ test('un rechazo del simulador sale en el aviso del Supervisor y se corrige con 
     ).toBeVisible();
     await expect(sp.locator('.ui-banner').filter({ hasText: 'rechazado' })).toHaveCount(0);
   });
+});
+
+test('una devolución parcial con la clave del Supervisor sale en efectivo de la caja del Cajero y aparece en el X', async () => {
+  const { page } = cajero;
+  let boleta = '';
+
+  await test.step('el Mozo comanda dos lomos y una gaseosa y el Cajero cobra la boleta en efectivo (S/ 62.00)', async () => {
+    await abrirMesaYComandar(mozo.page, '1', [PLATOS.lomo, PLATOS.lomo, PLATOS.gaseosa]);
+    await abrirElCobroDeLaMesa(page, '1');
+    await page.getByRole('textbox', { name: 'Recibido' }).fill('70');
+    const cobro = await cobrarYEsperar(page);
+    boleta = cobro.comprobante.numero;
+    expect(boleta).toMatch(/^B001-\d{8}$/);
+    await expect(estadoAnteSunat(page)).toContainText('Aceptado por SUNAT', { timeout: 30_000 });
+  });
+
+  await test.step('desde Caja › Comprobantes abre la boleta aceptada y toca «Nota de crédito»', async () => {
+    await irAlPanelDeCaja(page);
+    await abrirComprobanteDelPanel(page, boleta);
+    await expect(estadoAnteSunat(page)).toContainText('Aceptado por SUNAT');
+    await page.getByRole('button', { name: 'Nota de crédito', exact: true }).click();
+    await expect(page.getByRole('dialog', { name: 'Nota de crédito' })).toBeVisible();
+  });
+
+  const hoja = page.getByRole('dialog', { name: 'Nota de crédito' });
+  await test.step('elige «Devolver ítems», una unidad de lomo y el motivo: el total sale de calcularNotaCredito', async () => {
+    await hoja
+      .getByRole('group', { name: 'Qué quieres hacer' })
+      .getByRole('button', { name: 'Devolver ítems', exact: true })
+      .click();
+    // Los dos lomos salieron en dos líneas de la boleta: se devuelve uno.
+    await hoja.getByRole('button', { name: 'Agregar una unidad de Lomo saltado' }).first().click();
+    await expect(hoja.getByRole('definition').filter({ hasText: 'S/ 28.00' })).toBeVisible();
+    await expect(hoja.getByText(/^Incluye IGV S\/\s4\.27 · 1 unidad$/)).toBeVisible();
+    await hoja.getByRole('button', { name: 'Producto en mal estado', exact: true }).click();
+    await expect(hoja.getByText('Sale de tu turno en Caja 1')).toBeVisible();
+    await page.waitForTimeout(400); // la hoja termina de subir
+    await page.screenshot({ path: captura('18-nota-de-credito-360') });
+    await afirmarPantallaDeCelular(page, 'Comprobante › Nota de crédito (devolución)');
+  });
+
+  await test.step('el Cajero pide la clave: el Supervisor ve lo que autoriza y la da; la nota sale devolviendo S/ 28.00 en efectivo', async () => {
+    emulador.limpiar();
+    await hoja.getByRole('button', { name: 'Pedir clave de supervisor' }).click();
+    const ventana = page.getByRole('dialog', { name: 'Clave de supervisor' });
+    await expect(ventana).toContainText(
+      `Nota de crédito · Devolución · ${boleta} · S/ 28.00 · devuelve S/ 28.00 en efectivo`,
+    );
+    await darClaveDeSupervisor(page, e.supervisor.pin);
+    await expect(hoja.getByText('Nota de crédito emitida')).toBeVisible();
+    await expect(hoja.getByText('Devuelto en efectivo')).toBeVisible();
+    await expect(hoja.getByRole('region', { name: 'Estado ante SUNAT' })).toContainText(
+      'Aceptado por SUNAT',
+      { timeout: 30_000 },
+    );
+    await page.screenshot({ path: captura('19-nota-emitida-360') });
+    await afirmarPantallaDeCelular(page, 'Comprobante › Nota de crédito emitida');
+  });
+
+  await test.step('el ticket de la nota llega al emulador con lo que modifica y abre la gaveta', async () => {
+    const ticket = await esperarTicketCon(emulador, 'NOTA DE CRÉDITO ELECTRÓNICA');
+    expect(ticket.texto).toContain(boleta);
+    expect(ticket.texto).toContain('Producto en mal estado');
+    expect(ticket.pulsosGaveta).toBe(1);
+    expect(ticket.qrs[0]).toContain('|07|BC01|');
+  });
+
+  await test.step('la boleta sigue «Aceptado» y lista su nota de crédito; el original no se anula', async () => {
+    await hoja.getByRole('button', { name: 'Listo', exact: true }).click();
+    await expect(estadoAnteSunat(page)).toContainText('Aceptado por SUNAT');
+    await expect(page.getByRole('link', { name: /^BC01-\d{8}$/ })).toBeVisible();
+  });
+
+  await test.step('el X del Cajero muestra la devolución en los egresos y la baja del efectivo esperado', async () => {
+    await irACaja(page);
+    await page.getByRole('button', { name: 'Reporte X', exact: true }).click();
+    await expect(page.getByText(/^Generado a las /)).toBeVisible();
+    await expect(filaDelReporte(page, 'Efectivo que entró o salió', 'Egresos')).toHaveText(
+      'S/ 28.00',
+    );
+    // 200.00 de fondo + 28.00 + 38.00 + 6.00 + 62.00 cobrados en efectivo − 28.00 devueltos.
+    await expect(filaDelReporte(page, 'Lo que debería haber en caja', 'Efectivo')).toHaveText(
+      'S/ 306.00',
+    );
+    await page.screenshot({ path: captura('20-reporte-x-con-devolucion-360'), fullPage: true });
+    await afirmarPantallaDeCelular(page, 'Caja › Reporte X con la devolución');
+  });
+
+  afirmarClavesDelSalon(cajero.escrituras, [
+    ['POST', /^\/notas-credito$/],
+    ['POST', /^\/autorizaciones$/],
+  ]);
 });
