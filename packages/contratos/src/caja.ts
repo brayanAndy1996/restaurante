@@ -65,7 +65,7 @@ export const tipoSerieSchema = z.enum(TIPOS_COMPROBANTE);
 export const montoDeCobroSchema = z
   .string()
   .regex(/^\d{1,12}(\.\d{1,2})?$/, 'Debe ser un monto con hasta 2 decimales');
-const montoDeCobroPositivoSchema = montoDeCobroSchema.refine(
+export const montoDeCobroPositivoSchema = montoDeCobroSchema.refine(
   (texto) => /[1-9]/.test(texto),
   'Debe ser mayor que 0',
 );
@@ -230,6 +230,10 @@ export const movimientoRespuestaSchema = z.object({
   motivo: z.string(),
   creadoEn: instanteSchema,
   creadoPor: personaRefSchema.nullable(),
+  /** 6b (criterio 150): el medio del movimiento; fuera del efectivo solo las devoluciones de una nota de crédito. */
+  medio: medioPagoSchema.optional(),
+  /** 6b: la nota de crédito que originó el egreso. */
+  comprobanteId: uuidSchema.nullable().optional(),
 });
 
 /**
@@ -298,6 +302,13 @@ export const reporteCajaSchema = z.object({
     egresos: z.string(),
     lista: z.array(movimientoRespuestaSchema),
   }),
+  /**
+   * 6b (criterio 136): las notas de crédito emitidas con este turno; `devuelto` = Σ de sus egresos. Las ventas de arriba
+   * no las incluyen.
+   */
+  notasCredito: z
+    .object({ cantidad: z.number().int().min(0), total: z.string(), devuelto: z.string() })
+    .optional(),
   /** Lo que debería haber de cada medio según el sistema (`esperadoDelTurno`), en el orden de `MEDIOS_PAGO`. */
   esperado: z.array(z.object({ medio: medioPagoSchema, monto: z.string() })),
   /** Solo en un turno cerrado. */

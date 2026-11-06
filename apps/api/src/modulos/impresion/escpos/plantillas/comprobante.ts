@@ -4,7 +4,7 @@ import {
   type BloqueTicket,
   type DocumentoTicket,
 } from '@restaurante/contratos';
-import type { MedioPago } from '@restaurante/dominio';
+import type { MedioPago, TipoDocumentoElectronico } from '@restaurante/dominio';
 import { ETIQUETA_DE_MEDIO, esCero } from './etiquetas-caja';
 import { ajustarAlPresupuesto } from './presupuesto';
 import { formatoMonto, juntarEnLineas, limpiarTexto, lineasDeMesas } from './texto';
@@ -22,7 +22,7 @@ import { formatoMonto, juntarEnLineas, limpiarTexto, lineasDeMesas } from './tex
 
 /** Lo que el ticket toma del comprobante; `ComprobanteRespuesta` (contratos) lo cumple tal cual. */
 export interface ComprobanteParaTicket {
-  tipo: 'BOLETA' | 'FACTURA';
+  tipo: TipoDocumentoElectronico;
   serie: string;
   correlativo: number;
   /** `B001-00000124`. */
@@ -78,10 +78,17 @@ export const TEXTO_PENDIENTE_DE_ENVIO = 'Comprobante pendiente de envío a SUNAT
 const NOMBRE_DEL_TIPO = {
   BOLETA: 'BOLETA DE VENTA ELECTRÓNICA',
   FACTURA: 'FACTURA ELECTRÓNICA',
+  NOTA_CREDITO_BOLETA: 'NOTA DE CRÉDITO ELECTRÓNICA',
+  NOTA_CREDITO_FACTURA: 'NOTA DE CRÉDITO ELECTRÓNICA',
 } as const;
 
 /** Códigos de SUNAT del tipo de comprobante y del documento del cliente (catálogos 01 y 06). */
-const CODIGO_DE_COMPROBANTE = { BOLETA: '03', FACTURA: '01' } as const;
+const CODIGO_DE_COMPROBANTE = {
+  BOLETA: '03',
+  FACTURA: '01',
+  NOTA_CREDITO_BOLETA: '07',
+  NOTA_CREDITO_FACTURA: '07',
+} as const;
 const CODIGO_DE_DOCUMENTO = { DNI: '1', CE: '4', RUC: '6', PASAPORTE: '7' } as const;
 
 /** `AAAA-MM-DD` → `DD/MM/AAAA`. */

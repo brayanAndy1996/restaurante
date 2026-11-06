@@ -1,7 +1,8 @@
 import { z } from 'zod';
-import { CANTIDAD_MAXIMA_LINEA, TIPOS_DESCUENTO } from '@restaurante/dominio';
+import { CANTIDAD_MAXIMA_LINEA, TIPOS_DESCUENTO, TIPOS_NOTA_CREDITO } from '@restaurante/dominio';
 import {
   accionSchema,
+  montoNoNegativoSchema,
   montoSchema,
   motivoSchema,
   pinAutorizacionSchema,
@@ -11,7 +12,7 @@ import {
 /**
  * Lo que autoriza una clave de supervisor (historia 006, criterio 40, pregunta 9): la acción y su objetivo exacto.
  * `DESCUENTO`: la orden, el ítem (`null` = la cuenta) y el descuento (tipo y valor); `CORTESIA`: la orden, el ítem y
- * la cantidad. La clave solo sirve para eso. El servidor normaliza el objetivo (ids en minúsculas y `valor` con 2
+ * la cantidad; `NOTA_CREDITO` (6b): el comprobante, el tipo de nota, el total y lo devuelto. La clave solo sirve para eso. El servidor normaliza el objetivo (ids en minúsculas y `valor` con 2
  * decimales) al guardarlo y lo compara con el cuerpo de la acción.
  */
 export const objetivoAutorizacionSchema = z.discriminatedUnion('tipo', [
@@ -26,6 +27,14 @@ export const objetivoAutorizacionSchema = z.discriminatedUnion('tipo', [
     ordenId: uuidSchema,
     itemId: uuidSchema,
     cantidad: z.number().int().min(1).max(CANTIDAD_MAXIMA_LINEA),
+  }),
+  // 6b (criterio 145): una nota de crédito. `total` es el de la nota y `devuelto` la suma de lo devuelto por medio.
+  z.strictObject({
+    tipo: z.literal('NOTA_CREDITO'),
+    comprobanteId: uuidSchema,
+    tipoNota: z.enum(TIPOS_NOTA_CREDITO),
+    total: montoNoNegativoSchema,
+    devuelto: montoNoNegativoSchema,
   }),
 ]);
 

@@ -88,3 +88,66 @@ export interface VigenciaIcbper {
  * 2023-01-01. Un cambio de ley agrega una fila; nunca se edita una vigente.
  */
 export const MONTOS_ICBPER: readonly VigenciaIcbper[] = [{ desde: '2023-01-01', monto: '0.50' }];
+
+// ---------------------------------------------------------------------------------------------------
+// Entrega 6b: facturación electrónica (criterios 120 a 181)
+// ---------------------------------------------------------------------------------------------------
+
+/**
+ * Los documentos electrónicos que numera el sistema: lo que se elige al cobrar (`TIPOS_COMPROBANTE`) más las notas
+ * de crédito de boletas y de facturas (criterio 143).
+ */
+export const TIPOS_DOCUMENTO_ELECTRONICO = [
+  'BOLETA',
+  'FACTURA',
+  'NOTA_CREDITO_BOLETA',
+  'NOTA_CREDITO_FACTURA',
+] as const;
+export type TipoDocumentoElectronico = (typeof TIPOS_DOCUMENTO_ELECTRONICO)[number];
+
+/** Tipos de serie de una caja (criterio 149): los cuatro documentos electrónicos. */
+export const TIPOS_SERIE = TIPOS_DOCUMENTO_ELECTRONICO;
+export type TipoSerie = TipoDocumentoElectronico;
+
+/** Lo que se puede pedir al emitir una nota de crédito (criterio 143). */
+export const TIPOS_NOTA_CREDITO = ['ANULACION', 'DEVOLUCION', 'CAMBIO_A_FACTURA'] as const;
+export type TipoNotaCredito = (typeof TIPOS_NOTA_CREDITO)[number];
+
+/** Estados del envío de un comprobante al PSE (`envio_pse.estado`, criterio 124). */
+export const ESTADOS_ENVIO_PSE = [
+  'PENDIENTE',
+  'ESPERANDO_RESPUESTA',
+  'TERMINADO',
+  'DETENIDO',
+] as const;
+export type EstadoEnvioPse = (typeof ESTADOS_ENVIO_PSE)[number];
+
+/** Modo de facturación de un emisor (criterio 122): simulado o con el PSE real. */
+export const MODOS_PSE = ['SIMULADO', 'REAL'] as const;
+export type ModoPse = (typeof MODOS_PSE)[number];
+
+/** Días que vale un enlace público de un comprobante (criterio 160). */
+export const DIAS_ENLACE_COMPROBANTE = 30;
+
+/** Lo que puede responder el PSE (o fallar) en un intento de envío; es `envio_pse.ultimo_resultado` (criterio 120). */
+export const RESULTADOS_ENVIO_PSE = [
+  'ACEPTADO',
+  'RECHAZADO',
+  'PENDIENTE',
+  'ERROR_TRANSPORTE',
+  'ERROR_CONFIGURACION',
+] as const;
+export type ResultadoEnvioPse = (typeof RESULTADOS_ENVIO_PSE)[number];
+
+/** Operaciones de un intento contra el PSE (`intento_pse.operacion`, criterio 125). */
+export const OPERACIONES_INTENTO_PSE = ['EMITIR', 'CONSULTAR'] as const;
+export type OperacionIntentoPse = (typeof OPERACIONES_INTENTO_PSE)[number];
+
+/** Motivos de alerta de un comprobante (criterio 133). */
+export const ALERTAS_COMPROBANTE = [
+  'RECHAZADO',
+  'DEMORADO',
+  'DETENIDO',
+  'SIN_CONFIGURACION',
+] as const;
+export type AlertaComprobante = (typeof ALERTAS_COMPROBANTE)[number];

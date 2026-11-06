@@ -17,7 +17,15 @@ export interface EntradaEsperadoDelTurno {
   /** Los pagos confirmados del turno (lo que quedó en la gaveta, sin el vuelto). */
   pagos: readonly MontoPorMedio[];
   /** Los ingresos y egresos de efectivo del turno. */
-  movimientos: readonly { tipo: TipoMovimientoCaja; monto: string }[];
+  movimientos: readonly {
+    tipo: TipoMovimientoCaja;
+    monto: string;
+    /**
+     * El medio del movimiento (6b, criterio 136): sin él, `EFECTIVO`. En la fase A todavía no cambia el cálculo: el
+     * esperado sigue tratando todos los movimientos como de efectivo.
+     */
+    medio?: MedioPago;
+  }[];
 }
 
 export interface DiferenciaDelArqueo {

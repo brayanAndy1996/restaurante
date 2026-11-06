@@ -37,3 +37,23 @@ export {
 export type { PreciosUnitarios } from './aritmetica';
 export { montoEnLetras } from './letras';
 export { tiposDeComprobantePermitidos } from '../regimen';
+export * from './sunat';
+export {
+  ESPERAS_REINTENTO_MINUTOS,
+  MINUTOS_ALERTA_PENDIENTE,
+  PLAZOS_ENVIO_DIAS,
+  alertaDe,
+  plazoDeEnvio,
+  proximoIntento,
+  transicionPermitida,
+} from './envios';
+export type { EntradaAlerta } from './envios';
+export { calcularNotaCredito } from './notas-credito';
+export type {
+  LineaAcreditada,
+  LineaDeNotaCalculada,
+  LineaOriginalDeNota,
+  OriginalDeNota,
+  PedidoDeNota,
+  ResultadoNotaCredito,
+} from './notas-credito';
