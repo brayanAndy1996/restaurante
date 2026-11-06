@@ -21,8 +21,8 @@ export interface EntradaEsperadoDelTurno {
     tipo: TipoMovimientoCaja;
     monto: string;
     /**
-     * El medio del movimiento (6b, criterio 136): sin él, `EFECTIVO`. En la fase A todavía no cambia el cálculo: el
-     * esperado sigue tratando todos los movimientos como de efectivo.
+     * El medio del movimiento (6b, criterio 136): sin él, `EFECTIVO`. Un egreso resta del esperado de su medio (la
+     * devolución de una nota de crédito por Yape sale del Yape) y un ingreso suma al de su medio.
      */
     medio?: MedioPago;
   }[];
@@ -61,18 +61,23 @@ export function esperadoDelTurno(entrada: EntradaEsperadoDelTurno): MontoPorMedi
     return {
       tipo: delCatalogo(m.tipo, TIPOS_MOVIMIENTO_CAJA, `El tipo del movimiento ${i + 1}`),
       monto: monto(m.monto, `El monto del movimiento ${i + 1}`),
+      medio:
+        m.medio === undefined
+          ? ('EFECTIVO' as MedioPago)
+          : delCatalogo(m.medio, MEDIOS_PAGO, `El medio del movimiento ${i + 1}`),
     };
   });
   const delMedio = (medio: MedioPago): Dec =>
     suma(pagos.filter((p) => p.medio === medio).map((p) => p.monto));
-  const ingresos = suma(movimientos.filter((m) => m.tipo === 'INGRESO').map((m) => m.monto));
-  const egresos = suma(movimientos.filter((m) => m.tipo === 'EGRESO').map((m) => m.monto));
+  const movido = (medio: MedioPago, tipo: TipoMovimientoCaja): Dec =>
+    suma(movimientos.filter((m) => m.medio === medio && m.tipo === tipo).map((m) => m.monto));
   return MEDIOS_PAGO.map((medio) => ({
     medio,
     monto: dos(
-      medio === 'EFECTIVO'
-        ? fondo.plus(delMedio(medio)).plus(ingresos).minus(egresos)
-        : delMedio(medio),
+      (medio === 'EFECTIVO' ? fondo : new D(0))
+        .plus(delMedio(medio))
+        .plus(movido(medio, 'INGRESO'))
+        .minus(movido(medio, 'EGRESO')),
     ),
   }));
 }
