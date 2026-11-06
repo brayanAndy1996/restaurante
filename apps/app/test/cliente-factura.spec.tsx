@@ -284,6 +284,35 @@ describe('RUC con aviso: «Emitir igual» (criterio 140)', () => {
   });
 });
 
+describe('Un RUC que no figura dice la fecha del padrón (criterio 139)', () => {
+  it('con padronAl en el 404, el aviso dice «del 05/11»', async () => {
+    montar({
+      [`GET /padron/ruc/${RUC}`]: () =>
+        json(404, {
+          codigo: 'RUC_NO_ENCONTRADO',
+          mensaje: 'Este RUC no figura en el padrón de SUNAT',
+          padronAl: '2026-11-05T09:00:00.000Z',
+        }),
+    });
+    await escribirRuc(RUC);
+    expect(
+      await screen.findByText('Este RUC no figura en el padrón de SUNAT del 05/11'),
+    ).toBeVisible();
+    expect(screen.getByRole('checkbox', { name: 'Emitir igual' })).toBeVisible();
+  });
+
+  it('sin padronAl, el aviso no inventa una fecha', async () => {
+    montar({
+      [`GET /padron/ruc/${RUC}`]: () =>
+        json(404, { codigo: 'RUC_NO_ENCONTRADO', mensaje: 'Este RUC no figura en el padrón' }),
+    });
+    await escribirRuc(RUC);
+    const aviso = await screen.findByText('Este RUC no figura en el padrón de SUNAT');
+    expect(aviso).toBeVisible();
+    expect(aviso.textContent).not.toMatch(/ del \d/);
+  });
+});
+
 describe('Padrón no disponible (criterio 140)', () => {
   const noDisponible = () =>
     json(503, {

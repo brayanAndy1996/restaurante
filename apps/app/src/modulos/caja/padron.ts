@@ -48,8 +48,12 @@ export function tituloDelAviso(datos: PadronRucRespuesta): string {
   return `Este RUC figura como ${datos.estado} / ${datos.condicion} en el padrón de SUNAT del ${fechaDelPadron(datos.padronAl)}`;
 }
 
-/** El 404 no trae la fecha de la carga: el aviso la omite. */
-export const TITULO_RUC_NO_FIGURA = 'Este RUC no figura en el padrón de SUNAT';
+/** «Este RUC no figura en el padrón de SUNAT del 05/11»; si el 404 no trae la fecha de la carga, el aviso la omite. */
+export function tituloRucNoFigura(padronAl?: string): string {
+  return padronAl
+    ? `Este RUC no figura en el padrón de SUNAT del ${fechaDelPadron(padronAl)}`
+    : 'Este RUC no figura en el padrón de SUNAT';
+}
 export const TITULO_PADRON_NO_DISPONIBLE = 'No se pudo consultar el padrón';
 
 export const TEXTO_DE_LA_MARCA = 'Emitir igual';
@@ -145,7 +149,7 @@ export function useClienteFactura(
       consulta.error instanceof ErrorApi &&
       consulta.error.codigo === 'RUC_NO_ENCONTRADO'
     ) {
-      resultado = { tipo: 'no_figura', aviso: TITULO_RUC_NO_FIGURA };
+      resultado = { tipo: 'no_figura', aviso: tituloRucNoFigura(consulta.error.padronAl) };
     } else {
       resultado = { tipo: 'no_disponible' };
     }

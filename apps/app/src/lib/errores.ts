@@ -35,6 +35,8 @@ export class ErrorApi extends Error {
   readonly diferencias: DiferenciaDeArqueo[] | undefined;
   /** Solo en `YA_REEMPLAZADO` (006, 6b): el comprobante que ya reemplazó al rechazado. */
   readonly comprobanteId: string | undefined;
+  /** Solo en `RUC_NO_ENCONTRADO` (006, 6b): el instante de la carga activa del padrón de SUNAT. */
+  readonly padronAl: string | undefined;
 
   constructor(datos: {
     estado: number;
@@ -52,6 +54,7 @@ export class ErrorApi extends Error {
     ordenes?: number;
     diferencias?: DiferenciaDeArqueo[];
     comprobanteId?: string;
+    padronAl?: string;
   }) {
     super(datos.mensaje);
     this.name = 'ErrorApi';
@@ -69,6 +72,7 @@ export class ErrorApi extends Error {
     this.ordenes = datos.ordenes;
     this.diferencias = datos.diferencias;
     this.comprobanteId = datos.comprobanteId;
+    this.padronAl = datos.padronAl;
   }
 
   /** `true` si el servidor no llegó a contestar (red caída, tiempo agotado). */
@@ -99,6 +103,7 @@ export function errorDeRespuesta(estado: number, cuerpo: unknown, reintentada = 
       ...(e.ordenes === undefined ? {} : { ordenes: e.ordenes }),
       ...(e.diferencias === undefined ? {} : { diferencias: e.diferencias }),
       ...(e.comprobanteId === undefined ? {} : { comprobanteId: e.comprobanteId }),
+      ...(e.padronAl === undefined ? {} : { padronAl: e.padronAl }),
       reintentada,
     });
   }
