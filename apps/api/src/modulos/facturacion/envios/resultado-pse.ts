@@ -163,7 +163,15 @@ export async function aplicarResultado(
   entrada: EntradaDeResultado,
 ): Promise<SalidaDeResultado> {
   const { envio, llamadas, resultado, archivos, ahora } = entrada;
+  // `intento_pse.numero` es el de la llamada dentro del envío (1, 2, 3…), no el de `envio_pse.intentos`: un trabajo puede
+  // hacer dos llamadas (consultar y luego emitir). La fila del envío está bloqueada, así que nadie más numera a la vez.
+  const previas = await conexion.query<{ ultimo: number }>(
+    `SELECT COALESCE(max(numero), 0)::int AS ultimo FROM intento_pse WHERE envio_id = $1`,
+    { bind: [envio.envioId], type: QueryTypes.SELECT },
+  );
+  let numeroDeLlamada = previas[0]?.ultimo ?? 0;
   for (const llamada of llamadas) {
+    numeroDeLlamada += 1;
     const { codigo, mensaje } = codigoYMensaje(llamada.resultado);
     await conexion.query(
       `INSERT INTO intento_pse (empresa_id, envio_id, comprobante_id, numero, operacion, iniciado_en, terminado_en,
@@ -174,7 +182,7 @@ export async function aplicarResultado(
           envio.empresaId,
           envio.envioId,
           envio.comprobanteId,
-          envio.intentos,
+          numeroDeLlamada,
           llamada.operacion,
           llamada.iniciadoEn,
           llamada.terminadoEn,
