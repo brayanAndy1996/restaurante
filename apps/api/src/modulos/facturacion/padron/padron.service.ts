@@ -16,9 +16,19 @@ interface FilaPadron {
   cargado_en: Date | string;
 }
 
-/** 404 `RUC_NO_ENCONTRADO`: el RUC es válido pero el padrón no lo tiene (criterio 139). */
-const rucNoEncontrado = (): ErrorAplicacion =>
-  new ErrorAplicacion(404, 'RUC_NO_ENCONTRADO', 'Este RUC no figura en el padrón de SUNAT');
+/**
+ * 404 `RUC_NO_ENCONTRADO`: el RUC es válido pero el padrón no lo tiene (criterio 139). Lleva `padronAl`, la fecha de la
+ * carga activa, igual que el 200, para el aviso «no figura en el padrón de SUNAT del …» (criterio 140).
+ */
+const rucNoEncontrado = (padronAl: string | null): ErrorAplicacion =>
+  new ErrorAplicacion(
+    404,
+    'RUC_NO_ENCONTRADO',
+    'Este RUC no figura en el padrón de SUNAT',
+    undefined,
+    undefined,
+    padronAl === null ? undefined : { padronAl },
+  );
 
 /** 503 `PADRON_NO_DISPONIBLE`: el padrón todavía no se ha cargado (criterio 139). */
 const padronNoDisponible = (): ErrorAplicacion =>
@@ -29,7 +39,7 @@ const padronNoDisponible = (): ErrorAplicacion =>
  * `public.padron_buscar_ruc(ruc)` (`SECURITY DEFINER`, `STABLE`) con la conexión de la API, dentro de la transacción de
  * la petición; la función no lee ni escribe tablas de clientes. Solo responde por un RUC exacto de 11 dígitos, no escribe
  * nada y no guarda quién consultó qué: la respuesta para un RUC es la misma desde cualquier empresa. 404
- * `RUC_NO_ENCONTRADO`; 503 `PADRON_NO_DISPONIBLE` sin ninguna carga.
+ * `RUC_NO_ENCONTRADO` (con `padronAl`); 503 `PADRON_NO_DISPONIBLE` sin ninguna carga.
  */
 @Injectable()
 export class PadronService {
@@ -47,7 +57,7 @@ export class PadronService {
       throw error;
     }
     const fila = filas[0];
-    if (fila === undefined) throw rucNoEncontrado();
+    if (fila === undefined) throw rucNoEncontrado(await this.cargadoEn());
     return {
       ruc: fila.ruc.trim(),
       razonSocial: fila.razon_social,
@@ -58,5 +68,15 @@ export class PadronService {
       habido: fila.condicion === 'HABIDO',
       padronAl: new Date(fila.cargado_en).toISOString(),
     };
+  }
+
+  /** El instante de la carga activa (`public.padron_cargado_en()`), el mismo que lleva el 200; `null` si no se pudo leer. */
+  private async cargadoEn(): Promise<string | null> {
+    const filas = await this.conexion.query<{ cargado_en: Date | string | null }>(
+      'SELECT public.padron_cargado_en() AS cargado_en',
+      { type: QueryTypes.SELECT },
+    );
+    const instante = filas[0]?.cargado_en;
+    return instante === null || instante === undefined ? null : new Date(instante).toISOString();
   }
 }

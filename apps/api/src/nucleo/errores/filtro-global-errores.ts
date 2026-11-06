@@ -177,6 +177,7 @@ export class FiltroGlobalErrores implements ExceptionFilter {
       if (excepcion.detalle?.turnoId) cuerpo.turnoId = excepcion.detalle.turnoId;
       if (excepcion.detalle?.version !== undefined) cuerpo.version = excepcion.detalle.version;
       if (excepcion.detalle?.ordenes !== undefined) cuerpo.ordenes = excepcion.detalle.ordenes;
+      if (excepcion.detalle?.padronAl) cuerpo.padronAl = excepcion.detalle.padronAl;
       if (excepcion.detalle?.diferencias) cuerpo.diferencias = excepcion.detalle.diferencias;
       return { estado: excepcion.getStatus(), cuerpo };
     }

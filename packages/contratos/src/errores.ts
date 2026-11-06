@@ -142,6 +142,8 @@ export const errorRespuestaSchema = z.object({
    * orden de `MEDIOS_PAGO`; sin esperado, contado ni diferencia (decisión del usuario: el aviso no lleva montos).
    */
   diferencias: z.array(z.object({ medio: z.enum(MEDIOS_PAGO) })).optional(),
+  /** Solo en `RUC_NO_ENCONTRADO` (criterio 139 de 006): el instante de la carga activa del padrón (igual que `padronAl` del 200). */
+  padronAl: z.string().optional(),
   /** Solo en `LLAMADO_TOMADO` (criterio 43 de 005): quién ya está atendiendo el llamado. */
   atendidoPor: z.object({ id: uuidSchema, nombre: z.string() }).optional(),
   /** Solo en `LLAMADO_CERRADO` (criterios 44 y 53 de 005): el estado en que quedó el llamado. */
