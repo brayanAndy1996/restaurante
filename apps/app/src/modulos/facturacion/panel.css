@@ -177,11 +177,6 @@
   font-size: 1.125rem;
   line-height: 1.5rem;
 }
-.emitir__cliente {
-  display: flex;
-  flex-direction: column;
-  gap: var(--espacio-md);
-}
 .emitir__salida {
   display: flex;
 }

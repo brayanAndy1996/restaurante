@@ -580,6 +580,84 @@ describe('«Emitir otro» desde el detalle de un rechazado (criterio 134)', () =
     );
   });
 
+  describe('con el padrón de RUC (criterios 140 y 176)', () => {
+    const delPadron = (extra: Record<string, unknown> = {}) => ({
+      ruc: RUC,
+      razonSocial: 'Supermercados Peruanos S.A.',
+      direccion: 'Av. Principal 123, Lima',
+      estado: 'ACTIVO',
+      condicion: 'HABIDO',
+      activo: true,
+      habido: true,
+      padronAl: '2026-11-05T09:00:00.000Z',
+      ...extra,
+    });
+    const montarConPadron = (padron: () => Response) =>
+      montar('CAJERO', {
+        [`GET ${RUTA}`]: () => json(200, rechazado()),
+        [`GET /padron/ruc/${RUC}`]: padron,
+        [`POST ${RUTA}/reemision`]: () => json(201, respuestaDeReemision()),
+      });
+    async function corregirElRuc() {
+      renderApp(`/caja/comprobantes/${B}?emitir=1`);
+      await userEvent.clear(await screen.findByLabelText('RUC'));
+      await userEvent.type(screen.getByLabelText('RUC'), RUC);
+    }
+
+    it('al corregir el RUC llena la razón social y la dirección del padrón, que se pueden corregir', async () => {
+      const s = montarConPadron(() => json(200, delPadron()));
+      await corregirElRuc();
+      await waitFor(() =>
+        expect(screen.getByLabelText('Razón social')).toHaveValue('Supermercados Peruanos S.A.'),
+      );
+      expect(screen.getByLabelText('Dirección fiscal')).toHaveValue('Av. Principal 123, Lima');
+      await userEvent.clear(screen.getByLabelText('Dirección fiscal'));
+      await userEvent.type(screen.getByLabelText('Dirección fiscal'), 'Av. Nueva 9, Lima');
+      await userEvent.click(screen.getByRole('button', { name: 'Emitir comprobante' }));
+      await screen.findByText('Comprobante nuevo emitido');
+      expect(s.de('POST', `${RUTA}/reemision`)[0]?.cuerpo).toEqual({
+        tipo: 'FACTURA',
+        cliente: {
+          tipoDocumento: 'RUC',
+          numero: RUC,
+          nombre: 'Supermercados Peruanos S.A.',
+          direccion: 'Av. Nueva 9, Lima',
+        },
+      });
+    });
+
+    it('con un RUC de baja no emite sin «Emitir igual»; con la marca, emite', async () => {
+      const s = montarConPadron(() =>
+        json(200, delPadron({ estado: 'BAJA DE OFICIO', activo: false })),
+      );
+      await corregirElRuc();
+      expect(
+        await screen.findByText(
+          'Este RUC figura como BAJA DE OFICIO / HABIDO en el padrón de SUNAT del 05/11',
+        ),
+      ).toBeVisible();
+      await userEvent.click(screen.getByRole('button', { name: 'Emitir comprobante' }));
+      expect(await screen.findByText('Marca «Emitir igual» o corrige el RUC.')).toBeVisible();
+      expect(s.de('POST', `${RUTA}/reemision`)).toHaveLength(0);
+
+      await userEvent.click(screen.getByRole('checkbox', { name: 'Emitir igual' }));
+      await userEvent.click(screen.getByRole('button', { name: 'Emitir comprobante' }));
+      await screen.findByText('Comprobante nuevo emitido');
+      expect(s.de('POST', `${RUTA}/reemision`)).toHaveLength(1);
+    });
+
+    it('con el padrón caído (503) lo dice y deja emitir con lo escrito', async () => {
+      const s = montarConPadron(() =>
+        json(503, { codigo: 'PADRON_NO_DISPONIBLE', mensaje: 'El padrón no está disponible' }),
+      );
+      await corregirElRuc();
+      expect(await screen.findByText('No se pudo consultar el padrón')).toBeVisible();
+      await userEvent.click(screen.getByRole('button', { name: 'Emitir comprobante' }));
+      await screen.findByText('Comprobante nuevo emitido');
+      expect(s.de('POST', `${RUTA}/reemision`)).toHaveLength(1);
+    });
+  });
+
   it('se puede cambiar a boleta: el cliente pasa a ser opcional y el tipo viaja corregido', async () => {
     const s = montar('CAJERO', {
       [`GET ${RUTA}`]: () => json(200, rechazado()),

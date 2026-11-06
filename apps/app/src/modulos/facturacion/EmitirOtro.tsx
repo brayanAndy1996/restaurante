@@ -3,23 +3,11 @@ import type {
   ReemisionEntrada,
   ReemisionRespuesta,
 } from '@restaurante/contratos';
-import {
-  Aviso,
-  Boton,
-  CampoTexto,
-  EtiquetaDeEstado,
-  Segmentos,
-  type OpcionDeSegmento,
-} from '@restaurante/ui';
+import { Aviso, Boton, EtiquetaDeEstado, Segmentos, type OpcionDeSegmento } from '@restaurante/ui';
 import { useEffect, useRef, useState, type FormEvent } from 'react';
-import {
-  CLIENTE_VACIO,
-  NOMBRE_DE_DOCUMENTO,
-  boletaExigeCliente,
-  validarCliente,
-  type ClienteEscrito,
-  type TipoDeDocumento,
-} from '../caja/cobro';
+import { ClienteFactura } from '../caja/ClienteFactura';
+import { CLIENTE_VACIO, type ClienteEscrito } from '../caja/cobro';
+import { useClienteFactura } from '../caja/padron';
 import { EstadoDeLaImpresion } from '../caja/impresion-caja';
 import { EstadoDelComprobante } from './EstadoDelComprobante';
 import { NOMBRE_DE_TIPO_DOCUMENTO } from './facturacion';
@@ -31,12 +19,6 @@ type Tipo = 'BOLETA' | 'FACTURA';
 const OPCIONES_DE_TIPO: readonly OpcionDeSegmento<Tipo>[] = [
   { valor: 'BOLETA', etiqueta: 'Boleta' },
   { valor: 'FACTURA', etiqueta: 'Factura' },
-];
-const DOCUMENTOS_DE_BOLETA: readonly OpcionDeSegmento<TipoDeDocumento>[] = [
-  { valor: 'DNI', etiqueta: NOMBRE_DE_DOCUMENTO.DNI },
-  { valor: 'CE', etiqueta: NOMBRE_DE_DOCUMENTO.CE },
-  { valor: 'PASAPORTE', etiqueta: NOMBRE_DE_DOCUMENTO.PASAPORTE },
-  { valor: 'RUC', etiqueta: NOMBRE_DE_DOCUMENTO.RUC },
 ];
 
 /** El cliente del rechazado, listo para corregir: con él se llena el formulario. */
@@ -76,25 +58,21 @@ export function EmitirOtro({ comprobante, enviando, fallo, onEnviar, onCancelar 
   const [cliente, setCliente] = useState<ClienteEscrito>(() =>
     clienteDelRechazado(comprobante.cliente),
   );
-  const [conCliente, setConCliente] = useState(false);
   const [intentado, setIntentado] = useState(false);
   const raiz = useRef<HTMLFormElement>(null);
   useEffect(() => {
     raiz.current?.scrollIntoView({ block: 'nearest' });
   }, []);
 
-  const exigido = tipo === 'FACTURA' || boletaExigeCliente(total);
-  const visible = exigido || conCliente || cliente.numero !== '' || cliente.nombre !== '';
-  const documento: TipoDeDocumento = tipo === 'FACTURA' ? 'RUC' : cliente.tipoDocumento;
-  const validacion = validarCliente(tipo, total, cliente);
+  const padron = useClienteFactura(tipo, total, cliente, setCliente);
+  const validacion = padron.validado;
   const errores = intentado && !validacion.ok ? validacion.errores : null;
-  const poner = (cambio: Partial<ClienteEscrito>) => setCliente((c) => ({ ...c, ...cambio }));
 
   function elegirTipo(nuevo: Tipo) {
     setTipo(nuevo);
     // Una factura es de un RUC: un DNI de la boleta no sirve y se vuelve a escribir.
     if (nuevo === 'FACTURA' && cliente.tipoDocumento !== 'RUC') {
-      poner({ tipoDocumento: 'RUC', numero: '' });
+      setCliente({ ...cliente, tipoDocumento: 'RUC', numero: '' });
     }
   }
 
@@ -148,59 +126,14 @@ export function EmitirOtro({ comprobante, enviando, fallo, onEnviar, onCancelar 
             />
           )}
 
-          {tipo === 'BOLETA' && boletaExigeCliente(total) ? (
-            <Aviso tipo="alerta" titulo="Más de S/ 700: pide nombre y documento">
-              Una boleta de más de S/ 700.00 necesita los datos del cliente.
-            </Aviso>
-          ) : null}
-
-          {visible ? (
-            <div className="emitir__cliente">
-              {tipo === 'BOLETA' ? (
-                <Segmentos
-                  etiqueta="Documento del cliente"
-                  opciones={DOCUMENTOS_DE_BOLETA}
-                  valor={documento}
-                  onCambio={(tipoDocumento) => poner({ tipoDocumento, numero: '' })}
-                />
-              ) : null}
-              <CampoTexto
-                etiqueta={
-                  tipo === 'FACTURA' ? 'RUC' : `Número de ${NOMBRE_DE_DOCUMENTO[documento]}`
-                }
-                value={cliente.numero}
-                onChange={(e) =>
-                  poner({
-                    numero:
-                      documento === 'DNI' || documento === 'RUC'
-                        ? e.target.value.replace(/\D/g, '').slice(0, documento === 'DNI' ? 8 : 11)
-                        : e.target.value.replace(/[^A-Za-z0-9]/g, '').slice(0, 12),
-                  })
-                }
-                inputMode={documento === 'DNI' || documento === 'RUC' ? 'numeric' : 'text'}
-                autoComplete="off"
-                {...(errores?.numero ? { error: errores.numero } : {})}
-              />
-              <CampoTexto
-                etiqueta={tipo === 'FACTURA' ? 'Razón social' : 'Nombre del cliente'}
-                value={cliente.nombre}
-                onChange={(e) => poner({ nombre: e.target.value.slice(0, 200) })}
-                autoComplete="off"
-                {...(errores?.nombre ? { error: errores.nombre } : {})}
-              />
-              {tipo === 'FACTURA' ? (
-                <CampoTexto
-                  etiqueta="Dirección fiscal"
-                  value={cliente.direccion}
-                  onChange={(e) => poner({ direccion: e.target.value.slice(0, 300) })}
-                  autoComplete="off"
-                  {...(errores?.direccion ? { error: errores.direccion } : {})}
-                />
-              ) : null}
-            </div>
-          ) : (
-            <Boton onClick={() => setConCliente(true)}>Agregar datos del cliente</Boton>
-          )}
+          <ClienteFactura
+            tipo={tipo}
+            total={total}
+            cliente={cliente}
+            onCliente={setCliente}
+            errores={errores}
+            padron={padron}
+          />
         </>
       )}
 
