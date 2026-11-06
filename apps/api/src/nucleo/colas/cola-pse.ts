@@ -11,6 +11,12 @@ export const COLA_PSE = Symbol('COLA_PSE');
 /** Nombre del trabajo de envío al PSE en la cola. */
 export const TRABAJO_ENVIO_PSE = 'envio-pse';
 
+/** Nombre del trabajo de carga del padrón de RUC en la cola (criterio 138): sin datos, uno a la vez. */
+export const TRABAJO_PADRON_RUC = 'padron-ruc';
+
+/** Lo que el worker hace al recibir el trabajo `padron-ruc`: `CargaPadron.cargar()`. */
+export type ProcesadorDeCargaDePadron = () => Promise<void>;
+
 /** La carga de un trabajo `envio-pse`: nada más que estos dos ids. */
 export interface TrabajoEnvioPse {
   empresaId: string;
@@ -33,6 +39,16 @@ export interface ColaPse {
   encolar(trabajo: TrabajoEnvioPse, opciones?: OpcionesDeEncolado): Promise<void>;
   /** Registra quién procesa los trabajos (solo lo hace el worker). */
   trabajar(procesador: ProcesadorDeTrabajo): Promise<void>;
+  /**
+   * Pide una carga del padrón de RUC ahora (`POST /plataforma/padron/carga`). Si ya hay una esperando o en curso no encola
+   * otra: la cola deja a lo más una carga a la vez (criterio 138).
+   */
+  pedirCargaDePadron(): Promise<void>;
+  /**
+   * Solo el worker: programa la carga diaria (`0 4 * * *`, hora de Lima) y registra quién procesa el trabajo `padron-ruc`
+   * (criterio 138).
+   */
+  programarPadron(procesador: ProcesadorDeCargaDePadron): Promise<void>;
   /** Deja de recibir y de procesar trabajos. */
   detener(): Promise<void>;
 }

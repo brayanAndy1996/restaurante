@@ -9,6 +9,7 @@ import {
   type OnApplicationShutdown,
 } from '@nestjs/common';
 import { COLA_PSE, type ColaPse } from '../../../nucleo/colas';
+import { CargaPadron } from '../padron/carga-padron';
 import { BarridoEnviosPse } from './barrido-envios';
 import { ProcesadorEnviosPse } from './procesador-envios';
 
@@ -40,7 +41,7 @@ export class OpcionesWorkerModule {
 
 /**
  * Lo que corre en segundo plano en el worker de envíos (historia 006, criterio 125): registra el procesador en la cola
- * (`boss.work('envio-pse', …)`) y arranca el barrido de 60 segundos. Lo arranca `crearWorker(...).iniciar()` o, con
+ * (`boss.work('envio-pse', …)`), programa la carga diaria del padrón (`padron-ruc`) y arranca el barrido de 60 segundos. Lo arranca `crearWorker(...).iniciar()` o, con
  * `WORKER=habilitado`, la propia API al iniciar; con `NODE_ENV=test` nada de esto ocurre solo (criterio 137): las pruebas
  * llaman al procesador y al barrido a mano. Al cerrar la aplicación se detiene todo.
  */
@@ -51,6 +52,7 @@ export class TrabajoEnSegundoPlano implements OnApplicationBootstrap, OnApplicat
   constructor(
     @Inject(ProcesadorEnviosPse) private readonly procesador: ProcesadorEnviosPse,
     @Inject(BarridoEnviosPse) private readonly barrido: BarridoEnviosPse,
+    @Inject(CargaPadron) private readonly padron: CargaPadron,
     @Inject(COLA_PSE) private readonly cola: ColaPse,
     @Optional() @Inject(OPCIONES_WORKER) private readonly opciones: OpcionesWorker | null = null,
   ) {}
@@ -71,6 +73,10 @@ export class TrabajoEnSegundoPlano implements OnApplicationBootstrap, OnApplicat
       await this.cola.trabajar((trabajo) =>
         this.procesador.procesar(trabajo.empresaId, trabajo.comprobanteId),
       );
+      // La carga diaria del padrón (04:00 de Lima) y la que pide el superadministrador (criterio 138).
+      await this.cola.programarPadron(async () => {
+        await this.padron.cargar();
+      });
     } catch (error) {
       this.iniciado = false;
       throw error;

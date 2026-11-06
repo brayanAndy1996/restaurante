@@ -18,6 +18,9 @@
 //   devuelven nada. Sin ninguna carga todavía falla con el estado `RF503` (el servicio lo responde 503
 //   `PADRON_NO_DISPONIBLE`). No escribe nada ni guarda quién consultó qué.
 //
+// - `public.padron_estado()`: el estado de la carga (cinco columnas, ningún dato del padrón) para `GET /plataforma/padron`;
+//   `SECURITY DEFINER`, `STABLE`, `EXECUTE` solo para `restaurante_plataforma`.
+//
 // `restaurante_referencia`: `SELECT`, `INSERT` y `TRUNCATE` en las tres tablas de datos (nunca `UPDATE` ni `DELETE`: la carga
 // vacía con `TRUNCATE`) y `SELECT`, `INSERT` y `UPDATE` en `padron_estado`. Las migraciones están exentas de la regla de
 // ESLint de los nombres de funciones del contexto. Ninguna migración escribe datos.
@@ -109,9 +112,22 @@ END
 $fn$;
 REVOKE ALL ON FUNCTION public.padron_buscar_ruc(text) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.padron_buscar_ruc(text) TO restaurante_api;
+
+-- El estado de la carga para GET /plataforma/padron: restaurante_plataforma no tiene USAGE en el esquema, así que lo lee
+-- por esta función (solo las cinco columnas del estado, ningún dato del padrón).
+CREATE FUNCTION public.padron_estado()
+  RETURNS TABLE (cargado_en timestamptz, filas integer, fecha_archivo date, ultimo_intento_en timestamptz, ultimo_error text)
+  LANGUAGE sql STABLE SECURITY DEFINER
+  SET search_path = pg_catalog, pg_temp
+  AS $fn$
+  SELECT e.cargado_en, e.filas, e.fecha_archivo, e.ultimo_intento_en, e.ultimo_error FROM referencia.padron_estado e
+$fn$;
+REVOKE ALL ON FUNCTION public.padron_estado() FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.padron_estado() TO restaurante_plataforma;
 `;
 
 const SQL_DOWN = `
+DROP FUNCTION public.padron_estado();
 DROP FUNCTION public.padron_buscar_ruc(text);
 DROP TABLE referencia.ubigeo;
 DROP TABLE referencia.padron_estado;

@@ -47,8 +47,8 @@ export interface WorkerEnvios {
   barrido: BarridoEnviosPse;
   carga: CargaPadron;
   /**
-   * Empieza a trabajar: registra el procesador en la cola y arranca el barrido de 60 segundos (la carga diaria del
-   * padrón la programa T36). Con `NODE_ENV=test` las pruebas de la historia no lo llaman: corren el procesador y el
+   * Empieza a trabajar: registra el procesador en la cola, programa la carga diaria del padrón (04:00 de Lima) y
+   * arranca el barrido de 60 segundos. Con `NODE_ENV=test` las pruebas de la historia no lo llaman: corren el procesador y el
    * barrido a mano (criterio 137).
    */
   iniciar(): Promise<void>;

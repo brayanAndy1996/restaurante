@@ -2,7 +2,9 @@ import { Logger } from '@nestjs/common';
 import type { PgBoss } from 'pg-boss' with { 'resolution-mode': 'import' };
 import {
   TRABAJO_ENVIO_PSE,
+  TRABAJO_PADRON_RUC,
   type ColaPse,
+  type ProcesadorDeCargaDePadron,
   type OpcionesDeEncolado,
   type ProcesadorDeTrabajo,
   type TrabajoEnvioPse,
@@ -19,6 +21,11 @@ const EXPIRA_EN_SEGUNDOS = 5 * 60;
 /** Cuánto se guardan los trabajos terminados: la verdad está en `envio_pse`, la cola solo despierta. */
 const RETENCION_EN_SEGUNDOS = 60 * 60;
 const BORRAR_DESPUES_EN_SEGUNDOS = 24 * 60 * 60;
+/** La carga del padrón puede tardar (descarga de unos 400 MB y varios millones de filas): 3 horas antes de darla por perdida. */
+const EXPIRA_PADRON_EN_SEGUNDOS = 3 * 60 * 60;
+/** La carga diaria del padrón: 04:00 de Lima (criterio 138). */
+export const CRON_DEL_PADRON = '0 4 * * *';
+export const ZONA_DEL_PADRON = 'America/Lima';
 
 export interface OpcionesColaPgBoss {
   /**
@@ -98,6 +105,29 @@ export class ColaPgBoss implements ColaPse {
     );
   }
 
+  async pedirCargaDePadron(): Promise<void> {
+    const boss = await this.obtener();
+    // Cola `exclusive`: con una carga esperando o en curso, `send` no encola otra (devuelve `null`).
+    await boss.send(TRABAJO_PADRON_RUC, {});
+  }
+
+  async programarPadron(procesador: ProcesadorDeCargaDePadron): Promise<void> {
+    const boss = await this.obtener();
+    await boss.schedule(TRABAJO_PADRON_RUC, CRON_DEL_PADRON, {}, { tz: ZONA_DEL_PADRON });
+    await boss.work(TRABAJO_PADRON_RUC, { batchSize: 1, pollingIntervalSeconds: 5 }, async () => {
+      try {
+        await procesador();
+      } catch (error) {
+        this.logger.warn(
+          JSON.stringify({
+            evento: 'padron.trabajo_fallido',
+            error: error instanceof Error ? error.name : 'error desconocido',
+          }),
+        );
+      }
+    });
+  }
+
   async detener(): Promise<void> {
     this.detenida = true;
     const pendiente = this.boss;
@@ -150,6 +180,13 @@ export class ColaPgBoss implements ColaPse {
       policy: 'short',
       retryLimit: 0,
       expireInSeconds: EXPIRA_EN_SEGUNDOS,
+      retentionSeconds: RETENCION_EN_SEGUNDOS,
+      deleteAfterSeconds: BORRAR_DESPUES_EN_SEGUNDOS,
+    });
+    await boss.createQueue(TRABAJO_PADRON_RUC, {
+      policy: 'exclusive',
+      retryLimit: 0,
+      expireInSeconds: EXPIRA_PADRON_EN_SEGUNDOS,
       retentionSeconds: RETENCION_EN_SEGUNDOS,
       deleteAfterSeconds: BORRAR_DESPUES_EN_SEGUNDOS,
     });

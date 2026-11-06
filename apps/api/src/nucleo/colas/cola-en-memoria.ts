@@ -1,4 +1,10 @@
-import type { ColaPse, OpcionesDeEncolado, ProcesadorDeTrabajo, TrabajoEnvioPse } from './cola-pse';
+import type {
+  ColaPse,
+  OpcionesDeEncolado,
+  ProcesadorDeCargaDePadron,
+  ProcesadorDeTrabajo,
+  TrabajoEnvioPse,
+} from './cola-pse';
 
 /** Un trabajo guardado por la cola en memoria. */
 export interface TrabajoPendiente extends TrabajoEnvioPse {
@@ -16,6 +22,8 @@ export class ColaEnMemoria implements ColaPse {
   private readonly trabajos: TrabajoPendiente[] = [];
   private fallosPorInyectar = 0;
   private procesadorRegistrado: ProcesadorDeTrabajo | null = null;
+  private procesadorDelPadron: ProcesadorDeCargaDePadron | null = null;
+  private cargasDePadron = 0;
 
   encolar(trabajo: TrabajoEnvioPse, opciones: OpcionesDeEncolado = {}): Promise<void> {
     if (this.fallosPorInyectar > 0) {
@@ -36,8 +44,33 @@ export class ColaEnMemoria implements ColaPse {
     return Promise.resolve();
   }
 
+  /** Cuenta la carga pedida (a lo más una esperando, como la cola real); nunca la ejecuta sola. */
+  pedirCargaDePadron(): Promise<void> {
+    this.cargasDePadron = Math.min(this.cargasDePadron + 1, 1);
+    return Promise.resolve();
+  }
+
+  programarPadron(procesador: ProcesadorDeCargaDePadron): Promise<void> {
+    this.procesadorDelPadron = procesador;
+    return Promise.resolve();
+  }
+
+  /** `true` si hay una carga del padrón pedida que nadie ejecutó. */
+  cargaDePadronPendiente(): boolean {
+    return this.cargasDePadron > 0;
+  }
+
+  /** Ejecuta la carga pedida con el procesador registrado (`programarPadron`); devuelve si había una. */
+  async procesarCargaDePadron(): Promise<boolean> {
+    if (this.cargasDePadron === 0 || this.procesadorDelPadron === null) return false;
+    this.cargasDePadron = 0;
+    await this.procesadorDelPadron();
+    return true;
+  }
+
   detener(): Promise<void> {
     this.procesadorRegistrado = null;
+    this.procesadorDelPadron = null;
     return Promise.resolve();
   }
 
