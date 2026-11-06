@@ -5,8 +5,8 @@
   - **Entrega 6b (facturación electrónica):** HU-27, HU-29 y HU-31; RF-57 (envío por el PSE), RF-58, RF-62, RF-63, RF-64 (PDF y WhatsApp) y RF-66. RNF que aplican: RNF-07 (credenciales del PSE cifradas), RNF-10, RNF-18 y RNF-19.
   - **Quedan para otras secciones:** RF-79 a RF-83 y HU-35 a HU-37 (reportes y exportación, sección de reportes: aquí solo quedan los datos); el registro posterior de las ventas hechas con el talonario de contingencia (pregunta 23); el cobro de pedidos de delivery (sección de delivery: el cobro de esta sección sirve igual para una orden `DELIVERY`).
   - Fuente de negocio: `fuentes.md` de esta carpeta (requerimientos rev. 45, diseño rev. 29) y las decisiones de 002 a 005 que siguen vigentes. Donde las fuentes no alcanzan, los criterios están escritos con la recomendación de cada pregunta de "Preguntas abiertas" y la citan como "pregunta N".
-- **Ruta crítica:** sí, casi toda, confirmada por el orquestador el 2026-11-04: P1 a P6 en 6a y P7 a P9 en 6b. La precisión de 6b (2026-11-06) redefine P7 a P9 con los criterios nuevos y propone **P10** (permisos de 6b), pendiente de la confirmación del orquestador. Ver "Clasificación de ruta crítica".
-- **Estado:** aprobado por el usuario el 2026-11-04 con las recomendaciones de las 24 preguntas (las marcadas para el contador quedan por confirmar con él); 6a terminada (2026-11-05, `c1de966`); **6b precisada el 2026-11-06 (criterios 120 a 181, preguntas 25 a 40), pendiente de la aprobación del usuario.** El PSE todavía no se elige: 6b se implementa y se prueba completa con un PSE simulado detrás de `ConectorPse`, y el adaptador del PSE real es la tarea aparte T34.
+- **Ruta crítica:** sí, casi toda, confirmada por el orquestador el 2026-11-04 (P1 a P6 en 6a) y el 2026-11-06 para 6b: P7 a P10 (P10, permisos de 6b, confirmada). Ver "Clasificación de ruta crítica".
+- **Estado:** aprobado por el usuario el 2026-11-04 con las recomendaciones de las 24 preguntas; 6a terminada (2026-11-05, `c1de966`); 6b precisada y aprobada por el usuario el 2026-11-06 con las recomendaciones de las preguntas 25 a 40 (las marcadas para el contador, 27 y 38, quedan por confirmar con él); en curso 6b.
 
 ## Objetivo
 
@@ -807,7 +807,7 @@ Nuevos de 6b (2026-11-06), pendientes de la aprobación del usuario:
 
 ## Preguntas abiertas
 
-**Respondidas por el usuario el 2026-11-04: se aprueban las 24 recomendaciones.** Las que dependen del contador (4, 5, 6, 7, 8 y 21) quedan por confirmar con él; si cambian, el ajuste se limita a sus funciones puras.
+**Respondidas por el usuario el 2026-11-04: se aprueban las 24 recomendaciones. Las preguntas 25 a 40 (6b) se aprueban el 2026-11-06 con sus recomendaciones.** Las que dependen del contador (4, 5, 6, 7, 8 y 21) quedan por confirmar con él; si cambian, el ajuste se limita a sus funciones puras.
 
 Cada una con mi recomendación; los criterios ya están escritos con ella. Las 20 a 24 son de 6b y se pueden responder antes de empezarla.
 
