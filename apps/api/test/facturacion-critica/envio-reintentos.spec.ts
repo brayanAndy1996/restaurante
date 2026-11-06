@@ -28,6 +28,7 @@ import {
   exigirEstado,
   exigirPse,
   finDelDiaLima,
+  idPse,
   fechaEmisionDe,
   intentosDe,
   limitarBarrido,
@@ -57,8 +58,15 @@ afterAll(async () => {
   await ctx?.cerrar();
   await cerrarAdmin();
 });
+/** Cuándo (hora de la API) se abrieron por última vez las sesiones: expiran a los 30 minutos. */
+let sesionesDesde = 0;
 beforeEach(async () => {
   await exigirPse(esc);
+  if (ctx.reloj.ahora().getTime() - sesionesDesde > 5 * MIN) {
+    await esc.A.refrescarSesiones();
+    await esc.B.refrescarSesiones();
+    sesionesDesde = ctx.reloj.ahora().getTime();
+  }
   ctx.pse.reglas.limpiar();
   ctx.pse.reiniciar();
   ctx.cola.vaciar();
@@ -73,6 +81,21 @@ const trabajosDe = (comprobanteId: string) =>
   ctx.cola.pendientes().filter((t) => t.comprobanteId === comprobanteId);
 const proximoDe = async (id: string): Promise<number> =>
   new Date((await envioDe(id))!.proximo_intento_en as string).getTime();
+/** Las llamadas al PSE de estos comprobantes: el barrido también manda los envíos pendientes de otras pruebas. */
+async function llamadasDe(...comprobanteIds: string[]) {
+  const ids = await Promise.all(comprobanteIds.map((c) => idPse(c)));
+  return ctx.pse
+    .llamadas()
+    .filter((l) =>
+      ids.some(
+        (id) =>
+          id.rucEmisor === l.id.rucEmisor &&
+          id.tipoSunat === l.id.tipoSunat &&
+          id.serie === l.id.serie &&
+          id.numero === l.id.numero,
+      ),
+    );
+}
 const dormir = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
 /** Una vuelta del worker: el barrido y los trabajos vencidos de la cola. */
@@ -101,11 +124,12 @@ describe('criterio 129 · espera creciente con el reloj y el barrido', () => {
       ).toBe(toca);
       // Un segundo antes de tocar, ni el barrido ni la cola llaman al PSE.
       ctx.reloj.fijar(toca - 1000);
-      const llamadas = ctx.pse.llamadas().length;
+      const llamadas = (await llamadasDe(c.comprobanteId)).length;
       await vuelta();
-      expect(ctx.pse.llamadas(), `no se intenta antes de tiempo (intento ${n})`).toHaveLength(
-        llamadas,
-      );
+      expect(
+        await llamadasDe(c.comprobanteId),
+        `no se intenta antes de tiempo (intento ${n})`,
+      ).toHaveLength(llamadas);
       expect((await envioDe(c.comprobanteId))!.intentos).toBe(n - 1);
       // A la hora, el intento n.
       ctx.reloj.fijar(toca);
@@ -121,7 +145,7 @@ describe('criterio 129 · espera creciente con el reloj y el barrido', () => {
     expect(await proximoDe(c.comprobanteId)).toBe(t0 + momentos[momentos.length - 1]! * MIN);
     expect((await comprobanteFila(c.comprobanteId)).estado).toBe('POR_ENVIAR');
     // Un intento por llamada: emitir el primero y consultar los demás.
-    expect(ctx.pse.llamadas().map((l) => l.operacion)).toEqual([
+    expect((await llamadasDe(c.comprobanteId)).map((l) => l.operacion)).toEqual([
       'emitir',
       ...Array.from({ length: 7 }, () => 'consultar'),
     ]);
@@ -215,7 +239,10 @@ describe('criterio 126 · el barrido solo encola lo que toca', () => {
     expect((await comprobanteFila(aceptado.comprobanteId)).estado).toBe('ACEPTADO');
     expect((await comprobanteFila(rechazado.comprobanteId)).estado).toBe('RECHAZADO');
     ctx.cola.vaciar();
-    const llamadas = ctx.pse.llamadas().length;
+    // Solo cuentan las llamadas de estos dos documentos.
+    const deEstos = () => llamadasDe(aceptado.comprobanteId, rechazado.comprobanteId);
+    const llamadas = (await deEstos()).length;
+    expect(llamadas).toBe(2);
     for (const dias of [1, 2]) {
       ctx.reloj.avanzar(dias * 24 * 60 * MIN);
       await ctx.barrido.barrerAhora();
@@ -223,7 +250,7 @@ describe('criterio 126 · el barrido solo encola lo que toca', () => {
     }
     expect(trabajosDe(aceptado.comprobanteId)).toEqual([]);
     expect(trabajosDe(rechazado.comprobanteId)).toEqual([]);
-    expect(ctx.pse.llamadas()).toHaveLength(llamadas);
+    expect(await deEstos()).toHaveLength(llamadas);
     expect(await intentosDe(aceptado.comprobanteId)).toHaveLength(1);
     expect(await intentosDe(rechazado.comprobanteId)).toHaveLength(1);
     await esc.A.refrescarSesiones();
@@ -344,7 +371,7 @@ describe('criterio 130 · el plazo de SUNAT', () => {
     });
     expect((await comprobanteFila(c.comprobanteId)).estado).toBe('POR_ENVIAR');
     await procesarCola(ctx, [A().id]);
-    const llamadas = ctx.pse.llamadas().length;
+    const llamadas = (await llamadasDe(c.comprobanteId)).length;
     expect((await envioDe(c.comprobanteId))!.estado).toBe('DETENIDO');
 
     // No se reintenta solo, por mucho que pase el tiempo ni cuántas veces barra o llegue un trabajo.
@@ -352,7 +379,7 @@ describe('criterio 130 · el plazo de SUNAT', () => {
     await ctx.barrido.barrerAhora();
     await ctx.cola.encolar({ empresaId: A().id, comprobanteId: c.comprobanteId });
     await procesarCola(ctx, [A().id]);
-    expect(ctx.pse.llamadas()).toHaveLength(llamadas);
+    expect(await llamadasDe(c.comprobanteId)).toHaveLength(llamadas);
     expect((await envioDe(c.comprobanteId))!.estado).toBe('DETENIDO');
 
     // El reintento manual lo reactiva igual, aunque el plazo ya pasó.

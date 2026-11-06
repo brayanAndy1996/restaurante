@@ -328,14 +328,20 @@ describe('criterios 123 y 166 · el worker usa la credencial de su emisor y de n
       await procesar(ctx, A().id, deA.comprobanteId);
       await procesar(ctx, B().id, deB.comprobanteId);
       expect(espia.mock.calls).toHaveLength(2);
-      const porSerie = (c: { serie: string; numero: number }) =>
-        espia.mock.calls.find(
-          ([doc]) => doc.id.serie === c.serie && doc.id.numero === c.numero,
-        )![1];
-      const fa = await comprobanteFila(deA.comprobanteId);
-      const fb = await comprobanteFila(deB.comprobanteId);
-      expect(porSerie({ serie: fa.serie as string, numero: Number(fa.numero) })).toEqual(SECRETO_A);
-      expect(porSerie({ serie: fb.serie as string, numero: Number(fb.numero) })).toEqual(SECRETO_B);
+      // A y B pueden tener la misma serie y el mismo número: lo que las distingue es el RUC del emisor.
+      const credencialDe = async (comprobanteId: string) => {
+        const fila = await comprobanteFila(comprobanteId);
+        const llamada = espia.mock.calls.find(
+          ([doc]) =>
+            doc.id.rucEmisor === (fila.emisor as { ruc: string }).ruc &&
+            doc.id.serie === fila.serie &&
+            doc.id.numero === Number(fila.numero),
+        );
+        expect(llamada, `la llamada del comprobante ${comprobanteId}`).toBeDefined();
+        return llamada![1];
+      };
+      expect(await credencialDe(deA.comprobanteId)).toEqual(SECRETO_A);
+      expect(await credencialDe(deB.comprobanteId)).toEqual(SECRETO_B);
     } finally {
       espia.mockRestore();
     }

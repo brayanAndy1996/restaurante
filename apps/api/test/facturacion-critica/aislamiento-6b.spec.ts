@@ -105,7 +105,8 @@ describe('criterio 163 · un trabajo de una empresa con un comprobante de otra n
       await procesar(ctx, A().id, deB.comprobanteId);
       await procesar(ctx, B().id, deA.comprobanteId);
       await procesar(ctx, randomUUID(), deA.comprobanteId);
-      // También por la cola, con el trabajo mal armado.
+      // También por la cola, con el trabajo mal armado (sola: sin el trabajo legítimo del cobro de A).
+      ctx.cola.vaciar();
       await ctx.cola.encolar({ empresaId: A().id, comprobanteId: deB.comprobanteId });
       await procesarCola(ctx, [A().id]);
       const registrado = registros.texto();
