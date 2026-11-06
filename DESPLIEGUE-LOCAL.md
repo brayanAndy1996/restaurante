@@ -186,7 +186,7 @@ necesita platos disponibles.
    `miraflores`), activa _Publicada_ y guarda. La carta queda en http://localhost:3001/el-fogon/miraflores.
 2. **Crea las mesas y sus QR.** En _Ajustes › Mapa de mesas_ crea una zona y unas mesas, y abre _QR de las
    mesas_. Cada mesa tiene un código (22 caracteres): el QR lleva a `http://localhost:3001/m/<código>`.
-   En la pantalla puedes copiar la dirección en vez de escanear el QR.
+   La pantalla no muestra esa dirección en texto: para abrirla en la computadora sin escanear el QR, usa el comando de `docs/guia-de-uso/07-carta-web-y-llamados.md`, paso 7.3.
 3. **Haz de cliente.** Abre esa dirección de la mesa en el celular (o en la vista de celular del navegador).
    Toca un plato, elige sus opciones, mira _Tu pedido_ y pulsa _Enviar al mozo_. También puedes pulsar
    _Llamar al mozo_ o _Pedir la cuenta_. La pantalla dice con palabras qué pasó con tu llamado:

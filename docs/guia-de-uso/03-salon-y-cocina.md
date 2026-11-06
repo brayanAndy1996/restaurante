@@ -155,8 +155,8 @@ modificadores y el **"Total"** con "IGV incluido". La mesa pasa a **"Pre-cuenta"
   vez" saca una copia.
 - Si después agregas o anulas algo, la pre-cuenta "ya no vale" y hay que pedir otra.
 
-El cobro y la emisión de boletas y facturas llegan con la sección de Caja; por ahora la atención
-termina en la pre-cuenta.
+El cobro y la emisión de boletas y facturas están en el capítulo 6, "Caja, cobro y comprobantes". Los
+pedidos que el cliente envía desde el QR de su mesa están en el capítulo 7.
 
 ## 3.11 Otros casos útiles
 
