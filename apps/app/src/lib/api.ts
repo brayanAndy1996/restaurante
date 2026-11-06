@@ -76,9 +76,9 @@ const TIEMPO_MAXIMO_MS = 15000;
 const ESTADOS_REINTENTABLES = new Set([502, 503, 504]);
 /**
  * Un 503 que no es un corte de paso: el servidor contesta, y repetir no lo arregla (falta una configuración
- * del sistema). Se muestra de inmediato en vez de esperar los reintentos.
+ * del sistema, o el padrón de RUC sin ninguna carga). Se muestra de inmediato en vez de esperar los reintentos.
  */
-const CODIGOS_503_SIN_REINTENTO = new Set(['CONFIGURACION_INCOMPLETA']);
+const CODIGOS_503_SIN_REINTENTO = new Set(['CONFIGURACION_INCOMPLETA', 'PADRON_NO_DISPONIBLE']);
 
 interface Manejadores {
   /** Un 401 `NO_AUTENTICADO` o `SESION_EXPIRADA` con una credencial guardada: la sesión ya no vale. */

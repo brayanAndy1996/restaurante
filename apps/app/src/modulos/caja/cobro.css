@@ -83,13 +83,6 @@
   font-variant-numeric: tabular-nums;
 }
 
-/* Cliente */
-.cobro__cliente {
-  display: flex;
-  flex-direction: column;
-  gap: var(--espacio-md);
-}
-
 /* Pagos: una fila por pago, separadas por una junta */
 .pagos {
   display: flex;

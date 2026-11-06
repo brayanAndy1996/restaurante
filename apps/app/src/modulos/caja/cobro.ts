@@ -185,6 +185,8 @@ export interface ErroresDeCliente {
   numero?: string;
   nombre?: string;
   direccion?: string;
+  /** Falta la marca «Emitir igual» de un RUC con aviso en el padrón (criterio 140). */
+  emitirIgual?: string;
 }
 
 export type ResultadoDeCliente =

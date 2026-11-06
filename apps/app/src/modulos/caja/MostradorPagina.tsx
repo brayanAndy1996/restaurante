@@ -41,11 +41,11 @@ import {
   CLIENTE_VACIO,
   NOMBRE_DE_MEDIO_DE_PAGO,
   resumirPagos,
-  validarCliente,
   type ClienteEscrito,
   type FormatoDeCobro,
 } from './cobro';
 import { ComprobantePanel } from './ComprobantePanel';
+import { motivoDelCliente, useClienteFactura } from './padron';
 import {
   ORDEN_DEL_MOSTRADOR,
   claveDeVentaEnCurso,
@@ -181,7 +181,8 @@ function Mostrador({
     [carta, borrador.lineas, formato],
   );
   const total = venta?.ok ? venta.total : '0.00';
-  const clienteValidado = validarCliente(tipo, total, cliente);
+  const padron = useClienteFactura(tipo, total, cliente, setCliente);
+  const clienteValidado = padron.validado;
   const resumen = useMemo(() => resumirPagos(total, filas), [total, filas]);
 
   function elegir(producto: ProductoDeVenta) {
@@ -338,7 +339,7 @@ function Mostrador({
               ? `${venta.nombres.join(', ')} ya no ${venta.nombres.length === 1 ? 'está' : 'están'} en la carta. Quita ${venta.nombres.length === 1 ? 'la línea' : 'las líneas'} para cobrar.`
               : null
             : !clienteValidado.ok
-              ? 'Faltan los datos del cliente.'
+              ? motivoDelCliente(clienteValidado.errores)
               : resumen.problema === null
                 ? null
                 : intentado
@@ -512,6 +513,7 @@ function Mostrador({
                     cliente={cliente}
                     onCliente={setCliente}
                     errores={intentado && !clienteValidado.ok ? clienteValidado.errores : null}
+                    padron={padron}
                   />
                 ) : null}
                 <section

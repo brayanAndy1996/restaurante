@@ -33,7 +33,6 @@ import {
   partesCobradas,
   resumirPagos,
   rutaDeCobro,
-  validarCliente,
   type ClienteEscrito,
   type FalloDeCobro,
   type FormatoDeCobro,
@@ -41,6 +40,7 @@ import {
   type Seleccion,
 } from './cobro';
 import { ComprobantePanel } from './ComprobantePanel';
+import { motivoDelCliente, useClienteFactura } from './padron';
 import { claveDeCuenta, leerCuenta, rutaDeCuenta, sePuedeAjustar, tituloDeCuenta } from './cuenta';
 import { claveDeCobro, leerEstadoDeCobro, recordarEnCobro } from './partes';
 import { PagosPanel, pagoNuevo } from './PagosPanel';
@@ -224,7 +224,8 @@ function Cobro({ ordenId, empresaId, usuarioId, sucursalId, atras }: PropsCobro)
     [cuenta, anteriores, modoVigente, unidades, partesRestantes, formatoVigente, porConfirmar],
   );
   const totalDeLaParte = parte?.ok ? parte.total : TOTAL_VACIO;
-  const clienteValidado = validarCliente(tipo, totalDeLaParte, cliente);
+  const padron = useClienteFactura(tipo, totalDeLaParte, cliente, setCliente);
+  const clienteValidado = padron.validado;
   const resumen = useMemo(() => resumirPagos(totalDeLaParte, filas), [totalDeLaParte, filas]);
 
   // --- Pantallas previas al formulario ------------------------------------------------------------------
@@ -348,7 +349,7 @@ function Cobro({ ordenId, empresaId, usuarioId, sucursalId, atras }: PropsCobro)
       ? 'Confirma en cuántas partes se dividió la cuenta.'
       : null
     : !clienteValidado.ok
-      ? 'Faltan los datos del cliente.'
+      ? motivoDelCliente(clienteValidado.errores)
       : resumen.problema === null
         ? null
         : intentado
@@ -569,6 +570,7 @@ function Cobro({ ordenId, empresaId, usuarioId, sucursalId, atras }: PropsCobro)
               cliente={cliente}
               onCliente={setCliente}
               errores={intentado && !clienteValidado.ok ? clienteValidado.errores : null}
+              padron={padron}
             />
             <section className="cobro__bloque cobro__bloque--junta" aria-labelledby="cobro-pagos">
               <h2 id="cobro-pagos">Pagos</h2>

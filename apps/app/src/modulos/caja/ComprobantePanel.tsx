@@ -1,13 +1,7 @@
-import { Aviso, Boton, CampoTexto, Segmentos, type OpcionDeSegmento } from '@restaurante/ui';
-import { useState } from 'react';
-import {
-  NOMBRE_DE_DOCUMENTO,
-  boletaExigeCliente,
-  type ClienteEscrito,
-  type ErroresDeCliente,
-  type FormatoDeCobro,
-  type TipoDeDocumento,
-} from './cobro';
+import { Segmentos, type OpcionDeSegmento } from '@restaurante/ui';
+import { ClienteFactura } from './ClienteFactura';
+import { type ClienteEscrito, type ErroresDeCliente, type FormatoDeCobro } from './cobro';
+import type { ClienteFacturaEstado } from './padron';
 
 type Tipo = 'BOLETA' | 'FACTURA';
 
@@ -19,13 +13,6 @@ const OPCIONES_DE_FORMATO: readonly OpcionDeSegmento<FormatoDeCobro>[] = [
   { valor: 'DETALLADO', etiqueta: 'Detallado' },
   { valor: 'CONSUMO', etiqueta: 'Por consumo' },
 ];
-const DOCUMENTOS_DE_BOLETA: readonly OpcionDeSegmento<TipoDeDocumento>[] = [
-  { valor: 'DNI', etiqueta: NOMBRE_DE_DOCUMENTO.DNI },
-  { valor: 'CE', etiqueta: NOMBRE_DE_DOCUMENTO.CE },
-  { valor: 'PASAPORTE', etiqueta: NOMBRE_DE_DOCUMENTO.PASAPORTE },
-  { valor: 'RUC', etiqueta: NOMBRE_DE_DOCUMENTO.RUC },
-];
-
 interface Props {
   /** Los tipos que el régimen del emisor permite (un Nuevo RUS solo emite boletas). */
   permitidos: readonly Tipo[];
@@ -41,6 +28,8 @@ interface Props {
   onCliente: (cliente: ClienteEscrito) => void;
   /** Lo que falta o está mal del cliente; solo se muestra cuando la persona ya intentó cobrar. */
   errores: ErroresDeCliente | null;
+  /** El padrón de RUC y la marca «Emitir igual» del cliente (criterios 140 y 176). */
+  padron: ClienteFacturaEstado;
 }
 
 /** Boleta o factura, detallado o por consumo, y el cliente cuando hace falta (criterios 51 y 111). */
@@ -55,13 +44,8 @@ export function ComprobantePanel({
   cliente,
   onCliente,
   errores,
+  padron,
 }: Props) {
-  const [conCliente, setConCliente] = useState(false);
-  const exigido = tipo === 'FACTURA' || boletaExigeCliente(total);
-  const visible = exigido || conCliente || cliente.numero !== '' || cliente.nombre !== '';
-  const documento: TipoDeDocumento = tipo === 'FACTURA' ? 'RUC' : cliente.tipoDocumento;
-  const poner = (cambio: Partial<ClienteEscrito>) => onCliente({ ...cliente, ...cambio });
-
   return (
     <section className="cobro__bloque cobro__bloque--junta" aria-labelledby="cobro-comprobante">
       <h2 id="cobro-comprobante">Comprobante</h2>
@@ -88,57 +72,14 @@ export function ComprobantePanel({
         />
       )}
 
-      {tipo === 'BOLETA' && boletaExigeCliente(total) ? (
-        <Aviso tipo="alerta" titulo="Más de S/ 700: pide nombre y documento">
-          Una boleta de más de S/ 700.00 necesita los datos del cliente.
-        </Aviso>
-      ) : null}
-
-      {visible ? (
-        <div className="cobro__cliente">
-          {tipo === 'BOLETA' ? (
-            <Segmentos
-              etiqueta="Documento del cliente"
-              opciones={DOCUMENTOS_DE_BOLETA}
-              valor={documento}
-              onCambio={(tipoDocumento) => poner({ tipoDocumento, numero: '' })}
-            />
-          ) : null}
-          <CampoTexto
-            etiqueta={tipo === 'FACTURA' ? 'RUC' : `Número de ${NOMBRE_DE_DOCUMENTO[documento]}`}
-            value={cliente.numero}
-            onChange={(e) =>
-              poner({
-                numero:
-                  documento === 'DNI' || documento === 'RUC'
-                    ? e.target.value.replace(/\D/g, '').slice(0, documento === 'DNI' ? 8 : 11)
-                    : e.target.value.replace(/[^A-Za-z0-9]/g, '').slice(0, 12),
-              })
-            }
-            inputMode={documento === 'DNI' || documento === 'RUC' ? 'numeric' : 'text'}
-            autoComplete="off"
-            {...(errores?.numero ? { error: errores.numero } : {})}
-          />
-          <CampoTexto
-            etiqueta={tipo === 'FACTURA' ? 'Razón social' : 'Nombre del cliente'}
-            value={cliente.nombre}
-            onChange={(e) => poner({ nombre: e.target.value.slice(0, 200) })}
-            autoComplete="off"
-            {...(errores?.nombre ? { error: errores.nombre } : {})}
-          />
-          {tipo === 'FACTURA' ? (
-            <CampoTexto
-              etiqueta="Dirección fiscal"
-              value={cliente.direccion}
-              onChange={(e) => poner({ direccion: e.target.value.slice(0, 300) })}
-              autoComplete="off"
-              {...(errores?.direccion ? { error: errores.direccion } : {})}
-            />
-          ) : null}
-        </div>
-      ) : (
-        <Boton onClick={() => setConCliente(true)}>Agregar datos del cliente</Boton>
-      )}
+      <ClienteFactura
+        tipo={tipo}
+        total={total}
+        cliente={cliente}
+        onCliente={onCliente}
+        errores={errores}
+        padron={padron}
+      />
     </section>
   );
 }
