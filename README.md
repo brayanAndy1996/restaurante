@@ -69,7 +69,7 @@ La entrega 5b de la especificación 005, «Carta web y pedido desde la mesa» (`
 
 Ver «Carta web y pedido desde la mesa (5b)» más abajo.
 
-La entrega 6a de la especificación 006, «Caja, cobro y comprobante sin PSE» (HU-25, HU-26, HU-28 y HU-30 completas; HU-18 y HU-03 en lo que toca a venta de mostrador, descuentos y cortesías), está terminada en la rama `claude/upbeat-wright-q09k0n` y todavía no está en `main`. Su especificación, plan y tareas están en [`specs/006-caja-cobro/`](specs/006-caja-cobro/). Incluye la revisión y tres rondas de ataque adversarial sobre la ruta crítica (montos, cobro, caja, comprobantes, permisos y aislamiento). Ver «Caja, cobro y comprobante (6a)» más abajo.
+La entrega 6a de la especificación 006, «Caja, cobro y comprobante sin PSE» (HU-25, HU-26, HU-28 y HU-30 completas; HU-18 y HU-03 en lo que toca a venta de mostrador, descuentos y cortesías), ya está en `main`. Su especificación, plan y tareas están en [`specs/006-caja-cobro/`](specs/006-caja-cobro/). Incluye la revisión y tres rondas de ataque adversarial sobre la ruta crítica (montos, cobro, caja, comprobantes, permisos y aislamiento). Ver «Caja, cobro y comprobante (6a)» más abajo.
 
 **La 6a no se usa con clientes reales sin la 6b:** sus comprobantes quedan «por enviar» hasta que exista el envío a SUNAT (por un PSE, con sus plazos).
 
@@ -280,7 +280,7 @@ código fuente), `packages/contratos` para hablar con la API y `packages/dominio
 
 ## Salón y cocina (3a): cómo probarlo
 
-Con la rama de trabajo `claude/upbeat-wright-q09k0n`, `pnpm local:preparar` y `pnpm dev` (ver arriba). Los usuarios de demostración están en [`DESPLIEGUE-LOCAL.md`](DESPLIEGUE-LOCAL.md).
+Con `pnpm local:preparar` y `pnpm dev` (ver arriba). Los usuarios de demostración están en [`DESPLIEGUE-LOCAL.md`](DESPLIEGUE-LOCAL.md).
 
 - **Diseñar el mapa.** Como `fogon.admin`, en Ajustes › Mapa de mesas, crea una zona y sus mesas.
 - **Dos navegadores.** En uno, entra como `fogon.mozo` (El Fogón · Miraflores). En el otro, o en una ventana privada, entra como `fogon.cocina` y abre `/cocina`. Lo que hace el mozo (abrir la mesa, enviar, marchar, pedir la pre-cuenta) aparece en el KDS sin recargar, y el «Listo» de la cocina llega al salón.

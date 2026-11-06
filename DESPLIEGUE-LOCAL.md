@@ -16,7 +16,7 @@ secciones ya aprobadas y cerradas. Hoy son:
 - **Sección 5a, Carta web y llamados desde la mesa:** la API, los QR de las mesas (en Ajustes › Mapa de mesas) y los llamados (en Salón › Llamados).
 - **Sección 5b, Carta web y pedido desde la mesa:** la carta pública de cada sucursal y el modo mesa, que abre el QR de cada mesa (`apps/web`).
 
-La caja (sección 6a, caja, cobro y comprobante sin PSE) está en la rama `claude/upbeat-wright-q09k0n` y todavía no está en `main`: para probarla, cambia a esa rama con `git checkout claude/upbeat-wright-q09k0n`. Los comprobantes de la 6a quedan «por enviar» hasta la 6b (facturación electrónica), que se trabaja en la misma rama y llega a `main` cuando se aprueba.
+- **Sección 6a, Caja, cobro y comprobante sin PSE:** apertura y cierre de caja (X y Z), cobro con varios medios y vuelto, división de cuenta, descuentos y cortesías con clave, venta de mostrador y boleta o factura con su número. Los comprobantes quedan «por enviar» hasta la 6b (facturación electrónica), que se trabaja en otra rama y llega a `main` cuando se aprueba.
 
 ## 1. Lo que necesitas instalar
 
@@ -218,7 +218,7 @@ Con Docker, las fotos pueden no verse en la carta: el optimizador de imágenes c
 
 #### Caja, cobro y comprobante (sección 6a)
 
-Esta parte está en la rama `claude/upbeat-wright-q09k0n` (`git checkout claude/upbeat-wright-q09k0n`), todavía no en `main`. Hazla después de «Salón y cocina» (sección 3a), porque cobrar necesita una mesa con comanda. La demostración no trae cajas, series ni tasa de IGV: las creas tú en los pasos 1 y 2. El recorrido completo, pantalla por pantalla, está en [`docs/guia-de-uso/06-caja-y-cobro.md`](docs/guia-de-uso/06-caja-y-cobro.md).
+Hazla después de «Salón y cocina» (sección 3a), porque cobrar necesita una mesa con comanda. La demostración no trae cajas, series ni tasa de IGV: las creas tú en los pasos 1 y 2. El recorrido completo, pantalla por pantalla, está en [`docs/guia-de-uso/06-caja-y-cobro.md`](docs/guia-de-uso/06-caja-y-cobro.md).
 
 1. **Pon la tasa de IGV.** Como `fogon.admin`, en _Ajustes › Emisores_, elige el emisor «El Fogón Restaurante S.A.C.» (régimen General, el de Miraflores), toca _Agregar tasa_, escribe la fecha «Desde» (por ejemplo, `2026-01-01`) y la tasa, `18`, y pulsa _Guardar tasa_. Sin tasa no se cobra. El valor es de prueba: la tasa de tu negocio la confirma tu contador.
 2. **Crea la caja y sus series.** En _Ajustes › Cajas_, toca _Agregar caja_, escribe el nombre (por ejemplo, «Caja 1») y, si tienes una impresora de la 3b, elígela en _Impresora de la caja_. En el mismo formulario, pon la serie de boleta `B001` y la de factura `F001`, con el _Primer número_ en 1, y pulsa _Crear caja_. Sin una serie de cada tipo, ese comprobante no se emite.

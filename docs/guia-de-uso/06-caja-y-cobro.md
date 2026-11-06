@@ -1,6 +1,6 @@
 # 6. Caja, cobro y comprobantes
 
-> **Estado:** este capítulo es de la caja (entrega 6a), que está en la rama `claude/upbeat-wright-q09k0n` y todavía no en `main`. Para seguirlo, cambia a esa rama (`git checkout claude/upbeat-wright-q09k0n`) y corre `pnpm local:preparar` y `pnpm dev`. Los comprobantes quedan «por enviar»: no salen a SUNAT hasta la entrega 6b.
+> **Estado:** la caja (entrega 6a) ya está en `main`. Los comprobantes quedan «por enviar»: no salen a SUNAT hasta la entrega 6b.
 
 ## Para qué sirve
 
