@@ -35,7 +35,7 @@ import {
   configurarIdentidad,
   type MotivoDeCambioDeIdentidad,
 } from '../../lib/identidad';
-import { olvidarIntentosRecordados } from '../../lib/intentos-recordados';
+import { olvidarEnviosVivos, olvidarIntentosRecordados } from '../../lib/intentos-recordados';
 import type { ErrorApi } from '../../lib/errores';
 
 /** Por qué se cerró la sesión sin que la persona lo pidiera: se avisa en la pantalla de ingreso. */
@@ -118,6 +118,11 @@ export function SesionProvider({ children }: { children: ReactNode }) {
   const [plataforma, setPlataforma] = useState<SesionPlataforma | null>(() => sesionDePlataforma());
   const [salida, setSalida] = useState<Salida | null>(null);
   const { pathname } = useLocation();
+
+  // Una app que arranca no tiene envíos vivos de antes (los de otra instancia ya no se siguen).
+  useEffect(() => {
+    olvidarEnviosVivos();
+  }, []);
 
   // Cuando la redirección ya llegó a su destino, el aviso vive en el estado de la ubicación.
   useEffect(() => {

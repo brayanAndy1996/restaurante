@@ -1,11 +1,18 @@
 import type { AutorizacionRespuesta, ObjetivoAutorizacion } from '@restaurante/contratos';
 import type { RequisitoPermiso } from '@restaurante/dominio';
-import { useRef, useState } from 'react';
+import { useRef, useState, useSyncExternalStore } from 'react';
 import { mismoObjetivo, type ContextoDeObjetivo } from '../../componentes/objetivo-de-clave';
 import { useClaveDeSupervisor } from '../../componentes/useClaveDeSupervisor';
 import { ahoraDelServidor, nuevaClaveDeIdempotencia } from '../../lib/api';
 import { useEnvioPendiente } from '../../lib/envios';
-import { INTENTOS_RECORDADOS, type IntentoRecordado } from '../../lib/intentos-recordados';
+import {
+  alCambiarLosIntentos,
+  guardarIntento,
+  hayEnvioVivo,
+  leerIntento,
+  registrarEnvioVivo,
+  type IntentoRecordado,
+} from '../../lib/intentos-recordados';
 import { ErrorApi } from '../../lib/errores';
 import type { ExtraConClave } from './cuenta';
 
@@ -65,12 +72,11 @@ export function useAjusteConClave(opciones: { recordarComo?: string } = {}) {
   const memoria = opciones.recordarComo;
   const intento = {
     get current(): Intento | null {
-      return memoria === undefined ? propio.current : (INTENTOS_RECORDADOS.get(memoria) ?? null);
+      return memoria === undefined ? propio.current : leerIntento(memoria);
     },
     set current(valor: Intento | null) {
       if (memoria === undefined) propio.current = valor;
-      else if (valor === null) INTENTOS_RECORDADOS.delete(memoria);
-      else INTENTOS_RECORDADOS.set(memoria, valor);
+      else guardarIntento(memoria, valor);
     },
   };
 
@@ -116,6 +122,9 @@ export function useAjusteConClave(opciones: { recordarComo?: string } = {}) {
         };
         intento.current = actual;
 
+        // Con memoria, el envío queda anotado hasta que termine, aunque esta pantalla se cierre: así ninguna otra manda
+        // otro con el mismo intento mientras este siga vivo.
+        const terminarEnvio = memoria === undefined ? null : registrarEnvioVivo(memoria, actual.id);
         try {
           const respuesta = await envio.enviar(
             (extra) =>
@@ -142,6 +151,8 @@ export function useAjusteConClave(opciones: { recordarComo?: string } = {}) {
             }
           }
           return { estado: 'fallo', error, id: actual.id };
+        } finally {
+          terminarEnvio?.();
         }
       }
       return { estado: 'cancelado' };
@@ -155,6 +166,13 @@ export function useAjusteConClave(opciones: { recordarComo?: string } = {}) {
    * muestra su nota. Otra pantalla pudo recordar otro intento mientras tanto (una respuesta tardía no lo borra).
    */
   function soltarSiEs(id: string) {
+    // Con un envío vivo de ese `id` no se suelta: su respuesta final es la que lo suelta.
+    if (memoria !== undefined && hayEnvioVivo(memoria, id)) return;
+    if (intento.current?.id === id) intento.current = null;
+  }
+
+  /** La nota con ese `id` ya se ve en el comprobante leído: salió, y su envío (si sigue vivo) solo traerá la réplica. */
+  function soltarPorVista(id: string) {
     if (intento.current?.id === id) intento.current = null;
   }
 
@@ -163,8 +181,17 @@ export function useAjusteConClave(opciones: { recordarComo?: string } = {}) {
     return intento.current?.id ?? null;
   }
 
+  // ¿Queda un envío vivo del intento recordado (de esta pantalla o de una que ya se cerró)?
+  const esperandoRespuestaAnterior = useSyncExternalStore(alCambiarLosIntentos, () => {
+    if (memoria === undefined) return false;
+    const id = leerIntento(memoria)?.id;
+    return id !== undefined && hayEnvioVivo(memoria, id);
+  });
+
   return {
     ejecutar,
+    esperandoRespuestaAnterior,
+    soltarPorVista,
     soltarSiEs,
     idDelIntento,
     ventana,

@@ -127,18 +127,20 @@ export function NotaCreditoHoja({ comprobante, base, volver, onCerrar }: Props) 
   //  - Con esta hoja abierta y un envío suyo sin respuesta (un 500, un corte), la hoja muestra la nota emitida, leída por
   //    su comprobante, igual que tras un 201: así nadie toca «Emitir» otra vez y saca una segunda nota.
   //  - Si la hoja se abre después, el `id` se suelta en silencio.
-  const { soltarSiEs, idDelIntento } = ajuste;
+  const { soltarSiEs, soltarPorVista, idDelIntento } = ajuste;
   const notasDelComprobante = comprobante.notasCredito;
   const tipoEnviado = useRef<TipoNotaCredito | null>(null);
+  // Esta hoja se abrió (o estuvo) esperando la respuesta de una nota anterior: si la nota aparece, la muestra.
+  const esperaba = useRef(false);
   const leyendoLaNota = useRef(false);
   useEffect(() => {
     const id = idDelIntento();
     const emitida =
       id === null ? undefined : (notasDelComprobante ?? []).find((n) => n.notaId === id);
     if (id === null || emitida === undefined) return;
-    const tipoDeLaNota = tipoEnviado.current;
+    const tipoDeLaNota = tipoEnviado.current ?? (esperaba.current ? emitida.tipo : null);
     if (tipoDeLaNota === null) {
-      soltarSiEs(id);
+      soltarPorVista(id);
       return;
     }
     if (leyendoLaNota.current) return;
@@ -150,7 +152,7 @@ export function NotaCreditoHoja({ comprobante, base, volver, onCerrar }: Props) 
           queryFn: ({ signal }) => leerComprobante(emitida.id, signal),
           staleTime: 0,
         });
-        soltarSiEs(id);
+        soltarPorVista(id);
         if (!ajuste.sigueMontada()) return;
         setEnviando(false);
         setHecha({ respuesta: { nota: detalle }, tipo: tipoDeLaNota });
@@ -179,6 +181,11 @@ export function NotaCreditoHoja({ comprobante, base, volver, onCerrar }: Props) 
   const [fallo, setFallo] = useState<FalloDeNota | null>(null);
   const [enviando, setEnviando] = useState(false);
   const [hecha, setHecha] = useState<Hecha | null>(null);
+  // Un envío de la nota de este comprobante sigue vivo (de una hoja que ya se cerró): no se manda otro mientras tanto.
+  const esperando = ajuste.esperandoRespuestaAnterior && !enviando;
+  useEffect(() => {
+    if (esperando) esperaba.current = true;
+  }, [esperando]);
   // La API reconoció el `id` con otra devolución: la nota puede ya estar emitida y no se emite otra hasta revisar.
   const [porRevisar, setPorRevisar] = useState(false);
   const alertaDeFallo = useRef<HTMLDivElement>(null);
@@ -246,6 +253,30 @@ export function NotaCreditoHoja({ comprobante, base, volver, onCerrar }: Props) 
             volver={volver}
             onListo={onCerrar}
           />
+        </Hoja>
+        {ajuste.ventana}
+      </>
+    );
+  }
+
+  if (esperando) {
+    return (
+      <>
+        <Hoja abierta onCerrar={onCerrar} titulo="Nota de crédito" className="hoja-ajuste">
+          <div className="formulario ajuste nota">
+            <Aviso tipo="info" titulo="Esperando la respuesta de la nota anterior…">
+              Una nota de este comprobante sigue en camino. Hasta saber qué pasó con ella no se
+              emite otra, para no repetirla.
+            </Aviso>
+            {fallo?.revisarDeNuevo ? (
+              <Aviso tipo="error" titulo={fallo.titulo}>
+                {fallo.texto}
+              </Aviso>
+            ) : null}
+            <Boton variante="principal" bloque onClick={() => void revisarElComprobante()}>
+              {fallo?.revisarDeNuevo ? 'Intentar otra vez' : 'Revisar el comprobante'}
+            </Boton>
+          </div>
         </Hoja>
         {ajuste.ventana}
       </>
@@ -332,6 +363,13 @@ export function NotaCreditoHoja({ comprobante, base, volver, onCerrar }: Props) 
     };
     // Solo se suelta el intento de este envío (su respuesta final): otra hoja pudo recordar otro mientras esperaba.
     if (resultado.estado === 'hecho') soltarSiEs(resultado.id);
+    if (
+      resultado.estado === 'fallo' &&
+      resultado.id !== null &&
+      esRespuestaFinal(resultado.error)
+    ) {
+      soltarSiEs(resultado.id);
+    }
     if (!ajuste.sigueMontada()) {
       // La persona cerró la hoja mientras esperaba la red: la nota salió igual, y el detalle se pone al día.
       if (resultado.estado === 'hecho') refrescar();
@@ -344,7 +382,6 @@ export function NotaCreditoHoja({ comprobante, base, volver, onCerrar }: Props) 
       setHecha({ respuesta: resultado.respuesta, tipo });
       return;
     }
-    if (esRespuestaFinal(resultado.error) && resultado.id !== null) soltarSiEs(resultado.id);
     const traducido = falloDeNota(resultado.error);
     if (traducido.revisar) setPorRevisar(true);
     if (traducido.releer) {
@@ -375,7 +412,9 @@ export function NotaCreditoHoja({ comprobante, base, volver, onCerrar }: Props) 
         queryFn: ({ signal }) => leerComprobante(comprobante.id, signal),
         staleTime: 0,
       });
-      if (id !== null && (leido.notasCredito ?? []).some((n) => n.notaId === id)) soltarSiEs(id);
+      if (id !== null && (leido.notasCredito ?? []).some((n) => n.notaId === id)) {
+        soltarPorVista(id);
+      }
       onCerrar();
     } catch {
       if (!ajuste.sigueMontada()) return;
