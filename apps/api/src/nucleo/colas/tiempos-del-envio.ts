@@ -12,8 +12,11 @@ import { TIEMPO_LIMITE_R2_MS } from '../archivos/almacen-r2';
 
 /** El arriendo mínimo de un envío (criterio 125): el de siempre, 2 minutos. */
 export const ARRIENDO_ENVIO_MINIMO_MS = 2 * 60_000;
-/** Margen del arriendo sobre el peor caso del paso 2: guardar el resultado en la base y los relojes de los workers. */
-export const MARGEN_DEL_ARRIENDO_MS = 30_000;
+/**
+ * Margen del arriendo sobre el peor caso del paso 2: guardar el resultado en la base y los relojes de los workers. Con el
+ * `PSE_TIMEOUT_MS` por defecto (30 s) las cuentas dan justo 2 minutos: 2 × 30 + 2 × 20 + 20.
+ */
+export const MARGEN_DEL_ARRIENDO_MS = 20_000;
 /** Margen de la expiración de la cola sobre el arriendo más largo: la cola nunca da por perdido un trabajo que sigue vivo. */
 export const MARGEN_DE_EXPIRACION_MS = 60_000;
 
