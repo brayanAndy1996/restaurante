@@ -193,23 +193,39 @@ describe('H1 · criterios 153 y 177 · el id de la nota se conserva hasta una re
     expect(claveDe(s, 1)).not.toBe(claveDe(s, 0));
   });
 
-  it('tras un corte de la red (el POST se queda sin respuesta), cerrar la hoja, volver a abrirla y cambiar la devolución a Yape manda el mismo id', async () => {
+  it('tras un corte de la red (el POST se queda sin respuesta) y su hoja cerrada, la hoja siguiente espera sin mandar nada; cuando A responde 500, la devolución por Yape manda el mismo id', async () => {
+    // Criterio 177 (ronda 6): con un envío vivo del comprobante la hoja no manda otro; el `id` sigue siendo el de A.
     let n = 0;
+    let responderA: ((r: Response) => void) | undefined;
     const s = montar(({ cuerpo }) =>
       ++n === 1
-        ? new Promise<Response>(() => undefined) // la respuesta nunca llega
+        ? new Promise<Response>((r) => (responderA = r)) // la respuesta de A tarda
         : json(201, emitida(cuerpo as NotaCreditoEntrada)),
     );
-    let hoja = await abrirLaHoja();
-    await devolverUnLomoYEmitir(hoja);
+    const primera = await abrirLaHoja();
+    await devolverUnLomoYEmitir(primera);
     await waitFor(() => expect(posts(s)).toHaveLength(1));
-    await userEvent.click(within(hoja).getByRole('button', { name: 'Cerrar' }));
+    await userEvent.click(within(primera).getByRole('button', { name: 'Cerrar' }));
     await waitFor(() =>
       expect(screen.queryByRole('dialog', { name: 'Nota de crédito' })).toBeNull(),
     );
 
+    // La hoja siguiente espera: sin POST, solo «Revisar el comprobante» y cerrar.
     await userEvent.click(await screen.findByRole('button', { name: 'Nota de crédito' }));
-    hoja = await screen.findByRole('dialog', { name: 'Nota de crédito' });
+    const hoja = await screen.findByRole('dialog', { name: 'Nota de crédito' });
+    expect(
+      await within(hoja).findByText(/Esperando la respuesta de la nota anterior/i),
+    ).toBeVisible();
+    expect(within(hoja).getByRole('button', { name: /revisar (el )?comprobante/i })).toBeVisible();
+    const emitirEnEspera = within(hoja).queryByRole('button', EMITIR);
+    if (emitirEnEspera) expect(emitirEnEspera).toBeDisabled();
+    expect(posts(s)).toHaveLength(1);
+
+    // A responde con un fallo no final (500): ya no hay envío vivo y la hoja queda lista, con el mismo id.
+    responderA!(json(500, { codigo: 'ERROR_INTERNO', mensaje: 'Falló' }));
+    await waitFor(() =>
+      expect(within(hoja).queryByText(/Esperando la respuesta de la nota anterior/i)).toBeNull(),
+    );
     await within(hoja).findByText(/Sale de tu turno en Caja 1/);
     await userEvent.click(within(hoja).getByRole('button', { name: 'Devolver ítems' }));
     await masDe(hoja, 'Lomo saltado');
