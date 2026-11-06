@@ -467,7 +467,8 @@ describe('criterio 134 · auditoría y réplicas', () => {
     try {
       const filasDe = async () =>
         filasDeAuditoria(admin, "accion = 'reemitir_comprobante' AND empresa_id = $1", [A().id]);
-      const antes = (await filasDe()).length;
+      const filasAntes = await filasDe();
+      const antes = filasAntes.length;
       const clave = randomUUID();
       const cuerpo = { tipo: 'FACTURA', cliente: CLIENTE_RUC };
       const primera = await reemitir(original.comprobanteId, cuerpo, supervisor(), clave);
@@ -476,7 +477,11 @@ describe('criterio 134 · auditoría y réplicas', () => {
 
       const despues = await filasDe();
       expect(despues).toHaveLength(antes + 1);
-      const fila = despues.at(-1)!;
+      // Con el reloj manual todas las filas tienen la misma hora: la nueva es la que no estaba.
+      const conocidas = new Set(filasAntes.map((f) => f.id));
+      const nuevas = despues.filter((f) => !conocidas.has(f.id));
+      expect(nuevas).toHaveLength(1);
+      const fila = nuevas[0]!;
       expect(fila).toMatchObject({
         accion: 'reemitir_comprobante',
         entidad: 'comprobante',

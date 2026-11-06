@@ -207,6 +207,7 @@ export async function crearEscenarioFact(
   opciones: { conPse?: boolean } = {},
 ): Promise<Escenario> {
   const esc = await crearEscenario(ctx);
+  superadmins.set(ctx, esc.sa);
   if (opciones.conPse !== false) {
     // La configuración se hace aparte y se exige en el `beforeEach` de cada archivo (`exigirPse`): si falla, falla cada
     // prueba con el mismo motivo en lugar de quedar omitidas.
@@ -400,7 +401,19 @@ export async function avanzar(
 ): Promise<void> {
   ctx.reloj.avanzar(milisegundos);
   for (const e of empresas) await e.refrescarSesiones();
+  // La sesión del superadministrador también expira (30 minutos): se abre de nuevo y se actualiza en su sitio.
+  const sa = superadmins.get(ctx);
+  if (sa && milisegundos >= 5 * 60_000) {
+    const res = await ctx
+      .http()
+      .post('/plataforma/sesiones')
+      .send({ usuario: sa.usuario, contrasena: sa.contrasena });
+    exigirEstado(res, 201, 'Renovar la sesión del superadministrador');
+    sa.token = res.body.token as string;
+  }
 }
+
+const superadmins = new WeakMap<object, Escenario['sa']>();
 
 /** Lo que dice el reloj en un texto ISO. */
 export const ahoraIso = (ctx: AppFact): string => ctx.reloj.ahora().toISOString();
