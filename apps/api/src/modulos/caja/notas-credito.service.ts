@@ -11,7 +11,7 @@ import { jsonCanonico } from '../../nucleo/idempotencia';
 import { RELOJ, type Reloj } from '../../nucleo/reloj';
 import { AuditoriaService } from '../auditoria';
 import { EmisionService, veTodosLosTurnos } from '../facturacion';
-import { SesionActual, normalizarValor } from '../seguridad';
+import { SesionActual, normalizarValor, type ReplicaDeClave } from '../seguridad';
 import { CobrosService } from './cobros.service';
 import { idDeClienteReutilizado, turnoDeOtro } from './errores-caja';
 import { EventosCaja } from './eventos-caja';
@@ -115,7 +115,7 @@ interface FilaReplica {
  * autorización de supervisor que consumió la clave diferida.
  */
 @Injectable()
-export class NotasCreditoService {
+export class NotasCreditoService implements ReplicaDeClave {
   constructor(
     @Inject(CONEXION_API) private readonly conexion: Sequelize,
     @Inject(ContextoEmpresa) private readonly contexto: ContextoEmpresa,
@@ -127,6 +127,23 @@ export class NotasCreditoService {
     @Inject(AuditoriaService) private readonly auditoria: AuditoriaService,
     @Inject(EventosCaja) private readonly eventos: EventosCaja,
   ) {}
+
+  /**
+   * ¿Ya hay una nota con este `id` de cliente? Lo consulta `ClaveDiferidaInterceptor` antes de exigir y consumir la clave
+   * del supervisor (criterios 145 y 153): la réplica por `id` no es una nota nueva, así que no pide ni gasta la
+   * autorización (aunque sea de otro objetivo) y la resuelve `emitir` (201 con la nota guardada, o 422 si el `id` es otra
+   * petición). Toma antes el mismo cerrojo por `id` que `emitir`: si dos peticiones con el mismo `id` llegan a la vez, la
+   * segunda espera a que la primera confirme y ve su nota, en lugar de consumir su clave y devolver la réplica.
+   */
+  async yaExiste(cuerpo: unknown): Promise<boolean> {
+    const id = (cuerpo as { id: string }).id.toLowerCase();
+    await this.cobros.turnarPor(`nota-credito-id:${id}`);
+    const filas = await this.conexion.query('SELECT 1 FROM nota_credito WHERE id = $1', {
+      bind: [id],
+      type: QueryTypes.SELECT,
+    });
+    return filas.length > 0;
+  }
 
   async emitir(entrada: NotaCreditoEntradaValidada): Promise<NotaCreditoRespuesta> {
     const sucursalId = this.sesion.sucursalActiva();

@@ -18,7 +18,8 @@ import { NotasCreditoService } from './notas-credito.service';
  * El orden de los decoradores fija el de los interceptores (de abajo hacia arriba): rol, módulo, idempotencia (la réplica
  * de la misma clave devuelve lo guardado sin consumir la autorización), `Idempotency-Key` obligatoria y, al final, la clave
  * del supervisor, que valida antes la entrada y consume la autorización en la transacción de la operación: si la nota falla
- * después, el consumo se revierte con ella y la autorización vuelve (criterio 145). Que la clave sea del objetivo exacto
+ * después, el consumo se revierte con ella y la autorización vuelve (criterio 145). La réplica por `id` de una nota ya
+ * emitida no exige ni consume la clave (`replicaPor`: criterios 145 y 153). Que la clave sea del objetivo exacto
  * (el total recalculado y lo devuelto) lo comprueba `EmisionService.prepararNotaCredito`.
  */
 @Controller('notas-credito')
@@ -32,7 +33,7 @@ export class NotasCreditoController {
    * `CLIENTE_REQUERIDO` / `COMPROBANTE_NO_PERMITIDO` / `CLAVE_IDEMPOTENCIA_REUTILIZADA`.
    */
   @Post()
-  @ClaveDespuesDeValidar({ cuerpo: notaCreditoEntradaSchema })
+  @ClaveDespuesDeValidar({ cuerpo: notaCreditoEntradaSchema, replicaPor: NotasCreditoService })
   @IdempotenteObligatoria()
   @RequiereModulo('FACTURACION')
   @Permiso('EMITIR_NOTA_CREDITO')
