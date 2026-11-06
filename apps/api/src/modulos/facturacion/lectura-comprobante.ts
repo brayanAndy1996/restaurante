@@ -5,6 +5,7 @@ import type {
   TipoDocumentoElectronico,
 } from '@restaurante/dominio';
 import { QueryTypes, type Sequelize } from 'sequelize';
+import type { RegistroIdsDeNotas } from './impresora-de-caja';
 
 /**
  * Lee un comprobante de la tabla y lo arma con la forma de `comprobanteRespuesta` (historia 006, criterios 69 y 77, y
@@ -12,7 +13,9 @@ import { QueryTypes, type Sequelize } from 'sequelize';
  * RLS hace que uno de otra empresa sea indistinguible de uno inexistente (devuelve `null`). Dos consultas fijas, sin
  * importar cuántas líneas tenga. Una boleta o una factura lleva además, en dos consultas más, `notasCredito` y
  * `acreditado` (criterio 148): las notas que cuentan (todas las del comprobante salvo las que reemplazó una reemisión)
- * y lo que acreditan por línea del original, con los que la PWA calcula la nota con `calcularNotaCredito`.
+ * y lo que acreditan por línea del original, con los que la PWA calcula la nota con `calcularNotaCredito`. Cada nota lleva
+ * `notaId`, el `id` que mandó el cliente: lo da el puerto de caja (`RegistroIdsDeNotas`, que falla cerrado: facturación no
+ * lee `nota_credito`).
  */
 
 interface FilaComprobante {
@@ -130,6 +133,7 @@ const UNIONES = `FROM comprobante c
 export async function leerComprobante(
   conexion: Sequelize,
   id: string,
+  idsDeNotas: RegistroIdsDeNotas,
 ): Promise<ComprobanteRespuesta | null> {
   const filas = await conexion.query<FilaComprobante>(
     `SELECT ${COLUMNAS} ${UNIONES} WHERE c.id = $1`,
@@ -147,7 +151,8 @@ export async function leerComprobante(
     { bind: [id], type: QueryTypes.SELECT },
   );
   const tieneOperaciones = c.op_gravadas !== null;
-  const conNotas = c.tipo === 'BOLETA' || c.tipo === 'FACTURA' ? await notasDe(conexion, id) : null;
+  const conNotas =
+    c.tipo === 'BOLETA' || c.tipo === 'FACTURA' ? await notasDe(conexion, id, idsDeNotas) : null;
   return {
     id: c.id,
     tipo: c.tipo,
@@ -289,16 +294,24 @@ export async function leerComprobante(
 async function notasDe(
   conexion: Sequelize,
   id: string,
+  idsDeNotas: RegistroIdsDeNotas,
 ): Promise<Pick<ComprobanteRespuesta, 'notasCredito' | 'acreditado'>> {
   const notas = await conexion.query<{
     id: string;
+    cadena: string[];
     tipo_nota: 'ANULACION' | 'DEVOLUCION';
     serie: string;
     numero: number;
     estado: ComprobanteRespuesta['estado'];
     total: string;
   }>(
-    `SELECT n.id, n.tipo_nota, n.serie, n.numero, n.estado, n.total::text AS total
+    `SELECT n.id, n.tipo_nota, n.serie, n.numero, n.estado, n.total::text AS total,
+            (WITH RECURSIVE cadena(id) AS (
+               SELECT n.id
+               UNION
+               SELECT p.reemplaza_a_id FROM cadena c JOIN comprobante p ON p.id = c.id
+                WHERE p.reemplaza_a_id IS NOT NULL)
+             SELECT array_agg(id) FROM cadena) AS cadena
        FROM comprobante n
       WHERE n.afecta_a_id = $1
         AND NOT EXISTS (SELECT 1 FROM comprobante r WHERE r.reemplaza_a_id = n.id)
@@ -324,9 +337,22 @@ async function notasDe(
       GROUP BY l.posicion_origen ORDER BY l.posicion_origen`,
     { bind: [id], type: QueryTypes.SELECT },
   );
+  // El `id` de cliente lo tiene la primera nota de la cadena de reemisiones (la reemisión de una rechazada es otro comprobante
+  // de la misma operación).
+  const registrados = await idsDeNotas.deLosComprobantes([
+    ...new Set(notas.flatMap((n) => n.cadena)),
+  ]);
+  const notaIdDe = (n: { id: string; cadena: string[] }): string => {
+    for (const eslabon of n.cadena) {
+      const notaId = registrados.get(eslabon);
+      if (notaId !== undefined) return notaId;
+    }
+    throw new Error(`La nota ${n.id} no tiene su registro de nota de crédito`);
+  };
   return {
     notasCredito: notas.map((n) => ({
       id: n.id,
+      notaId: notaIdDe(n),
       tipo: n.tipo_nota,
       numero: textoDelNumero(n.serie, n.numero),
       estado: n.estado,

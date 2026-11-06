@@ -29,6 +29,7 @@ import { ReemisionService } from './reemision.service';
 import { FacturadoService } from './facturado';
 import {
   RegistroDevolucionDeNota,
+  RegistroIdsDeNotas,
   RegistroImpresoraDeCaja,
   RegistroPagosDeCobro,
 } from './impresora-de-caja';
@@ -63,6 +64,7 @@ import { UltimaEmisionDeComprobantes } from './ultima-emision-de-comprobantes';
     RegistroImpresoraDeCaja,
     RegistroPagosDeCobro,
     RegistroDevolucionDeNota,
+    RegistroIdsDeNotas,
     DevolucionDeNotaParaTicket,
     RegistroAlcanceDeTurnos,
     UltimaEmisionDeComprobantes,
@@ -92,6 +94,7 @@ import { UltimaEmisionDeComprobantes } from './ultima-emision-de-comprobantes';
     RegistroImpresoraDeCaja,
     RegistroPagosDeCobro,
     RegistroDevolucionDeNota,
+    RegistroIdsDeNotas,
     RegistroAlcanceDeTurnos,
     RegistroDeConectores,
     EnviosService,

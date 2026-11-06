@@ -99,3 +99,31 @@ export class RegistroDevolucionDeNota {
     return this.resolutor(notaId);
   }
 }
+
+/** Cómo dar el `id` que mandó el cliente de cada nota de crédito; lo registra el módulo de caja. */
+export type ResolutorIdsDeNotas = (comprobanteIds: string[]) => Promise<Map<string, string>>;
+
+/**
+ * Lo mismo para el `id` de cliente de las notas de crédito (historia 006, criterio 148): `comprobanteRespuesta.notasCredito`
+ * lleva `notaId`, el `nota_credito.id` que mandó la PWA en `POST /notas-credito`, para que sepa si su intento ya salió.
+ * Facturación no lee `nota_credito`: el módulo de caja registra al arrancar cómo obtenerlo a partir de los ids de comprobante.
+ * Devuelve solo los que tienen registro (el de la nota original; una reemisión no tiene el suyo). **Falla cerrado**: sin
+ * registro, lanza un error (nunca responde una nota sin su `notaId`).
+ */
+@Injectable()
+export class RegistroIdsDeNotas {
+  private resolutor: ResolutorIdsDeNotas | null = null;
+
+  registrar(resolutor: ResolutorIdsDeNotas): void {
+    this.resolutor = resolutor;
+  }
+
+  async deLosComprobantes(comprobanteIds: string[]): Promise<Map<string, string>> {
+    if (this.resolutor === null) {
+      throw new Error(
+        'Nadie registró cómo leer el id de cliente de las notas de crédito (módulo de caja)',
+      );
+    }
+    return this.resolutor(comprobanteIds);
+  }
+}

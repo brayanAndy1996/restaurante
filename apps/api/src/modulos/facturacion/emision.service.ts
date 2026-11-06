@@ -58,7 +58,11 @@ import {
 } from './errores-facturacion';
 import { sinMarcaDeValida } from './facturado';
 import { DevolucionDeNotaParaTicket } from './devolucion-de-nota';
-import { RegistroImpresoraDeCaja, RegistroPagosDeCobro } from './impresora-de-caja';
+import {
+  RegistroIdsDeNotas,
+  RegistroImpresoraDeCaja,
+  RegistroPagosDeCobro,
+} from './impresora-de-caja';
 import { RegistroDeConectores } from './pse/registro-de-conectores';
 import { EnviosService } from './envios/envios.service';
 import { leerComprobante, textoDelNumero } from './lectura-comprobante';
@@ -227,6 +231,7 @@ export class EmisionService {
     @Inject(SesionActual) private readonly sesion: SesionActual,
     @Inject(RegistroDeConectores) private readonly conectores: RegistroDeConectores,
     @Inject(DevolucionDeNotaParaTicket) private readonly devoluciones: DevolucionDeNotaParaTicket,
+    @Inject(RegistroIdsDeNotas) private readonly idsDeNotas: RegistroIdsDeNotas,
   ) {}
 
   /**
@@ -330,7 +335,7 @@ export class EmisionService {
     // 6b: el envío se registra en esta transacción y se encola después de confirmarla (criterio 124).
     await this.envios.registrar(comprobanteId, datos.tipo, fechaLima(instante), instante);
     await this.suscripciones.registrarComprobanteEmitido(datos.sucursalId, instante);
-    const comprobante = await leerComprobante(this.conexion, comprobanteId);
+    const comprobante = await leerComprobante(this.conexion, comprobanteId, this.idsDeNotas);
     if (comprobante === null) throw new Error('El comprobante recién emitido no se puede leer');
     const trabajoId = await this.encolarTicket(comprobante, datos, instante, emisor.id);
     return {
@@ -576,12 +581,12 @@ export class EmisionService {
       await this.suscripciones.registrarComprobanteEmitido(preparada.sucursalId, instante);
     }
 
-    const nota = await leerComprobante(this.conexion, notaId);
+    const nota = await leerComprobante(this.conexion, notaId, this.idsDeNotas);
     if (nota === null) throw new Error('La nota recién emitida no se puede leer');
     const trabajoNota = await this.encolarTicketDeNota(nota, preparada, datos, instante, true);
     let factura: ComprobanteEmitido | null = null;
     if (facturaId !== null) {
-      const emitida = await leerComprobante(this.conexion, facturaId);
+      const emitida = await leerComprobante(this.conexion, facturaId, this.idsDeNotas);
       if (emitida === null) throw new Error('La factura recién emitida no se puede leer');
       const trabajoFactura = await this.encolarTicketDeNota(
         emitida,
@@ -928,7 +933,7 @@ export class EmisionService {
     );
     await this.envios.registrar(nuevoId, datos.tipo, fechaLima(instante), instante);
     await this.suscripciones.registrarComprobanteEmitido(rechazado.sucursal_id, instante);
-    const comprobante = await leerComprobante(this.conexion, nuevoId);
+    const comprobante = await leerComprobante(this.conexion, nuevoId, this.idsDeNotas);
     if (comprobante === null) throw new Error('El comprobante recién emitido no se puede leer');
     const trabajoId = await this.encolarTicketDeReemision(comprobante, rechazado, instante);
     return {

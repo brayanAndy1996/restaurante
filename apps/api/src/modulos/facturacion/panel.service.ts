@@ -34,6 +34,7 @@ import { ComprobantesService } from './comprobantes.service';
 import { contarAlertas, sqlAlerta } from './envios/alertas-sql';
 import { COLUMNAS_ENVIO, envioRespuestaDe, type FilaDeEnvio } from './envios/envio-respuesta';
 import { EnviosService } from './envios/envios.service';
+import { RegistroIdsDeNotas } from './impresora-de-caja';
 import { leerComprobante, textoDelNumero } from './lectura-comprobante';
 import { EnlacesComprobante } from './enlaces';
 import { comprobanteNoEncontrado, pdfNoDisponible } from './errores-facturacion';
@@ -168,6 +169,7 @@ export class PanelService {
     @Inject(EnlacesComprobante) private readonly enlaces: EnlacesComprobante,
     @Inject(ContextoEmpresa) private readonly contexto: ContextoEmpresa,
     @Inject(ENTORNO) private readonly entorno: Entorno,
+    @Inject(RegistroIdsDeNotas) private readonly idsDeNotas: RegistroIdsDeNotas,
   ) {}
 
   private readonly logger = new Logger(PanelService.name);
@@ -269,7 +271,7 @@ export class PanelService {
   async detalle(id: string): Promise<ComprobanteDetalle> {
     await this.comprobantes.exigirVisible(id);
     const comprobanteId = id.toLowerCase();
-    const comprobante = await leerComprobante(this.conexion, comprobanteId);
+    const comprobante = await leerComprobante(this.conexion, comprobanteId, this.idsDeNotas);
     if (comprobante === null) throw comprobanteNoEncontrado();
     return {
       ...comprobante,

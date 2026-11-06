@@ -11,6 +11,7 @@ import { arriendoDelEnvioMs } from '../../../nucleo/colas/tiempos-del-envio';
 import { ContextoEmpresa } from '../../../nucleo/contexto-empresa';
 import { PUBLICADOR_EVENTOS, type PublicadorEventos } from '../../../nucleo/eventos';
 import { RELOJ, type Reloj } from '../../../nucleo/reloj';
+import { RegistroIdsDeNotas } from '../impresora-de-caja';
 import { leerComprobante } from '../lectura-comprobante';
 import { armarDocumentoPse } from '../pse/documento-pse';
 import type {
@@ -108,6 +109,7 @@ export class ProcesadorEnviosPse {
     @Inject(COLA_PSE) private readonly cola: ColaPse,
     @Inject(PUBLICADOR_EVENTOS) private readonly publicador: PublicadorEventos,
     @Inject(ArchivadorDePdf) private readonly pdf: ArchivadorDePdf,
+    @Inject(RegistroIdsDeNotas) private readonly idsDeNotas: RegistroIdsDeNotas,
   ) {}
 
   /**
@@ -164,7 +166,7 @@ export class ProcesadorEnviosPse {
       return null;
     }
 
-    const comprobante = await leerComprobante(this.conexion, comprobanteId);
+    const comprobante = await leerComprobante(this.conexion, comprobanteId, this.idsDeNotas);
     if (comprobante === null) return null;
     const intentoEnCurso = randomUUID();
     await this.conexion.query(

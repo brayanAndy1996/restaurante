@@ -166,7 +166,10 @@ export const acreditadoLineaSchema = z.object({
 
 /** Las notas de crédito de un comprobante (6b, criterio 148). */
 export const notaDeComprobanteSchema = z.object({
+  /** El `id` del comprobante de la nota. */
   id: uuidSchema,
+  /** El `nota_credito.id` que mandó el cliente en `POST /notas-credito` (para saber si su intento ya salió). */
+  notaId: uuidSchema,
   tipo: z.enum(['ANULACION', 'DEVOLUCION']),
   numero: z.string(),
   estado: estadoComprobanteSchema,

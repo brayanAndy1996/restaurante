@@ -9,6 +9,7 @@ export { ComprobantesService } from './comprobantes.service';
 export type { ResumenTributarioDeTurno } from './comprobantes.service';
 export {
   RegistroDevolucionDeNota,
+  RegistroIdsDeNotas,
   RegistroImpresoraDeCaja,
   RegistroPagosDeCobro,
 } from './impresora-de-caja';

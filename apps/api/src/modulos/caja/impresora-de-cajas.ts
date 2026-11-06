@@ -4,6 +4,7 @@ import { CONEXION_API } from '../../nucleo/base-de-datos';
 import { MEDIOS_PAGO, type MedioPago } from '@restaurante/dominio';
 import {
   RegistroDevolucionDeNota,
+  RegistroIdsDeNotas,
   RegistroImpresoraDeCaja,
   RegistroPagosDeCobro,
   type DevolucionDeNota,
@@ -24,6 +25,7 @@ export class ImpresoraDeCajas implements OnModuleInit {
     @Inject(RegistroImpresoraDeCaja) private readonly registro: RegistroImpresoraDeCaja,
     @Inject(RegistroPagosDeCobro) private readonly registroPagos: RegistroPagosDeCobro,
     @Inject(RegistroDevolucionDeNota) private readonly registroDevolucion: RegistroDevolucionDeNota,
+    @Inject(RegistroIdsDeNotas) private readonly registroIds: RegistroIdsDeNotas,
     @Inject(CONEXION_API) private readonly conexion: Sequelize,
     @Inject(IMPRESION) private readonly impresion: ImpresionPuerto,
   ) {}
@@ -32,6 +34,19 @@ export class ImpresoraDeCajas implements OnModuleInit {
     this.registro.registrar((cajaId) => this.deLaCaja(cajaId));
     this.registroPagos.registrar((cobroId) => this.pagosDelCobro(cobroId));
     this.registroDevolucion.registrar((notaId) => this.devolucionDeLaNota(notaId));
+    this.registroIds.registrar((ids) => this.idsDeCliente(ids));
+  }
+
+  /**
+   * El `nota_credito.id` (el que mandó el cliente) de cada comprobante de nota dado, para `notasCredito.notaId` del
+   * comprobante original (criterio 148). Solo los que tienen registro.
+   */
+  async idsDeCliente(comprobanteIds: string[]): Promise<Map<string, string>> {
+    const filas = await this.conexion.query<{ comprobante_id: string; id: string }>(
+      'SELECT comprobante_id, id FROM nota_credito WHERE comprobante_id = ANY($1::uuid[])',
+      { bind: [comprobanteIds], type: QueryTypes.SELECT },
+    );
+    return new Map(filas.map((f) => [f.comprobante_id, f.id]));
   }
 
   /**

@@ -20,7 +20,11 @@ import { SesionActual, requisitoDeLaPeticion } from '../seguridad';
 import { RegistroAlcanceDeTurnos, veTodosLosTurnos } from './alcance-de-turnos';
 import { comprobanteDeOtro, comprobanteNoEncontrado } from './errores-facturacion';
 import { DevolucionDeNotaParaTicket } from './devolucion-de-nota';
-import { RegistroImpresoraDeCaja, RegistroPagosDeCobro } from './impresora-de-caja';
+import {
+  RegistroIdsDeNotas,
+  RegistroImpresoraDeCaja,
+  RegistroPagosDeCobro,
+} from './impresora-de-caja';
 import { RegistroDeConectores } from './pse/registro-de-conectores';
 import { leerComprobante, textoDelNumero } from './lectura-comprobante';
 
@@ -57,6 +61,7 @@ export class ComprobantesService {
     @Inject(RegistroAlcanceDeTurnos) private readonly turnos: RegistroAlcanceDeTurnos,
     @Inject(RegistroDeConectores) private readonly conectores: RegistroDeConectores,
     @Inject(DevolucionDeNotaParaTicket) private readonly devoluciones: DevolucionDeNotaParaTicket,
+    @Inject(RegistroIdsDeNotas) private readonly idsDeNotas: RegistroIdsDeNotas,
   ) {}
 
   /**
@@ -65,7 +70,7 @@ export class ComprobantesService {
    */
   async consultar(id: string): Promise<ComprobanteRespuesta> {
     await this.exigirVisible(id);
-    const comprobante = await leerComprobante(this.conexion, id.toLowerCase());
+    const comprobante = await leerComprobante(this.conexion, id.toLowerCase(), this.idsDeNotas);
     if (comprobante === null) throw comprobanteNoEncontrado();
     return comprobante;
   }
@@ -236,7 +241,7 @@ export class ComprobantesService {
         'No hay una impresora activa donde reimprimir este ticket',
       );
     }
-    const comprobante = await leerComprobante(this.conexion, comprobanteId);
+    const comprobante = await leerComprobante(this.conexion, comprobanteId, this.idsDeNotas);
     if (comprobante === null) throw comprobanteNoEncontrado();
     const original = await this.impresion.trabajoDeComprobante(comprobanteId);
     let documento;
