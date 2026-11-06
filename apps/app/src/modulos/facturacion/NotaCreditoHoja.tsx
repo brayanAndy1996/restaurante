@@ -43,7 +43,7 @@ import {
   etiquetaDeTurno,
   esRespuestaFinal,
   falloDeNota,
-  huellaDeNota,
+  huellaDeIntento,
   huellaDelCuerpoDeNota,
   lineasPorAcreditar,
   objetivoDeNota,
@@ -114,8 +114,11 @@ interface Hecha {
  * tipo (anular, devolver ítems o cambiar la boleta por factura), las líneas con − y + hasta lo que falta por acreditar,
  * el total calculado con `calcularNotaCredito`, el motivo, la devolución por medio (con el redondeo del efectivo y
  * desde el turno propio; sin turno abierto, «Sin devolución») y, para el Cajero, la ventana de clave con el objetivo
- * exacto que se manda. Si la API dice que la clave ya no vale, la pide otra vez sin perder lo escrito; el `id` de la
- * nota se conserva hasta una respuesta final, así un corte o un reintento nunca emiten dos.
+ * exacto que se manda. Si la API dice que la clave ya no vale, la pide otra vez sin perder lo escrito. El `id` de la
+ * nota se conserva hasta una respuesta final (la nota emitida o un rechazo de la API), aunque tras un 500 o un corte la
+ * persona cambie las líneas, la devolución o el cliente: así un envío que sí llegó nunca se convierte en dos notas.
+ * Con otro cuerpo va otra clave de idempotencia; si la API reconoce el `id` (422 `CLAVE_IDEMPOTENCIA_REUTILIZADA`), la
+ * hoja dice que la nota puede ya estar emitida y ofrece revisar el comprobante.
  */
 export function NotaCreditoHoja({ comprobante, base, volver, onCerrar }: Props) {
   const clientes = useQueryClient();
@@ -275,7 +278,7 @@ export function NotaCreditoHoja({ comprobante, base, volver, onCerrar }: Props) 
         ...(devolucion ? { devueltoEn: textoDeMedios(devolucion.pagos.map((p) => p.medio)) } : {}),
       },
       motivo: motivoLimpio,
-      huella: huellaDeNota(cuerpo),
+      huella: huellaDeIntento(comprobante.id),
       huellaDelCuerpo: huellaDelCuerpoDeNota(cuerpo),
       enviar: (id, extra) => emitirNotaCredito({ ...cuerpo, id }, extra),
     });
@@ -308,6 +311,12 @@ export function NotaCreditoHoja({ comprobante, base, volver, onCerrar }: Props) 
     }
     setFallo(traducido);
     requestAnimationFrame(() => alertaDeFallo.current?.scrollIntoView?.({ block: 'nearest' }));
+  }
+
+  /** La nota puede ya estar emitida: se vuelve a leer el comprobante y se cierra la hoja para verlo. */
+  async function revisarElComprobante() {
+    await clientes.invalidateQueries({ queryKey: claveComprobante(comprobante.id) });
+    onCerrar();
   }
 
   const conClave = permiso === 'clave';
@@ -519,7 +528,12 @@ export function NotaCreditoHoja({ comprobante, base, volver, onCerrar }: Props) 
             {fallo ? (
               <div role="alert" ref={alertaDeFallo}>
                 <Aviso tipo={fallo.releer ? 'alerta' : 'error'} titulo={fallo.titulo}>
-                  {fallo.texto}
+                  <p>{fallo.texto}</p>
+                  {fallo.revisar ? (
+                    <Boton onClick={() => void revisarElComprobante()}>
+                      Revisar el comprobante
+                    </Boton>
+                  ) : null}
                 </Aviso>
               </div>
             ) : null}

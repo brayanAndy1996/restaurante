@@ -6,7 +6,7 @@ import {
   entradaDeNota,
   esRespuestaFinal,
   falloDeNota,
-  huellaDeNota,
+  huellaDeIntento,
   huellaDelCuerpoDeNota,
   lineasPorAcreditar,
   objetivoDeNota,
@@ -293,13 +293,21 @@ describe('Lo que se manda y lo que se autoriza (criterios 144, 145 y 153)', () =
     });
   });
 
-  it('la huella que conserva el id no cuenta el total ni el motivo; la del cuerpo sí', () => {
+  it('el id se ata al comprobante, no al contenido; la clave de idempotencia, a todo el cuerpo', () => {
     const base = entradaDeNota({ ...datos, tipo: 'DEVOLUCION' });
-    const corregida = { ...base, motivo: 'Otro motivo', total: '29.00' };
-    expect(huellaDeNota(corregida)).toBe(huellaDeNota(base));
-    expect(huellaDelCuerpoDeNota(corregida)).not.toBe(huellaDelCuerpoDeNota(base));
-    const otraLinea = { ...base, lineas: [{ posicion: 2, cantidad: 1 }] };
-    expect(huellaDeNota(otraLinea)).not.toBe(huellaDeNota(base));
+    expect(huellaDeIntento(datos.comprobanteId)).toBe(`nota:${datos.comprobanteId}`);
+    expect(huellaDeIntento(uuid(7001))).not.toBe(huellaDeIntento(datos.comprobanteId));
+    // Cambiar el motivo, el total, las líneas o la devolución cambia el cuerpo.
+    for (const otro of [
+      { ...base, motivo: 'Otro motivo' },
+      { ...base, total: '29.00' },
+      { ...base, lineas: [{ posicion: 2, cantidad: 1 }] },
+      { ...base, devolucion: null },
+    ]) {
+      expect(huellaDelCuerpoDeNota(otro)).not.toBe(huellaDelCuerpoDeNota(base));
+    }
+    // El `id` no cuenta: el mismo cuerpo con otro id es el mismo cuerpo.
+    expect(huellaDelCuerpoDeNota({ ...base, id: uuid(9002) })).toBe(huellaDelCuerpoDeNota(base));
   });
 
   it('dice los medios de la devolución en palabras', () => {
@@ -330,6 +338,12 @@ describe('Los errores en palabras', () => {
     const f = falloDeNota(error(422, 'NADA_QUE_ACREDITAR'));
     expect(f.texto).toContain('ya no le queda nada por acreditar');
     expect(f.releer).toBe(true);
+  });
+
+  it('CLAVE_IDEMPOTENCIA_REUTILIZADA dice que la nota puede ya estar emitida y manda a revisar', () => {
+    const f = falloDeNota(error(422, 'CLAVE_IDEMPOTENCIA_REUTILIZADA'));
+    expect(f.texto).toMatch(/puede ya estar emitida/);
+    expect(f.revisar).toBe(true);
   });
 
   it('SIN_SERIE manda al Administrador a Ajustes › Cajas', () => {

@@ -327,22 +327,27 @@ export function entradaDeNota(d: DatosDeNota): NotaCreditoEntrada {
 }
 
 /**
- * Lo que hace que dos intentos sean la misma nota (criterio 153): el mismo comprobante, tipo, líneas, devolución y
- * cliente conservan el `id`. No cuentan el total ni el motivo, que pueden corregirse sin que sea otra nota.
+ * Lo que hace que dos intentos sean la misma nota (criterios 153 y 177): el comprobante. El `id` de la nota se conserva
+ * hasta una respuesta final aunque la persona cambie las líneas, la devolución o el cliente: si el primer envío sí llegó
+ * a la API y se emitiera con otro `id`, saldrían dos notas por una misma devolución. Si el `id` ya se usó con otro cuerpo,
+ * la API lo dice (422 `CLAVE_IDEMPOTENCIA_REUTILIZADA`) y la hoja manda a revisar el comprobante.
  */
-export function huellaDeNota(entrada: NotaCreditoEntrada): string {
-  return JSON.stringify([
+export const huellaDeIntento = (comprobanteId: string): string => `nota:${comprobanteId}`;
+
+/**
+ * Todo el cuerpo menos el `id`: la clave de idempotencia solo se repite si el cuerpo es el mismo (la API rechaza otra
+ * clave con otro cuerpo).
+ */
+export const huellaDelCuerpoDeNota = (entrada: NotaCreditoEntrada): string =>
+  JSON.stringify([
     entrada.comprobanteId,
     entrada.tipo,
     entrada.lineas ?? null,
     entrada.devolucion ?? null,
     entrada.cliente ?? null,
+    entrada.total,
+    entrada.motivo,
   ]);
-}
-
-/** Todo el cuerpo menos el `id`: la clave de idempotencia solo se repite si el cuerpo es el mismo. */
-export const huellaDelCuerpoDeNota = (entrada: NotaCreditoEntrada): string =>
-  JSON.stringify([huellaDeNota(entrada), entrada.total, entrada.motivo]);
 
 /** La API contestó que no, y no por un corte ni por un cruce con otra operación: el `id` ya no hace falta. */
 export function esRespuestaFinal(error: unknown): boolean {
@@ -363,6 +368,8 @@ export interface FalloDeNota {
   texto: string;
   /** Lo que se ve en pantalla estaba viejo: hay que volver a leer el comprobante. */
   releer?: boolean;
+  /** La nota puede ya estar emitida: se ofrece «Revisar el comprobante» (vuelve a leerlo) en lugar de emitir otra. */
+  revisar?: boolean;
   /** El turno elegido ya no sirve: hay que volver a leer los turnos abiertos y elegir otro. */
   releerTurnos?: boolean;
 }
@@ -453,10 +460,10 @@ export function falloDeNota(error: unknown): FalloDeNota {
         };
       case 'CLAVE_IDEMPOTENCIA_REUTILIZADA':
         return {
-          titulo,
+          titulo: 'Revisa el comprobante antes de emitir otra',
           texto:
-            'Esta nota ya se había enviado con otros datos. Cierra esta ventana y mira el comprobante: puede que ya esté emitida.',
-          releer: true,
+            'Esta nota ya se había enviado con otros datos, así que puede ya estar emitida. Revisa el comprobante: si la nota ya salió, no hace falta emitir otra.',
+          revisar: true,
         };
       case 'MODULO_NO_INCLUIDO':
         return { titulo, texto: 'El plan de esta sucursal no incluye la facturación electrónica.' };
