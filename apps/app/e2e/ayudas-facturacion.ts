@@ -196,6 +196,10 @@ export async function prepararLaFacturacion(
 export const estadoAnteSunat = (page: Page): Locator =>
   page.getByRole('region', { name: 'Estado ante SUNAT' });
 
+/** El estado del comprobante que acaba de salir de «Emitir otro» (en el detalle del rechazado, junto al del original). */
+export const estadoDelComprobanteNuevo = (page: Page): Locator =>
+  page.getByRole('region', { name: 'Comprobante nuevo emitido' }).getByLabel('Estado ante SUNAT');
+
 /** Llena el RUC de una factura y espera que el padrón responda (los datos del cliente quedan escritos). */
 export async function escribirRucDeFactura(
   page: Page,
@@ -217,4 +221,28 @@ export async function irAlPanelDeAjustes(page: Page): Promise<void> {
     .getByRole('button', { name: 'Comprobantes', exact: true });
   await boton.click();
   await expect(boton).toHaveAttribute('aria-pressed', 'true');
+}
+
+/** Desde el panel de comprobantes abre el detalle del que lleva ese número (en celular es una fila; en tableta, una tabla). */
+export async function abrirComprobanteDelPanel(page: Page, numero: string): Promise<void> {
+  await page
+    .getByRole('link', { name: new RegExp(numero) })
+    .first()
+    .click();
+  await expect(page).toHaveURL(/\/comprobantes\/[0-9a-f-]{36}/);
+  await expect(page.getByRole('heading', { name: new RegExp(numero), level: 1 })).toBeVisible();
+}
+
+/** Toca «Emitir comprobante» del formulario de «Emitir otro», espera el 201 de la reemisión y devuelve el número nuevo. */
+export async function emitirComprobanteNuevo(page: Page): Promise<string> {
+  const respuesta = page.waitForResponse(
+    (r) =>
+      r.request().method() === 'POST' &&
+      /^\/facturacion\/comprobantes\/[^/]+\/reemision$/.test(new URL(r.url()).pathname),
+  );
+  await page.getByRole('button', { name: 'Emitir comprobante', exact: true }).click();
+  const recibida = await respuesta;
+  expect(recibida.status(), 'la reemisión se aceptó').toBe(201);
+  expect(recibida.request().headers()['idempotency-key']).toMatch(/\S/);
+  return ((await recibida.json()) as { comprobante: { numero: string } }).comprobante.numero;
 }
