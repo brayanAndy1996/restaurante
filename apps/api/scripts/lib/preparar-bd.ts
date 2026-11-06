@@ -1,8 +1,12 @@
 import { Client } from 'pg';
 import {
   BASE_DE_DATOS_POR_DEFECTO,
+  ESQUEMA_COLAS,
   ROLES,
+  ROL_COLAS,
+  ROL_REFERENCIA,
   ROL_TIEMPO_REAL,
+  contrasenaDeRolDeFacturacion,
   contrasenaDeTiempoReal,
   contrasenasDeRoles,
   exigirUrlAdmin,
@@ -497,10 +501,49 @@ function avisoDeProteccionesOmitidas(baseDeDatos: string): string {
 const BLOQUEO_PREPARAR = "hashtext('restaurante:preparar-bd')";
 /** Espera máxima por el bloqueo asesor: otra preparación que no termina no debe colgar esta. */
 const ESPERA_BLOQUEO_PREPARAR_MS = 60_000;
+/**
+ * El esquema `colas` (historia 006, entrega 6b): dueño `restaurante_colas`, que es quien lo usa y donde pg-boss crea sus
+ * tablas. Se crea conectado a la base de destino, de forma repetible. Un administrador que no es superusuario necesita
+ * ser miembro del rol dueño para crearlo.
+ */
+async function prepararEsquemaDeColas(
+  adminUrl: string,
+  baseDeDatos: string,
+  esSuperusuario: boolean,
+): Promise<boolean> {
+  const cliente = new Client({ connectionString: urlAdminParaBase(adminUrl, baseDeDatos) });
+  cliente.on('error', () => undefined);
+  await cliente.connect();
+  try {
+    const dueno = cliente.escapeIdentifier(ROL_COLAS);
+    const esquema = cliente.escapeIdentifier(ESQUEMA_COLAS);
+    if (!esSuperusuario) await cliente.query(`GRANT ${dueno} TO CURRENT_USER`);
+    await cliente.query(`CREATE SCHEMA IF NOT EXISTS ${esquema} AUTHORIZATION ${dueno}`);
+    await cliente.query(`ALTER SCHEMA ${esquema} OWNER TO ${dueno}`);
+    await cliente.query(`REVOKE ALL ON SCHEMA ${esquema} FROM PUBLIC`);
+    return true;
+  } catch (error) {
+    // Un administrador que no es superusuario y que no creó el rol de la cola no puede darse su membresía (como con el
+    // rol del tiempo real): el esquema `colas` queda para quien sí pueda (el creador del rol o un superusuario).
+    if (!esSuperusuario && (error as { code?: string }).code === SQLSTATE_PRIVILEGIO_INSUFICIENTE) {
+      return false;
+    }
+    throw error;
+  } finally {
+    await cliente.end();
+  }
+}
+
 const SQLSTATE_BLOQUEO_NO_DISPONIBLE = '55P03';
 
 /** `insufficient_privilege` de PostgreSQL. */
 const SQLSTATE_PRIVILEGIO_INSUFICIENTE = '42501';
+
+/**
+ * Roles que se agregaron después de los tres primeros (el del tiempo real, de la historia 004, y los de la cola y el
+ * padrón, de la 006): un administrador que no es superusuario y que no los creó no tiene `ADMIN OPTION` sobre ellos.
+ */
+const ROLES_AGREGADOS_DESPUES: readonly string[] = [ROL_TIEMPO_REAL, ROL_COLAS, ROL_REFERENCIA];
 
 /** Atributos que `ALTER ROLE` rechaza nombrar a un administrador que no es superusuario (PostgreSQL 16). */
 const ATRIBUTOS_RESERVADOS_A_SUPERUSUARIO = [
@@ -533,6 +576,8 @@ export async function prepararBaseDeDatos(opciones: OpcionesPrepararBd = {}): Pr
   const baseDeDatos = validarNombreDeBase(opciones.baseDeDatos ?? BASE_DE_DATOS_POR_DEFECTO);
   const contrasenas = contrasenasDeRoles(env);
   const contrasenaTiempoReal = contrasenaDeTiempoReal(env);
+  const contrasenaColas = contrasenaDeRolDeFacturacion('colas', env);
+  const contrasenaReferencia = contrasenaDeRolDeFacturacion('referencia', env);
   const { omitir } = leerProteccionCatalogo(env);
   const esperaMs = opciones.esperaBloqueoMs ?? ESPERA_BLOQUEO_PREPARAR_MS;
 
@@ -583,6 +628,9 @@ export async function prepararBaseDeDatos(opciones: OpcionesPrepararBd = {}): Pr
         ([clave, nombre]): [string, string] => [nombre, contrasenas[clave]],
       ),
       [ROL_TIEMPO_REAL, contrasenaTiempoReal],
+      // Facturación electrónica (historia 006, 6b): la cola de envíos (dueño del esquema `colas`) y la carga del padrón.
+      [ROL_COLAS, contrasenaColas],
+      [ROL_REFERENCIA, contrasenaReferencia],
     ];
     for (const [nombre, contrasena] of rolesPorPreparar) {
       const existe = await admin.query('SELECT 1 FROM pg_roles WHERE rolname = $1', [nombre]);
@@ -605,7 +653,7 @@ export async function prepararBaseDeDatos(opciones: OpcionesPrepararBd = {}): Pr
         // concede sobre los otros tres). No se modifica —queda con la contraseña que ya tiene— pero se sigue
         // comprobando abajo que no tenga atributos privilegiados.
         if (
-          nombre === ROL_TIEMPO_REAL &&
+          ROLES_AGREGADOS_DESPUES.includes(nombre) &&
           existe.rowCount &&
           !esSuperusuario &&
           (error as { code?: string }).code === SQLSTATE_PRIVILEGIO_INSUFICIENTE
@@ -678,7 +726,17 @@ export async function prepararBaseDeDatos(opciones: OpcionesPrepararBd = {}): Pr
     // 3. Permisos de la base: nada para PUBLIC (CONNECT, CREATE, TEMPORARY); CONNECT para los roles de la aplicación.
     await admin.query(`REVOKE ALL ON DATABASE ${base} FROM PUBLIC`);
     await admin.query(
-      `GRANT CONNECT ON DATABASE ${base} TO ${admin.escapeIdentifier(ROLES.api)}, ${admin.escapeIdentifier(ROLES.plataforma)}, ${admin.escapeIdentifier(ROL_TIEMPO_REAL)}`,
+      `GRANT CONNECT ON DATABASE ${base} TO ${admin.escapeIdentifier(ROLES.api)}, ${admin.escapeIdentifier(ROLES.plataforma)}, ${admin.escapeIdentifier(ROL_TIEMPO_REAL)}, ${admin.escapeIdentifier(ROL_COLAS)}, ${admin.escapeIdentifier(ROL_REFERENCIA)}`,
+    );
+
+    // 3b. Esquema `colas` de pg-boss (historia 006, criterio 163): dueño `restaurante_colas`, sin acceso para PUBLIC ni
+    // para los demás roles. El rol de la cola no tiene privilegios sobre `public` ni `referencia`.
+    const esquemaDeColas = await prepararEsquemaDeColas(adminUrl, baseDeDatos, esSuperusuario);
+    registrar(
+      esquemaDeColas
+        ? `base ${baseDeDatos}: esquema ${ESQUEMA_COLAS} con dueño ${ROL_COLAS}`
+        : `base ${baseDeDatos}: esquema ${ESQUEMA_COLAS} sin crear (${usuario} no tiene ADMIN OPTION sobre ${ROL_COLAS}): ` +
+            'ejecuta db:preparar con el usuario que creó ese rol o con un superusuario',
     );
 
     if (aplicarProtecciones) {

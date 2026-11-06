@@ -16,8 +16,10 @@ describe('preparación de la base de pruebas', () => {
       );
       expect(rows.map((r) => r.rolname)).toEqual([
         'restaurante_api',
+        'restaurante_colas',
         'restaurante_migrador',
         'restaurante_plataforma',
+        'restaurante_referencia',
         'restaurante_tiempo_real',
       ]);
       for (const rol of rows) {

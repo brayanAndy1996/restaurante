@@ -17,8 +17,28 @@ export type RolAplicacion = keyof typeof ROLES;
  */
 export const ROL_TIEMPO_REAL = 'restaurante_tiempo_real';
 
-/** Rol que tiene URL derivada: los de `ROLES` y el del tiempo real. */
-export type RolConUrl = RolAplicacion | 'tiempoReal';
+/**
+ * Rol de la cola de envíos al PSE (historia 006, entrega 6b, criterio 163): dueño solo del esquema `colas` (pg-boss crea
+ * ahí sus tablas) y sin privilegios sobre `public` ni `referencia`. Lo crea `db:preparar` como el del tiempo real:
+ * fuera de `ROLES` y de `contrasenasDeRoles`.
+ */
+export const ROL_COLAS = 'restaurante_colas';
+
+/** Esquema de PostgreSQL de pg-boss: dueño `restaurante_colas`. */
+export const ESQUEMA_COLAS = 'colas';
+
+/**
+ * Rol de la carga del padrón de RUC (criterio 138): solo tiene privilegios sobre el esquema `referencia` (los da la
+ * migración 12), ninguno sobre `public`. Lo crea `db:preparar`.
+ */
+export const ROL_REFERENCIA = 'restaurante_referencia';
+
+/** Rol que tiene URL derivada: los de `ROLES`, el del tiempo real, el de la cola y el del padrón. */
+export type RolConUrl = RolAplicacion | 'tiempoReal' | 'colas' | 'referencia';
+
+/** Contraseñas de desarrollo y pruebas de los roles de la cola y del padrón. */
+export const CONTRASENA_COLAS_POR_DEFECTO = 'colas_local';
+export const CONTRASENA_REFERENCIA_POR_DEFECTO = 'referencia_local';
 
 /** Contraseña de desarrollo y pruebas del rol del tiempo real. */
 export const CONTRASENA_TIEMPO_REAL_POR_DEFECTO = 'tiempo_real_local';
@@ -68,6 +88,26 @@ export function contrasenaDeTiempoReal(env: NodeJS.ProcessEnv = process.env): st
   }
   throw new Error(
     'Falta DB_PASSWORD_TIEMPO_REAL: solo hay contraseña por defecto con NODE_ENV=development ' +
+      'o NODE_ENV=test escritos de forma explícita',
+  );
+}
+
+/**
+ * Contraseña del rol de la cola (`DB_PASSWORD_COLAS`) o del padrón (`DB_PASSWORD_REFERENCIA`): la variable o, solo con
+ * `NODE_ENV` `development` o `test` explícito, la de desarrollo; si no, falla nombrando la variable.
+ */
+export function contrasenaDeRolDeFacturacion(
+  rol: 'colas' | 'referencia',
+  env: NodeJS.ProcessEnv = process.env,
+): string {
+  const variable = rol === 'colas' ? 'DB_PASSWORD_COLAS' : 'DB_PASSWORD_REFERENCIA';
+  const definida = env[variable];
+  if (definida) return definida;
+  if (env.NODE_ENV !== undefined && ENTORNOS_CON_CONTRASENA_POR_DEFECTO.includes(env.NODE_ENV)) {
+    return rol === 'colas' ? CONTRASENA_COLAS_POR_DEFECTO : CONTRASENA_REFERENCIA_POR_DEFECTO;
+  }
+  throw new Error(
+    `Falta ${variable}: solo hay contraseña por defecto con NODE_ENV=development ` +
       'o NODE_ENV=test escritos de forma explícita',
   );
 }
@@ -145,8 +185,16 @@ export function urlParaRol(
   env: NodeJS.ProcessEnv = process.env,
 ): string {
   const url = new URL(adminUrl);
-  url.username = rol === 'tiempoReal' ? ROL_TIEMPO_REAL : ROLES[rol];
-  url.password = rol === 'tiempoReal' ? contrasenaDeTiempoReal(env) : contrasenaDeRol(rol, env);
+  if (rol === 'tiempoReal') {
+    url.username = ROL_TIEMPO_REAL;
+    url.password = contrasenaDeTiempoReal(env);
+  } else if (rol === 'colas' || rol === 'referencia') {
+    url.username = rol === 'colas' ? ROL_COLAS : ROL_REFERENCIA;
+    url.password = contrasenaDeRolDeFacturacion(rol, env);
+  } else {
+    url.username = ROLES[rol];
+    url.password = contrasenaDeRol(rol, env);
+  }
   url.pathname = `/${validarNombreDeBase(baseDeDatos)}`;
   return url.toString();
 }

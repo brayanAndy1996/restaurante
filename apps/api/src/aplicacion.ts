@@ -13,7 +13,10 @@ import {
   AlmacenEnDisco,
   descartarCuerpoDeFotoAlResponder,
   type AlmacenArchivos,
+  type AlmacenComprobantes,
 } from './nucleo/archivos';
+import type { ColaPse } from './nucleo/colas';
+import type { ConectorPse } from './modulos/facturacion/pse';
 import type { InventarioPuerto } from './modulos/pedidos';
 import type { PublicadorEventos } from './nucleo/eventos';
 import type { Reloj } from './nucleo/reloj';
@@ -54,6 +57,18 @@ export interface OpcionesAplicacion {
    */
   inventario?: InventarioPuerto;
   /**
+   * Conector del PSE (`CONECTOR_PSE`, historia 006 6b): reemplaza el conector para todos los modos de los emisores
+   * (`SIMULADO` y `REAL`). Por defecto un `SimuladorPse`. Las pruebas pasan uno propio para fijar sus reglas.
+   */
+  pse?: ConectorPse;
+  /**
+   * Cola de envíos al PSE (`COLA_PSE`). Por defecto, con `NODE_ENV=test` o sin `DATABASE_COLAS_URL`, la cola en memoria,
+   * que guarda los trabajos sin procesarlos (criterio 137). Las pruebas pasan una `ColaEnMemoria` para inspeccionarla.
+   */
+  colaPse?: ColaPse;
+  /** Almacén privado de comprobantes (`ALMACEN_COMPROBANTES`: XML, CDR y PDF); por defecto el del entorno. */
+  almacenComprobantes?: AlmacenComprobantes;
+  /**
    * Socket.IO (`/tiempo-real`): `habilitado` lo enciende o apaga; por defecto lo decide `TIEMPO_REAL` del
    * entorno (apagado con `NODE_ENV=test`). Las pruebas de tiempo real lo habilitan y escuchan un puerto con
    * `app.listen(0)`.
@@ -85,6 +100,9 @@ export async function crearAplicacion(
       publicadorEventos: opciones.publicadorEventos,
       almacenArchivos: opciones.almacenArchivos,
       inventario: opciones.inventario,
+      pse: opciones.pse,
+      colaPse: opciones.colaPse,
+      almacenComprobantes: opciones.almacenComprobantes,
       tiempoReal: { habilitado: tiempoRealHabilitado },
     }),
     {

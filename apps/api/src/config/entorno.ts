@@ -27,6 +27,32 @@ export type DriverDeArchivos = (typeof DRIVERS_DE_ARCHIVOS)[number];
 export const ESTADOS_TIEMPO_REAL = ['habilitado', 'deshabilitado'] as const;
 export type EstadoTiempoReal = (typeof ESTADOS_TIEMPO_REAL)[number];
 
+/** Valores de `WORKER`: si el worker de envíos corre dentro del proceso de la API (historia 006, criterio 125). */
+export const ESTADOS_WORKER = ['habilitado', 'deshabilitado'] as const;
+export type EstadoWorker = (typeof ESTADOS_WORKER)[number];
+
+/** El conector del PSE sin proveedor: el simulador (historia 006, criterio 121). Es el valor de desarrollo y de pruebas. */
+export const PSE_CONECTOR_SIMULADOR = 'simulador';
+
+/** Tiempo máximo de cada llamada al PSE si no se define `PSE_TIMEOUT_MS` (criterio 120). */
+export const PSE_TIMEOUT_MS_POR_DEFECTO = 30_000;
+
+/**
+ * Valor de `CLAVE_CIFRADO` con `NODE_ENV` `development` o `test` si no se define (32 bytes en base64). Solo sirve para
+ * desarrollo y pruebas: en producción es obligatoria.
+ */
+export const CLAVE_CIFRADO_LOCAL = Buffer.from('clave-cifrado-solo-desarrollo-32b').toString(
+  'base64',
+);
+
+/** El padrón reducido de RUC de SUNAT (archivo público) si no se define `PADRON_RUC_URL` (criterio 138). */
+export const PADRON_RUC_URL_POR_DEFECTO = 'https://www2.sunat.gob.pe/padron_reducido_ruc.zip';
+
+/** Carpeta del almacén privado de comprobantes en desarrollo con `disco`; la API nunca la sirve (criterio 165). */
+export const ARCHIVOS_COMPROBANTES_DIRECTORIO_LOCAL = './archivos-privados';
+
+const MINIMO_BYTES_CLAVE_CIFRADO = 32;
+
 const entornoSchema = z.object({
   // Sin valor por defecto: un despliegue que olvide `NODE_ENV=production` no debe arrancar con
   // el resolutor por cabecera ni con contraseñas conocidas (criterio 29b).
@@ -58,13 +84,41 @@ const entornoSchema = z.object({
   // Carta web y pedido desde la mesa (historia 005): la URL base de `apps/web` y la cabecera con la IP real del cliente.
   CARTA_WEB_URL: z.string().optional(),
   CABECERA_IP_CLIENTE: z.string().optional(),
+  // Facturación electrónica (historia 006, entrega 6b). Reglas por entorno en `cargarEntorno` y
+  // `exigirEntornoDeProduccion`.
+  PSE_CONECTOR: z
+    .string()
+    .regex(/^[a-z][a-z0-9-]{0,39}$/, 'Debe ser un código en minúsculas')
+    .optional(),
+  PSE_TIMEOUT_MS: z.coerce
+    .number()
+    .int()
+    .min(1000)
+    .max(120_000)
+    .default(PSE_TIMEOUT_MS_POR_DEFECTO),
+  CLAVE_CIFRADO: z.string().optional(),
+  CLAVE_CIFRADO_ANTERIOR: z.string().optional(),
+  DATABASE_COLAS_URL: urlPostgres.optional(),
+  DATABASE_REFERENCIA_URL: urlPostgres.optional(),
+  WORKER: z.enum(ESTADOS_WORKER).optional(),
+  PADRON_RUC_URL: z.string().optional(),
+  R2_BUCKET_COMPROBANTES: z.string().optional(),
+  ARCHIVOS_COMPROBANTES_DIRECTORIO: z.string().optional(),
 });
 
 type EntornoLeido = z.infer<typeof entornoSchema>;
 
 export interface Entorno extends Omit<
   EntornoLeido,
-  'PIN_PEPPER' | 'ORIGENES_PERMITIDOS' | 'ARCHIVOS_DRIVER' | 'TIEMPO_REAL'
+  | 'PIN_PEPPER'
+  | 'ORIGENES_PERMITIDOS'
+  | 'ARCHIVOS_DRIVER'
+  | 'TIEMPO_REAL'
+  | 'PSE_CONECTOR'
+  | 'CLAVE_CIFRADO'
+  | 'WORKER'
+  | 'PADRON_RUC_URL'
+  | 'ARCHIVOS_COMPROBANTES_DIRECTORIO'
 > {
   /**
    * Secreto con el que se calcula la huella de los PIN (base64, 32 bytes o más). Con `NODE_ENV`
@@ -118,6 +172,28 @@ export interface Entorno extends Omit<
    * del límite de llamados (criterio 33 de 005): la IP nunca se guarda.
    */
   CABECERA_IP_CLIENTE: string | undefined;
+  /**
+   * Código del conector del PSE (criterio 122): `simulador` o el código del adaptador real (T34). Con `development`
+   * y `test` vale `simulador` si no se define; en producción puede faltar (`undefined`) al leer el entorno, pero la
+   * API no arranca sin él (`exigirEntornoDeProduccion`).
+   */
+  PSE_CONECTOR: string | undefined;
+  /**
+   * Clave maestra del cifrado de las credenciales del PSE y de los enlaces de comprobantes (base64, 32 bytes o más;
+   * criterios 123 y 160). Con `development` y `test` tiene un valor fijo si no se define; en producción puede faltar al
+   * leer el entorno, pero la API no arranca sin ella.
+   */
+  CLAVE_CIFRADO: string | undefined;
+  /** `DATABASE_COLAS_URL` (rol `restaurante_colas`, dueño del esquema `colas`): la cola de pg-boss (criterio 163). */
+  DATABASE_COLAS_URL?: string | undefined;
+  /** `DATABASE_REFERENCIA_URL` (rol `restaurante_referencia`): solo la carga del padrón de RUC (criterio 138). */
+  DATABASE_REFERENCIA_URL?: string | undefined;
+  /** Si el worker de envíos corre dentro del proceso de la API; `deshabilitado` por defecto y siempre con `NODE_ENV=test`. */
+  WORKER: EstadoWorker;
+  /** Dirección del padrón reducido de RUC (`https://…` o `file://…` en las pruebas). */
+  PADRON_RUC_URL: string;
+  /** Carpeta del almacén privado de comprobantes con `disco` (solo desarrollo); la API nunca la sirve. */
+  ARCHIVOS_COMPROBANTES_DIRECTORIO: string;
 }
 
 /** Carpeta del almacén en disco si no se define `ARCHIVOS_DIRECTORIO`. */
@@ -211,6 +287,7 @@ export function cargarEntorno(env: NodeJS.ProcessEnv = process.env): Entorno {
   validarApiUrlPublica(limpio.API_URL_PUBLICA, problemas);
   validarCartaWebUrl(limpio.CARTA_WEB_URL, problemas);
   validarCabeceraIpCliente(limpio.CABECERA_IP_CLIENTE, problemas);
+  validarFacturacion(limpio, problemas);
 
   if (problemas.length > 0 || !resultado.success) throw new EntornoInvalidoError(problemas);
   const driverPorDefecto: DriverDeArchivos | undefined =
@@ -240,6 +317,14 @@ export function cargarEntorno(env: NodeJS.ProcessEnv = process.env): Entorno {
     API_URL_PUBLICA: apiUrlPublica?.replace(/\/+$/, ''),
     CARTA_WEB_URL: cartaWebUrl?.replace(/\/+$/, ''),
     CABECERA_IP_CLIENTE: resultado.data.CABECERA_IP_CLIENTE?.toLowerCase(),
+    PSE_CONECTOR: resultado.data.PSE_CONECTOR ?? (conDefectos ? PSE_CONECTOR_SIMULADOR : undefined),
+    CLAVE_CIFRADO: resultado.data.CLAVE_CIFRADO ?? (conDefectos ? CLAVE_CIFRADO_LOCAL : undefined),
+    // El worker nunca corre dentro del proceso con NODE_ENV=test (criterio 137): las pruebas lo arman con `crearWorker`.
+    WORKER:
+      limpio.NODE_ENV === 'test' ? 'deshabilitado' : (resultado.data.WORKER ?? 'deshabilitado'),
+    PADRON_RUC_URL: resultado.data.PADRON_RUC_URL ?? PADRON_RUC_URL_POR_DEFECTO,
+    ARCHIVOS_COMPROBANTES_DIRECTORIO:
+      resultado.data.ARCHIVOS_COMPROBANTES_DIRECTORIO ?? ARCHIVOS_COMPROBANTES_DIRECTORIO_LOCAL,
   };
 }
 
@@ -274,6 +359,18 @@ function validarArchivos(
     }
     if (env.ARCHIVOS_URL_PUBLICA === undefined) {
       problemas.push('ARCHIVOS_URL_PUBLICA es obligatoria con ARCHIVOS_DRIVER=r2');
+    }
+  }
+  if (driver === 'r2') {
+    // El almacén de los comprobantes (historia 006) es otro bucket y es privado: nunca el de las fotos, que es público.
+    if (env.R2_BUCKET_COMPROBANTES === undefined) {
+      problemas.push(
+        'R2_BUCKET_COMPROBANTES es obligatoria con ARCHIVOS_DRIVER=r2 (bucket privado)',
+      );
+    } else if (env.R2_BUCKET_COMPROBANTES === env.R2_BUCKET) {
+      problemas.push(
+        'R2_BUCKET_COMPROBANTES debe ser un bucket distinto de R2_BUCKET: el de los comprobantes es privado',
+      );
     }
   }
   if (env.ARCHIVOS_URL_PUBLICA !== undefined) {
@@ -326,6 +423,33 @@ function validarCartaWebUrl(valor: string | undefined, problemas: string[]): voi
   }
 }
 
+/** `CLAVE_CIFRADO` y `CLAVE_CIFRADO_ANTERIOR` en base64 con al menos 32 bytes; `PADRON_RUC_URL` con `http(s)` o `file`. */
+function validarFacturacion(env: Record<string, string | undefined>, problemas: string[]): void {
+  for (const variable of ['CLAVE_CIFRADO', 'CLAVE_CIFRADO_ANTERIOR'] as const) {
+    const valor = env[variable];
+    if (valor === undefined) continue;
+    const bytes = FORMATO_BASE64.test(valor) ? Buffer.from(valor, 'base64').length : 0;
+    if (bytes < MINIMO_BYTES_CLAVE_CIFRADO) {
+      problemas.push(
+        `${variable}: debe estar en base64 y tener al menos ${MINIMO_BYTES_CLAVE_CIFRADO} bytes al decodificarse`,
+      );
+    }
+  }
+  const padron = env.PADRON_RUC_URL;
+  if (padron !== undefined) {
+    let valida = false;
+    try {
+      const protocolo = new URL(padron).protocol;
+      valida = protocolo === 'http:' || protocolo === 'https:' || protocolo === 'file:';
+    } catch {
+      valida = false;
+    }
+    if (!valida) {
+      problemas.push('PADRON_RUC_URL no es una URL http(s) o file:// válida');
+    }
+  }
+}
+
 /** `CABECERA_IP_CLIENTE`, si se define, debe ser el nombre de una cabecera HTTP (por ejemplo `cf-connecting-ip`). */
 function validarCabeceraIpCliente(valor: string | undefined, problemas: string[]): void {
   if (valor === undefined) return;
@@ -360,6 +484,53 @@ export function exigirEntornoDeProduccion(entorno: Entorno): void {
     problemas.push(
       'ARCHIVOS_DRIVER=r2 es obligatorio en producción (fotos de la carta en Cloudflare R2, con sus ' +
         'R2_* y ARCHIVOS_URL_PUBLICA)',
+    );
+  }
+  // Facturación electrónica (historia 006, entrega 6b): sin estas la API no puede cifrar credenciales, encolar los
+  // envíos, elegir el conector ni guardar los archivos de los comprobantes en un bucket privado.
+  if (entorno.CLAVE_CIFRADO === undefined) {
+    problemas.push(
+      'CLAVE_CIFRADO es obligatoria en producción (base64, al menos 32 bytes): cifra las credenciales del PSE ' +
+        'y los enlaces de los comprobantes',
+    );
+  }
+  if (entorno.DATABASE_COLAS_URL === undefined) {
+    problemas.push(
+      'DATABASE_COLAS_URL es obligatoria en producción: es la conexión de la cola de envíos al PSE, con el rol ' +
+        'restaurante_colas (ver db:preparar)',
+    );
+  }
+  if (entorno.PSE_CONECTOR === undefined) {
+    problemas.push(
+      'PSE_CONECTOR es obligatoria en producción (simulador o el código del adaptador del PSE)',
+    );
+  }
+  if (entorno.R2_BUCKET_COMPROBANTES === undefined) {
+    problemas.push(
+      'R2_BUCKET_COMPROBANTES es obligatoria en producción: el bucket privado de los XML, CDR y PDF de los ' +
+        'comprobantes',
+    );
+  }
+  if (problemas.length > 0) throw new EntornoInvalidoError(problemas);
+}
+
+/**
+ * Lo que el worker de envíos exige para arrancar como proceso aparte (historia 006, 6b): la conexión de la cola
+ * (`DATABASE_COLAS_URL`, rol `restaurante_colas`) y la de la carga del padrón (`DATABASE_REFERENCIA_URL`, rol
+ * `restaurante_referencia`). Lanza `EntornoInvalidoError` con todo lo que falte.
+ */
+export function exigirEntornoDelWorker(entorno: Entorno): void {
+  const problemas: string[] = [];
+  if (entorno.DATABASE_COLAS_URL === undefined) {
+    problemas.push(
+      'DATABASE_COLAS_URL es obligatoria para el worker: es la conexión de la cola de envíos, con el rol ' +
+        'restaurante_colas (ver db:preparar)',
+    );
+  }
+  if (entorno.DATABASE_REFERENCIA_URL === undefined) {
+    problemas.push(
+      'DATABASE_REFERENCIA_URL es obligatoria para el worker: es la conexión de la carga del padrón de RUC, con el ' +
+        'rol restaurante_referencia (ver db:preparar)',
     );
   }
   if (problemas.length > 0) throw new EntornoInvalidoError(problemas);

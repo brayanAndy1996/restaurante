@@ -5,6 +5,11 @@ export const PIN_PEPPER_DE_PRUEBA = Buffer.from('pin-pepper-solo-para-pruebas-12
   'base64',
 );
 
+/** `CLAVE_CIFRADO` de las pruebas de producción (base64 de 32 bytes). */
+export const CLAVE_CIFRADO_DE_PRUEBA = Buffer.from('clave-cifrado-solo-pruebas-12345').toString(
+  'base64',
+);
+
 /** `ORIGENES_PERMITIDOS` de las pruebas. */
 export const ORIGENES_PERMITIDOS_DE_PRUEBA = 'http://localhost:5173';
 
@@ -33,6 +38,9 @@ export function fijarEntornoDePrueba(
     DATABASE_URL: urlDeRol('api'),
     DATABASE_PLATAFORMA_URL: urlDeRol('plataforma'),
     DATABASE_TIEMPO_REAL_URL: urlDeRol('tiempoReal'),
+    // Facturación electrónica (6b): la cola y la carga del padrón tienen su propio rol.
+    DATABASE_COLAS_URL: urlDeRol('colas'),
+    DATABASE_REFERENCIA_URL: urlDeRol('referencia'),
     NODE_ENV: nodeEnv,
     EMPRESA_POR_HEADER: opciones.empresaPorHeader === false ? undefined : 'habilitado',
     DB_POOL_MAX: String(opciones.poolMax ?? 2),
@@ -51,6 +59,10 @@ export function fijarEntornoDePrueba(
     R2_ACCESS_KEY_ID: nodeEnv === 'production' ? 'clave-de-prueba' : undefined,
     R2_SECRET_ACCESS_KEY: nodeEnv === 'production' ? 'secreto-de-prueba' : undefined,
     R2_BUCKET: nodeEnv === 'production' ? 'bucket-de-prueba' : undefined,
+    // Con `NODE_ENV=production` la API exige además lo de la facturación electrónica (6b).
+    R2_BUCKET_COMPROBANTES: nodeEnv === 'production' ? 'bucket-privado-de-prueba' : undefined,
+    CLAVE_CIFRADO: nodeEnv === 'production' ? CLAVE_CIFRADO_DE_PRUEBA : undefined,
+    PSE_CONECTOR: nodeEnv === 'production' ? 'simulador' : undefined,
     ...opciones.extra,
   };
   for (const [clave, valor] of Object.entries(aplicado)) {

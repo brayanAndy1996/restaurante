@@ -1,6 +1,13 @@
 import { DynamicModule, Module, Type } from '@nestjs/common';
 import { ConfigModule } from './config/config.module';
-import { ArchivosModule, type AlmacenArchivos } from './nucleo/archivos';
+import {
+  AlmacenComprobantesModule,
+  ArchivosModule,
+  type AlmacenArchivos,
+  type AlmacenComprobantes,
+} from './nucleo/archivos';
+import { CifradoModule } from './nucleo/cifrado';
+import { ColasModule, type ColaPse } from './nucleo/colas';
 import { BaseDeDatosModule } from './nucleo/base-de-datos';
 import { ContextoEmpresaModule } from './nucleo/contexto-empresa';
 import { ErroresModule } from './nucleo/errores';
@@ -12,6 +19,7 @@ import { CajaModule } from './modulos/caja';
 import { CartaModule } from './modulos/carta';
 import { CartaWebModule } from './modulos/carta-web';
 import { FacturacionModule } from './modulos/facturacion';
+import { ConectorPseModule, type ConectorPse } from './modulos/facturacion/pse';
 import { ImpresionModule } from './modulos/impresion';
 import { LlamadosModule } from './modulos/llamados';
 import { InventarioModule, PedidosModule, type InventarioPuerto } from './modulos/pedidos';
@@ -31,6 +39,15 @@ export interface OpcionesAppModule {
   almacenArchivos?: AlmacenArchivos;
   /** Puerto de inventario (`INVENTARIO`); por defecto el `InventarioNulo`. Las pruebas pasan un `InventarioDePrueba`. */
   inventario?: InventarioPuerto;
+  /**
+   * Conector del PSE (`CONECTOR_PSE`, historia 006 6b): reemplaza el conector para todos los modos de los emisores. Por
+   * defecto un `SimuladorPse`. Las pruebas pasan uno con sus reglas.
+   */
+  pse?: ConectorPse;
+  /** Cola de envíos al PSE (`COLA_PSE`); por defecto la que elige el entorno. Las pruebas pasan una `ColaEnMemoria`. */
+  colaPse?: ColaPse;
+  /** Almacén privado de comprobantes (`ALMACEN_COMPROBANTES`); por defecto el del entorno. */
+  almacenComprobantes?: AlmacenComprobantes;
   /** Si la API sirve Socket.IO; por defecto no (`crearAplicacion` lo decide con `TIEMPO_REAL` del entorno). */
   tiempoReal?: { habilitado: boolean };
 }
@@ -70,6 +87,10 @@ export class AppModule {
         ),
         ArchivosModule.registrar(opciones.almacenArchivos),
         InventarioModule.registrar(opciones.inventario),
+        CifradoModule,
+        ColasModule.registrar(opciones.colaPse),
+        AlmacenComprobantesModule.registrar(opciones.almacenComprobantes),
+        ConectorPseModule.registrar(opciones.pse),
         TiempoRealModule.registrar({ habilitado: tiempoReal }),
       ],
       controllers: opciones.controladoresExtra ?? [],
