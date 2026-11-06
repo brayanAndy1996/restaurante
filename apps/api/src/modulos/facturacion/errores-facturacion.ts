@@ -70,3 +70,44 @@ export const comprobanteNoPermitido = (mensaje: string, campo: string): ErrorApl
 /** 422 `CLIENTE_REQUERIDO`: la factura o la boleta de más de S/ 700 necesita al cliente (criterio 51). */
 export const clienteRequerido = (mensaje: string): ErrorAplicacion =>
   new ErrorAplicacion(422, 'CLIENTE_REQUERIDO', mensaje, [{ campo: 'cliente', mensaje }]);
+
+// ---------------------------------------------------------------------------------------------------
+// Notas de crédito (6b, criterios 143 a 151)
+// ---------------------------------------------------------------------------------------------------
+
+/** 409 `COMPROBANTE_NO_ACEPTADO`: solo un comprobante `ACEPTADO` admite nota de crédito (criterio 146). */
+export const comprobanteNoAceptado = (): ErrorAplicacion =>
+  new ErrorAplicacion(
+    409,
+    'COMPROBANTE_NO_ACEPTADO',
+    'Solo se puede emitir una nota de crédito sobre un comprobante aceptado por SUNAT',
+  );
+
+/** 409 `COMPROBANTE_ANULADO`: el comprobante ya fue anulado por una nota de crédito (criterio 146). */
+export const comprobanteAnulado = (): ErrorAplicacion =>
+  new ErrorAplicacion(409, 'COMPROBANTE_ANULADO', 'El comprobante ya fue anulado');
+
+/** 422 `NOTA_CREDITO_INVALIDA` con el motivo en el mensaje (criterios 143, 146 y 147). */
+export const notaCreditoInvalida = (mensaje: string): ErrorAplicacion =>
+  new ErrorAplicacion(422, 'NOTA_CREDITO_INVALIDA', mensaje);
+
+/** 422 `NADA_QUE_ACREDITAR`: a la línea pedida ya no le queda nada por acreditar (criterios 147 y 148). */
+export const nadaQueAcreditar = (): ErrorAplicacion =>
+  new ErrorAplicacion(422, 'NADA_QUE_ACREDITAR', 'A esa línea ya no le queda nada por acreditar');
+
+/** 409 `NOTA_CREDITO_CAMBIO`: el total de la nota que vio la persona no es el que calcula el servidor (criterio 144). */
+export const notaCreditoCambio = (totalNuevo: string): ErrorAplicacion =>
+  new ErrorAplicacion(
+    409,
+    'NOTA_CREDITO_CAMBIO',
+    'El total de la nota cambió desde que lo viste: revísalo y vuelve a emitirla',
+    [{ campo: 'total', mensaje: `El total ahora es S/ ${totalNuevo}` }] satisfies CampoError[],
+  );
+
+/** 409 `SIN_SERIE`: la caja no tiene una serie activa de notas de crédito de ese tipo para el emisor (criterio 149). */
+export const sinSerieDeNotas = (): ErrorAplicacion =>
+  new ErrorAplicacion(
+    409,
+    'SIN_SERIE',
+    'La caja no tiene serie de notas de crédito: configúrala en Ajustes',
+  );

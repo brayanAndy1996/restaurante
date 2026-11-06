@@ -10,8 +10,9 @@ import { QueryTypes, type Sequelize } from 'sequelize';
  * Lee un comprobante de la tabla y lo arma con la forma de `comprobanteRespuesta` (historia 006, criterios 69 y 77, y
  * los campos de 6b de los criterios 122, 127, 134, 143 y 159). Corre en la transacción de la empresa del contexto: la
  * RLS hace que uno de otra empresa sea indistinguible de uno inexistente (devuelve `null`). Dos consultas fijas, sin
- * importar cuántas líneas tenga. `notasCredito` y `acreditado` (criterio 148) los agrega quien emite notas de crédito
- * (T39/T40); aquí quedan sin definir.
+ * importar cuántas líneas tenga. Una boleta o una factura lleva además, en dos consultas más, `notasCredito` y
+ * `acreditado` (criterio 148): las notas que cuentan (todas las del comprobante salvo las que reemplazó una reemisión)
+ * y lo que acreditan por línea del original, con los que la PWA calcula la nota con `calcularNotaCredito`.
  */
 
 interface FilaComprobante {
@@ -143,6 +144,7 @@ export async function leerComprobante(
     { bind: [id], type: QueryTypes.SELECT },
   );
   const tieneOperaciones = c.op_gravadas !== null;
+  const conNotas = c.tipo === 'BOLETA' || c.tipo === 'FACTURA' ? await notasDe(conexion, id) : null;
   return {
     id: c.id,
     tipo: c.tipo,
@@ -269,6 +271,70 @@ export async function leerComprobante(
       anuladoEn: c.anulado_en?.toISOString() ?? null,
     },
     pdfDisponible: c.tiene_pdf,
+    ...(conNotas === null ? {} : conNotas),
+  };
+}
+
+/**
+ * Las notas de crédito que cuentan de un comprobante y lo que acreditan por línea (criterio 148). Cuentan todas las notas
+ * cuyo `afecta_a_id` es el comprobante salvo las que reemplazó una reemisión (una rechazada sin reemisión sigue contando:
+ * su dinero ya se devolvió).
+ */
+async function notasDe(
+  conexion: Sequelize,
+  id: string,
+): Promise<Pick<ComprobanteRespuesta, 'notasCredito' | 'acreditado'>> {
+  const notas = await conexion.query<{
+    id: string;
+    tipo_nota: 'ANULACION' | 'DEVOLUCION';
+    serie: string;
+    numero: number;
+    estado: ComprobanteRespuesta['estado'];
+    total: string;
+  }>(
+    `SELECT n.id, n.tipo_nota, n.serie, n.numero, n.estado, n.total::text AS total
+       FROM comprobante n
+      WHERE n.afecta_a_id = $1
+        AND NOT EXISTS (SELECT 1 FROM comprobante r WHERE r.reemplaza_a_id = n.id)
+      ORDER BY n.emitido_en, n.serie, n.numero`,
+    { bind: [id], type: QueryTypes.SELECT },
+  );
+  if (notas.length === 0) return { notasCredito: [], acreditado: [] };
+  const acreditado = await conexion.query<{
+    posicion_origen: number;
+    cantidad: number;
+    neto: string;
+    base: string;
+    igv: string;
+    bolsas: number;
+    icbper: string;
+  }>(
+    `SELECT l.posicion_origen, sum(l.cantidad)::int AS cantidad, sum(l.neto)::numeric(14, 2)::text AS neto,
+            sum(l.base)::numeric(14, 2)::text AS base, sum(l.igv)::numeric(14, 2)::text AS igv,
+            sum(l.bolsas)::int AS bolsas, sum(l.icbper)::numeric(14, 2)::text AS icbper
+       FROM comprobante n JOIN comprobante_linea l ON l.comprobante_id = n.id
+      WHERE n.afecta_a_id = $1
+        AND NOT EXISTS (SELECT 1 FROM comprobante r WHERE r.reemplaza_a_id = n.id)
+      GROUP BY l.posicion_origen ORDER BY l.posicion_origen`,
+    { bind: [id], type: QueryTypes.SELECT },
+  );
+  return {
+    notasCredito: notas.map((n) => ({
+      id: n.id,
+      tipo: n.tipo_nota,
+      numero: textoDelNumero(n.serie, n.numero),
+      estado: n.estado,
+      total: n.total,
+    })),
+    acreditado: acreditado.map((a) => ({
+      posicion: a.posicion_origen,
+      cantidad: a.cantidad,
+      neto: a.neto,
+      base: a.base,
+      igv: a.igv,
+      bolsas: a.bolsas,
+      icbper: a.icbper,
+    })),
   };
 }
 
