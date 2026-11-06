@@ -250,12 +250,21 @@ describe('criterio 139 · GET /padron/ruc/:ruc', () => {
     }
   });
 
-  it('la respuesta para el mismo RUC es idéntica desde A y desde B', async () => {
-    for (const ruc of [RUC_CON_DIRECCION, RUC_TILDES, RUC_BAJA, RUC_VALIDO_AUSENTE]) {
+  it('la respuesta para el mismo RUC es idéntica desde A y desde B (200 con los del padrón, 404 con uno válido que no está)', async () => {
+    const esperado: Array<[string, number]> = [
+      [RUC_CON_DIRECCION, 200],
+      [RUC_TILDES, 200],
+      [RUC_BAJA, 200],
+      [RUC_VALIDO_AUSENTE, 404],
+    ];
+    for (const [ruc, estado] of esperado) {
       const deA = await buscar(ruc, A().token.supervisor);
       const deB = await buscar(ruc, B().token.supervisor);
-      expect(deA.status, ruc).toBe(deB.status);
+      expect(deA.status, `${ruc} desde A: ${deA.text}`).toBe(estado);
+      expect(deB.status, `${ruc} desde B: ${deB.text}`).toBe(estado);
       expect(deA.body, ruc).toEqual(deB.body);
+      if (estado === 200) expect(padronRucRespuestaSchema.parse(deA.body).ruc).toBe(ruc);
+      else expect(deA.body.codigo).toBe('RUC_NO_ENCONTRADO');
     }
   });
 

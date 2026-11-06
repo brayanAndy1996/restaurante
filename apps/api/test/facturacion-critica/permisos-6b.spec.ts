@@ -11,7 +11,7 @@
 //   y en las alertas, las demás con `sucursalId`) en el panel, el detalle, el PDF, el enlace, el reintento, la reemisión y las
 //   alertas;
 // - 170: las rutas de plataforma de 6b son solo del superadministrador (las sesiones de empresa reciben 401), un emisor de otra
-//   empresa es 404 y dejan su fila en `auditoria_plataforma` sin secretos;
+//   empresa es 404 y dejan su fila en `auditoria` (origen `plataforma`) sin secretos;
 // - 171: `reemitir_comprobante` deja exactamente una fila (ninguna en las réplicas, los rechazos ni el reintento manual); las
 //   filas de `envio_pse` e `intento_pse` y los cambios de estado de un comprobante quedan trazados con su actor (la persona que
 //   emitió o reintentó, o `worker:envio-pse`) y `configuracion_pse`, con el superadministrador.
@@ -376,11 +376,30 @@ describe('criterio 169 · rechazos por rol, módulo y sucursal', () => {
 describe('criterio 170 · rutas de plataforma', () => {
   const rutaPse = (empresaId: string, emisorId: string) =>
     `/plataforma/empresas/${empresaId}/emisores/${emisorId}/pse`;
+  // Desde 002 la auditoría de plataforma vive en `auditoria` con `origen = 'plataforma'` y `accion` = la operación. Se
+  // limita al superadministrador de esta prueba para que otros archivos que corren en paralelo no sumen filas.
   const auditoriaPlataforma = (operacion: string, empresaId: string | null) =>
     filas(
-      `SELECT * FROM auditoria_plataforma WHERE operacion = $1 AND empresa_id IS NOT DISTINCT FROM $2 ORDER BY ocurrido_en, id`,
-      [operacion, empresaId],
+      `SELECT * FROM auditoria
+        WHERE origen = 'plataforma' AND accion = $1 AND empresa_id IS NOT DISTINCT FROM $2
+          AND actor_superadministrador_id = $3
+        ORDER BY ocurrido_en, id`,
+      [operacion, empresaId, esc.sa.id],
     );
+  /**
+   * Filas de auditoría que un intento no autorizado dejaría: las de configurar el PSE de A o de B (de cualquier actor) y
+   * las de cargar el padrón que no son de un superadministrador.
+   */
+  const filasDePlataforma = async (): Promise<string> =>
+    (
+      await filas(
+        `SELECT count(*)::text AS n FROM auditoria
+          WHERE origen = 'plataforma'
+            AND ((accion = 'configurar_pse_emisor' AND empresa_id = ANY($1::uuid[]))
+              OR (accion = 'cargar_padron' AND actor_superadministrador_id IS NULL))`,
+        [[A().id, B().id]],
+      )
+    )[0]!.n as string;
 
   it('las sesiones de empresa, de soporte y de equipo reciben 401 NO_AUTENTICADO en las rutas de plataforma de 6b y no se ejecuta nada', async () => {
     const soporte = await sesionDeSoporte(ctx.app, esc.sa.token, A().id, A().S1);
@@ -391,7 +410,7 @@ describe('criterio 170 · rutas de plataforma', () => {
       ['sesión de soporte', soporte],
       ['token de equipo', equipo],
     ];
-    const antes = (await filas('SELECT count(*)::text AS n FROM auditoria_plataforma'))[0]!.n;
+    const antes = await filasDePlataforma();
     const fallos: string[] = [];
     for (const ruta of RUTAS.filter((x) => x.clase === 'PLATAFORMA')) {
       for (const [que, token] of intentos) {
@@ -408,7 +427,7 @@ describe('criterio 170 · rutas de plataforma', () => {
       }
     }
     expect(fallos, fallos.join('\n')).toEqual([]);
-    expect((await filas('SELECT count(*)::text AS n FROM auditoria_plataforma'))[0]!.n).toBe(antes);
+    expect(await filasDePlataforma()).toBe(antes);
   });
 
   it('un emisor de otra empresa o inexistente en la ruta es 404 con el mismo cuerpo', async () => {
