@@ -35,6 +35,8 @@ import {
   rechazarRucEnElSimulador,
   vigilarEscriturasDeFacturacion,
   irAlPanelDeCaja,
+  irAlPanelDeAjustes,
+  filaDelPanel,
   filaDelReporte,
   abrirComprobanteDelPanel,
   prepararLaFacturacion,
@@ -67,6 +69,23 @@ const TABLETA: BrowserContextOptions = {
 const enTableta = () => test.info().project.name === 'tablet';
 const equipoBase = (): BrowserContextOptions => (enTableta() ? TABLETA : CELULAR);
 
+/**
+ * DEFECTOS ENCONTRADOS POR ESTA PRUEBA EN LA PWA (se reportaron al orquestador; no se tocó el código de producción). Cada
+ * prueba afectada se salta (`test.fixme`) mientras la constante valga `true`; al corregir el defecto se pone en `false` y
+ * la prueba debe pasar sin más cambios.
+ *
+ * 1. La hoja «Nota de crédito» se cierra sola. `ComprobanteDetallePagina` la monta con `notaAbierta && puedeNota`, y
+ *    `puedeNota` deja de ser verdad apenas SUNAT acepta una nota de anulación o de cambio a factura (el original pasa a
+ *    ANULADO, en vivo): a ~1 s de emitirla, la persona pierde el resultado («Nota de crédito emitida», el número de la
+ *    factura nueva, el estado de los dos documentos, el ticket) y se queda con el detalle del original.
+ * 2. El detalle de un comprobante nuevo conserva lo de la reemisión anterior. `DetalleCargado` no se vuelve a montar al
+ *    pasar de un comprobante a otro (misma ruta, otro `:id`), así que `reemision.data` sigue puesto: tras «Emitir otro» →
+ *    rechazado otra vez → «Ver el comprobante nuevo», el detalle del nuevo sigue mostrando «Comprobante nuevo emitido»
+ *    y no ofrece «Emitir otro» hasta recargar.
+ */
+const DEFECTO_LA_HOJA_DE_NOTA_SE_CIERRA_SOLA = true;
+const DEFECTO_EL_DETALLE_CONSERVA_LA_REEMISION_ANTERIOR = true;
+
 let e: EscenarioDeSalon;
 let emulador: EmuladorEscPos;
 let puente: SimuladorPuente | undefined;
@@ -80,6 +99,7 @@ interface Persona {
 let cajero: Persona;
 let mozo: Persona;
 let supervisor: Persona;
+let admin: Persona;
 
 test.beforeAll(async ({ request }) => {
   e = await crearEscenarioDeSalon(request);
@@ -398,4 +418,244 @@ test('una devolución parcial con la clave del Supervisor sale en efectivo de la
     ['POST', /^\/notas-credito$/],
     ['POST', /^\/autorizaciones$/],
   ]);
+});
+
+test('el Administrador cambia una boleta por factura: la boleta queda «Anulado» y la factura nueva «Aceptado»', async ({
+  browser,
+}) => {
+  test.fixme(
+    DEFECTO_LA_HOJA_DE_NOTA_SE_CIERRA_SOLA,
+    'La hoja «Nota de crédito» se cierra sola cuando el original pasa a ANULADO (ver la constante)',
+  );
+  let boleta = '';
+  admin = await entrar(browser, e.administrador, e.s1.nombre);
+  const { page } = admin;
+
+  await test.step('el Mozo comanda un ceviche y el Cajero cobra la boleta (S/ 38.00) en efectivo', async () => {
+    await abrirMesaYComandar(mozo.page, '1', [PLATOS.ceviche]);
+    await abrirElCobroDeLaMesa(cajero.page, '1');
+    const cobro = await cobrarYEsperar(cajero.page);
+    boleta = cobro.comprobante.numero;
+    await expect(estadoAnteSunat(cajero.page)).toContainText('Aceptado por SUNAT', {
+      timeout: 30_000,
+    });
+  });
+
+  await test.step('en Ajustes › Comprobantes el Administrador abre la boleta y elige «Cambiar a factura»', async () => {
+    await irAlPanelDeAjustes(page);
+    await abrirComprobanteDelPanel(page, boleta);
+    await expect(estadoAnteSunat(page)).toContainText('Aceptado por SUNAT');
+    await page.getByRole('button', { name: 'Nota de crédito', exact: true }).click();
+    const hoja = page.getByRole('dialog', { name: 'Nota de crédito' });
+    await hoja
+      .getByRole('group', { name: 'Qué quieres hacer' })
+      .getByRole('button', { name: 'Cambiar a factura', exact: true })
+      .click();
+    await escribirRucDeFactura(page, RUC.activo.numero, 200);
+    await expect(hoja.getByLabel('Razón social')).toHaveValue(RUC.activo.razonSocial);
+    await expect(hoja.getByLabel('Dirección fiscal')).toHaveValue(RUC.activo.direccion);
+    await hoja.getByRole('button', { name: 'El cliente pidió factura', exact: true }).click();
+    await page.waitForTimeout(400); // la hoja termina de subir
+    await page.screenshot({ path: captura('21-cambio-a-factura-360') });
+    await afirmarPantallaDeCelular(page, 'Comprobante › Cambiar a factura');
+  });
+
+  const hoja = page.getByRole('dialog', { name: 'Nota de crédito' });
+  await test.step('el Administrador emite sin clave: salen la nota de crédito y la factura, y SUNAT acepta las dos', async () => {
+    emulador.limpiar();
+    await hoja.getByRole('button', { name: 'Emitir nota de crédito', exact: true }).click();
+    await expect(hoja.getByText('Nota de crédito emitida')).toBeVisible();
+    await expect(hoja.getByText('Devolución de dinero')).toBeVisible();
+    await expect(hoja.getByText('Ninguna', { exact: true })).toBeVisible();
+    await expect(
+      hoja
+        .getByRole('region', { name: 'Estado ante SUNAT' })
+        .filter({ hasText: 'Aceptado por SUNAT' }),
+    ).toHaveCount(2, { timeout: 30_000 });
+    await expect(hoja.getByText(/^Factura · F001-\d{8}$/)).toBeVisible();
+    await page.screenshot({ path: captura('22-cambio-emitido-360') });
+    await afirmarPantallaDeCelular(page, 'Comprobante › Cambio a factura emitido');
+  });
+
+  await test.step('salen los dos tickets (la nota y la factura) y ninguno abre la gaveta', async () => {
+    const nota = await esperarTicketCon(emulador, 'NOTA DE CRÉDITO ELECTRÓNICA');
+    const factura = await esperarTicketCon(emulador, 'Representación impresa de la FACTURA');
+    expect(nota.pulsosGaveta + factura.pulsosGaveta).toBe(0);
+    expect(nota.texto).toContain(boleta);
+    expect(factura.texto).toContain(RUC.activo.numero);
+  });
+
+  await test.step('la boleta pasa a «Anulado» en la misma pantalla y el panel lista la factura nueva aceptada', async () => {
+    await hoja.getByRole('button', { name: 'Listo', exact: true }).click();
+    await expect(estadoAnteSunat(page)).toContainText('Anulado', { timeout: 30_000 });
+    await expect(page.getByRole('link', { name: /^F001-\d{8}$/ })).toBeVisible();
+    await page.screenshot({ path: captura('23-boleta-anulada-360'), fullPage: true });
+    await afirmarPantallaDeCelular(page, 'Comprobante › Boleta anulada');
+    await irAlPanelDeAjustes(page);
+    await expect(filaDelPanel(page, boleta)).toContainText('Anulado');
+  });
+
+  await test.step('el cambio no es dinero nuevo: el X del Cajero no suma la factura ni resta nada', async () => {
+    const { page: pc } = cajero;
+    await irACaja(pc);
+    await pc.getByRole('button', { name: 'Reporte X', exact: true }).click();
+    // Cinco cobros: tres facturas (una rechazada), la boleta de S/ 62.00 y esta boleta; la reemisión y el cambio no cuentan.
+    await expect(filaDelReporte(pc, 'Ventas', 'Total vendido')).toHaveText('S/ 172.00');
+    await expect(pc.getByText('5 comprobantes', { exact: true })).toBeVisible();
+    await expect(filaDelReporte(pc, 'Efectivo que entró o salió', 'Egresos')).toHaveText(
+      'S/ 28.00',
+    );
+    await expect(filaDelReporte(pc, 'Lo que debería haber en caja', 'Efectivo')).toHaveText(
+      'S/ 344.00',
+    );
+  });
+
+  afirmarClavesDelSalon(admin.escrituras, [['POST', /^\/notas-credito$/]]);
+  // Un Administrador no pide clave: la nota no lleva autorización.
+  expect(admin.escrituras.some((w) => /^\/autorizaciones$/.test(w.ruta))).toBe(false);
+});
+
+test('compartir por WhatsApp arma el enlace del PDF y un contexto sin sesión lo abre', async ({
+  browser,
+}) => {
+  const { page, contexto } = cajero;
+  const wa: string[] = [];
+  // WhatsApp no se abre de verdad: se anota a dónde iba la pestaña.
+  await contexto.route('https://wa.me/**', async (ruta) => {
+    wa.push(ruta.request().url());
+    await ruta.fulfill({ status: 200, contentType: 'text/html', body: 'WhatsApp simulado' });
+  });
+  let enlace = '';
+  let factura = '';
+
+  await test.step('el Cajero abre la primera factura (aceptada, con su PDF) en Caja › Comprobantes', async () => {
+    await irAlPanelDeCaja(page);
+    await page
+      .getByRole('link', { name: /^Factura F001-00000001, / })
+      .or(page.getByRole('link', { name: 'F001-00000001', exact: true }))
+      .first()
+      .click();
+    factura = 'F001-00000001';
+    await expect(page.getByRole('heading', { name: new RegExp(factura), level: 1 })).toBeVisible();
+    await expect(estadoAnteSunat(page)).toContainText('Aceptado por SUNAT');
+  });
+
+  await test.step('«Compartir por WhatsApp» con el celular del cliente: abre wa.me con el texto y el enlace', async () => {
+    await page.getByRole('button', { name: 'Compartir por WhatsApp' }).click();
+    await page.getByLabel('Celular del cliente').fill('987 654 321');
+    await page.screenshot({ path: captura('24-compartir-whatsapp-360'), fullPage: true });
+    await afirmarPantallaDeCelular(page, 'Comprobante › Compartir por WhatsApp');
+    const [pestana] = await Promise.all([
+      contexto.waitForEvent('page'),
+      page.getByRole('button', { name: 'Abrir WhatsApp', exact: true }).click(),
+    ]);
+    await expect.poll(() => wa.length, { message: 'la pestaña fue a wa.me' }).toBeGreaterThan(0);
+    await pestana.close();
+    const destino = new URL(wa[0]!);
+    expect(destino.origin + destino.pathname).toBe('https://wa.me/51987654321');
+    const texto = destino.searchParams.get('text') ?? '';
+    expect(texto).toMatch(
+      new RegExp(`^Tu FACTURA ${factura} de E2E Carta \\w+ S\\.A\\.C\\. por S/ 28\\.00: http\\S+$`),
+    );
+    enlace = texto.slice(texto.lastIndexOf(': ') + 2);
+    expect(enlace).toMatch(/^http:\/\/localhost:\d+\/publico\/comprobantes\/[A-Za-z0-9_-]{20,}$/);
+    // El celular no se guarda: al volver a abrir el formulario está vacío.
+    await expect(page.getByLabel('Celular del cliente')).toHaveCount(0);
+    await page.getByRole('button', { name: 'Compartir por WhatsApp' }).click();
+    await expect(page.getByLabel('Celular del cliente')).toHaveValue('');
+  });
+
+  await test.step('un contexto sin sesión abre el enlace: el PDF público responde', async () => {
+    const anonimo = await browser.newContext();
+    abiertos.push(anonimo);
+    const respuesta = await anonimo.request.get(enlace);
+    expect(respuesta.status()).toBe(200);
+    expect(respuesta.headers()['content-type']).toContain('application/pdf');
+    expect(respuesta.headers()['cache-control']).toContain('private');
+    const cuerpo = await respuesta.body();
+    expect(cuerpo.subarray(0, 5).toString('latin1')).toBe('%PDF-');
+    expect(cuerpo.length).toBeGreaterThan(1_000);
+    // Sin sesión de ninguna clase: el contexto no trae nada de la PWA.
+    const sesion = await anonimo.storageState();
+    expect(sesion.cookies).toEqual([]);
+    expect(sesion.origins).toEqual([]);
+
+    // Un sello cambiado o la ruta sin sello no devuelven nada (el mismo 404 en los dos casos).
+    const sello = enlace.slice(enlace.lastIndexOf('/') + 1);
+    const base = enlace.slice(0, enlace.lastIndexOf('/') + 1);
+    const alterado = `${base}${sello.slice(0, -2)}${sello.endsWith('AA') ? 'BB' : 'AA'}`;
+    const [conSelloAlterado, sinSello] = await Promise.all([
+      anonimo.request.get(alterado),
+      anonimo.request.get(base),
+    ]);
+    expect(conSelloAlterado.status()).toBe(404);
+    expect(sinSello.status()).toBe(404);
+  });
+
+  await test.step('«Compartir» sin celular elige el contacto en WhatsApp (wa.me sin número)', async () => {
+    wa.length = 0;
+    await page.getByLabel('Celular del cliente').fill('');
+    const [pestana] = await Promise.all([
+      contexto.waitForEvent('page'),
+      page.getByRole('button', { name: 'Abrir WhatsApp', exact: true }).click(),
+    ]);
+    await expect.poll(() => wa.length).toBeGreaterThan(0);
+    await pestana.close();
+    const destino = new URL(wa[0]!);
+    expect(destino.origin + destino.pathname).toBe('https://wa.me/');
+    expect(destino.searchParams.get('text')).toContain(factura);
+  });
+});
+
+test('«Emitir otro» de un reemplazo que SUNAT también rechazó: el detalle del comprobante nuevo ofrece «Emitir otro» otra vez', async ({
+  request,
+}) => {
+  test.fixme(
+    DEFECTO_EL_DETALLE_CONSERVA_LA_REEMISION_ANTERIOR,
+    'El detalle del comprobante nuevo sigue mostrando la reemisión anterior (ver la constante)',
+  );
+  await rechazarRucEnElSimulador(request, RUC.sunat.numero, {
+    codigo: '2800',
+    mensaje: 'El RUC del cliente no es válido para SUNAT (simulado)',
+  });
+  const { page } = cajero;
+  const sp = supervisor.page;
+  let rechazado = '';
+  let segundo = '';
+
+  await test.step('el Cajero cobra una factura al RUC que el simulador rechaza', async () => {
+    await abrirMesaYComandar(mozo.page, '1', [PLATOS.gaseosa]);
+    await abrirElCobroDeLaMesa(page, '1');
+    await elegirTipoDeComprobante(page, 'Factura');
+    await escribirRucDeFactura(page, RUC.sunat.numero, 200);
+    rechazado = (await cobrarYEsperar(page)).comprobante.numero;
+    await expect(estadoAnteSunat(page)).toContainText('Rechazado: SUNAT:', { timeout: 30_000 });
+  });
+
+  await test.step('el Supervisor emite otro con los mismos datos y SUNAT lo rechaza otra vez', async () => {
+    await irAlPanelDeCaja(sp);
+    await abrirComprobanteDelPanel(sp, rechazado);
+    await sp.getByRole('button', { name: 'Emitir otro', exact: true }).click();
+    segundo = await emitirComprobanteNuevo(sp);
+    await expect(estadoDelComprobanteNuevo(sp)).toContainText('Rechazado: SUNAT:', {
+      timeout: 30_000,
+    });
+  });
+
+  await test.step('«Ver el comprobante nuevo» abre su propio detalle: rechazado y con «Emitir otro»', async () => {
+    await sp.getByRole('link', { name: 'Ver el comprobante nuevo' }).click();
+    await expect(sp.getByRole('heading', { name: new RegExp(segundo), level: 1 })).toBeVisible();
+    await expect(sp.getByRole('heading', { name: 'Comprobante nuevo emitido' })).toHaveCount(0);
+    await expect(sp.getByRole('button', { name: 'Emitir otro', exact: true })).toBeVisible();
+  });
+
+  await test.step('«Emitir otro» corrigiendo el RUC: SUNAT acepta', async () => {
+    await sp.getByRole('button', { name: 'Emitir otro', exact: true }).click();
+    await escribirRucDeFactura(sp, RUC.panaderia.numero, 200);
+    const tercero = await emitirComprobanteNuevo(sp);
+    expect(new Set([rechazado, segundo, tercero]).size).toBe(3);
+    await expect(estadoDelComprobanteNuevo(sp)).toContainText('Aceptado por SUNAT', {
+      timeout: 30_000,
+    });
+  });
 });

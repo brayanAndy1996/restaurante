@@ -283,3 +283,10 @@ export const filaDelReporte = (page: Page, bloque: string, etiqueta: string): Lo
     .locator('.reporte__fila')
     .filter({ has: page.locator('.reporte__etiqueta', { hasText: etiqueta }) })
     .locator('.reporte__valor');
+
+/** La fila (en celular) o la fila de la tabla (en tableta) del panel que lleva ese número. */
+export const filaDelPanel = (page: Page, numero: string): Locator =>
+  page
+    .getByRole('link', { name: new RegExp(`${numero}, `) })
+    .or(page.getByRole('row', { name: new RegExp(numero) }))
+    .first();
