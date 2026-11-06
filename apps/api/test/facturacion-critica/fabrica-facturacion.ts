@@ -455,7 +455,7 @@ export const eventosPublicados = (ctx: AppFact, nombre: string): EventoPublicabl
 const seriesDeNotasPuestas = new Map<string, Promise<void>>();
 
 /**
- * Pone las series de notas de crédito de las cajas 1 y 2 de las sucursales S1 y S3 (criterio 149): `BN01`/`FN01` y
+ * Pone las series de notas de crédito de las cajas 1 y 2 de las sucursales S1 y S3 que existan (criterio 149): `BN01`/`FN01` y
  * `BN02`/`FN02` en S1 y `BN31`/`FN31` y `BN32`/`FN32` en S3. Se hace una sola vez por empresa y archivo.
  */
 export function seriesDeNotas(ctx: AppFact, e: EmpresaCaja): Promise<void> {
@@ -476,7 +476,8 @@ export function seriesDeNotas(ctx: AppFact, e: EmpresaCaja): Promise<void> {
         ['S1', ['01', '02']],
         ['S3', ['31', '32']],
       ] as const) {
-        const c = cajas[sucursal]!;
+        const c = cajas[sucursal];
+        if (!c) continue;
         await poner(e.sucursalId(sucursal), c.caja1, 'NOTA_CREDITO_BOLETA', `BN${nombre[0]}`);
         await poner(e.sucursalId(sucursal), c.caja1, 'NOTA_CREDITO_FACTURA', `FN${nombre[0]}`);
         await poner(e.sucursalId(sucursal), c.caja2, 'NOTA_CREDITO_BOLETA', `BN${nombre[1]}`);
