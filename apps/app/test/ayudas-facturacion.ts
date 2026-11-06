@@ -102,3 +102,96 @@ export function itemDePanel(extra: Partial<PanelItem> = {}): PanelItem {
     ...extra,
   };
 }
+
+/** Una línea de comprobante con la forma de `comprobanteLineaRespuestaSchema`. */
+export function lineaDeComprobante(
+  extra: Partial<ComprobanteRespuesta['lineas'][number]> = {},
+): ComprobanteRespuesta['lineas'][number] {
+  return {
+    posicion: 1,
+    itemId: null,
+    descripcion: 'Lomo saltado',
+    cantidad: 1,
+    unidad: 'NIU',
+    precioUnitario: '28.00',
+    valorUnitario: '23.7288135593',
+    bruto: '28.00',
+    descuento: '0.00',
+    neto: '28.00',
+    base: '23.73',
+    igv: '4.27',
+    bolsas: 0,
+    icbper: '0.00',
+    afectacion: 'GRAVADO',
+    gratuita: false,
+    valorReferencial: null,
+    posicionOrigen: null,
+    ...extra,
+  };
+}
+
+/**
+ * Una boleta aceptada de S/ 66.20 con cuatro líneas, como la cuenta C de 004 más una cortesía: Lomo saltado × 2,
+ * Gaseosa × 1, Bolsa plástica × 2 (con ICBPER) y un postre de cortesía (gratuito). Sin notas de crédito.
+ */
+export function boletaAceptada(extra: Partial<ComprobanteDetalle> = {}): ComprobanteDetalle {
+  return detalleDe({
+    estado: 'ACEPTADO',
+    envio: envioDe({ estado: 'TERMINADO', intentos: 1, ultimoResultado: 'ACEPTADO' }),
+    lineas: [
+      lineaDeComprobante({
+        posicion: 1,
+        descripcion: 'Lomo saltado',
+        cantidad: 2,
+        bruto: '56.00',
+        neto: '56.00',
+        base: '47.46',
+        igv: '8.54',
+      }),
+      lineaDeComprobante({
+        posicion: 2,
+        descripcion: 'Gaseosa 1 L',
+        precioUnitario: '9.00',
+        bruto: '9.00',
+        neto: '9.00',
+        base: '7.63',
+        igv: '1.37',
+      }),
+      lineaDeComprobante({
+        posicion: 3,
+        descripcion: 'Bolsa plástica',
+        cantidad: 2,
+        precioUnitario: '0.10',
+        bruto: '0.20',
+        neto: '0.20',
+        base: '0.17',
+        igv: '0.03',
+        bolsas: 2,
+        icbper: '1.00',
+      }),
+      lineaDeComprobante({
+        posicion: 4,
+        descripcion: 'Postre de la casa (cortesía)',
+        precioUnitario: '12.00',
+        bruto: '0.00',
+        neto: '0.00',
+        base: '0.00',
+        igv: '0.00',
+        gratuita: true,
+        valorReferencial: '12.00',
+      }),
+    ],
+    totales: {
+      subtotal: '65.20',
+      descuentos: '0.00',
+      operaciones: { gravadas: '55.26', exoneradas: '0.00', inafectas: '0.00', gratuitas: '10.17' },
+      igv: '9.94',
+      igvGratuitas: '1.83',
+      icbper: '1.00',
+      total: '66.20',
+    },
+    notasCredito: [],
+    acreditado: [],
+    ...extra,
+  });
+}
