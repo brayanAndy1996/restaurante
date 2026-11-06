@@ -473,3 +473,218 @@ describe('El detalle de un comprobante (criterio 174)', () => {
     expect(await screen.findByText('Este comprobante no es de tus turnos.')).toBeVisible();
   });
 });
+
+describe('«Emitir otro» desde el detalle de un rechazado (criterio 134)', () => {
+  const RUTA = `/facturacion/comprobantes/${B}`;
+  const NUEVO = uuid(7010);
+  const RUC = '20100070970';
+  const rechazado = (extra: Partial<ComprobanteDetalle> = {}) =>
+    detalleDe({
+      id: B,
+      tipo: 'FACTURA',
+      numero: 'F001-00000030',
+      estado: 'RECHAZADO',
+      cliente: {
+        tipoDocumento: 'RUC',
+        numero: '20512345679',
+        nombre: 'Inversiones Sol S.A.C.',
+        direccion: 'Jr. Los Alamos 450',
+      },
+      sunat: {
+        codigo: '2800',
+        mensaje: 'El RUC del receptor no existe',
+        observaciones: [],
+        hash: null,
+      },
+      envio: envioDe({ estado: 'TERMINADO', ultimoResultado: 'RECHAZADO' }),
+      ...extra,
+    });
+  const emitido = (extra = {}) =>
+    detalleDe({
+      id: NUEVO,
+      tipo: 'FACTURA',
+      numero: 'F001-00000031',
+      estado: 'POR_ENVIAR',
+      reemplazaA: { id: B, numero: 'F001-00000030' },
+      ...extra,
+    });
+  const respuestaDeReemision = () => ({
+    comprobante: emitido(),
+    impresion: 'SIN_IMPRESORA' as const,
+    trabajoId: null,
+  });
+
+  it('el rechazado ofrece «Emitir otro»; un aceptado o uno ya reemplazado, no', async () => {
+    montar('CAJERO', { [`GET ${RUTA}`]: () => json(200, rechazado()) });
+    renderApp(`/caja/comprobantes/${B}`);
+    expect(await screen.findByRole('button', { name: 'Emitir otro' })).toBeVisible();
+  });
+
+  it('un comprobante aceptado no ofrece «Emitir otro»', async () => {
+    montar('CAJERO', {
+      [`GET ${RUTA}`]: () => json(200, rechazado({ estado: 'ACEPTADO', sunat: null })),
+    });
+    renderApp(`/caja/comprobantes/${B}`);
+    await screen.findByText('Aceptado por SUNAT');
+    expect(screen.queryByRole('button', { name: 'Emitir otro' })).toBeNull();
+  });
+
+  it('un rechazado que ya tiene reemplazo no ofrece «Emitir otro» y enlaza al nuevo', async () => {
+    montar('CAJERO', {
+      [`GET ${RUTA}`]: () =>
+        json(200, rechazado({ reemplazadoPor: { id: NUEVO, numero: 'F001-00000031' } })),
+    });
+    renderApp(`/caja/comprobantes/${B}`);
+    expect(await screen.findByRole('link', { name: 'F001-00000031' })).toBeVisible();
+    expect(screen.queryByRole('button', { name: 'Emitir otro' })).toBeNull();
+  });
+
+  it('abre el formulario con el cliente del rechazado, deja corregirlo y emite con su clave de idempotencia', async () => {
+    const s = montar('CAJERO', {
+      [`GET ${RUTA}`]: () => json(200, rechazado()),
+      [`GET /facturacion/comprobantes/${NUEVO}`]: () => json(200, emitido()),
+      [`POST ${RUTA}/reemision`]: () => json(201, respuestaDeReemision()),
+    });
+    renderApp(`/caja/comprobantes/${B}`);
+    await userEvent.click(await screen.findByRole('button', { name: 'Emitir otro' }));
+    expect(await screen.findByRole('heading', { name: 'Emitir otro comprobante' })).toBeVisible();
+    // Parte de lo que tenía el rechazado.
+    expect(screen.getByLabelText('RUC')).toHaveValue('20512345679');
+    expect(screen.getByLabelText('Razón social')).toHaveValue('Inversiones Sol S.A.C.');
+    expect(screen.getByLabelText('Dirección fiscal')).toHaveValue('Jr. Los Alamos 450');
+    expect(screen.getByRole('button', { name: 'Factura', pressed: true })).toBeVisible();
+
+    // El RUC estaba mal: se corrige y se emite.
+    await userEvent.clear(screen.getByLabelText('RUC'));
+    await userEvent.type(screen.getByLabelText('RUC'), RUC);
+    await userEvent.click(screen.getByRole('button', { name: 'Emitir comprobante' }));
+
+    expect(await screen.findByText('Comprobante nuevo emitido')).toBeVisible();
+    expect(screen.getByText('Factura F001-00000031')).toBeVisible();
+    expect(screen.getByText('Sin impresora de caja')).toBeVisible();
+    const pedidos = s.de('POST', `${RUTA}/reemision`);
+    expect(pedidos).toHaveLength(1);
+    expect(pedidos[0]?.cuerpo).toEqual({
+      tipo: 'FACTURA',
+      cliente: {
+        tipoDocumento: 'RUC',
+        numero: RUC,
+        nombre: 'Inversiones Sol S.A.C.',
+        direccion: 'Jr. Los Alamos 450',
+      },
+    });
+    expect(pedidos[0]?.cabeceras.get('Idempotency-Key')).toMatch(/^[0-9a-f-]{36}$/);
+    expect(screen.getByRole('link', { name: 'Ver el comprobante nuevo' })).toHaveAttribute(
+      'href',
+      `/caja/comprobantes/${NUEVO}`,
+    );
+  });
+
+  it('se puede cambiar a boleta: el cliente pasa a ser opcional y el tipo viaja corregido', async () => {
+    const s = montar('CAJERO', {
+      [`GET ${RUTA}`]: () => json(200, rechazado()),
+      [`POST ${RUTA}/reemision`]: () => json(201, respuestaDeReemision()),
+    });
+    renderApp(`/caja/comprobantes/${B}?emitir=1`);
+    await userEvent.click(await screen.findByRole('button', { name: 'Boleta' }));
+    // Una boleta de S/ 68.50 no exige cliente: con los campos vacíos se emite sin él.
+    await userEvent.clear(screen.getByLabelText('Número de RUC'));
+    await userEvent.clear(screen.getByLabelText('Nombre del cliente'));
+    await userEvent.click(screen.getByRole('button', { name: 'Emitir comprobante' }));
+    await screen.findByText('Comprobante nuevo emitido');
+    expect(s.de('POST', `${RUTA}/reemision`)[0]?.cuerpo).toEqual({ tipo: 'BOLETA' });
+  });
+
+  it('una factura sin RUC válido no se manda y dice qué corregir', async () => {
+    const s = montar('CAJERO', { [`GET ${RUTA}`]: () => json(200, rechazado()) });
+    renderApp(`/caja/comprobantes/${B}?emitir=1`);
+    await userEvent.clear(await screen.findByLabelText('RUC'));
+    await userEvent.type(screen.getByLabelText('RUC'), '20512345679');
+    await userEvent.clear(screen.getByLabelText('Dirección fiscal'));
+    await userEvent.click(screen.getByRole('button', { name: 'Emitir comprobante' }));
+    expect(await screen.findByText('Escribe un RUC válido de 11 dígitos')).toBeVisible();
+    expect(screen.getByText('Escribe la dirección fiscal')).toBeVisible();
+    expect(s.de('POST', `${RUTA}/reemision`)).toHaveLength(0);
+  });
+
+  it('con un 409 YA_REEMPLAZADO lleva al comprobante nuevo y lo explica', async () => {
+    const s = montar('CAJERO', {
+      [`GET ${RUTA}`]: () => json(200, rechazado()),
+      [`GET /facturacion/comprobantes/${NUEVO}`]: () => json(200, emitido()),
+      [`POST ${RUTA}/reemision`]: () =>
+        json(409, {
+          codigo: 'YA_REEMPLAZADO',
+          mensaje: 'Ya tiene reemplazo',
+          comprobanteId: NUEVO,
+        }),
+    });
+    renderApp(`/caja/comprobantes/${B}?emitir=1`);
+    await userEvent.clear(await screen.findByLabelText('RUC'));
+    await userEvent.type(screen.getByLabelText('RUC'), RUC);
+    await userEvent.click(screen.getByRole('button', { name: 'Emitir comprobante' }));
+
+    expect(await screen.findByRole('heading', { name: 'Factura F001-00000031' })).toBeVisible();
+    expect(screen.getByText('Ya habían emitido el reemplazo')).toBeVisible();
+    expect(s.de('GET', `/facturacion/comprobantes/${NUEVO}`).length).toBeGreaterThan(0);
+    expect(screen.getByRole('link', { name: 'F001-00000030' })).toBeVisible();
+    expect(s.de('POST', `${RUTA}/reemision`)).toHaveLength(1);
+  });
+
+  it('una nota de crédito rechazada se emite igual, sin pedir cliente', async () => {
+    const s = montar('CAJERO', {
+      [`GET ${RUTA}`]: () =>
+        json(200, rechazado({ tipo: 'NOTA_CREDITO_BOLETA', numero: 'BC01-00000003' })),
+      [`POST ${RUTA}/reemision`]: () => json(201, respuestaDeReemision()),
+    });
+    renderApp(`/caja/comprobantes/${B}?emitir=1`);
+    expect(await screen.findByText(/Se emitirá otra nota de crédito de boleta/)).toBeVisible();
+    expect(screen.queryByLabelText('RUC')).toBeNull();
+    expect(screen.queryByRole('group', { name: 'Tipo de comprobante' })).toBeNull();
+    await userEvent.click(screen.getByRole('button', { name: 'Emitir comprobante' }));
+    await screen.findByText('Comprobante nuevo emitido');
+    expect(s.de('POST', `${RUTA}/reemision`)[0]?.cuerpo).toEqual({ tipo: 'NOTA_CREDITO_BOLETA' });
+  });
+
+  it('un emisor del Nuevo RUS solo emite boletas y lo dice', async () => {
+    montar('CAJERO', {
+      [`GET ${RUTA}`]: () =>
+        json(
+          200,
+          rechazado({
+            tipo: 'BOLETA',
+            numero: 'B001-00000030',
+            cliente: null,
+            emisor: { ruc: RUC, razonSocial: 'Pollería Rus', regimen: 'NUEVO_RUS' },
+          }),
+        ),
+    });
+    renderApp(`/caja/comprobantes/${B}?emitir=1`);
+    expect(await screen.findByText(/solo emite boletas, por su régimen tributario/)).toBeVisible();
+    expect(screen.queryByRole('group', { name: 'Tipo de comprobante' })).toBeNull();
+  });
+
+  it('si la caja no tiene serie, lo dice con la salida y el formulario sigue abierto', async () => {
+    montar('CAJERO', {
+      [`GET ${RUTA}`]: () => json(200, rechazado()),
+      [`POST ${RUTA}/reemision`]: () =>
+        json(409, { codigo: 'SIN_SERIE', mensaje: 'Sin serie activa' }),
+    });
+    renderApp(`/caja/comprobantes/${B}?emitir=1`);
+    await userEvent.clear(await screen.findByLabelText('RUC'));
+    await userEvent.type(screen.getByLabelText('RUC'), RUC);
+    await userEvent.click(screen.getByRole('button', { name: 'Emitir comprobante' }));
+    expect(await screen.findByText(/no tiene una serie activa de ese tipo/)).toBeVisible();
+    expect(screen.getByLabelText('RUC')).toHaveValue(RUC);
+    expect(screen.getByRole('button', { name: 'Emitir comprobante' })).toBeEnabled();
+  });
+
+  it('«Cancelar» cierra el formulario y deja el detalle como estaba', async () => {
+    montar('CAJERO', { [`GET ${RUTA}`]: () => json(200, rechazado()) });
+    renderApp(`/caja/comprobantes/${B}?emitir=1`);
+    await userEvent.click(await screen.findByRole('button', { name: 'Cancelar' }));
+    await waitFor(() =>
+      expect(screen.queryByRole('heading', { name: 'Emitir otro comprobante' })).toBeNull(),
+    );
+    expect(screen.getByRole('button', { name: 'Emitir otro' })).toBeVisible();
+  });
+});

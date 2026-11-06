@@ -150,3 +150,16 @@
 .caja__tasa {
   font-variant-numeric: tabular-nums;
 }
+
+/* Las series de las notas de crédito (6b), dentro de su sección plegable. */
+.caja__notas {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espacio-lg);
+  padding-block: var(--espacio-md);
+}
+/* La junta de arriba ya la pone el borde de la sección plegable. */
+.caja__notas > .caja__serie:first-child {
+  padding-top: 0;
+  border-top: 0;
+}

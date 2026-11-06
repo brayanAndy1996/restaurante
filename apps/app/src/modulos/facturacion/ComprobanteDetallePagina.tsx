@@ -1,7 +1,15 @@
-import type { ComprobanteDetalle } from '@restaurante/contratos';
-import { Aviso, Boton, ErrorDeCarga, EsqueletoDeLista, IconoReintentar } from '@restaurante/ui';
+import type { ComprobanteDetalle, ReemisionEntrada } from '@restaurante/contratos';
+import {
+  Aviso,
+  Boton,
+  ErrorDeCarga,
+  EsqueletoDeLista,
+  IconoReintentar,
+  claseBoton,
+} from '@restaurante/ui';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Link, useLocation, useParams } from 'react-router-dom';
+import { lazy, Suspense, type ReactNode } from 'react';
+import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { Pagina } from '../../componentes/Pagina';
 import { AvisoPendiente } from '../../componentes/PendienteDeEnvio';
 import { MUTACION_SIN_PAUSA, useEnvioPendiente } from '../../lib/envios';
@@ -9,20 +17,31 @@ import { ErrorApi, mensajeDeError } from '../../lib/errores';
 import { fechaDeLima, horaDeLima } from '../../lib/formato';
 import { montoEnSoles } from '../../lib/monto';
 import { CLAVES_TIEMPO_REAL, useIntervaloDeSondeo } from '../../lib/tiempo-real';
+import { usePermiso } from '../acceso/permisos';
 import { EstadoDelComprobante } from './EstadoDelComprobante';
 import {
   NOMBRE_DE_ESTADO_DE_ENVIO,
   NOMBRE_DE_RESULTADO,
   NOMBRE_DE_TIPO_DOCUMENTO,
   claveComprobante,
+  falloDeReemision,
   leerComprobante,
+  reemitir,
   reintentarEnvio,
   rutaDelDetalle,
+  sePuedeEmitirOtro,
   sePuedeReintentar,
   textoDeFalloDeReintento,
 } from './facturacion';
+import { ID_FORMULARIO_DE_REEMISION } from './ids';
 import { RUTA_PANEL_EN_AJUSTES, RUTA_PANEL_EN_CAJA } from './rutas';
 import './panel.css';
+
+// El formulario de «Emitir otro» (con las reglas del cliente del cobro) se baja solo al abrirlo.
+const EmitirOtro = lazy(() => import('./EmitirOtro').then((m) => ({ default: m.EmitirOtro })));
+const ReemisionHecha = lazy(() =>
+  import('./EmitirOtro').then((m) => ({ default: m.ReemisionHecha })),
+);
 
 /** `/caja/comprobantes/:id`: el detalle para el Supervisor y el Cajero (de sus turnos). */
 export function ComprobanteDetalleEnCajaPagina() {
@@ -90,7 +109,13 @@ interface PropsCargado {
 
 function DetalleCargado({ base, atras, volver, comprobante }: PropsCargado) {
   const clientes = useQueryClient();
+  const navegar = useNavigate();
+  const ubicacion = useLocation();
+  const [parametros, ponerParametros] = useSearchParams();
+  const puedeCobrar = usePermiso('COBRAR') !== 'prohibido';
   const envio = useEnvioPendiente();
+  const yaReemplazado = (ubicacion.state as { aviso?: string } | null)?.aviso === 'YA_REEMPLAZADO';
+
   const reintento = useMutation({
     ...MUTACION_SIN_PAUSA,
     mutationFn: () => envio.enviar((extra) => reintentarEnvio(comprobante.id, extra)),
@@ -108,19 +133,82 @@ function DetalleCargado({ base, atras, volver, comprobante }: PropsCargado) {
     },
   });
 
+  const reemision = useMutation({
+    ...MUTACION_SIN_PAUSA,
+    mutationFn: (entrada: ReemisionEntrada) =>
+      envio.enviar((extra) => reemitir(comprobante.id, entrada, extra)),
+    onSuccess: () => {
+      void clientes.invalidateQueries({ queryKey: CLAVES_TIEMPO_REAL.facturacion });
+    },
+    onError: (error) => {
+      const fallo = falloDeReemision(error);
+      if (fallo.releer)
+        void clientes.invalidateQueries({ queryKey: claveComprobante(comprobante.id) });
+      // Otra persona ya emitió el reemplazo: se lleva a quien lo pidió al comprobante nuevo.
+      if (fallo.yaReemplazadoPor) {
+        navegar(rutaDelDetalle(base, fallo.yaReemplazadoPor), {
+          replace: true,
+          state: { volver, aviso: 'YA_REEMPLAZADO' },
+        });
+      }
+    },
+  });
+
+  const emitible = puedeCobrar && sePuedeEmitirOtro(comprobante);
+  const abierto = parametros.get('emitir') === '1';
+  const cambiarEmitir = (abrir: boolean) => {
+    const siguiente = new URLSearchParams(parametros);
+    if (abrir) siguiente.set('emitir', '1');
+    else siguiente.delete('emitir');
+    ponerParametros(siguiente, { replace: true, state: ubicacion.state });
+  };
+  const hecha = reemision.data;
   const reintentable = sePuedeReintentar(comprobante);
-  const pie = reintentable ? (
-    <Boton
-      variante="principal"
-      bloque
-      icono={IconoReintentar}
-      cargando={reintento.isPending}
-      textoCargando={envio.pendiente ? 'Pendiente de envío' : 'Pidiendo el reintento…'}
-      onClick={() => reintento.mutate()}
-    >
-      Reintentar el envío
-    </Boton>
-  ) : undefined;
+
+  let pie: ReactNode;
+  if (hecha) {
+    pie = (
+      <Link
+        to={rutaDelDetalle(base, hecha.comprobante.id)}
+        state={{ volver }}
+        className={claseBoton('principal', true)}
+      >
+        Ver el comprobante nuevo
+      </Link>
+    );
+  } else if (emitible && abierto) {
+    pie = (
+      <Boton
+        variante="principal"
+        bloque
+        type="submit"
+        form={ID_FORMULARIO_DE_REEMISION}
+        cargando={reemision.isPending}
+        textoCargando={envio.pendiente ? 'Pendiente de envío' : 'Emitiendo…'}
+      >
+        Emitir comprobante
+      </Boton>
+    );
+  } else if (emitible) {
+    pie = (
+      <Boton variante="principal" bloque onClick={() => cambiarEmitir(true)}>
+        Emitir otro
+      </Boton>
+    );
+  } else if (reintentable) {
+    pie = (
+      <Boton
+        variante="principal"
+        bloque
+        icono={IconoReintentar}
+        cargando={reintento.isPending}
+        textoCargando={envio.pendiente ? 'Pendiente de envío' : 'Pidiendo el reintento…'}
+        onClick={() => reintento.mutate()}
+      >
+        Reintentar el envío
+      </Boton>
+    );
+  }
 
   return (
     <Pagina
@@ -129,6 +217,11 @@ function DetalleCargado({ base, atras, volver, comprobante }: PropsCargado) {
       {...(pie ? { pie } : {})}
     >
       <div className="detalle">
+        {yaReemplazado ? (
+          <Aviso tipo="info" titulo="Ya habían emitido el reemplazo">
+            Otra persona emitió este comprobante en lugar del rechazado. Es el que ves aquí.
+          </Aviso>
+        ) : null}
         <EstadoDelComprobante comprobante={comprobante} sinAcciones />
         <AvisoPendiente pendiente={envio.pendiente} />
         {reintento.isSuccess ? (
@@ -140,6 +233,29 @@ function DetalleCargado({ base, atras, volver, comprobante }: PropsCargado) {
           <Aviso tipo="error" titulo="No pudimos pedir el reintento">
             {textoDeFalloDeReintento(reintento.error)}
           </Aviso>
+        ) : null}
+
+        {hecha ? (
+          <Suspense fallback={null}>
+            <ReemisionHecha respuesta={hecha} />
+          </Suspense>
+        ) : emitible && abierto ? (
+          <Suspense
+            fallback={
+              <EsqueletoDeLista etiqueta="Cargando el formulario" filas={3} conInicial={false} />
+            }
+          >
+            <EmitirOtro
+              comprobante={comprobante}
+              enviando={reemision.isPending}
+              fallo={reemision.isError ? falloDeReemision(reemision.error).texto : undefined}
+              onEnviar={(entrada) => reemision.mutate(entrada)}
+              onCancelar={() => {
+                reemision.reset();
+                cambiarEmitir(false);
+              }}
+            />
+          </Suspense>
         ) : null}
 
         <Resumen comprobante={comprobante} />

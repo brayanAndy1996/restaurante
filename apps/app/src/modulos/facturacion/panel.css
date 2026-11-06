@@ -161,3 +161,27 @@
 .panel .ui-tabla td {
   padding-inline: var(--espacio-sm);
 }
+
+/* «Emitir otro» (criterio 134): un formulario dentro del detalle, con su columna de campos. */
+.emitir {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espacio-md);
+  padding: var(--espacio-md) var(--espacio-lg);
+  background: var(--color-baldosa);
+  border: 1px solid var(--color-junta);
+  border-radius: var(--radio-baldosa);
+}
+.emitir > h2 {
+  margin: 0;
+  font-size: 1.125rem;
+  line-height: 1.5rem;
+}
+.emitir__cliente {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espacio-md);
+}
+.emitir__salida {
+  display: flex;
+}

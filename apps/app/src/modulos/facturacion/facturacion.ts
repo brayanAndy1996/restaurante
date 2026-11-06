@@ -3,15 +3,18 @@ import {
   comprobanteDetalleSchema,
   envioPseRespuestaSchema,
   panelComprobantesSchema,
+  reemisionRespuestaSchema,
   type AlertasRespuesta,
   type ComprobanteDetalle,
   type EnvioPseRespuesta,
   type PanelComprobantes,
   type PanelItem,
+  type ReemisionEntrada,
+  type ReemisionRespuesta,
 } from '@restaurante/contratos';
 import type { TipoAviso } from '@restaurante/ui';
 import type { ExtraDeEscritura } from '../../lib/envios';
-import { mensajeDeError } from '../../lib/errores';
+import { ErrorApi, mensajeDeError } from '../../lib/errores';
 import { api } from '../../lib/api';
 import { CLAVES_TIEMPO_REAL } from '../../lib/tiempo-real';
 
@@ -191,6 +194,71 @@ export function textoDeFalloDeReintento(error: unknown): string {
     PROHIBIDO: 'No puedes reintentar este comprobante.',
     NO_ENCONTRADO: 'Este comprobante ya no está disponible.',
   });
+}
+
+// --- Emitir otro (criterio 134) -------------------------------------------------------------------------
+
+/** Emite un comprobante nuevo en lugar del rechazado; con la clave de idempotencia de `enviarSinPerder`. */
+export const reemitir = (
+  comprobanteId: string,
+  entrada: ReemisionEntrada,
+  extra?: ExtraDeEscritura,
+) =>
+  api.post<ReemisionRespuesta>(`/facturacion/comprobantes/${comprobanteId}/reemision`, entrada, {
+    esquema: reemisionRespuestaSchema,
+    ...extra,
+  });
+
+/** Solo un rechazado que todavía no tiene reemplazo se puede emitir otra vez (criterio 134). */
+export const sePuedeEmitirOtro = (
+  comprobante: Pick<ComprobanteDetalle, 'estado' | 'reemplazadoPor'>,
+): boolean => comprobante.estado === 'RECHAZADO' && !comprobante.reemplazadoPor;
+
+export interface FalloDeReemision {
+  texto: string;
+  /** Otra persona ya emitió el reemplazo: el comprobante que lo hizo, para llevar a él. */
+  yaReemplazadoPor?: string;
+  /** Lo que se ve en pantalla estaba viejo: hay que volver a leer el comprobante. */
+  releer?: boolean;
+}
+
+/** Por qué no se pudo emitir otro, con palabras y con la salida. */
+export function falloDeReemision(error: unknown): FalloDeReemision {
+  if (error instanceof ErrorApi) {
+    switch (error.codigo) {
+      case 'YA_REEMPLAZADO':
+        return {
+          texto: 'Ya se emitió otro comprobante en lugar de este.',
+          ...(error.comprobanteId ? { yaReemplazadoPor: error.comprobanteId } : {}),
+          releer: true,
+        };
+      case 'COMPROBANTE_NO_RECHAZADO':
+        return {
+          texto: 'Este comprobante ya no está rechazado: no hace falta emitir otro.',
+          releer: true,
+        };
+      case 'SIN_SERIE':
+        return {
+          texto:
+            'La caja de este comprobante no tiene una serie activa de ese tipo. Pide al Administrador que la ponga en Ajustes › Cajas.',
+        };
+      case 'SERIE_AGOTADA':
+        return {
+          texto:
+            'La serie de ese tipo llegó a su último número. Pide al Administrador una serie nueva en Ajustes › Cajas.',
+        };
+      case 'CLIENTE_REQUERIDO':
+        return { texto: 'Faltan los datos del cliente. Revísalos y vuelve a intentar.' };
+      case 'COMPROBANTE_NO_PERMITIDO':
+        return { texto: 'Por su régimen tributario, esta empresa solo emite boletas.' };
+    }
+  }
+  return {
+    texto: mensajeDeError(error, {
+      PROHIBIDO: 'No puedes emitir otro para este comprobante.',
+      NO_ENCONTRADO: 'Este comprobante ya no está disponible.',
+    }),
+  };
 }
 
 export { RUTA_PANEL_EN_AJUSTES, RUTA_PANEL_EN_CAJA, rutaDelDetalle } from './rutas';
