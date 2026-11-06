@@ -16,6 +16,7 @@ import { randomUUID } from 'node:crypto';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   arrancarFact,
+  api,
   avanzar,
   cerrarAdmin,
   cobrarLomo,
@@ -299,6 +300,25 @@ describe('criterio 132 · reintento manual', () => {
     expect(despues.proximo_intento_en).toEqual(antes!.proximo_intento_en);
     expect(despues.intento_en_curso).toBe(antes!.intento_en_curso);
     await en_curso;
+  });
+
+  it('sin Idempotency-Key responde 400 (como las demás escrituras) y no cambia el envío ni encola', async () => {
+    ctx.pse.reglas.fallarTransmision(1);
+    const c = await nuevoCobro();
+    await procesarCola(ctx, [A().id]);
+    ctx.cola.vaciar();
+    const antes = await envioDe(c.comprobanteId);
+    const res = await api(
+      ctx,
+      A().token.supervisor,
+      'post',
+      `/facturacion/comprobantes/${c.comprobanteId}/reintento`,
+    );
+    expect(res.status, res.text).toBe(400);
+    expect(await envioDe(c.comprobanteId)).toEqual(antes);
+    expect(trabajosDe(c.comprobanteId)).toEqual([]);
+    // Con la clave, sí.
+    exigirEstado(await reintentar(c.comprobanteId), 202, 'Reintento manual con clave');
   });
 
   it('un comprobante inexistente (o de otra empresa) responde 404', async () => {

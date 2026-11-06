@@ -9,8 +9,8 @@
 // - 135: `GET /facturacion/comprobantes` con sus filtros (estado, tipo, fechas, alerta, texto), los conteos por estado con
 //   los mismos filtros salvo el estado, 50 por página del más nuevo al más antiguo con cursor, y
 //   `GET /facturacion/comprobantes/:id` con el envío y los intentos (del más nuevo al más antiguo).
-// Cuál alerta gana cuando coinciden varias (por ejemplo `DETENIDO` y `DEMORADO`) no lo fija la especificación: las
-// pruebas de ese caso suman los dos contadores. Los comprobantes de la empresa B (una sola sucursal) arman el panel; las de
+// Cuando coinciden varios motivos, cada comprobante cuenta una sola vez en el primero de este orden: rechazados, detenidos,
+// sinConfiguracion, demorados (criterio 133). Los comprobantes de la empresa B (una sola sucursal) arman el panel; las de
 // A, las alertas que dependen del barrido y de un emisor sin configuración.
 // Hoy falla porque `envio_pse` no existe y las rutas de 6b responden «No implementado».
 import {
@@ -478,11 +478,18 @@ describe('criterio 133 · alertas de la empresa A', () => {
     expect(await alertasDe(token)).toMatchObject({ sinConfiguracion: antes, modoSimulado: true });
   });
 
-  it('un comprobante con el PSE caído más de 30 minutos y otro que pasa su plazo suman una alerta cada uno, una sola vez', async () => {
+  /** La fila de la empresa A en `GET /plataforma/facturacion/alertas`. */
+  const deLaPlataforma = async (): Promise<Libre> => {
+    const res = await api(ctx, esc.sa.token, 'get', '/plataforma/facturacion/alertas');
+    exigirEstado(res, 200, 'GET /plataforma/facturacion/alertas (006, criterio 133)');
+    return alertasPlataformaRespuestaSchema.parse(res.body).find((e) => e.empresaId === A().id)!;
+  };
+
+  it('un comprobante con el PSE caído cuenta como demorado a los 31 minutos y, al pasar su plazo, solo como detenido; el aviso sale una vez por motivo', async () => {
     const turnoS3 = await turnoDe(ctx, A(), 'cajeroS3', 'S3', 'caja1');
-    const token = A().token.supervisorS3!;
-    const base = await alertasDe(token);
-    const total = (a: Libre) => a.demorados + a.detenidos;
+    const token = () => A().token.supervisorS3!; // se relee: las sesiones se renuevan al mover el reloj
+    const base = await alertasDe(token());
+    const baseP = await deLaPlataforma();
     const eventosAntes = alertasPublicadas(A(), A().S3).length;
 
     ctx.pse.reglas.fallarTransmision(1000);
@@ -492,38 +499,73 @@ describe('criterio 133 · alertas de la empresa A', () => {
       token: A().token.cajeroS3!,
     });
     await procesar(ctx, A().id, c.comprobanteId);
-    // A los 29 minutos todavía no; a los 31 sí (el barrido la detecta).
+    // A los 29 minutos todavía no; a los 31 sí (el barrido la detecta): un demorado más.
     await avanzar(ctx, 29 * MIN, A());
     await barrer(A().id);
-    expect(total(await alertasDe(token))).toBe(total(base));
+    expect(await alertasDe(token())).toEqual(base);
     expect(alertasPublicadas(A(), A().S3)).toHaveLength(eventosAntes);
     await avanzar(ctx, 2 * MIN, A());
     await barrer(A().id);
-    expect(total(await alertasDe(token))).toBe(total(base) + 1);
+    expect(await alertasDe(token())).toEqual({ ...base, demorados: base.demorados + 1 });
     expect(alertasPublicadas(A(), A().S3)).toHaveLength(eventosAntes + 1);
     await barrer(A().id);
     expect(alertasPublicadas(A(), A().S3)).toHaveLength(eventosAntes + 1);
 
-    // Pasa su plazo: queda DETENIDO. Sigue siendo un comprobante con alerta (no dos).
+    // Pasa su plazo: queda DETENIDO y cuenta solo como detenido (aunque lleve más de 30 minutos sin respuesta).
     await avanzar(ctx, 4 * 24 * 60 * MIN, A());
     await barrer(A().id);
-    const final = await alertasDe(token);
-    expect(total(final)).toBe(total(base) + 1);
+    expect(await alertasDe(token())).toEqual({ ...base, detenidos: base.detenidos + 1 });
+    const p = await deLaPlataforma();
+    expect(p.detenidos).toBe(baseP.detenidos + 1);
+    expect(p.demorados).toBe(baseP.demorados);
     const panel = await api(
       ctx,
-      token,
+      token(),
       'get',
       `/facturacion/comprobantes?texto=${numeroDe(c)}&desde=2026-11-01&hasta=2026-12-31`,
     );
     exigirEstado(panel, 200, 'Panel');
     const item = panelComprobantesSchema.parse(panel.body).items[0]!;
     expect(item.envio!.estado).toBe('DETENIDO');
-    expect(['DETENIDO', 'DEMORADO']).toContain(item.alerta);
-    const despues = alertasPublicadas(A(), A().S3).length;
-    expect(despues).toBeGreaterThanOrEqual(eventosAntes + 1);
-    expect(despues).toBeLessThanOrEqual(eventosAntes + 2);
+    expect(item.alerta).toBe('DETENIDO');
+    // Un aviso por motivo: el de tiempo y el del envío detenido; repetir el barrido no suma.
+    expect(alertasPublicadas(A(), A().S3)).toHaveLength(eventosAntes + 2);
     await barrer(A().id);
-    expect(alertasPublicadas(A(), A().S3)).toHaveLength(despues);
+    expect(alertasPublicadas(A(), A().S3)).toHaveLength(eventosAntes + 2);
+  });
+
+  it('un envío detenido cuyo último resultado fue ERROR_CONFIGURACION cuenta solo como detenido', async () => {
+    const turnoS3 = await turnoDe(ctx, A(), 'cajeroS3', 'S3', 'caja1');
+    const token = () => A().token.supervisorS3!; // se relee: las sesiones se renuevan al mover el reloj
+    ctx.pse.reglas.errorDeConfiguracion(1000);
+    const c = await cobrarLomo(ctx, A(), {
+      turnoId: turnoS3,
+      sucursal: 'S3',
+      token: A().token.cajeroS3!,
+    });
+    await procesar(ctx, A().id, c.comprobanteId);
+    // Recién emitido: solo falta de configuración.
+    const reciente = await alertasDe(token());
+    await avanzar(ctx, 4 * 24 * 60 * MIN, A());
+    await barrer(A().id);
+    const base = await alertasDe(token());
+    const panel = await api(
+      ctx,
+      token(),
+      'get',
+      `/facturacion/comprobantes?texto=${numeroDe(c)}&desde=2026-11-01&hasta=2026-12-31`,
+    );
+    exigirEstado(panel, 200, 'Panel');
+    const item = panelComprobantesSchema.parse(panel.body).items[0]!;
+    expect(item.envio).toMatchObject({
+      estado: 'DETENIDO',
+      ultimoResultado: 'ERROR_CONFIGURACION',
+    });
+    expect(item.alerta).toBe('DETENIDO');
+    // Y no cuenta además en sinConfiguracion ni en demorados.
+    expect(base.sinConfiguracion).toBeLessThan(reciente.sinConfiguracion);
+    expect(base.detenidos).toBeGreaterThan(reciente.detenidos);
+    expect(base.demorados).toBe(reciente.demorados);
   });
 
   it('cada alerta deja un registro warn `pse.alerta` con ids y motivo, sin datos del cliente, y una sola vez', async () => {
