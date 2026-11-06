@@ -104,7 +104,17 @@ function Detalle({ base }: { base: string }) {
       </Pagina>
     );
   }
-  return <DetalleCargado base={base} atras={atras} volver={volver} comprobante={comprobante} />;
+  // Con `key`, al pasar a otro comprobante (por ejemplo «Ver el comprobante nuevo») el estado de la pantalla empieza de
+  // cero: la reemisión, el reintento y la hoja de la nota de crédito del anterior no se arrastran.
+  return (
+    <DetalleCargado
+      key={comprobante.id}
+      base={base}
+      atras={atras}
+      volver={volver}
+      comprobante={comprobante}
+    />
+  );
 }
 
 interface PropsCargado {
@@ -274,7 +284,7 @@ function DetalleCargado({ base, atras, volver, comprobante }: PropsCargado) {
           </Suspense>
         ) : null}
 
-        {notaAbierta && puedeNota ? (
+        {notaAbierta ? (
           <Suspense fallback={null}>
             <NotaCreditoHoja
               comprobante={comprobante}

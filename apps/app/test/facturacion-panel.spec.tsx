@@ -765,4 +765,34 @@ describe('«Emitir otro» desde el detalle de un rechazado (criterio 134)', () =
     );
     expect(screen.getByRole('button', { name: 'Emitir otro' })).toBeVisible();
   });
+  it('«Ver el comprobante nuevo» abre el detalle limpio: no arrastra «Comprobante nuevo emitido» de la reemisión anterior', async () => {
+    const OTRO = uuid(7020);
+    const s = montar('SUPERVISOR', {
+      [`GET ${RUTA}`]: () => json(200, rechazado()),
+      // El comprobante nuevo también salió rechazado.
+      [`GET /facturacion/comprobantes/${NUEVO}`]: () =>
+        json(
+          200,
+          emitido({
+            estado: 'RECHAZADO',
+            sunat: { codigo: '2800', mensaje: 'Otra vez', observaciones: [], hash: null },
+            envio: envioDe({ estado: 'TERMINADO', ultimoResultado: 'RECHAZADO' }),
+          }),
+        ),
+      [`GET /facturacion/comprobantes/${OTRO}`]: () => json(200, emitido({ id: OTRO })),
+      [`POST ${RUTA}/reemision`]: () => json(201, respuestaDeReemision()),
+    });
+    renderApp(`/caja/comprobantes/${B}?emitir=1`);
+    await userEvent.clear(await screen.findByLabelText('RUC'));
+    await userEvent.type(screen.getByLabelText('RUC'), RUC);
+    await userEvent.click(screen.getByRole('button', { name: 'Emitir comprobante' }));
+    await screen.findByText('Comprobante nuevo emitido');
+
+    await userEvent.click(screen.getByRole('link', { name: 'Ver el comprobante nuevo' }));
+    expect(await screen.findByRole('heading', { name: 'Factura F001-00000031' })).toBeVisible();
+    expect(await screen.findByText('Rechazado: Otra vez')).toBeVisible();
+    expect(screen.queryByText('Comprobante nuevo emitido')).toBeNull();
+    expect(screen.getByRole('button', { name: 'Emitir otro' })).toBeVisible();
+    expect(s.de('POST', `${RUTA}/reemision`)).toHaveLength(1);
+  });
 });

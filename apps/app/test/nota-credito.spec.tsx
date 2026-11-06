@@ -7,13 +7,14 @@ import type {
   TurnoRespuesta,
 } from '@restaurante/contratos';
 import type { Rol } from '@restaurante/dominio';
-import { screen, waitFor, within } from '@testing-library/react';
+import { act, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { espera } from '../src/lib/api';
 import { ID, TOKEN_SESION, json, renderApp, servidor } from './ayudas';
 import { boletaAceptada, comprobanteDe, detalleDe, lineaDeComprobante } from './ayudas-facturacion';
 import { sesionDeRol, uuid } from './ayudas-salon';
+import { socketVigente } from './ayudas-tiempo-real';
 
 // spec: 006-caja-cobro, criterios 143 a 153 y 177 en la interfaz (pruebas no protegidas de la hoja de la nota de
 // crédito): lo que se autoriza es lo que se manda, la clave vuelve a pedirse sin perder lo escrito, el `id` se conserva
@@ -494,6 +495,41 @@ describe('La ventana de clave muestra lo que se autoriza y manda exactamente eso
     expect(await screen.findByText('Nota de crédito emitida')).toBeVisible();
     expect(s.de('POST', '/autorizaciones')).toHaveLength(0);
     expect(notas(s)[0]?.cabeceras.get('X-Autorizacion')).toBeNull();
+  });
+
+  it('al aceptar SUNAT la nota, el original pasa a ANULADO y la hoja con el resultado sigue en pantalla', async () => {
+    let anular: () => void = () => undefined;
+    const s = montar({
+      rol: 'SUPERVISOR',
+      extra: {
+        [`POST ${API_NOTAS}`]: ({ cuerpo }) => json(201, respuestaDe(cuerpo as NotaCreditoEntrada)),
+      },
+    });
+    anular = () => {
+      s.estado.comprobante = { ...s.estado.comprobante, estado: 'ANULADO' };
+    };
+    renderApp(RUTA);
+    const hoja = await abrirLaHoja();
+    await within(hoja).findByText(/Sale de tu turno en Caja 1/);
+    await userEvent.click(within(hoja).getByRole('button', { name: 'Error al cobrar' }));
+    await userEvent.click(within(hoja).getByRole('button', { name: 'Emitir nota de crédito' }));
+    expect(await screen.findByText('Nota de crédito emitida')).toBeVisible();
+
+    // El worker recibe la aceptación de la nota: el original queda ANULADO y ya no admite otra nota.
+    anular();
+    act(() =>
+      socketVigente()?.desdeElServidor('comprobante.estado', {
+        comprobanteId: BOLETA,
+        estado: 'ANULADO',
+        sucursalId: ID.sucursalA,
+      }),
+    );
+    await waitFor(() =>
+      expect(screen.queryByRole('button', { name: 'Nota de crédito' })).toBeNull(),
+    );
+    // La hoja no se cierra sola: la persona sigue viendo el resultado hasta cerrarla.
+    expect(screen.getByRole('dialog', { name: 'Nota de crédito' })).toBeInTheDocument();
+    expect(screen.getByText('Nota de crédito emitida')).toBeVisible();
   });
 
   it('cerrar la ventana de la clave no manda nada y deja lo escrito', async () => {

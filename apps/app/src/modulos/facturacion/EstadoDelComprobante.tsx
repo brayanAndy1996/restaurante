@@ -24,8 +24,18 @@ import {
 } from './facturacion';
 import './facturacion.css';
 
-/** Cada cuánto se vuelve a preguntar si no hay conexión de tiempo real y el comprobante aún no tiene respuesta. */
-const SONDEO_SIN_TIEMPO_REAL_MS = 8_000;
+/**
+ * Cuándo se vuelve a preguntar mientras el comprobante no tiene respuesta final. El evento `comprobante.estado` es lo
+ * que actualiza la pantalla al instante, pero un evento puede perderse (un corte del socket, un aviso que llegó antes de
+ * que existiera la consulta, un fallo del canal entre el worker y la API): sin una red de seguridad la pantalla diría
+ * «Enviando a SUNAT…» para siempre. Por eso, con o sin conexión de tiempo real:
+ *
+ * - una lectura de refuerzo a los pocos segundos de la primera (casi todos los envíos terminan en ese lapso);
+ * - luego, cada 15 s con el socket conectado (solo respaldo) y cada 8 s sin él.
+ */
+export const REFUERZO_DE_LECTURA_MS = 3_000;
+export const SONDEO_CON_TIEMPO_REAL_MS = 15_000;
+export const SONDEO_SIN_TIEMPO_REAL_MS = 8_000;
 
 interface Props {
   /** Lo que respondió el cobro, la venta de mostrador o la nota de crédito: con eso se pinta mientras llega lo vivo. */
@@ -37,7 +47,7 @@ interface Props {
 /**
  * El estado del comprobante ante SUNAT en el resultado de un cobro, de una venta de mostrador o de una nota de crédito
  * (criterio 173): «Enviando a SUNAT…», «Aceptado por SUNAT» o «Rechazado: <mensaje>». Se actualiza solo con el evento
- * `comprobante.estado`; sin conexión de tiempo real, pregunta cada pocos segundos mientras no haya respuesta final.
+ * `comprobante.estado`; además pregunta cada pocos segundos mientras no haya respuesta final (ver `REFUERZO_DE_LECTURA_MS`).
  * Con un rechazo ofrece «Emitir otro» a quien puede cobrar (pregunta 40) y solo a quien no puede emitirlo le dice que
  * avise a su supervisor (criterio 173). Un comprobante simulado lleva su marca.
  * Sin el módulo de Facturación en el plan no hay envío a SUNAT y no se muestra nada.
@@ -52,11 +62,12 @@ export function EstadoDelComprobante({ comprobante, sinAcciones }: Props) {
     queryFn: ({ signal }) => leerComprobante(comprobante.id, signal),
     enabled: habilitado,
     staleTime: 0,
-    refetchInterval: (q) =>
-      tiempoReal === 'conectado' ||
-      (q.state.data !== undefined && describirEstado({ estado: q.state.data.estado }).final)
-        ? false
-        : SONDEO_SIN_TIEMPO_REAL_MS,
+    refetchInterval: (q) => {
+      if (q.state.data !== undefined && describirEstado({ estado: q.state.data.estado }).final)
+        return false;
+      if (q.state.dataUpdateCount <= 1) return REFUERZO_DE_LECTURA_MS;
+      return tiempoReal === 'conectado' ? SONDEO_CON_TIEMPO_REAL_MS : SONDEO_SIN_TIEMPO_REAL_MS;
+    },
   });
   if (!habilitado) return null;
 

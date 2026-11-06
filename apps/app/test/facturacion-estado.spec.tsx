@@ -8,6 +8,10 @@ import { espera } from '../src/lib/api';
 import { conexion } from '../src/lib/conexion';
 import { SesionProvider, useSesion } from '../src/modulos/acceso/sesion';
 import { ResultadoDeCobro } from '../src/modulos/caja/ResultadoDeCobro';
+import {
+  REFUERZO_DE_LECTURA_MS,
+  SONDEO_CON_TIEMPO_REAL_MS,
+} from '../src/modulos/facturacion/EstadoDelComprobante';
 import { ID, TOKEN_SESION, json, renderApp, servidor } from './ayudas';
 import { alertasDe, comprobanteDe, detalleDe, envioDe } from './ayudas-facturacion';
 import { sesionDeRol, uuid } from './ayudas-salon';
@@ -103,6 +107,53 @@ describe('El estado del comprobante en el resultado del cobro (criterio 173)', (
     expect(await screen.findByText('Aceptado por SUNAT')).toBeVisible();
     expect(screen.queryByText('Enviando a SUNAT…')).toBeNull();
     expect(s.de('GET', RUTA_DETALLE)).toHaveLength(2);
+  });
+
+  it('si el evento se pierde, con el socket conectado lo lee de nuevo en el siguiente sondeo y no se queda en «Enviando»', async () => {
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
+    let actual = detalleDe({ id: COMPROBANTE, estado: 'POR_ENVIAR' });
+    const s = servidor({
+      'GET /sesion': () => json(200, sesionDeRol('CAJERO', { modulos: [...MODULOS] })),
+      [`GET ${RUTA_DETALLE}`]: () => json(200, actual),
+    });
+    montarResultado();
+    expect(await screen.findByText('Enviando a SUNAT…')).toBeVisible();
+    await waitFor(() => expect(s.de('GET', RUTA_DETALLE)).toHaveLength(1));
+    // El socket está conectado: antes no se volvía a preguntar nunca.
+    act(() => socketVigente()?.conectar());
+    // Al conectar, la app vuelve a pedir lo que hay en pantalla (todavía sin respuesta).
+    await waitFor(() => expect(s.de('GET', RUTA_DETALLE).length).toBeGreaterThanOrEqual(2));
+
+    // SUNAT aceptó, pero el aviso nunca llegó a la pantalla.
+    actual = detalleDe({
+      id: COMPROBANTE,
+      estado: 'ACEPTADO',
+      envio: envioDe({ estado: 'TERMINADO', ultimoResultado: 'ACEPTADO' }),
+    });
+    await act(() => vi.advanceTimersByTimeAsync(SONDEO_CON_TIEMPO_REAL_MS + 200));
+    expect(await screen.findByText('Aceptado por SUNAT')).toBeVisible();
+    // Ya es final: no se sigue preguntando.
+    const lecturas = s.de('GET', RUTA_DETALLE).length;
+    await act(() => vi.advanceTimersByTimeAsync(60_000));
+    expect(s.de('GET', RUTA_DETALLE)).toHaveLength(lecturas);
+    vi.useRealTimers();
+  });
+
+  it('mientras no haya respuesta final sigue preguntando, más despacio, con el socket conectado', async () => {
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
+    const s = servidor({
+      'GET /sesion': () => json(200, sesionDeRol('CAJERO', { modulos: [...MODULOS] })),
+      [`GET ${RUTA_DETALLE}`]: () => json(200, detalleDe({ id: COMPROBANTE })),
+    });
+    montarResultado();
+    await screen.findByText('Enviando a SUNAT…');
+    act(() => socketVigente()?.conectar());
+    await act(() => vi.advanceTimersByTimeAsync(REFUERZO_DE_LECTURA_MS + 200));
+    const tras = s.de('GET', RUTA_DETALLE).length;
+    expect(tras).toBeGreaterThanOrEqual(2);
+    await act(() => vi.advanceTimersByTimeAsync(SONDEO_CON_TIEMPO_REAL_MS + 200));
+    expect(s.de('GET', RUTA_DETALLE).length).toBeGreaterThan(tras);
+    vi.useRealTimers();
   });
 
   it('un evento de otro comprobante no vuelve a pedir este', async () => {
