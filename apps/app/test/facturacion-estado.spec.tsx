@@ -148,7 +148,34 @@ describe('El estado del comprobante en el resultado del cobro (criterio 173)', (
     expect(await screen.findByText('Rechazado: El RUC del receptor no existe')).toBeVisible();
     const emitir = screen.getByRole('link', { name: 'Emitir otro' });
     expect(emitir).toHaveAttribute('href', `/caja/comprobantes/${COMPROBANTE}?emitir=1`);
-    expect(screen.getByText(/avísale a tu supervisor/i)).toBeVisible();
+    // Quien puede emitirlo no necesita avisar a nadie (criterio 173).
+    expect(screen.getByText('Corrige los datos y emite otro comprobante.')).toBeVisible();
+    expect(screen.queryByText(/avísale a tu supervisor/i)).toBeNull();
+  });
+
+  it('quien no puede cobrar ve el rechazo sin «Emitir otro» y con «Avísale a tu supervisor»', async () => {
+    servidor({
+      'GET /sesion': () => json(200, sesionDeRol('MOZO', { modulos: [...MODULOS] })),
+      [`GET ${RUTA_DETALLE}`]: () =>
+        json(
+          200,
+          detalleDe({
+            id: COMPROBANTE,
+            estado: 'RECHAZADO',
+            sunat: {
+              codigo: '2800',
+              mensaje: 'El RUC del receptor no existe',
+              observaciones: [],
+              hash: null,
+            },
+            envio: envioDe({ estado: 'TERMINADO', ultimoResultado: 'RECHAZADO' }),
+          }),
+        ),
+    });
+    montarResultado();
+    expect(await screen.findByText('Rechazado: El RUC del receptor no existe')).toBeVisible();
+    expect(screen.getByText('Avísale a tu supervisor.')).toBeVisible();
+    expect(screen.queryByRole('link', { name: 'Emitir otro' })).toBeNull();
   });
 
   it('el comprobante simulado lleva la marca «Simulado»', async () => {

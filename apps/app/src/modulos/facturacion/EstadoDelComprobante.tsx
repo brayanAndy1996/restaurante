@@ -38,7 +38,8 @@ interface Props {
  * El estado del comprobante ante SUNAT en el resultado de un cobro, de una venta de mostrador o de una nota de crédito
  * (criterio 173): «Enviando a SUNAT…», «Aceptado por SUNAT» o «Rechazado: <mensaje>». Se actualiza solo con el evento
  * `comprobante.estado`; sin conexión de tiempo real, pregunta cada pocos segundos mientras no haya respuesta final.
- * Con un rechazo ofrece «Emitir otro» a quien puede cobrar (pregunta 40). Un comprobante simulado lleva su marca.
+ * Con un rechazo ofrece «Emitir otro» a quien puede cobrar (pregunta 40) y solo a quien no puede emitirlo le dice que
+ * avise a su supervisor (criterio 173). Un comprobante simulado lleva su marca.
  * Sin el módulo de Facturación en el plan no hay envío a SUNAT y no se muestra nada.
  */
 export function EstadoDelComprobante({ comprobante, sinAcciones }: Props) {
@@ -87,7 +88,7 @@ export function EstadoDelComprobante({ comprobante, sinAcciones }: Props) {
           {rechazado && !sinAcciones ? (
             <p className="estado-sunat__texto">
               {puedeCobrar
-                ? 'Corrige los datos y emite otro comprobante. Si no sabes qué corregir, avísale a tu supervisor.'
+                ? 'Corrige los datos y emite otro comprobante.'
                 : 'Avísale a tu supervisor.'}
             </p>
           ) : null}
