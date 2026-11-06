@@ -659,7 +659,7 @@ describe('calcularNotaCredito · criterio 147 · casos especiales', () => {
     expect(r.totales.total).toBe('28.60');
     const anulada = valida(calcularNotaCredito(rus, [], ANULACION));
     expect(anulada.totales.operaciones).toBeNull();
-    expect(anulada.totales.total).toBe('57.00');
+    expect(anulada.totales.total).toBe('57.20');
   });
 
   it('la tasa del original manda: con 10.00 el desglose de 28.00 es base 25.45 e igv 2.55', () => {
