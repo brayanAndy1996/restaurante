@@ -123,12 +123,18 @@ export interface ConectorPse {
   urlConsulta(): string | null;
 }
 
-/** El conector de un emisor según su modo (`RegistroDeConectores.para`, criterio 122). */
+/**
+ * El conector de un emisor según su modo (`RegistroDeConectores.para`, criterio 122). Con `conector` `null` el envío no
+ * llama a nadie y el intento termina en `ERROR_CONFIGURACION` con `detalle` (sin credenciales ni datos de clientes).
+ */
 export interface ConectorDeEmisor {
   /** `null` si el emisor no tiene configuración: sus envíos terminan en `ERROR_CONFIGURACION`. */
   modo: ModoPse | null;
+  /** `null` si no se puede llamar a nadie: sin configuración o con una credencial que no se pudo abrir. */
   conector: ConectorPse | null;
   credencial: CredencialPse | null;
+  /** Por qué no hay conector (para `intento_pse.mensaje` y `envio_pse.ultimo_error`); `null` si lo hay. */
+  detalle: string | null;
 }
 
 /** La clave de un documento para guardarlo y compararlo: `RUC-tipo-serie-número`. */

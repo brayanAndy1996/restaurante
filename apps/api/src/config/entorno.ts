@@ -184,6 +184,11 @@ export interface Entorno extends Omit<
    * leer el entorno, pero la API no arranca sin ella.
    */
   CLAVE_CIFRADO: string | undefined;
+  /**
+   * La clave maestra anterior, solo para abrir lo cifrado antes de rotar `CLAVE_CIFRADO` (criterio 123): nunca cifra. Opcional
+   * y sin valor por defecto.
+   */
+  CLAVE_CIFRADO_ANTERIOR?: string | undefined;
   /** `DATABASE_COLAS_URL` (rol `restaurante_colas`, dueño del esquema `colas`): la cola de pg-boss (criterio 163). */
   DATABASE_COLAS_URL?: string | undefined;
   /** `DATABASE_REFERENCIA_URL` (rol `restaurante_referencia`): solo la carga del padrón de RUC (criterio 138). */
@@ -319,6 +324,7 @@ export function cargarEntorno(env: NodeJS.ProcessEnv = process.env): Entorno {
     CABECERA_IP_CLIENTE: resultado.data.CABECERA_IP_CLIENTE?.toLowerCase(),
     PSE_CONECTOR: resultado.data.PSE_CONECTOR ?? (conDefectos ? PSE_CONECTOR_SIMULADOR : undefined),
     CLAVE_CIFRADO: resultado.data.CLAVE_CIFRADO ?? (conDefectos ? CLAVE_CIFRADO_LOCAL : undefined),
+    CLAVE_CIFRADO_ANTERIOR: resultado.data.CLAVE_CIFRADO_ANTERIOR,
     // El worker nunca corre dentro del proceso con NODE_ENV=test (criterio 137): las pruebas lo arman con `crearWorker`.
     WORKER:
       limpio.NODE_ENV === 'test' ? 'deshabilitado' : (resultado.data.WORKER ?? 'deshabilitado'),

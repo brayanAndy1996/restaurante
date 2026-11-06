@@ -6,7 +6,8 @@ import {
 } from '@restaurante/contratos';
 import { PipeUuid, PipeZod } from '../../nucleo/errores/pipes';
 import { ConfiguracionPseService } from './configuracion-pse.service';
-import { Superadministrador } from './superadministrador.decorator';
+import { Superadministrador, SuperadministradorActual } from './superadministrador.decorator';
+import type { SuperadministradorAutenticado } from './tipos';
 
 /**
  * `GET` y `PUT /plataforma/empresas/:empresaId/emisores/:emisorId/pse` (historia 006, entrega 6b, criterios 122 y 123): solo
@@ -34,7 +35,8 @@ export class ConfiguracionPseController {
     @Param('empresaId', PipeUuid) empresaId: string,
     @Param('emisorId', PipeUuid) emisorId: string,
     @Body(new PipeZod(configuracionPseEntradaSchema)) entrada: ConfiguracionPseEntrada,
+    @SuperadministradorActual() superadministrador: SuperadministradorAutenticado,
   ): Promise<ConfiguracionPseRespuesta> {
-    return this.configuracion.configurar(empresaId, emisorId, entrada);
+    return this.configuracion.configurar(empresaId, emisorId, entrada, superadministrador.id);
   }
 }

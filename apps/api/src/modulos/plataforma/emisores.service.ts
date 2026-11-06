@@ -10,7 +10,7 @@ import { QueryTypes, type Sequelize } from 'sequelize';
 import { CONEXION_API, SQLSTATE, sqlstateDe } from '../../nucleo/base-de-datos';
 import { ContextoEmpresa } from '../../nucleo/contexto-empresa';
 import { ErrorAplicacion } from '../../nucleo/errores/error-aplicacion';
-import { noImplementado } from '../../nucleo/errores/no-implementado';
+import { Cifrado, CifradoInvalidoError } from '../../nucleo/cifrado';
 import { RELOJ, type Reloj } from '../../nucleo/reloj';
 import { AuditoriaService } from '../auditoria';
 import { MODELOS_API, type EmisorModelo, type Modelos } from './modelos';
@@ -51,8 +51,18 @@ export interface ConfiguracionPseDescifrada {
   modo: 'SIMULADO' | 'REAL';
   /** El `PSE_CONECTOR` con que se pasó a `REAL`; `null` en `SIMULADO`. */
   conector: string | null;
-  /** `null` si no tiene credencial o si no se pudo descifrar (el intento termina en `ERROR_CONFIGURACION`). */
+  /** `null` si no tiene credencial o si no se pudo descifrar (en ese caso `credencialIlegible` es `true`). */
   credencial: Readonly<Record<string, string>> | null;
+  /**
+   * Hay una credencial guardada pero no se pudo abrir (clave cambiada, datos asociados que no coinciden, contenido
+   * alterado): el intento termina en `ERROR_CONFIGURACION` y nunca se usa otra credencial (criterio 123).
+   */
+  credencialIlegible: boolean;
+}
+
+/** `datosAsociados` del cifrado de la credencial: un cifrado copiado a la fila de otro emisor no se abre (criterio 123). */
+export function datosAsociadosDeCredencial(empresaId: string, emisorId: string): string {
+  return `credencial-pse:${empresaId}:${emisorId}`;
 }
 
 /**
@@ -68,16 +78,56 @@ export class EmisoresService {
     @Inject(CONEXION_API) private readonly conexion: Sequelize,
     @Inject(AuditoriaService) private readonly auditoria: AuditoriaService,
     @Inject(RELOJ) private readonly reloj: Reloj,
+    @Inject(Cifrado) private readonly cifrado: Cifrado,
   ) {}
 
   /**
    * La configuración del PSE del emisor, con la credencial descifrada (historia 006, 6b, criterios 122 y 123); `null` si el
-   * emisor no tiene configuración. Con el contexto de la empresa de la petición o del trabajo (RLS). Fase A: lanza
-   * `Error('No implementado')` hasta T30.
+   * emisor no tiene configuración. Con el contexto de la empresa de la petición o del trabajo (RLS). La usan solo
+   * `RegistroDeConectores` y el worker: el valor descifrado vive en memoria durante una llamada al PSE y no se registra.
+   * Una credencial que no se puede abrir no lanza: `credencialIlegible`.
    */
-  configuracionPse(emisorId: string): Promise<ConfiguracionPseDescifrada | null> {
-    void emisorId;
-    return Promise.reject(noImplementado());
+  async configuracionPse(emisorId: string): Promise<ConfiguracionPseDescifrada | null> {
+    const filas = await this.conexion.query<{
+      empresa_id: string;
+      modo: 'SIMULADO' | 'REAL';
+      conector: string | null;
+      credencial: Buffer | null;
+    }>(
+      `SELECT empresa_id, modo, conector, credencial FROM configuracion_pse WHERE emisor_id = $1`,
+      { bind: [emisorId], type: QueryTypes.SELECT },
+    );
+    const fila = filas[0];
+    if (fila === undefined) return null;
+    let credencial: Record<string, string> | null = null;
+    let credencialIlegible = false;
+    if (fila.credencial !== null) {
+      try {
+        credencial = JSON.parse(
+          this.cifrado.abrir(fila.credencial, {
+            proposito: 'credencial-pse',
+            datosAsociados: datosAsociadosDeCredencial(fila.empresa_id, emisorId),
+          }),
+        ) as Record<string, string>;
+      } catch (error) {
+        if (!(error instanceof CifradoInvalidoError) && !(error instanceof SyntaxError))
+          throw error;
+        credencialIlegible = true;
+      }
+    }
+    return { modo: fila.modo, conector: fila.conector, credencial, credencialIlegible };
+  }
+
+  /**
+   * Solo el modo del emisor (`SIMULADO`, `REAL` o `null` sin configuración), sin tocar la credencial: la emisión lo lee,
+   * sin bloquear, para copiar `comprobante.simulado` (criterio 122).
+   */
+  async modoPse(emisorId: string): Promise<'SIMULADO' | 'REAL' | null> {
+    const filas = await this.conexion.query<{ modo: 'SIMULADO' | 'REAL' }>(
+      `SELECT modo FROM configuracion_pse WHERE emisor_id = $1`,
+      { bind: [emisorId], type: QueryTypes.SELECT },
+    );
+    return filas[0]?.modo ?? null;
   }
 
   async listar(): Promise<EmisorRespuesta[]> {
