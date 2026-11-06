@@ -9,6 +9,7 @@ import {
   type ProcesadorDeTrabajo,
   type TrabajoEnvioPse,
 } from './cola-pse';
+import { EXPIRA_ENVIO_EN_SEGUNDOS } from './tiempos-del-envio';
 
 /** Esquema de PostgreSQL de pg-boss: dueño `restaurante_colas`, lo crea `db:preparar` (criterio 163). */
 export const ESQUEMA_DE_COLAS = 'colas';
@@ -16,8 +17,6 @@ export const ESQUEMA_DE_COLAS = 'colas';
 /** Cuántos trabajos `envio-pse` procesa un worker a la vez (plan, «Flujo del envío», paso 3). */
 export const TRABAJOS_POR_LOTE = 5;
 
-/** Segundos que un trabajo puede estar activo antes de que pg-boss lo dé por perdido (el arriendo del envío es de 2 minutos). */
-const EXPIRA_EN_SEGUNDOS = 5 * 60;
 /** Cuánto se guardan los trabajos terminados: la verdad está en `envio_pse`, la cola solo despierta. */
 const RETENCION_EN_SEGUNDOS = 60 * 60;
 const BORRAR_DESPUES_EN_SEGUNDOS = 24 * 60 * 60;
@@ -71,11 +70,12 @@ export class ColaPgBoss implements ColaPse {
       ...(opciones.startAfter !== undefined ? { startAfter: opciones.startAfter } : {}),
     });
     // `null`: ya hay un trabajo esperando de este comprobante. Si piden «ya» (el barrido, el reintento manual), se
-    // adelanta el que espera, que pudo quedar programado para más tarde.
+    // adelanta el que espera, que pudo quedar programado para más tarde. `startAfter: 0` es «ahora» según el reloj de la
+    // base de datos de la cola (pg-boss suma 0 segundos a su `now()`): ni la API ni el worker leen el reloj del sistema.
     if (idTrabajo === null && opciones.startAfter === undefined) {
       await boss.update(TRABAJO_ENVIO_PSE, undefined, {
         singletonKey: trabajo.comprobanteId,
-        startAfter: new Date(),
+        startAfter: 0,
       });
     }
   }
@@ -179,10 +179,12 @@ export class ColaPgBoss implements ColaPse {
     await boss.createQueue(TRABAJO_ENVIO_PSE, {
       policy: 'short',
       retryLimit: 0,
-      expireInSeconds: EXPIRA_EN_SEGUNDOS,
+      expireInSeconds: EXPIRA_ENVIO_EN_SEGUNDOS,
       retentionSeconds: RETENCION_EN_SEGUNDOS,
       deleteAfterSeconds: BORRAR_DESPUES_EN_SEGUNDOS,
     });
+    // `createQueue` no cambia una cola que ya existe: una expiración vieja (más corta que el arriendo) se corrige aquí.
+    await boss.updateQueue(TRABAJO_ENVIO_PSE, { expireInSeconds: EXPIRA_ENVIO_EN_SEGUNDOS });
     await boss.createQueue(TRABAJO_PADRON_RUC, {
       policy: 'exclusive',
       retryLimit: 0,

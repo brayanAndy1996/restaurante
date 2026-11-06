@@ -73,7 +73,7 @@ export class CargaPadron {
     cliente.on('error', (error: Error) => {
       this.logger.warn(JSON.stringify({ evento: 'padron.conexion_perdida', error: error.name }));
     });
-    const inicio = Date.now();
+    const inicio = performance.now();
     try {
       await cliente.connect();
     } catch (error) {
@@ -158,7 +158,7 @@ export class CargaPadron {
           evento: 'padron.cargado',
           filas,
           tabla: inactiva,
-          segundos: Math.round((Date.now() - inicio) / 100) / 10,
+          segundos: Math.round((performance.now() - inicio) / 100) / 10,
         }),
       );
       return { filas, activada: true };

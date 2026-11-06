@@ -23,9 +23,7 @@ interface FilaEstadoDelPadron {
 /**
  * Lo que el superadministrador ve y pide de la facturación electrónica (historia 006, entrega 6b, criterios 133 y 138): los
  * conteos de alertas por empresa, el estado del padrón de RUC y la carga a pedido. Plataforma no lee `comprobante`: los
- * conteos y la carga los darán facturación y el worker por puertos que registran al arrancar (T32 y T36).
- *
- * Fase A (T29): solo las firmas; lanzan `Error('No implementado')`.
+ * conteos y la carga los dan facturación y el worker por puertos que registran al arrancar.
  */
 @Injectable()
 export class FacturacionPlataformaService {

@@ -37,6 +37,8 @@ export const PSE_CONECTOR_SIMULADOR = 'simulador';
 
 /** Tiempo máximo de cada llamada al PSE si no se define `PSE_TIMEOUT_MS` (criterio 120). */
 export const PSE_TIMEOUT_MS_POR_DEFECTO = 30_000;
+/** El mayor `PSE_TIMEOUT_MS` que se admite; de él sale la expiración de los trabajos de la cola (criterio 125). */
+export const PSE_TIMEOUT_MS_MAXIMO = 120_000;
 
 /**
  * Valor de `CLAVE_CIFRADO` con `NODE_ENV` `development` o `test` si no se define (32 bytes en base64). Solo sirve para
@@ -95,7 +97,7 @@ const entornoSchema = z.object({
     .number()
     .int()
     .min(1000)
-    .max(120_000)
+    .max(PSE_TIMEOUT_MS_MAXIMO)
     .default(PSE_TIMEOUT_MS_POR_DEFECTO),
   CLAVE_CIFRADO: z.string().optional(),
   CLAVE_CIFRADO_ANTERIOR: z.string().optional(),

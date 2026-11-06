@@ -142,8 +142,7 @@ export interface ComprobanteEmitido {
 }
 
 // ---------------------------------------------------------------------------------------------------
-// Entrega 6b: notas de crédito y reemisión (criterios 134, 143 a 157). Tipos provisionales de la fase A: T40 y T32 los
-// ajustan al implementar.
+// Entrega 6b: notas de crédito y reemisión (criterios 134, 143 a 157).
 // ---------------------------------------------------------------------------------------------------
 
 /** De una línea del original, lo que la línea de la nota copia tal cual (no se recalcula). */

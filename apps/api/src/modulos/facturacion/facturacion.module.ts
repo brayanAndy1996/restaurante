@@ -67,7 +67,7 @@ import { UltimaEmisionDeComprobantes } from './ultima-emision-de-comprobantes';
     RegistroAlcanceDeTurnos,
     UltimaEmisionDeComprobantes,
     AlcanceDeReimpresionDeComprobantes,
-    // Entrega 6b (fase A: firmas que lanzan «No implementado»).
+    // Entrega 6b.
     RegistroDeConectores,
     EnviosService,
     ProcesadorEnviosPse,

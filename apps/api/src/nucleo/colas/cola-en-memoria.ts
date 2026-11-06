@@ -86,17 +86,14 @@ export class ColaEnMemoria implements ColaPse {
 
   /**
    * Quita de la lista y entrega a `procesador`, en orden y uno por uno, los trabajos cuyo `startAfter` no sea posterior
-   * a `ahora` (por defecto, el reloj del sistema). Devuelve cuántos entregó. Si el procesador lanza, el trabajo ya salió
+   * a `ahora`. Sin `ahora` (no hay reloj del sistema en la cola) solo entrega los que no esperan a ninguna hora. Devuelve cuántos entregó. Si el procesador lanza, el trabajo ya salió
    * de la lista y el error se propaga.
    */
-  async procesarPendientes(
-    procesador: ProcesadorDeTrabajo,
-    ahora: Date = new Date(),
-  ): Promise<number> {
+  async procesarPendientes(procesador: ProcesadorDeTrabajo, ahora?: Date): Promise<number> {
     let entregados = 0;
     for (;;) {
       const indice = this.trabajos.findIndex(
-        (t) => t.startAfter === null || t.startAfter.getTime() <= ahora.getTime(),
+        (t) => t.startAfter === null || (ahora !== undefined && t.startAfter <= ahora),
       );
       if (indice === -1) return entregados;
       const [trabajo] = this.trabajos.splice(indice, 1);

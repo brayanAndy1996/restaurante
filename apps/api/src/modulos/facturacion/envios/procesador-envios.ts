@@ -7,6 +7,7 @@ import { ENTORNO, type Entorno } from '../../../config/entorno';
 import { ALMACEN_COMPROBANTES, type AlmacenComprobantes } from '../../../nucleo/archivos';
 import { CONEXION_API } from '../../../nucleo/base-de-datos';
 import { COLA_PSE, type ColaPse } from '../../../nucleo/colas';
+import { arriendoDelEnvioMs } from '../../../nucleo/colas/tiempos-del-envio';
 import { ContextoEmpresa } from '../../../nucleo/contexto-empresa';
 import { PUBLICADOR_EVENTOS, type PublicadorEventos } from '../../../nucleo/eventos';
 import { RELOJ, type Reloj } from '../../../nucleo/reloj';
@@ -35,20 +36,6 @@ import {
  * columnas de trazabilidad de `envio_pse`, `intento_pse` y los cambios de estado de `comprobante` (criterio 171).
  */
 export const ACTOR_WORKER_ENVIO_PSE = 'worker:envio-pse';
-
-/** El arriendo mínimo de un envío (criterio 125): el de siempre, 2 minutos. */
-export const ARRIENDO_ENVIO_MINIMO_MS = 2 * 60_000;
-/** Margen del arriendo sobre las dos llamadas al PSE: guardar el resultado, el XML y el CDR, y los relojes de los workers. */
-export const MARGEN_DEL_ARRIENDO_MS = 30_000;
-
-/**
- * Cuánto dura el arriendo de un envío (criterio 125). Un procesamiento hace hasta dos llamadas al PSE (consultar y emitir),
- * cada una con el tiempo máximo `PSE_TIMEOUT_MS`; el arriendo se calcula de ese valor (`2 × PSE_TIMEOUT_MS` más un margen,
- * con un mínimo de 2 minutos) para que ningún otro worker tome el envío en medio de esas llamadas.
- */
-export function arriendoDelEnvioMs(tiempoMaximoPseMs: number): number {
-  return Math.max(ARRIENDO_ENVIO_MINIMO_MS, 2 * tiempoMaximoPseMs + MARGEN_DEL_ARRIENDO_MS);
-}
 
 /** Lo que el paso 1 deja listo para el paso 2, fuera de toda transacción. */
 interface EnvioTomado {
@@ -93,7 +80,7 @@ function motivosPublicados(
  * El procesador de un envío al PSE (historia 006, entrega 6b, criterios 125 a 131; ruta crítica P7), en tres pasos:
  *
  * 1. **Tomar** (transacción corta): `FOR UPDATE SKIP LOCKED` sobre `envio_pse`; si no hay fila, está `TERMINADO` o
- *    `DETENIDO`, aún no toca o tiene un arriendo vigente, termina sin hacer nada. Si no, fija el arriendo (`2 × PSE_TIMEOUT_MS + 30 s`, mínimo 2 minutos) y un
+ *    `DETENIDO`, aún no toca o tiene un arriendo vigente, termina sin hacer nada. Si no, fija el arriendo (`2 × PSE_TIMEOUT_MS + 2 × TIEMPO_LIMITE_R2_MS + 30 s`, mínimo 2 minutos) y un
  *    `intento_en_curso`, suma un intento y arma el documento y el conector del emisor.
  * 2. **Llamar** (sin transacción): el primer intento emite; los demás consultan primero y solo con `NO_EXISTE` emiten
  *    (criterio 128). Un `ACEPTADO` con XML o CDR los guarda en el almacén privado antes del paso 3.
