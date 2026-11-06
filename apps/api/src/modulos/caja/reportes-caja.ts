@@ -26,6 +26,8 @@ interface SumasDeCobros {
 interface FilaMovimiento {
   id: string;
   tipo: TipoMovimientoCaja;
+  medio: MedioPago;
+  comprobante_id: string | null;
   monto: string;
   motivo: string;
   creado_en: Date;
@@ -69,14 +71,16 @@ export class ReportesCaja {
       fila = (await buscarTurno(this.conexion, turnoId)) ?? fila;
     }
     const movimientos = await this.conexion.query<FilaMovimiento>(
-      `SELECT id, tipo, monto::text AS monto, motivo, creado_en, creado_por_usuario_id
+      `SELECT id, tipo, medio, comprobante_id, monto::text AS monto, motivo, creado_en, creado_por_usuario_id
          FROM movimiento_caja WHERE turno_id = $1 ORDER BY creado_en, id`,
       { bind: [turnoId], type: QueryTypes.SELECT },
     );
     const sumas = (
-      await this.conexion.query<{ ingresos: string; egresos: string }>(
+      await this.conexion.query<{ ingresos: string; egresos: string; devuelto: string }>(
         `SELECT coalesce(sum(monto) FILTER (WHERE tipo = 'INGRESO'), 0)::numeric(14, 2)::text AS ingresos,
-                coalesce(sum(monto) FILTER (WHERE tipo = 'EGRESO'), 0)::numeric(14, 2)::text AS egresos
+                coalesce(sum(monto) FILTER (WHERE tipo = 'EGRESO'), 0)::numeric(14, 2)::text AS egresos,
+                coalesce(sum(monto) FILTER (WHERE tipo = 'EGRESO' AND comprobante_id IS NOT NULL), 0)::numeric(14, 2)::text
+                  AS devuelto
            FROM movimiento_caja WHERE turno_id = $1`,
         { bind: [turnoId], type: QueryTypes.SELECT },
       )
@@ -86,7 +90,7 @@ export class ReportesCaja {
     const esperado = esperadoDelTurno({
       fondo: fila.fondo,
       pagos: cobros.pagos,
-      movimientos: movimientos.map((m) => ({ tipo: m.tipo, monto: m.monto })),
+      movimientos: movimientos.map((m) => ({ tipo: m.tipo, monto: m.monto, medio: m.medio })),
     });
     const nombres = await this.usuarios.nombres(
       movimientos.flatMap((m) =>
@@ -98,6 +102,8 @@ export class ReportesCaja {
       tipo: m.tipo,
       monto: m.monto,
       motivo: m.motivo,
+      medio: m.medio,
+      comprobanteId: m.comprobante_id,
       creadoEn: m.creado_en.toISOString(),
       creadoPor:
         m.creado_por_usuario_id === null
@@ -122,6 +128,12 @@ export class ReportesCaja {
         vueltos: cobros.vueltos,
       },
       movimientos: { ingresos: sumas.ingresos, egresos: sumas.egresos, lista },
+      // 6b (criterio 136): las notas de crédito emitidas con este turno van aparte; no son ventas.
+      notasCredito: {
+        cantidad: resumen.notasCredito.cantidad,
+        total: resumen.notasCredito.total,
+        devuelto: sumas.devuelto,
+      },
       esperado,
     };
     if (fila.estado === 'CERRADO' && turno.cerradoEn !== null && turno.cerradoPor !== null) {
