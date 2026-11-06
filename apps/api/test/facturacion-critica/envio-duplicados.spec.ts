@@ -233,6 +233,7 @@ describe('criterio 125 y 128 · un arriendo vencido que toma otro worker', () =>
       return { tipo: 'RECHAZADO', origen: 'SUNAT', codigo: '9999', mensaje: 'Resultado tardío' };
     });
     const primero = procesar(ctx, A().id, c.comprobanteId);
+    primero.catch(() => undefined); // si la prueba falla antes de esperarlo, que no quede un rechazo sin atender
     let envio: Libre | undefined;
     for (let i = 0; i < 40 && !envio?.en_curso_hasta; i++) {
       await dormir(50);

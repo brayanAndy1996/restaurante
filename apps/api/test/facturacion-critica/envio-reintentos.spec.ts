@@ -193,6 +193,7 @@ describe('criterio 126 · el barrido solo encola lo que toca', () => {
     const c = await nuevoCobro();
     ctx.cola.vaciar();
     const en_curso = procesar(ctx, A().id, c.comprobanteId);
+    en_curso.catch(() => undefined); // si la prueba falla antes de esperarlo, que no quede un rechazo sin atender
     let envio: Libre | undefined;
     for (let i = 0; i < 40 && !envio?.en_curso_hasta; i++) {
       await dormir(50);
@@ -281,6 +282,7 @@ describe('criterio 132 · reintento manual', () => {
     ctx.pse.reglas.demorar(1500);
     const c = await nuevoCobro();
     const en_curso = procesar(ctx, A().id, c.comprobanteId);
+    en_curso.catch(() => undefined); // si la prueba falla antes de esperarlo, que no quede un rechazo sin atender
     let antes: Libre | undefined;
     for (let i = 0; i < 40 && !antes?.en_curso_hasta; i++) {
       await dormir(50);

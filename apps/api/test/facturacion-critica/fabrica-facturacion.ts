@@ -207,7 +207,7 @@ export async function crearEscenarioFact(
   opciones: { conPse?: boolean } = {},
 ): Promise<Escenario> {
   const esc = await crearEscenario(ctx);
-  if (opciones.conPse !== false && !process.env.P7_SIN_PSE) {
+  if (opciones.conPse !== false) {
     // La configuración se hace aparte y se exige en el `beforeEach` de cada archivo (`exigirPse`): si falla, falla cada
     // prueba con el mismo motivo en lugar de quedar omitidas.
     const lista = (async () => {

@@ -375,6 +375,7 @@ describe('criterio 125 · los tres pasos con el arriendo', () => {
     const c = await nuevoCobro();
     const t0 = ctx.reloj.ahora().getTime();
     const en_curso = procesar(ctx, A().id, c.comprobanteId);
+    en_curso.catch(() => undefined); // si la prueba falla antes de esperarlo, que no quede un rechazo sin atender
     // Paso 1 confirmado: el arriendo y el intento ya están a la vista de otra conexión.
     let envio: Libre | undefined;
     for (let i = 0; i < 40 && !envio?.en_curso_hasta; i++) {
