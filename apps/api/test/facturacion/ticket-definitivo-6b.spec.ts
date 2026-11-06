@@ -33,6 +33,7 @@ import {
   type Escenario,
 } from '../facturacion-critica/fabrica-facturacion';
 import { efectivo, emitirNota, type Libre } from '../facturacion-critica/fabrica-notas';
+import type { TicketEmulado } from '../soporte/puente/interprete-escpos';
 
 vi.setConfig({ testTimeout: 180_000, hookTimeout: 180_000 });
 
@@ -43,6 +44,26 @@ const cierres = new Cierres();
 const A = () => esc.A;
 const MARCA = 'SIMULADO · SIN VALOR TRIBUTARIO';
 const sinEspacios = (texto: string): string => texto.replace(/\s+/g, '');
+
+/**
+ * El ticket que lleva `numero`, descartando los demás que lleguen antes. El puente entrega los tickets de forma asíncrona y
+ * cada cobro o nota deja el suyo en la cola de la impresora: «el primero que llegue» puede ser el de la operación anterior
+ * (la raíz de una falla intermitente de la reemisión), así que cada prueba espera el ticket de su propio número.
+ */
+async function ticketDe(
+  impresora: ImpresoraDePrueba,
+  numero: string,
+  ms = 10_000,
+): Promise<TicketEmulado> {
+  const limite = Date.now() + ms;
+  const buscado = sinEspacios(numero);
+  for (;;) {
+    const restante = limite - Date.now();
+    if (restante <= 0) throw new Error(`No llegó el ticket de ${numero} en ${ms} ms`);
+    const ticket = await impresora.emulador.esperarTicket(restante);
+    if (sinEspacios(ticket.texto).includes(buscado)) return ticket;
+  }
+}
 
 beforeAll(async () => {
   ctx = await arrancarFact();
@@ -94,7 +115,7 @@ describe('con impresora de caja en S3 (emisor en SIMULADO)', () => {
   it('el ticket del cobro lleva la leyenda de 6b y la marca de simulado, y el QR sin el hash', async () => {
     impresora.emulador.limpiar();
     const c = await cobrarLomo(ctx, A(), { turnoId, sucursal: 'S3', token: A().token.cajeroS3! });
-    const ticket = await impresora.emulador.esperarTicket(5_000);
+    const ticket = await ticketDe(impresora, (c.respuesta.comprobante as Libre).numero);
     const t = ticket.texto;
     expect(t.split(MARCA).length - 1).toBe(2);
     expect(t.trimStart().startsWith(MARCA)).toBe(true);
@@ -128,10 +149,8 @@ describe('con impresora de caja en S3 (emisor en SIMULADO)', () => {
       total: '56.00',
     });
     await procesar(ctx, A().id, c.comprobanteId);
-    await impresora.emulador.esperarTicket(5_000);
-    impresora.emulador.limpiar();
     const nota = await devolverUnLomo(A().token.supervisorS3!, c.comprobanteId, turnoId);
-    const ticket = await impresora.emulador.esperarTicket(5_000);
+    const ticket = await ticketDe(impresora, nota.nota.numero);
     const t = sinEspacios(ticket.texto);
     for (const esperado of [
       'NOTA DE CRÉDITO ELECTRÓNICA',
@@ -173,7 +192,7 @@ describe('con impresora de caja en S3 (emisor en SIMULADO)', () => {
       { 'Idempotency-Key': randomUUID() },
     );
     exigirEstado(res, 201, 'Emitir otro de una nota rechazada (006, criterio 134)');
-    const ticket = await impresora.emulador.esperarTicket(5_000);
+    const ticket = await ticketDe(impresora, res.body.comprobante.numero);
     const t = sinEspacios(ticket.texto);
     expect(t).toContain(sinEspacios(res.body.comprobante.numero));
     expect(t).toContain('DEVOLUCIÓN');
@@ -213,7 +232,7 @@ describe('la reimpresión de una nota que se emitió sin impresora (no hay ticke
     );
     exigirEstado(res, 201, 'Reimprimir una nota de crédito (006, criterio 157)');
     expect(res.body.impresion).toBe('EN_COLA');
-    const ticket = await impresora.emulador.esperarTicket(5_000);
+    const ticket = await ticketDe(impresora, nota.nota.numero);
     const t = sinEspacios(ticket.texto);
     for (const esperado of [
       'REIMPRESIÓN',
