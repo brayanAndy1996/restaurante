@@ -19,7 +19,9 @@ import { IMPRESION, type ImpresionPuerto } from '../pedidos/impresion';
 import { SesionActual, requisitoDeLaPeticion } from '../seguridad';
 import { RegistroAlcanceDeTurnos, veTodosLosTurnos } from './alcance-de-turnos';
 import { comprobanteDeOtro, comprobanteNoEncontrado } from './errores-facturacion';
+import { DevolucionDeNotaParaTicket } from './devolucion-de-nota';
 import { RegistroImpresoraDeCaja, RegistroPagosDeCobro } from './impresora-de-caja';
+import { RegistroDeConectores } from './pse/registro-de-conectores';
 import { leerComprobante, textoDelNumero } from './lectura-comprobante';
 
 /**
@@ -53,6 +55,8 @@ export class ComprobantesService {
     @Inject(CONEXION_API) private readonly conexion: Sequelize,
     @Inject(SesionActual) private readonly sesion: SesionActual,
     @Inject(RegistroAlcanceDeTurnos) private readonly turnos: RegistroAlcanceDeTurnos,
+    @Inject(RegistroDeConectores) private readonly conectores: RegistroDeConectores,
+    @Inject(DevolucionDeNotaParaTicket) private readonly devoluciones: DevolucionDeNotaParaTicket,
   ) {}
 
   /**
@@ -64,6 +68,16 @@ export class ComprobantesService {
     const comprobante = await leerComprobante(this.conexion, id.toLowerCase());
     if (comprobante === null) throw comprobanteNoEncontrado();
     return comprobante;
+  }
+
+  /** El emisor de un comprobante visible (para la dirección de consulta de su ticket). */
+  private async emisorDe(comprobanteId: string): Promise<string> {
+    const filas = await this.conexion.query<{ emisor_id: string }>(
+      'SELECT emisor_id FROM comprobante WHERE id = $1',
+      { bind: [comprobanteId], type: QueryTypes.SELECT },
+    );
+    if (filas[0] === undefined) throw comprobanteNoEncontrado();
+    return filas[0].emisor_id;
   }
 
   /** El texto del número (`B001-00000124`) de un comprobante visible; 404 si no existe (la RLS oculta los de otra empresa). */
@@ -231,6 +245,11 @@ export class ComprobantesService {
       documento = conMarcas({ ...original.documento, bloques: sinPulso }, { reimpresion: true });
     } else {
       const cobro = visible.cobroId === null ? null : await this.pagos.deCobro(visible.cobroId);
+      // La leyenda con la dirección de consulta del emisor y, en una nota de crédito, la devolución por medio (criterio
+      // 157): facturación no lee `movimiento_caja`, así que los egresos los da el puerto de caja (falla cerrado).
+      const urlConsulta = await this.conectores.urlConsulta(await this.emisorDe(comprobanteId));
+      const esNota = comprobante.afectaA !== undefined && comprobante.afectaA !== null;
+      const devolucion = esNota ? await this.devoluciones.de(comprobanteId) : null;
       documento = conMarcas(
         documentoDeComprobante(comprobante, {
           hora: horaLocal(new Date(comprobante.emitidoEn)),
@@ -238,6 +257,8 @@ export class ComprobantesService {
           vuelto: cobro?.vuelto ?? '0.00',
           redondeo: cobro?.redondeo ?? '0.00',
           abreGaveta: false,
+          urlConsulta,
+          devolucion,
         }),
         { reimpresion: true },
       );

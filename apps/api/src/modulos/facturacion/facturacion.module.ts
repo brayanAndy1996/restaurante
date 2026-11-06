@@ -8,6 +8,7 @@ import { AlertasParaPlataforma } from './alertas-para-plataforma';
 import { AlcanceDeReimpresionDeComprobantes } from './alcance-de-reimpresion-de-comprobantes';
 import { ComprobantesController } from './comprobantes.controller';
 import { ComprobantesService } from './comprobantes.service';
+import { DevolucionDeNotaParaTicket } from './devolucion-de-nota';
 import { EmisionService } from './emision.service';
 import { EnlacesComprobante } from './enlaces';
 import { BarridoEnviosPse } from './envios/barrido-envios';
@@ -26,7 +27,11 @@ import { PdfComprobantes } from './pdf/pdf-comprobantes';
 import { RegistroDeConectores } from './pse/registro-de-conectores';
 import { ReemisionService } from './reemision.service';
 import { FacturadoService } from './facturado';
-import { RegistroImpresoraDeCaja, RegistroPagosDeCobro } from './impresora-de-caja';
+import {
+  RegistroDevolucionDeNota,
+  RegistroImpresoraDeCaja,
+  RegistroPagosDeCobro,
+} from './impresora-de-caja';
 import { SeriesService } from './series.service';
 import { UltimaEmisionDeComprobantes } from './ultima-emision-de-comprobantes';
 
@@ -57,6 +62,8 @@ import { UltimaEmisionDeComprobantes } from './ultima-emision-de-comprobantes';
     ComprobantesService,
     RegistroImpresoraDeCaja,
     RegistroPagosDeCobro,
+    RegistroDevolucionDeNota,
+    DevolucionDeNotaParaTicket,
     RegistroAlcanceDeTurnos,
     UltimaEmisionDeComprobantes,
     AlcanceDeReimpresionDeComprobantes,
@@ -84,6 +91,7 @@ import { UltimaEmisionDeComprobantes } from './ultima-emision-de-comprobantes';
     ComprobantesService,
     RegistroImpresoraDeCaja,
     RegistroPagosDeCobro,
+    RegistroDevolucionDeNota,
     RegistroAlcanceDeTurnos,
     RegistroDeConectores,
     EnviosService,

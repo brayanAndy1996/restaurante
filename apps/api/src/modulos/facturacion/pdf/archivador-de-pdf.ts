@@ -100,8 +100,7 @@ export class ArchivadorDePdf {
     if (fila.estado !== 'ACEPTADO' && fila.estado !== 'ANULADO') return null;
     const comprobante = await leerComprobante(this.conexion, comprobanteId);
     if (comprobante === null) return null;
-    const { conector } = await this.conectores.para(fila.emisor_id);
-    return { comprobante, urlConsulta: conector?.urlConsulta() ?? null };
+    return { comprobante, urlConsulta: await this.conectores.urlConsulta(fila.emisor_id) };
   }
 
   /** Anota la clave solo si todavía no había una (dos workers a la vez dejan la misma clave). */

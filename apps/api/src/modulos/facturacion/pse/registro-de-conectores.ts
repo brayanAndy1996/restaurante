@@ -20,6 +20,17 @@ export class RegistroDeConectores {
     @Inject(EmisoresService) private readonly emisores: EmisoresService,
   ) {}
 
+  /**
+   * La dirección donde el cliente consulta el comprobante (`urlConsulta()` del conector del emisor; criterio 162), para la
+   * leyenda del ticket. Sin configuración, `null`. **No descifra la credencial**: el cobro nunca la toca (criterio 123).
+   * Con el contexto de su empresa.
+   */
+  async urlConsulta(emisorId: string): Promise<string | null> {
+    return (await this.emisores.modoPse(emisorId)) === null
+      ? null
+      : this.conectorInyectado.urlConsulta();
+  }
+
   /** El conector, la credencial descifrada y el modo del emisor (con el contexto de su empresa). */
   async para(emisorId: string): Promise<ConectorDeEmisor> {
     const configuracion = await this.emisores.configuracionPse(emisorId);

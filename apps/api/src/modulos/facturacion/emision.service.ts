@@ -57,7 +57,9 @@ import {
   yaReemplazado,
 } from './errores-facturacion';
 import { sinMarcaDeValida } from './facturado';
+import { DevolucionDeNotaParaTicket } from './devolucion-de-nota';
 import { RegistroImpresoraDeCaja, RegistroPagosDeCobro } from './impresora-de-caja';
+import { RegistroDeConectores } from './pse/registro-de-conectores';
 import { EnviosService } from './envios/envios.service';
 import { leerComprobante, textoDelNumero } from './lectura-comprobante';
 import { SeriesService, type NumeroTomado } from './series.service';
@@ -224,6 +226,8 @@ export class EmisionService {
     @Inject(RegistroImpresoraDeCaja) private readonly impresoras: RegistroImpresoraDeCaja,
     @Inject(RegistroPagosDeCobro) private readonly pagosDeCobro: RegistroPagosDeCobro,
     @Inject(SesionActual) private readonly sesion: SesionActual,
+    @Inject(RegistroDeConectores) private readonly conectores: RegistroDeConectores,
+    @Inject(DevolucionDeNotaParaTicket) private readonly devoluciones: DevolucionDeNotaParaTicket,
   ) {}
 
   /**
@@ -329,7 +333,7 @@ export class EmisionService {
     await this.suscripciones.registrarComprobanteEmitido(datos.sucursalId, instante);
     const comprobante = await leerComprobante(this.conexion, comprobanteId);
     if (comprobante === null) throw new Error('El comprobante recién emitido no se puede leer');
-    const trabajoId = await this.encolarTicket(comprobante, datos, instante);
+    const trabajoId = await this.encolarTicket(comprobante, datos, instante, emisor.id);
     return {
       comprobante,
       trabajoId,
@@ -805,6 +809,7 @@ export class EmisionService {
   ): Promise<string | null> {
     const impresora = d.impresora;
     if (impresora === null) return null;
+    const urlConsulta = await this.conectores.urlConsulta(p.emisorId);
     const [trabajoId] = await this.impresion.encolar([
       {
         sucursalId: p.sucursalId,
@@ -831,6 +836,7 @@ export class EmisionService {
                   redondeo: d.redondeo,
                 }
               : null,
+          urlConsulta,
         }),
       },
     ]);
@@ -988,6 +994,12 @@ export class EmisionService {
     if (impresora === null) return null;
     const cobro =
       rechazado.cobro_id === null ? null : await this.pagosDeCobro.deCobro(rechazado.cobro_id);
+    const urlConsulta = await this.conectores.urlConsulta(rechazado.emisor_id);
+    // Una nota que reemplaza a otra rechazada lleva la devolución de la rechazada (la que se hizo en caja, criterio 157).
+    const devolucion =
+      comprobante.afectaA === undefined || comprobante.afectaA === null
+        ? null
+        : await this.devoluciones.de(rechazado.id);
     const orden = comprobante.orden;
     const [trabajoId] = await this.impresion.encolar([
       {
@@ -1013,6 +1025,8 @@ export class EmisionService {
           vuelto: cobro?.vuelto ?? '0.00',
           redondeo: cobro?.redondeo ?? '0.00',
           abreGaveta: false,
+          urlConsulta,
+          devolucion,
         }),
       },
     ]);
@@ -1028,9 +1042,11 @@ export class EmisionService {
     comprobante: ComprobanteRespuesta,
     datos: DatosDeEmision,
     instante: Date,
+    emisorId: string,
   ): Promise<string | null> {
     const impresora = datos.impresora;
     if (impresora === null) return null;
+    const urlConsulta = await this.conectores.urlConsulta(emisorId);
     const hayEfectivo = datos.pagos.some((p) => p.medio === 'EFECTIVO' && p.monto !== '0.00');
     const orden = datos.orden;
     const [trabajoId] = await this.impresion.encolar([
@@ -1057,6 +1073,7 @@ export class EmisionService {
           vuelto: datos.vuelto,
           redondeo: datos.redondeo,
           abreGaveta: impresora.gaveta && hayEfectivo,
+          urlConsulta,
         }),
       },
     ]);

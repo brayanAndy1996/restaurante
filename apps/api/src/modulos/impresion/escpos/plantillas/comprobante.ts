@@ -7,14 +7,18 @@ import {
 import type { MedioPago, TipoDocumentoElectronico } from '@restaurante/dominio';
 import { ETIQUETA_DE_MEDIO, esCero } from './etiquetas-caja';
 import { ajustarAlPresupuesto } from './presupuesto';
-import { formatoMonto, juntarEnLineas, limpiarTexto, lineasDeMesas } from './texto';
+import { formatoMonto, juntarEnLineas, limpiarTexto, lineasDeMesas, partirTexto } from './texto';
 
 /**
  * Plantilla del ticket del comprobante (historia 006, criterios 90 y 91): razón social y RUC del emisor, sucursal y
  * dirección, el tipo de comprobante con su serie y número, la fecha y la hora, el cliente (si hay), la mesa y el
  * mozo o el número de llamado, las líneas con sus importes, los descuentos y las cortesías, las operaciones, el IGV
  * con su tasa, el ICBPER, el total, "SON: …", los pagos con el vuelto y el redondeo, y el QR con los datos de SUNAT
- * que ya se conocen. En 6a dice "Comprobante pendiente de envío a SUNAT" (6b lo reemplaza).
+ * que ya se conocen (sin el `hash`, que llega después: el ticket se imprime al cobrar, sin esperar al PSE). La leyenda de 6b
+ * (criterio 162) dice «Representación impresa de la BOLETA DE VENTA ELECTRÓNICA» (o del tipo que corresponda) y, si el
+ * conector del emisor tiene dirección de consulta, «Consulte su comprobante en <url>»; un comprobante simulado lleva
+ * «SIMULADO · SIN VALOR TRIBUTARIO» en doble alto al inicio y al final. Una nota de crédito lleva el documento que
+ * modifica, el motivo y la devolución por medio.
  *
  * Los montos son los guardados en el comprobante: aquí solo se les da formato, no se calcula nada. El ancho (32 o 48
  * columnas) y el juego de caracteres (con `SIN_TILDES` incluido) los resuelve el renderizador al entregar.
@@ -64,6 +68,8 @@ export interface ComprobanteParaTicket {
   afectaA?: { tipo: TipoDocumentoElectronico; numero: string } | null;
   /** Solo en una nota de crédito (6b, criterio 157): su tipo y el motivo que escribió quien la emitió. */
   nota?: { tipo: 'ANULACION' | 'DEVOLUCION'; motivo: string } | null;
+  /** Copiado del modo del emisor al emitir (6b, criterio 122): un comprobante simulado lleva la marca (criterio 162). */
+  simulado?: boolean;
 }
 
 /** Lo que el ticket toma del cobro y del momento de la emisión. */
@@ -83,9 +89,12 @@ export interface ContextoDeComprobante {
     pagos: readonly { medio: MedioPago; monto: string }[];
     redondeo: string;
   } | null;
+  /** La dirección donde el cliente consulta el comprobante (`urlConsulta()` del conector del emisor); `null` o ausente: sin ella. */
+  urlConsulta?: string | null;
 }
 
-export const TEXTO_PENDIENTE_DE_ENVIO = 'Comprobante pendiente de envío a SUNAT';
+/** La marca de un comprobante simulado, en doble alto al inicio y al final del ticket (criterio 162). */
+export const TEXTO_SIMULADO = 'SIMULADO · SIN VALOR TRIBUTARIO';
 
 const NOMBRE_DEL_TIPO = {
   BOLETA: 'BOLETA DE VENTA ELECTRÓNICA',
@@ -148,6 +157,7 @@ export function textoDelQr(c: ComprobanteParaTicket, hash: string | null = null)
 function encabezadoDe(c: ComprobanteParaTicket, ctx: ContextoDeComprobante): BloqueTicket[] {
   const bloques: BloqueTicket[] = [];
   if (ctx.abreGaveta) bloques.push({ tipo: 'gaveta' });
+  if (c.simulado === true) bloques.push({ tipo: 'titulo', texto: TEXTO_SIMULADO });
   bloques.push(
     { tipo: 'titulo', texto: limpiarTexto(c.emisor.razonSocial) },
     { tipo: 'linea', texto: `RUC: ${limpiarTexto(c.emisor.ruc)}`, alinear: 'centro' },
@@ -315,6 +325,21 @@ function pagosDe(ctx: ContextoDeComprobante): BloqueTicket[] {
   return bloques;
 }
 
+/** La leyenda del ticket definitivo (criterio 162): la representación impresa y, si hay, dónde consultar el comprobante. */
+function leyendaDe(c: ComprobanteParaTicket, ctx: ContextoDeComprobante): BloqueTicket[] {
+  const bloques: BloqueTicket[] = partirTexto(
+    limpiarTexto(`Representación impresa de la ${NOMBRE_DEL_TIPO[c.tipo]}`),
+  ).map((texto): BloqueTicket => ({ tipo: 'linea', texto, alinear: 'centro' }));
+  const url =
+    ctx.urlConsulta === undefined || ctx.urlConsulta === null ? '' : limpiarTexto(ctx.urlConsulta);
+  if (url.length > 0) {
+    for (const texto of partirTexto(`Consulte su comprobante en ${url}`)) {
+      bloques.push({ tipo: 'linea', texto, alinear: 'centro' });
+    }
+  }
+  return bloques;
+}
+
 function pieDe(c: ComprobanteParaTicket, ctx: ContextoDeComprobante): BloqueTicket[] {
   return [
     ...totalesDe(c),
@@ -323,7 +348,8 @@ function pieDe(c: ComprobanteParaTicket, ctx: ContextoDeComprobante): BloqueTick
     { tipo: 'espacio' },
     { tipo: 'qr', texto: textoDelQr(c) },
     { tipo: 'espacio' },
-    { tipo: 'linea', texto: TEXTO_PENDIENTE_DE_ENVIO, alinear: 'centro' },
+    ...leyendaDe(c, ctx),
+    ...(c.simulado === true ? [{ tipo: 'titulo', texto: TEXTO_SIMULADO } as const] : []),
   ];
 }
 

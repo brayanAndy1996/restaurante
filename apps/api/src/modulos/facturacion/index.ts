@@ -7,8 +7,14 @@ export type { ComprobanteEmitido, DatosDeEmision, PagoParaTicket } from './emisi
 export { FacturadoService } from './facturado';
 export { ComprobantesService } from './comprobantes.service';
 export type { ResumenTributarioDeTurno } from './comprobantes.service';
-export { RegistroImpresoraDeCaja, RegistroPagosDeCobro } from './impresora-de-caja';
+export {
+  RegistroDevolucionDeNota,
+  RegistroImpresoraDeCaja,
+  RegistroPagosDeCobro,
+} from './impresora-de-caja';
 export type {
+  DevolucionDeNota,
+  ResolutorDevolucionDeNota,
   ImpresoraDeCaja,
   PagosDeUnCobro,
   ResolutorImpresoraDeCaja,
