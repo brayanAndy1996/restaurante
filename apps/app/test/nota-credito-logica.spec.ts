@@ -26,6 +26,7 @@ const algoYaDevuelto = () =>
     notasCredito: [
       {
         id: uuid(7100),
+        notaId: uuid(9100),
         tipo: 'DEVOLUCION',
         numero: 'BC01-00000001',
         estado: 'ACEPTADO',
@@ -70,6 +71,7 @@ describe('Qué admite cada comprobante (criterios 143, 146 y 148)', () => {
       notasCredito: [
         {
           id: uuid(7100),
+          notaId: uuid(9100),
           tipo: 'DEVOLUCION',
           numero: 'BC01-00000001',
           estado: 'ACEPTADO',

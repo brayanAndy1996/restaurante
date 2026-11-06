@@ -234,6 +234,7 @@ describe('Quién ve «Nota de crédito» y cuándo (criterios 143, 146, 169 y 17
         notasCredito: [
           {
             id: uuid(7101),
+            notaId: uuid(9101),
             tipo: 'DEVOLUCION',
             numero: 'BC01-00000001',
             estado: 'ACEPTADO',
@@ -301,6 +302,7 @@ describe('Los tipos y las líneas (criterios 143, 147, 148 y 177)', () => {
         notasCredito: [
           {
             id: uuid(7101),
+            notaId: uuid(9101),
             tipo: 'DEVOLUCION',
             numero: 'BC01-00000001',
             estado: 'ACEPTADO',
@@ -973,6 +975,69 @@ describe('El id se conserva hasta una respuesta final (criterio 153)', () => {
     expect(cuerpoDe(s, 1).id).toBe(cuerpoDe(s, 0).id);
   });
 
+  it('una nota de otra emisión que aparece en el comprobante no suelta el id: solo la nota con ese mismo id lo suelta', async () => {
+    let intentos = 0;
+    const s = montar({
+      rol: 'SUPERVISOR',
+      extra: {
+        [`POST ${API_NOTAS}`]: ({ cuerpo }) =>
+          ++intentos === 1
+            ? json(500, { codigo: 'ERROR_INTERNO', mensaje: 'Falló' })
+            : json(201, respuestaDe(cuerpo as NotaCreditoEntrada)),
+      },
+    });
+    const vista = renderApp(RUTA);
+    const hoja = await abrirLaHoja();
+    await within(hoja).findByText(/Sale de tu turno en Caja 1/);
+    await userEvent.click(within(hoja).getByRole('button', { name: 'Error al cobrar' }));
+    await userEvent.click(within(hoja).getByRole('button', { name: 'Emitir nota de crédito' }));
+    await within(hoja).findByText('No se pudo emitir la nota');
+    // Otra caja emitió una nota (con otro id) y el comprobante se relee: no es la nuestra.
+    s.estado.comprobante = boletaAceptada({
+      id: BOLETA,
+      numero: 'B001-00000124',
+      notasCredito: [
+        {
+          id: uuid(7102),
+          notaId: uuid(9999),
+          tipo: 'DEVOLUCION',
+          numero: 'BC01-00000009',
+          estado: 'POR_ENVIAR',
+          total: '28.00',
+        },
+      ],
+      acreditado: [
+        {
+          posicion: 1,
+          cantidad: 1,
+          neto: '28.00',
+          base: '23.73',
+          igv: '4.27',
+          bolsas: 0,
+          icbper: '0.00',
+        },
+      ],
+    });
+    await userEvent.click(within(hoja).getByRole('button', { name: 'Cerrar' }));
+    await waitFor(() =>
+      expect(screen.queryByRole('dialog', { name: 'Nota de crédito' })).toBeNull(),
+    );
+    // La persona vuelve al comprobante y se relee.
+    vista.unmount();
+    renderApp(RUTA);
+    await userEvent.click(await screen.findByRole('button', { name: 'Nota de crédito' }));
+    const otra = await screen.findByRole('dialog', { name: 'Nota de crédito' });
+    // El comprobante releído ya tiene una nota: solo queda devolver por ítems.
+    await within(otra).findByRole('group', { name: 'Cantidad de Lomo saltado' });
+    await masDe(otra, 'Lomo saltado');
+    await userEvent.click(within(otra).getByRole('button', { name: 'Producto en mal estado' }));
+    await userEvent.click(within(otra).getByRole('button', { name: 'Emitir nota de crédito' }));
+    await screen.findByText('Nota de crédito emitida');
+    // Sigue siendo la misma emisión pendiente: mismo id.
+    expect(notas(s)).toHaveLength(2);
+    expect(cuerpoDe(s, 1).id).toBe(cuerpoDe(s, 0).id);
+  });
+
   it('tras una respuesta final de la API (422) el id se suelta: el siguiente intento es otra nota', async () => {
     let intentos = 0;
     const s = montar({
@@ -1059,6 +1124,7 @@ describe('Cuando la API dice que lo que se vio cambió (criterios 144 y 148)', (
       notasCredito: [
         {
           id: uuid(7101),
+          notaId: uuid(9101),
           tipo: 'DEVOLUCION',
           numero: 'BC01-00000001',
           estado: 'POR_ENVIAR',

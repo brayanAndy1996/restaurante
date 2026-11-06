@@ -14,7 +14,7 @@ import {
   type OpcionDeSegmento,
 } from '@restaurante/ui';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { AvisoPendiente } from '../../componentes/PendienteDeEnvio';
 import { montoEnSoles, montoEsCero } from '../../lib/monto';
 import { CLAVES_TIEMPO_REAL } from '../../lib/tiempo-real';
@@ -125,6 +125,14 @@ export function NotaCreditoHoja({ comprobante, base, volver, onCerrar }: Props) 
   const sesion = useSesionActiva();
   const permiso = usePermiso('EMITIR_NOTA_CREDITO');
   const ajuste = useAjusteConClave({ recordarComo: `nota-credito:${comprobante.id}` });
+
+  // Si el comprobante (cargado o releído) ya muestra la nota que este equipo mandó, esa nota salió: su `id` ya no se
+  // repite (una segunda devolución idéntica, legítima, es otra nota con otro `id` y otra clave de idempotencia).
+  const { soltarSiEs } = ajuste;
+  const notasDelComprobante = comprobante.notasCredito;
+  useEffect(() => {
+    for (const nota of notasDelComprobante ?? []) soltarSiEs(nota.notaId);
+  }, [notasDelComprobante, soltarSiEs]);
 
   const tipos = tiposDeNota(comprobante);
   const [tipoElegido, setTipoElegido] = useState<TipoNotaCredito | null>(null);
