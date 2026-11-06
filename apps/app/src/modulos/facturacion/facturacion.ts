@@ -1,11 +1,17 @@
 import {
   alertasRespuestaSchema,
   comprobanteDetalleSchema,
+  envioPseRespuestaSchema,
+  panelComprobantesSchema,
   type AlertasRespuesta,
   type ComprobanteDetalle,
   type EnvioPseRespuesta,
+  type PanelComprobantes,
+  type PanelItem,
 } from '@restaurante/contratos';
 import type { TipoAviso } from '@restaurante/ui';
+import type { ExtraDeEscritura } from '../../lib/envios';
+import { mensajeDeError } from '../../lib/errores';
 import { api } from '../../lib/api';
 import { CLAVES_TIEMPO_REAL } from '../../lib/tiempo-real';
 
@@ -39,13 +45,155 @@ export const leerAlertas = (senal?: AbortSignal) =>
     ...(senal ? { senal } : {}),
   });
 
-// --- Rutas ------------------------------------------------------------------------------------------------
+// --- El panel (criterio 135) --------------------------------------------------------------------------
 
-/** El panel de comprobantes de Caja (Supervisor y Cajero) y el de Ajustes (Administrador). */
-export const RUTA_PANEL_EN_CAJA = '/caja/comprobantes';
-export const RUTA_PANEL_EN_AJUSTES = '/administracion/comprobantes';
+export type EstadoDelFiltro = PanelItem['estado'] | 'TODOS';
+export type TipoDelFiltro = PanelItem['tipo'] | 'TODOS';
 
-export const rutaDelDetalle = (base: string, comprobanteId: string) => `${base}/${comprobanteId}`;
+/** Lo que se eligió en el panel. Vive en la dirección de la pantalla (`?estado=…&alerta=1`), así se comparte y se vuelve atrás. */
+export interface FiltrosDelPanel {
+  estado: EstadoDelFiltro;
+  tipo: TipoDelFiltro;
+  /** `AAAA-MM-DD`; vacío = los últimos 7 días que pone el servidor. */
+  desde: string;
+  hasta: string;
+  /** Número del comprobante o documento del cliente. */
+  texto: string;
+  alerta: boolean;
+  /** Solo el Administrador: `''` = todas sus sucursales. */
+  sucursalId: string;
+}
+
+export const FILTROS_VACIOS: FiltrosDelPanel = {
+  estado: 'TODOS',
+  tipo: 'TODOS',
+  desde: '',
+  hasta: '',
+  texto: '',
+  alerta: false,
+  sucursalId: '',
+};
+
+/** Máximo de días entre `desde` y `hasta` que acepta la API (criterio 135). */
+export const DIAS_MAXIMOS_DEL_PANEL = 93;
+
+const ESTADOS = ['POR_ENVIAR', 'ENVIADO', 'ACEPTADO', 'RECHAZADO', 'ANULADO'] as const;
+const TIPOS = ['BOLETA', 'FACTURA', 'NOTA_CREDITO_BOLETA', 'NOTA_CREDITO_FACTURA'] as const;
+const FECHA = /^\d{4}-\d{2}-\d{2}$/;
+
+/** Los filtros que dice la dirección; lo que no se entiende se ignora. */
+export function filtrosDeLaDireccion(parametros: URLSearchParams): FiltrosDelPanel {
+  const estado = parametros.get('estado');
+  const tipo = parametros.get('tipo');
+  const fecha = (nombre: string) => {
+    const valor = parametros.get(nombre) ?? '';
+    return FECHA.test(valor) ? valor : '';
+  };
+  return {
+    estado: ESTADOS.find((e) => e === estado) ?? 'TODOS',
+    tipo: TIPOS.find((t) => t === tipo) ?? 'TODOS',
+    desde: fecha('desde'),
+    hasta: fecha('hasta'),
+    texto: (parametros.get('texto') ?? '').slice(0, 50),
+    alerta: parametros.get('alerta') === '1',
+    sucursalId: parametros.get('sucursal') ?? '',
+  };
+}
+
+/** Lo contrario: solo lo que se apartó de lo habitual. */
+export function direccionDeFiltros(filtros: FiltrosDelPanel): URLSearchParams {
+  const p = new URLSearchParams();
+  if (filtros.estado !== 'TODOS') p.set('estado', filtros.estado);
+  if (filtros.tipo !== 'TODOS') p.set('tipo', filtros.tipo);
+  if (filtros.desde) p.set('desde', filtros.desde);
+  if (filtros.hasta) p.set('hasta', filtros.hasta);
+  if (filtros.texto.trim()) p.set('texto', filtros.texto.trim());
+  if (filtros.alerta) p.set('alerta', '1');
+  if (filtros.sucursalId) p.set('sucursal', filtros.sucursalId);
+  return p;
+}
+
+/** Cuántos filtros además del estado están puestos (para decirlo con el panel de filtros cerrado). */
+export function cuantosFiltrosHay(filtros: FiltrosDelPanel): number {
+  return [
+    filtros.tipo !== 'TODOS',
+    filtros.desde !== '' || filtros.hasta !== '',
+    filtros.alerta,
+    filtros.sucursalId !== '',
+  ].filter(Boolean).length;
+}
+
+const dia = (fecha: string) => {
+  const [a = 0, m = 0, d = 0] = fecha.split('-').map(Number);
+  return Date.UTC(a, m - 1, d) / 86_400_000;
+};
+
+/** El problema de las fechas elegidas, dicho para quien las escribió, o `null` si valen. */
+export function errorDeFechas(filtros: Pick<FiltrosDelPanel, 'desde' | 'hasta'>): string | null {
+  const { desde, hasta } = filtros;
+  if (desde && hasta && dia(desde) > dia(hasta))
+    return 'La fecha «Desde» no puede ser posterior a «Hasta».';
+  if (desde && hasta && dia(hasta) - dia(desde) > DIAS_MAXIMOS_DEL_PANEL)
+    return `Elige un rango de hasta ${DIAS_MAXIMOS_DEL_PANEL} días.`;
+  return null;
+}
+
+/** La consulta de `GET /facturacion/comprobantes` (criterio 135). El estado va aparte: los conteos no lo usan. */
+function consultaDelPanel(filtros: FiltrosDelPanel, cursor?: string): string {
+  const p = new URLSearchParams();
+  if (filtros.estado !== 'TODOS') p.set('estado', filtros.estado);
+  if (filtros.tipo !== 'TODOS') p.set('tipo', filtros.tipo);
+  if (filtros.desde) p.set('desde', filtros.desde);
+  if (filtros.hasta) p.set('hasta', filtros.hasta);
+  if (filtros.texto.trim()) p.set('texto', filtros.texto.trim());
+  if (filtros.alerta) p.set('alerta', 'true');
+  if (filtros.sucursalId) p.set('sucursalId', filtros.sucursalId);
+  if (cursor) p.set('cursor', cursor);
+  const texto = p.toString();
+  return texto ? `?${texto}` : '';
+}
+
+export const clavePanel = (sucursalId: string, filtros: FiltrosDelPanel) =>
+  [...CLAVES_TIEMPO_REAL.facturacionPanel, sucursalId, filtros] as const;
+
+/** Una página del panel: 50 comprobantes del más nuevo al más antiguo, con los conteos de los demás estados. */
+export const listarPanel = (
+  filtros: FiltrosDelPanel,
+  cursor: string | undefined,
+  senal?: AbortSignal,
+) =>
+  api.get<PanelComprobantes>(`/facturacion/comprobantes${consultaDelPanel(filtros, cursor)}`, {
+    esquema: panelComprobantesSchema,
+    ...(senal ? { senal } : {}),
+  });
+
+// --- Reintentar (criterio 132) --------------------------------------------------------------------------
+
+/** Pide que el envío se intente ya; con la clave de idempotencia de `enviarSinPerder`. */
+export const reintentarEnvio = (comprobanteId: string, extra?: ExtraDeEscritura) =>
+  api.post<EnvioPseRespuesta>(`/facturacion/comprobantes/${comprobanteId}/reintento`, undefined, {
+    esquema: envioPseRespuestaSchema,
+    ...extra,
+  });
+
+/** El envío puede reintentarse: el comprobante sigue sin respuesta final y el envío no terminó (criterio 132). */
+export const sePuedeReintentar = (
+  comprobante: Pick<ComprobanteDetalle, 'estado' | 'envio'>,
+): boolean =>
+  (comprobante.estado === 'POR_ENVIAR' || comprobante.estado === 'ENVIADO') &&
+  comprobante.envio !== null &&
+  comprobante.envio.estado !== 'TERMINADO';
+
+/** Lo que dice la pantalla cuando el reintento no se pudo pedir. */
+export function textoDeFalloDeReintento(error: unknown): string {
+  return mensajeDeError(error, {
+    ENVIO_TERMINADO: 'Este comprobante ya tiene su respuesta. Actualizamos su estado.',
+    PROHIBIDO: 'No puedes reintentar este comprobante.',
+    NO_ENCONTRADO: 'Este comprobante ya no está disponible.',
+  });
+}
+
+export { RUTA_PANEL_EN_AJUSTES, RUTA_PANEL_EN_CAJA, rutaDelDetalle } from './rutas';
 
 // --- Palabras ---------------------------------------------------------------------------------------------
 
@@ -138,3 +286,48 @@ export function describirEstado(entrada: {
     }
   }
 }
+
+// --- Nombres ----------------------------------------------------------------------------------------------
+
+export const NOMBRE_DE_TIPO_DOCUMENTO: Record<PanelItem['tipo'], string> = {
+  BOLETA: 'Boleta',
+  FACTURA: 'Factura',
+  NOTA_CREDITO_BOLETA: 'Nota de crédito de boleta',
+  NOTA_CREDITO_FACTURA: 'Nota de crédito de factura',
+};
+
+export const NOMBRE_DE_ESTADO: Record<PanelItem['estado'], string> = {
+  POR_ENVIAR: 'Por enviar',
+  ENVIADO: 'Enviado',
+  ACEPTADO: 'Aceptado',
+  RECHAZADO: 'Rechazado',
+  ANULADO: 'Anulado',
+};
+
+/** Qué es lo que alerta de un comprobante (criterio 133). */
+export const NOMBRE_DE_ALERTA: Record<NonNullable<PanelItem['alerta']>, string> = {
+  RECHAZADO: 'Falta emitir otro',
+  DEMORADO: 'Demorado',
+  DETENIDO: 'Envío detenido',
+  SIN_CONFIGURACION: 'Sin activar',
+};
+
+export const NOMBRE_DE_ESTADO_DE_ENVIO: Record<EnvioPseRespuesta['estado'], string> = {
+  PENDIENTE: 'Por enviar',
+  ESPERANDO_RESPUESTA: 'Esperando respuesta de SUNAT',
+  TERMINADO: 'Terminado',
+  DETENIDO: 'Detenido: pasó el plazo sin respuesta',
+};
+
+/** Qué pasó en un intento, en palabras. */
+export const NOMBRE_DE_RESULTADO: Record<
+  ComprobanteDetalle['intentos'][number]['resultado'],
+  string
+> = {
+  ACEPTADO: 'Aceptado',
+  RECHAZADO: 'Rechazado',
+  PENDIENTE: 'SUNAT aún no responde',
+  ERROR_TRANSPORTE: 'No hubo conexión',
+  ERROR_CONFIGURACION: 'Facturación sin activar',
+  NO_EXISTE: 'No se encontró el documento',
+};

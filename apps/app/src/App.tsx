@@ -10,7 +10,13 @@ import { IngresoPagina } from './modulos/acceso/IngresoPagina';
 import { InicioPagina } from './modulos/acceso/InicioPagina';
 import { PinPagina } from './modulos/acceso/PinPagina';
 import { RecordarEquipoAutomatico } from './modulos/acceso/RecordarEquipo';
-import { veElSalon, veLaCaja, veLaCocina, veLaCuenta } from './modulos/acceso/navegacion';
+import {
+  veElSalon,
+  veLaCaja,
+  veLaCocina,
+  veLaCuenta,
+  veLosComprobantes,
+} from './modulos/acceso/navegacion';
 import { usePermiso } from './modulos/acceso/permisos';
 import { useSesion } from './modulos/acceso/sesion';
 import { PlataformaIngresoPagina } from './modulos/plataforma/PlataformaIngresoPagina';
@@ -130,6 +136,27 @@ const CobroPagina = lazy(() =>
 // La venta de mostrador (006): el comandero y el cobro en una pantalla; otro bloque que solo se baja al abrirla.
 const MostradorPagina = lazy(() =>
   import('./modulos/caja/MostradorPagina').then((m) => ({ default: m.MostradorPagina })),
+);
+// Los comprobantes ante SUNAT (006, 6b): el panel y el detalle, cada uno su bloque, para Caja y para Ajustes.
+const ComprobantesEnCajaPagina = lazy(() =>
+  import('./modulos/facturacion/ComprobantesPagina').then((m) => ({
+    default: m.ComprobantesEnCajaPagina,
+  })),
+);
+const ComprobantesEnAjustesPagina = lazy(() =>
+  import('./modulos/facturacion/ComprobantesPagina').then((m) => ({
+    default: m.ComprobantesEnAjustesPagina,
+  })),
+);
+const ComprobanteDetalleEnCajaPagina = lazy(() =>
+  import('./modulos/facturacion/ComprobanteDetallePagina').then((m) => ({
+    default: m.ComprobanteDetalleEnCajaPagina,
+  })),
+);
+const ComprobanteDetalleEnAjustesPagina = lazy(() =>
+  import('./modulos/facturacion/ComprobanteDetallePagina').then((m) => ({
+    default: m.ComprobanteDetalleEnAjustesPagina,
+  })),
 );
 const CocinaPagina = lazy(() =>
   import('./modulos/cocina/CocinaPagina').then((m) => ({ default: m.CocinaPagina })),
@@ -294,6 +321,16 @@ function RutaDeCuenta() {
   return <Outlet />;
 }
 
+/**
+ * Los comprobantes ante SUNAT los ve quien tiene `COBRAR` con su rol en la sucursal activa y el módulo de Facturación
+ * en su plan (criterio 174 y pregunta 40). La guarda solo ordena la pantalla: la API decide el alcance de cada rol.
+ */
+function RutaDeComprobantes() {
+  const { sesion } = useSesion();
+  if (!veLosComprobantes(sesion)) return <Navigate to="/" replace />;
+  return <Outlet />;
+}
+
 function Cargando() {
   return <PantallaDeCarga />;
 }
@@ -344,6 +381,10 @@ export function App() {
                 <Route path="/caja/cuentas/:id/cobrar" element={<CobroPagina />} />
                 <Route path="/caja/mostrador" element={<MostradorPagina />} />
               </Route>
+              <Route element={<RutaDeComprobantes />}>
+                <Route path="/caja/comprobantes" element={<ComprobantesEnCajaPagina />} />
+                <Route path="/caja/comprobantes/:id" element={<ComprobanteDetalleEnCajaPagina />} />
+              </Route>
               <Route element={<RutaDeCuenta />}>
                 <Route path="/caja/cuentas/:id" element={<CuentaPagina />} />
               </Route>
@@ -375,6 +416,16 @@ export function App() {
                 <Route path="/administracion/carta-web" element={<CartaWebPagina />} />
                 <Route path="/administracion/cajas" element={<CajasPagina />} />
                 <Route path="/administracion/emisores" element={<EmisoresPagina />} />
+                <Route element={<RutaDeComprobantes />}>
+                  <Route
+                    path="/administracion/comprobantes"
+                    element={<ComprobantesEnAjustesPagina />}
+                  />
+                  <Route
+                    path="/administracion/comprobantes/:id"
+                    element={<ComprobanteDetalleEnAjustesPagina />}
+                  />
+                </Route>
               </Route>
             </Route>
           </Route>

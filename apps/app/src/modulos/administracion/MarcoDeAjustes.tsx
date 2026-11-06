@@ -2,9 +2,18 @@ import { Segmentos, type OpcionDeSegmento } from '@restaurante/ui';
 import type { ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Pagina } from '../../componentes/Pagina';
+import { tieneFacturacion } from '../acceso/navegacion';
+import { useSesion } from '../acceso/sesion';
 
 export type SeccionDeAjustes =
-  'usuarios' | 'acceso' | 'mesas' | 'impresion' | 'carta-web' | 'cajas' | 'emisores';
+  | 'usuarios'
+  | 'acceso'
+  | 'mesas'
+  | 'impresion'
+  | 'carta-web'
+  | 'cajas'
+  | 'emisores'
+  | 'comprobantes';
 
 const SECCIONES: readonly OpcionDeSegmento<SeccionDeAjustes>[] = [
   { valor: 'usuarios', etiqueta: 'Usuarios' },
@@ -14,6 +23,7 @@ const SECCIONES: readonly OpcionDeSegmento<SeccionDeAjustes>[] = [
   { valor: 'carta-web', etiqueta: 'Carta web' },
   { valor: 'cajas', etiqueta: 'Cajas' },
   { valor: 'emisores', etiqueta: 'Emisores' },
+  { valor: 'comprobantes', etiqueta: 'Comprobantes' },
 ];
 
 export const RUTA_DE_SECCION: Record<SeccionDeAjustes, string> = {
@@ -24,6 +34,7 @@ export const RUTA_DE_SECCION: Record<SeccionDeAjustes, string> = {
   'carta-web': '/administracion/carta-web',
   cajas: '/administracion/cajas',
   emisores: '/administracion/emisores',
+  comprobantes: '/administracion/comprobantes',
 };
 
 interface PropsMarco {
@@ -36,17 +47,20 @@ interface PropsMarco {
 
 /**
  * Ajustes del Administrador (criterio 87 de 004): una sola puerta para Usuarios, Acceso, Mapa de
- * mesas, Impresión (3b), Carta web (005), Cajas y Emisores (006). Es una pantalla con el cambio de sección arriba, como la Carta, para que
+ * mesas, Impresión (3b), Carta web (005), Cajas, Emisores y Comprobantes (006). Es una pantalla con el cambio de sección arriba, como la Carta, para que
  * "Ajustes" sea un destino de la navegación y no tres.
  */
 export function MarcoDeAjustes({ actual, pie, ancho = 'estrecho', children }: PropsMarco) {
   const navegar = useNavigate();
+  // «Comprobantes» (006, 6b) solo está si el plan de la sucursal incluye Facturación.
+  const { sesion } = useSesion();
+  const secciones = SECCIONES.filter((s) => s.valor !== 'comprobantes' || tieneFacturacion(sesion));
   return (
     <Pagina titulo="Ajustes" ancho={ancho} {...(pie ? { pie } : {})}>
       <div className="ajustes__secciones">
         <Segmentos
           etiqueta="Secciones de Ajustes"
-          opciones={SECCIONES}
+          opciones={secciones}
           valor={actual}
           onCambio={(valor) => navegar(RUTA_DE_SECCION[valor], { replace: true })}
         />

@@ -30,6 +30,8 @@ const SONDEO_SIN_TIEMPO_REAL_MS = 8_000;
 interface Props {
   /** Lo que respondió el cobro, la venta de mostrador o la nota de crédito: con eso se pinta mientras llega lo vivo. */
   comprobante: Pick<ComprobanteRespuesta, 'id' | 'estado' | 'simulado' | 'sunat' | 'tipo'>;
+  /** En el detalle del comprobante las acciones («Emitir otro») viven en la propia pantalla. */
+  sinAcciones?: boolean;
 }
 
 /**
@@ -39,7 +41,7 @@ interface Props {
  * Con un rechazo ofrece «Emitir otro» a quien puede cobrar (pregunta 40). Un comprobante simulado lleva su marca.
  * Sin el módulo de Facturación en el plan no hay envío a SUNAT y no se muestra nada.
  */
-export function EstadoDelComprobante({ comprobante }: Props) {
+export function EstadoDelComprobante({ comprobante, sinAcciones }: Props) {
   const sesion = useSesionActiva();
   const habilitado = tieneFacturacion(sesion);
   const puedeCobrar = usePermiso('COBRAR') !== 'prohibido';
@@ -82,7 +84,7 @@ export function EstadoDelComprobante({ comprobante }: Props) {
           {descripcion.detalle ? (
             <p className="estado-sunat__texto">{descripcion.detalle}</p>
           ) : null}
-          {rechazado ? (
+          {rechazado && !sinAcciones ? (
             <p className="estado-sunat__texto">
               {puedeCobrar
                 ? 'Corrige los datos y emite otro comprobante. Si no sabes qué corregir, avísale a tu supervisor.'
@@ -91,7 +93,7 @@ export function EstadoDelComprobante({ comprobante }: Props) {
           ) : null}
           {marca}
         </Aviso>
-        {rechazado && puedeCobrar ? (
+        {rechazado && puedeCobrar && !sinAcciones ? (
           <Link
             to={`${rutaDelDetalle(RUTA_PANEL_EN_CAJA, comprobante.id)}?emitir=1`}
             className={claseBoton('principal', true)}

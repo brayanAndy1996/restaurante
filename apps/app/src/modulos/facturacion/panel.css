@@ -1,0 +1,163 @@
+/* El panel de comprobantes (006, 6b, criterio 174): se carga con la pantalla. */
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espacio-lg);
+  min-width: 0;
+}
+.panel__filtros {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espacio-md);
+  padding-block: var(--espacio-md);
+}
+.panel__fechas {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--espacio-md);
+}
+.panel__quitar {
+  display: flex;
+}
+.panel__derecha {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: var(--espacio-xs);
+}
+.panel__derecha > b {
+  font-variant-numeric: tabular-nums;
+  color: var(--color-tinta);
+}
+.panel__etiquetas {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--espacio-xs);
+}
+.panel__sub {
+  display: block;
+  font-size: 0.8125rem;
+  line-height: 1.125rem;
+  color: var(--color-tinta-suave);
+}
+.panel__cliente {
+  display: block;
+  min-width: 7rem;
+  max-width: 15rem;
+  overflow-wrap: break-word;
+}
+.panel__titulo {
+  margin: var(--espacio-sm) 0 0;
+  font-size: 1.25rem;
+  line-height: 1.625rem;
+}
+.panel__enlace {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--alto-control);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-accion);
+}
+@media (max-width: 380px) {
+  .panel__fechas {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* El detalle de un comprobante. */
+.detalle {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espacio-xl);
+  min-width: 0;
+}
+.detalle__bloque {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espacio-md);
+  padding: var(--espacio-md) var(--espacio-lg);
+  background: var(--color-baldosa);
+  border: 1px solid var(--color-junta);
+  border-radius: var(--radio-baldosa);
+}
+.detalle__bloque > h2 {
+  margin: 0;
+  font-size: 1.125rem;
+  line-height: 1.5rem;
+}
+.detalle__subtitulo {
+  margin: var(--espacio-sm) 0 0;
+  font-size: 1rem;
+  line-height: 1.5rem;
+}
+.detalle__marcas {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--espacio-sm);
+}
+.detalle__datos {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+}
+.detalle__dato {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--espacio-md);
+  padding-block: var(--espacio-sm);
+  border-top: 1px solid var(--color-junta);
+}
+.detalle__dato:first-child {
+  border-top: 0;
+}
+.detalle__dato dt {
+  flex: none;
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+  color: var(--color-tinta-suave);
+}
+.detalle__dato dd {
+  margin: 0;
+  text-align: right;
+  overflow-wrap: anywhere;
+  font-variant-numeric: tabular-nums;
+}
+.detalle__observaciones {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espacio-xs);
+}
+.detalle__observaciones ul {
+  margin: 0;
+  padding-left: var(--espacio-lg);
+}
+.detalle__intentos {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.detalle__intento {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-block: var(--espacio-sm);
+  border-top: 1px solid var(--color-junta);
+  overflow-wrap: anywhere;
+}
+.detalle__intento-cabecera {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: var(--espacio-xs) var(--espacio-md);
+  font-variant-numeric: tabular-nums;
+}
+
+/* La tabla de tableta: celdas más angostas para que la fila quepa sin desplazarse hacia los lados. */
+.panel .ui-tabla th,
+.panel .ui-tabla td {
+  padding-inline: var(--espacio-sm);
+}

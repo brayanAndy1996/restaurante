@@ -52,9 +52,7 @@ export function AvisosDeFacturacion() {
               </Link>
             )
           }
-        >
-          Revísalos para que lleguen a SUNAT.
-        </BannerDeEstado>
+        />
       ) : null}
       {alertas.sinConfiguracion > 0 ? (
         <BannerDeEstado tono="aji" icono={IconoAlerta} titulo="Facturación electrónica sin activar">
