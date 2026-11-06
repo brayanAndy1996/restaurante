@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ColaEnMemoria, ColaPgBoss } from '../../src/nucleo/colas';
+import { ColaEnMemoria } from '../../src/nucleo/colas';
 
 // Pruebas del desarrollador (no protegidas) de la cola en memoria (historia 006, criterios 124 y 137).
 
@@ -83,12 +83,5 @@ describe('ColaEnMemoria', () => {
     expect(llamadas).toBe(1);
     await cola.detener();
     expect(cola.procesador()).toBeNull();
-  });
-});
-
-describe('ColaPgBoss (fase A)', () => {
-  it('todavía no está implementada', async () => {
-    const cola = new ColaPgBoss('postgres://x');
-    await expect(cola.encolar(A)).rejects.toThrow('No implementado');
   });
 });

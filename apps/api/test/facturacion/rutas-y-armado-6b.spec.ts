@@ -146,9 +146,13 @@ describe('crearWorker (fase A)', () => {
     try {
       expect(worker.contexto.get(CONECTOR_PSE, { strict: false })).toBe(pse);
       expect(worker.contexto.get(COLA_PSE, { strict: false })).toBe(cola);
+      // Un trabajo con un comprobante que no existe termina sin hacer nada (T31).
       await expect(
-        worker.procesador.procesar('11111111-1111-1111-1111-111111111111', 'x'),
-      ).rejects.toThrow('No implementado');
+        worker.procesador.procesar(
+          '11111111-1111-1111-1111-111111111111',
+          '22222222-2222-2222-2222-222222222222',
+        ),
+      ).resolves.toBeUndefined();
       await expect(worker.barrido.barrerAhora()).rejects.toThrow('No implementado');
       await expect(worker.iniciar()).rejects.toThrow('No implementado');
     } finally {

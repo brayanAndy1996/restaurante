@@ -1,5 +1,32 @@
-import { Injectable } from '@nestjs/common';
-import { noImplementado } from '../../../nucleo/errores/no-implementado';
+import { Inject, Injectable, Logger } from '@nestjs/common';
+import { uuidSchema } from '@restaurante/contratos';
+import type { AlertaComprobante, EstadoComprobante, EstadoEnvioPse } from '@restaurante/dominio';
+import { QueryTypes, type Sequelize } from 'sequelize';
+import { randomUUID } from 'node:crypto';
+import { ENTORNO, type Entorno } from '../../../config/entorno';
+import { ALMACEN_COMPROBANTES, type AlmacenComprobantes } from '../../../nucleo/archivos';
+import { CONEXION_API } from '../../../nucleo/base-de-datos';
+import { COLA_PSE, type ColaPse } from '../../../nucleo/colas';
+import { ContextoEmpresa } from '../../../nucleo/contexto-empresa';
+import { PUBLICADOR_EVENTOS, type PublicadorEventos } from '../../../nucleo/eventos';
+import { RELOJ, type Reloj } from '../../../nucleo/reloj';
+import { leerComprobante } from '../lectura-comprobante';
+import { armarDocumentoPse } from '../pse/documento-pse';
+import type {
+  ConectorDeEmisor,
+  DocumentoPse,
+  IdDocumentoPse,
+  ResultadoConsultaPse,
+  ResultadoPse,
+} from '../pse/conector-pse';
+import { RegistroDeConectores } from '../pse/registro-de-conectores';
+import {
+  aplicarResultado,
+  esAceptado,
+  guardarArchivosDeComprobante,
+  type ClavesDeArchivos,
+  type LlamadaHecha,
+} from './resultado-pse';
 
 /**
  * Nombre del actor de las transacciones del worker de envíos (historia 006, criterios 125 y 163); lo registran las
@@ -7,23 +34,366 @@ import { noImplementado } from '../../../nucleo/errores/no-implementado';
  */
 export const ACTOR_WORKER_ENVIO_PSE = 'worker:envio-pse';
 
+/** Cuánto dura el arriendo de un envío (criterio 125): mayor que dos llamadas al PSE con su tiempo máximo. */
+export const ARRIENDO_ENVIO_MS = 2 * 60_000;
+
+/** Lo que el paso 1 deja listo para el paso 2, fuera de toda transacción. */
+interface EnvioTomado {
+  envioId: string;
+  sucursalId: string;
+  intentoEnCurso: string;
+  /** Intentos hechos contando este (1 = el primero: emitir; después: consultar antes de emitir). */
+  intentos: number;
+  plazoHasta: Date;
+  estadoComprobante: EstadoComprobante;
+  emitidoEn: Date;
+  alertaPublicada: AlertaComprobante | null;
+  documento: DocumentoPse;
+  conector: ConectorDeEmisor;
+}
+
+interface FilaDeEnvio {
+  envio_id: string;
+  estado: EstadoEnvioPse;
+  intentos: number;
+  proximo_intento_en: Date | null;
+  plazo_hasta: Date;
+  en_curso_hasta: Date | null;
+  intento_en_curso: string | null;
+  alerta: AlertaComprobante | null;
+  emisor_id: string;
+  sucursal_id: string;
+  estado_comprobante: EstadoComprobante;
+  emitido_en: Date;
+}
+
 /**
  * El procesador de un envío al PSE (historia 006, entrega 6b, criterios 125 a 131; ruta crítica P7), en tres pasos:
- * tomar (transacción corta con `FOR UPDATE SKIP LOCKED` y arriendo), llamar (sin transacción: `emitir`, o `consultar`
- * y solo con `NO_EXISTE` `emitir`) y guardar (transacción corta, solo si el arriendo sigue siendo suyo).
  *
- * Fase A (T29): solo la firma; lanza `Error('No implementado')` hasta T31.
+ * 1. **Tomar** (transacción corta): `FOR UPDATE SKIP LOCKED` sobre `envio_pse`; si no hay fila, está `TERMINADO` o
+ *    `DETENIDO`, aún no toca o tiene un arriendo vigente, termina sin hacer nada. Si no, fija el arriendo (2 minutos) y un
+ *    `intento_en_curso`, suma un intento y arma el documento y el conector del emisor.
+ * 2. **Llamar** (sin transacción): el primer intento emite; los demás consultan primero y solo con `NO_EXISTE` emiten
+ *    (criterio 128). Un `ACEPTADO` con XML o CDR los guarda en el almacén privado antes del paso 3.
+ * 3. **Guardar** (transacción corta): vuelve a tomar la fila y solo si el `intento_en_curso` sigue siendo el suyo aplica el
+ *    resultado (`resultado-pse.ts`); si el arriendo venció y otro worker lo tomó, descarta su resultado (la llamada fue
+ *    idempotente por identificador). Los eventos y el siguiente encolado salen con `alConfirmar`.
+ *
+ * Ninguna llamada al PSE ocurre dentro de una transacción. Cada transacción fija la empresa del trabajo y actúa como
+ * `worker:envio-pse`. Las esperas, el arriendo y los plazos usan el reloj de la API.
  */
 @Injectable()
 export class ProcesadorEnviosPse {
+  private readonly logger = new Logger(ProcesadorEnviosPse.name);
+
+  constructor(
+    @Inject(CONEXION_API) private readonly conexion: Sequelize,
+    @Inject(ContextoEmpresa) private readonly contexto: ContextoEmpresa,
+    @Inject(RELOJ) private readonly reloj: Reloj,
+    @Inject(ENTORNO) private readonly entorno: Entorno,
+    @Inject(RegistroDeConectores) private readonly conectores: RegistroDeConectores,
+    @Inject(ALMACEN_COMPROBANTES) private readonly almacen: AlmacenComprobantes,
+    @Inject(COLA_PSE) private readonly cola: ColaPse,
+    @Inject(PUBLICADOR_EVENTOS) private readonly publicador: PublicadorEventos,
+  ) {}
+
   /**
    * Procesa el envío del comprobante con el contexto de `empresaId` (`ContextoEmpresa.ejecutar` en cada transacción, con
    * el actor `worker:envio-pse`). Un envío que no existe, de otra empresa, `TERMINADO`, `DETENIDO`, que no toca todavía o
    * con un arriendo vigente termina sin hacer nada. No lanza por un resultado del PSE.
    */
-  procesar(empresaId: string, comprobanteId: string): Promise<void> {
-    void empresaId;
-    void comprobanteId;
-    return Promise.reject(noImplementado());
+  async procesar(empresaId: string, comprobanteId: string): Promise<void> {
+    if (!uuidSchema.safeParse(empresaId).success || !uuidSchema.safeParse(comprobanteId).success) {
+      return;
+    }
+    const tomado = await this.contexto.ejecutar(empresaId, () => this.tomar(comprobanteId), {
+      actor: { sistema: ACTOR_WORKER_ENVIO_PSE },
+    });
+    if (tomado === null) return;
+
+    const { llamadas, resultado, archivos } = await this.llamar(empresaId, comprobanteId, tomado);
+
+    await this.contexto.ejecutar(
+      empresaId,
+      () => this.guardar(empresaId, comprobanteId, tomado, llamadas, resultado, archivos),
+      { actor: { sistema: ACTOR_WORKER_ENVIO_PSE } },
+    );
+  }
+
+  // ----------------------------------------------------------------------------------------------
+  // Paso 1 · tomar
+  // ----------------------------------------------------------------------------------------------
+
+  private async tomar(comprobanteId: string): Promise<EnvioTomado | null> {
+    const filas = await this.conexion.query<FilaDeEnvio>(
+      `SELECT e.id AS envio_id, e.estado, e.intentos, e.proximo_intento_en, e.plazo_hasta, e.en_curso_hasta,
+              e.intento_en_curso, e.alerta, c.emisor_id, c.sucursal_id, c.estado AS estado_comprobante, c.emitido_en
+         FROM envio_pse e
+         JOIN comprobante c ON c.id = e.comprobante_id AND c.empresa_id = e.empresa_id
+        WHERE e.comprobante_id = $1
+          FOR UPDATE OF e SKIP LOCKED`,
+      { bind: [comprobanteId], type: QueryTypes.SELECT },
+    );
+    const fila = filas[0];
+    if (fila === undefined) return null;
+    const ahora = this.reloj.ahora();
+    if (fila.estado === 'TERMINADO' || fila.estado === 'DETENIDO') return null;
+    if (fila.proximo_intento_en === null || fila.proximo_intento_en.getTime() > ahora.getTime()) {
+      return null;
+    }
+    if (fila.en_curso_hasta !== null && fila.en_curso_hasta.getTime() > ahora.getTime()) {
+      return null;
+    }
+    if (fila.estado_comprobante !== 'POR_ENVIAR' && fila.estado_comprobante !== 'ENVIADO') {
+      return null;
+    }
+
+    const comprobante = await leerComprobante(this.conexion, comprobanteId);
+    if (comprobante === null) return null;
+    const intentoEnCurso = randomUUID();
+    await this.conexion.query(
+      `UPDATE envio_pse
+          SET en_curso_hasta = $2, intento_en_curso = $3, intentos = intentos + 1, actualizado_en = $4
+        WHERE id = $1`,
+      {
+        bind: [fila.envio_id, new Date(ahora.getTime() + ARRIENDO_ENVIO_MS), intentoEnCurso, ahora],
+        type: QueryTypes.UPDATE,
+      },
+    );
+    return {
+      envioId: fila.envio_id,
+      sucursalId: fila.sucursal_id,
+      intentoEnCurso,
+      intentos: fila.intentos + 1,
+      plazoHasta: fila.plazo_hasta,
+      estadoComprobante: fila.estado_comprobante,
+      emitidoEn: fila.emitido_en,
+      alertaPublicada: fila.alerta,
+      documento: armarDocumentoPse(comprobante),
+      conector: await this.conectores.para(fila.emisor_id),
+    };
+  }
+
+  // ----------------------------------------------------------------------------------------------
+  // Paso 2 · llamar (sin transacción)
+  // ----------------------------------------------------------------------------------------------
+
+  private async llamar(
+    empresaId: string,
+    comprobanteId: string,
+    tomado: EnvioTomado,
+  ): Promise<{ llamadas: LlamadaHecha[]; resultado: ResultadoPse; archivos: ClavesDeArchivos }> {
+    const llamadas: LlamadaHecha[] = [];
+    const sinArchivos: ClavesDeArchivos = { xmlClave: null, cdrClave: null };
+    const { conector, credencial } = tomado.conector;
+    const primerIntento = tomado.intentos === 1;
+
+    // Sin conector (el emisor no tiene configuración o su credencial no se pudo abrir): no se llama a nadie.
+    if (conector === null) {
+      const ahora = this.reloj.ahora();
+      const resultado: ResultadoPse = {
+        tipo: 'ERROR_CONFIGURACION',
+        detalle: tomado.conector.detalle ?? 'La facturación electrónica no está activada',
+      };
+      llamadas.push({
+        operacion: primerIntento ? 'EMITIR' : 'CONSULTAR',
+        iniciadoEn: ahora,
+        terminadoEn: ahora,
+        resultado,
+      });
+      return { llamadas, resultado, archivos: sinArchivos };
+    }
+
+    const id: IdDocumentoPse = tomado.documento.id;
+    let resultado: ResultadoPse | null = null;
+    if (!primerIntento) {
+      const consulta = await this.conTiempoMaximo(() => conector.consultar(id, credencial));
+      llamadas.push({ operacion: 'CONSULTAR', ...consulta });
+      if (consulta.resultado.tipo !== 'NO_EXISTE') resultado = consulta.resultado;
+    }
+    if (resultado === null) {
+      const emision = await this.conTiempoMaximo(() =>
+        conector.emitir(tomado.documento, credencial),
+      );
+      llamadas.push({ operacion: 'EMITIR', ...emision });
+      resultado = emision.resultado as ResultadoPse;
+    }
+
+    if (!esAceptado(resultado)) return { llamadas, resultado, archivos: sinArchivos };
+    try {
+      const archivos = await guardarArchivosDeComprobante(
+        this.almacen,
+        empresaId,
+        comprobanteId,
+        resultado,
+      );
+      return { llamadas, resultado, archivos };
+    } catch (error) {
+      // El PSE aceptó pero no se pudieron guardar los archivos: el siguiente intento consulta y los vuelve a guardar.
+      this.logger.warn(
+        JSON.stringify({
+          evento: 'pse.archivos_no_guardados',
+          empresaId,
+          comprobanteId,
+          error: error instanceof Error ? error.name : 'error desconocido',
+        }),
+      );
+      return {
+        llamadas,
+        resultado: {
+          tipo: 'ERROR_TRANSPORTE',
+          detalle: 'No se pudieron guardar los archivos del comprobante',
+        },
+        archivos: sinArchivos,
+      };
+    }
+  }
+
+  /**
+   * Una llamada al conector con su tiempo máximo (`PSE_TIMEOUT_MS`). Nunca lanza: una excepción o el tiempo agotado son
+   * `ERROR_TRANSPORTE` (criterio 120); el detalle no lleva datos del documento ni la credencial.
+   */
+  private async conTiempoMaximo(
+    llamada: () => Promise<ResultadoConsultaPse>,
+  ): Promise<{ iniciadoEn: Date; terminadoEn: Date; resultado: ResultadoConsultaPse }> {
+    const iniciadoEn = this.reloj.ahora();
+    let temporizador: NodeJS.Timeout | undefined;
+    const agotado = new Promise<ResultadoConsultaPse>((resolver) => {
+      temporizador = setTimeout(
+        () =>
+          resolver({
+            tipo: 'ERROR_TRANSPORTE',
+            detalle: `Tiempo agotado esperando al PSE (${this.entorno.PSE_TIMEOUT_MS} ms)`,
+          }),
+        this.entorno.PSE_TIMEOUT_MS,
+      );
+    });
+    let resultado: ResultadoConsultaPse;
+    try {
+      const respuesta = llamada().catch((error: unknown): ResultadoConsultaPse => ({
+        tipo: 'ERROR_TRANSPORTE',
+        detalle: `Falló la llamada al PSE (${error instanceof Error ? error.name : 'error'})`,
+      }));
+      resultado = await Promise.race([respuesta, agotado]);
+    } catch (error) {
+      resultado = {
+        tipo: 'ERROR_TRANSPORTE',
+        detalle: `Falló la llamada al PSE (${error instanceof Error ? error.name : 'error'})`,
+      };
+    } finally {
+      clearTimeout(temporizador);
+    }
+    return { iniciadoEn, terminadoEn: this.reloj.ahora(), resultado };
+  }
+
+  // ----------------------------------------------------------------------------------------------
+  // Paso 3 · guardar
+  // ----------------------------------------------------------------------------------------------
+
+  private async guardar(
+    empresaId: string,
+    comprobanteId: string,
+    tomado: EnvioTomado,
+    llamadas: LlamadaHecha[],
+    resultado: ResultadoPse,
+    archivos: ClavesDeArchivos,
+  ): Promise<void> {
+    const filas = await this.conexion.query<{
+      intento_en_curso: string | null;
+      alerta: AlertaComprobante | null;
+      estado_comprobante: EstadoComprobante;
+    }>(
+      `SELECT e.intento_en_curso, e.alerta, c.estado AS estado_comprobante
+         FROM envio_pse e
+         JOIN comprobante c ON c.id = e.comprobante_id AND c.empresa_id = e.empresa_id
+        WHERE e.id = $1
+          FOR UPDATE OF e`,
+      { bind: [tomado.envioId], type: QueryTypes.SELECT },
+    );
+    const actual = filas[0];
+    // Otro worker tomó el envío (el arriendo venció) o ya terminó: este resultado se descarta sin escribir nada.
+    if (actual === undefined || actual.intento_en_curso !== tomado.intentoEnCurso) {
+      this.logger.warn(
+        JSON.stringify({ evento: 'pse.resultado_descartado', empresaId, comprobanteId }),
+      );
+      return;
+    }
+
+    const ahora = this.reloj.ahora();
+    const salida = await aplicarResultado(this.conexion, {
+      envio: {
+        envioId: tomado.envioId,
+        empresaId,
+        comprobanteId,
+        sucursalId: tomado.sucursalId,
+        intentos: tomado.intentos,
+        plazoHasta: tomado.plazoHasta,
+        estadoComprobante: actual.estado_comprobante,
+        emitidoEn: tomado.emitidoEn,
+        alertaPublicada: actual.alerta,
+      },
+      llamadas,
+      resultado,
+      archivos,
+      ahora,
+    });
+
+    if (salida.cambioElEstado) {
+      const estado = salida.estadoComprobante;
+      this.contexto.alConfirmar(() =>
+        this.publicador.publicar({
+          empresaId,
+          sala: { tipo: 'sucursal', sucursalId: tomado.sucursalId },
+          nombre: 'comprobante.estado',
+          datos: { comprobanteId, estado, sucursalId: tomado.sucursalId },
+        }),
+      );
+    }
+    if (salida.alertaNueva !== null) {
+      const motivo = salida.alertaNueva;
+      this.contexto.alConfirmar(() =>
+        this.publicarAlerta(empresaId, comprobanteId, tomado.sucursalId, motivo),
+      );
+    }
+    if (salida.proximoIntentoEn !== null) {
+      const startAfter = salida.proximoIntentoEn;
+      this.contexto.alConfirmar(() => this.encolarSiguiente(empresaId, comprobanteId, startAfter));
+    }
+  }
+
+  /** El aviso `facturacion.alerta` y el registro `pse.alerta` (criterio 133): solo ids y el motivo. */
+  private async publicarAlerta(
+    empresaId: string,
+    comprobanteId: string,
+    sucursalId: string,
+    motivo: AlertaComprobante,
+  ): Promise<void> {
+    this.logger.warn(JSON.stringify({ evento: 'pse.alerta', motivo, empresaId, comprobanteId }));
+    await this.publicador.publicar({
+      empresaId,
+      sala: { tipo: 'sucursal', sucursalId },
+      nombre: 'facturacion.alerta',
+      datos: { sucursalId },
+    });
+  }
+
+  /** El siguiente intento en la cola; si falla, el barrido lo recoge (criterio 126). */
+  private async encolarSiguiente(
+    empresaId: string,
+    comprobanteId: string,
+    startAfter: Date,
+  ): Promise<void> {
+    try {
+      await this.cola.encolar({ empresaId, comprobanteId }, { startAfter });
+    } catch (error) {
+      this.logger.warn(
+        JSON.stringify({
+          evento: 'pse.encolado_fallido',
+          empresaId,
+          comprobanteId,
+          error: error instanceof Error ? error.name : 'error desconocido',
+        }),
+      );
+    }
   }
 }
