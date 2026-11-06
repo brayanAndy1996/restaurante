@@ -1,6 +1,10 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { QueryTypes, type Sequelize } from 'sequelize';
-import { ALMACEN_COMPROBANTES, type AlmacenComprobantes } from '../../nucleo/archivos';
+import {
+  ALMACEN_COMPROBANTES,
+  esClaveDelPdfDe,
+  type AlmacenComprobantes,
+} from '../../nucleo/archivos';
 import { CONEXION_API } from '../../nucleo/base-de-datos';
 import { ContextoEmpresa } from '../../nucleo/contexto-empresa';
 import { EnlacesComprobante } from './enlaces';
@@ -52,7 +56,7 @@ export class PublicoComprobantesService {
       { actor: ACTOR_PUBLICO_COMPROBANTE },
     );
     if (fila === null || fila.pdf_clave === null) throw enlaceNoValido();
-    if (!fila.pdf_clave.startsWith(`comprobantes/${empresaId}/${comprobanteId}/`)) {
+    if (!esClaveDelPdfDe(fila.pdf_clave, empresaId, comprobanteId)) {
       throw enlaceNoValido();
     }
     const contenido = await this.almacen.leer(fila.pdf_clave);

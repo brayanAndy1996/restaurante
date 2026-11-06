@@ -1,9 +1,6 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, isAbsolute, relative, resolve } from 'node:path';
-import type { AlmacenComprobantes } from './almacen-comprobantes';
-
-/** Lo único que puede llevar una clave: letras, cifras, guion, punto, guion bajo y barras entre carpetas. */
-const CLAVE_VALIDA = /^[A-Za-z0-9_-]+(?:\/[A-Za-z0-9_-]+)*(?:\.[A-Za-z0-9]+)?$/;
+import { esClaveValidaDeComprobante, type AlmacenComprobantes } from './almacen-comprobantes';
 
 /**
  * Almacén privado de comprobantes en disco (historia 006, criterio 131; solo desarrollo): guarda el XML, el CDR y el PDF
@@ -22,7 +19,7 @@ export class AlmacenComprobantesEnDisco implements AlmacenComprobantes {
     const ruta = resolve(this.raiz, clave);
     const relativa = relative(this.raiz, ruta);
     if (
-      !CLAVE_VALIDA.test(clave) ||
+      !esClaveValidaDeComprobante(clave) ||
       relativa === '' ||
       relativa.startsWith('..') ||
       isAbsolute(relativa)

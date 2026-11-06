@@ -1,4 +1,4 @@
-import type { AlmacenComprobantes } from './almacen-comprobantes';
+import { exigirClaveValidaDeComprobante, type AlmacenComprobantes } from './almacen-comprobantes';
 
 /**
  * El almacén de comprobantes de las pruebas: guarda en un `Map`. `claves()` y `obtener()` permiten comprobar lo
@@ -9,12 +9,14 @@ export class AlmacenComprobantesEnMemoria implements AlmacenComprobantes {
   private escrituras = 0;
 
   guardar(clave: string, contenido: Buffer, tipo: string): Promise<void> {
+    exigirClaveValidaDeComprobante(clave);
     this.archivos.set(clave, { contenido: Buffer.from(contenido), tipo });
     this.escrituras += 1;
     return Promise.resolve();
   }
 
   leer(clave: string): Promise<Buffer | null> {
+    exigirClaveValidaDeComprobante(clave);
     const archivo = this.archivos.get(clave);
     return Promise.resolve(archivo ? Buffer.from(archivo.contenido) : null);
   }

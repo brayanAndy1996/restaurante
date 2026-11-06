@@ -1,5 +1,5 @@
 import { AwsClient } from 'aws4fetch';
-import type { AlmacenComprobantes } from './almacen-comprobantes';
+import { exigirClaveValidaDeComprobante, type AlmacenComprobantes } from './almacen-comprobantes';
 import { TIEMPO_LIMITE_R2_MS } from './almacen-r2';
 
 export interface OpcionesAlmacenComprobantesR2 {
@@ -15,7 +15,8 @@ export interface OpcionesAlmacenComprobantesR2 {
 /**
  * Almacén privado de comprobantes en Cloudflare R2 (historia 006, criterio 131): el XML, el CDR y el PDF viven en un
  * bucket sin dominio público ni acceso anónimo; la API es la única que los lee, por su ruta autenticada o por un enlace
- * sellado (criterio 160). `PUT` y `GET` firmados con SigV4 (`aws4fetch`), con el mismo tiempo máximo que el de las fotos.
+ * sellado (criterio 160). Valida las claves con el mismo patrón estricto que el almacén en disco antes de tocar el bucket:
+ * un `..` se resolvería en R2 a la carpeta de otra empresa. `PUT` y `GET` firmados con SigV4 (`aws4fetch`), con el mismo tiempo máximo que el de las fotos.
  */
 export class AlmacenComprobantesR2 implements AlmacenComprobantes {
   private readonly cliente: AwsClient;
@@ -38,6 +39,7 @@ export class AlmacenComprobantesR2 implements AlmacenComprobantes {
   }
 
   async guardar(clave: string, contenido: Buffer, tipo: string): Promise<void> {
+    exigirClaveValidaDeComprobante(clave);
     const peticion = await this.cliente.sign(this.urlDe(clave), {
       method: 'PUT',
       body: new Uint8Array(contenido),
@@ -52,6 +54,7 @@ export class AlmacenComprobantesR2 implements AlmacenComprobantes {
   }
 
   async leer(clave: string): Promise<Buffer | null> {
+    exigirClaveValidaDeComprobante(clave);
     const peticion = await this.cliente.sign(this.urlDe(clave), { method: 'GET' });
     const respuesta = await this.llamar(peticion, {
       signal: AbortSignal.timeout(TIEMPO_LIMITE_R2_MS),

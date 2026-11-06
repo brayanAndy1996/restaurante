@@ -19,7 +19,11 @@ import { QueryTypes, type Sequelize } from 'sequelize';
 import { Logger } from '@nestjs/common';
 import { DIAS_ENLACE_COMPROBANTE } from '@restaurante/dominio';
 import { ENTORNO, type Entorno } from '../../config/entorno';
-import { ALMACEN_COMPROBANTES, type AlmacenComprobantes } from '../../nucleo/archivos';
+import {
+  ALMACEN_COMPROBANTES,
+  esClaveDelPdfDe,
+  type AlmacenComprobantes,
+} from '../../nucleo/archivos';
 import { CONEXION_API } from '../../nucleo/base-de-datos';
 import { ContextoEmpresa } from '../../nucleo/contexto-empresa';
 import { ErrorAplicacion } from '../../nucleo/errores/error-aplicacion';
@@ -359,11 +363,9 @@ export class PanelService {
     if (fila.pdf_clave === null) {
       throw pdfNoDisponible('El PDF se está preparando; inténtalo de nuevo en un minuto');
     }
-    // Solo se sirve un archivo que cuelga de la carpeta de este comprobante (criterios 165 y 167): una clave que apunte a otra
-    // empresa o a otro comprobante es como no tener PDF, igual que en la ruta pública.
-    if (
-      !fila.pdf_clave.startsWith(`comprobantes/${this.contexto.empresaActual()}/${comprobanteId}/`)
-    ) {
+    // Solo se sirve el archivo exacto de este comprobante (criterios 165 y 167): una clave distinta (de otra empresa, de otro
+    // comprobante o con `..`, que un bucket resuelve a otra carpeta) es como no tener PDF, igual que en la ruta pública.
+    if (!esClaveDelPdfDe(fila.pdf_clave, this.contexto.empresaActual(), comprobanteId)) {
       throw pdfNoDisponible();
     }
     return { numero: textoDelNumero(fila.serie, fila.numero), clave: fila.pdf_clave };
