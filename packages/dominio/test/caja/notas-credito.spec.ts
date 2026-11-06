@@ -153,12 +153,44 @@ const devolucion = (...lineas: Array<[number, number]>): PedidoDeNota => ({
 });
 const ANULACION: PedidoDeNota = { tipo: 'ANULACION' };
 
+/**
+ * Lo acreditado por una nota anterior. Desde la regla de la última devolución (criterio 147, decisión del 2026-11-06) el
+ * cálculo necesita también la base y el IGV ya acreditados de cada línea: `LineaAcreditada` los lleva como `base` e `igv`
+ * (esta ayuda los agrega; por defecto el desglose del neto al 18 % gravado, que es el de los ejemplos).
+ */
+type Acreditada = LineaAcreditada & { base: string; igv: string };
 const acreditada = (
   posicionOrigen: number,
   cantidad: number,
   neto: string,
-  extra: Partial<LineaAcreditada> = {},
-): LineaAcreditada => ({ posicionOrigen, cantidad, neto, bolsas: 0, icbper: '0.00', ...extra });
+  extra: Partial<Acreditada> = {},
+): Acreditada => ({
+  posicionOrigen,
+  cantidad,
+  neto,
+  bolsas: 0,
+  icbper: '0.00',
+  ...desglosar(neto, 'GRAVADO', '18.00'),
+  ...extra,
+});
+/** Lo que acredita una línea de nota ya calculada. */
+const acreditadaDe = (l: {
+  posicionOrigen: number;
+  cantidad: number;
+  neto: string;
+  base: string;
+  igv: string;
+  bolsas: number;
+  icbper: string;
+}): Acreditada => ({
+  posicionOrigen: l.posicionOrigen,
+  cantidad: l.cantidad,
+  neto: l.neto,
+  base: l.base,
+  igv: l.igv,
+  bolsas: l.bolsas,
+  icbper: l.icbper,
+});
 
 /** Exige un resultado válido y lo devuelve. */
 function valida(r: ReturnType<typeof calcularNotaCredito>) {
@@ -202,7 +234,7 @@ describe('calcularNotaCredito · criterio 147 · devolución de unidades', () =>
 
   it('después, devolver el otro Lomo da otra vez 28.00 con base 23.73 e igv 4.27: las dos suman el IGV del original (8.54)', () => {
     const primera = valida(calcularNotaCredito(BOLETA_C, [], devolucion([1, 1])));
-    const previas = [acreditada(1, 1, primera.lineas[0]!.neto)];
+    const previas = [acreditadaDe(primera.lineas[0]!)];
     const segunda = valida(calcularNotaCredito(BOLETA_C, previas, devolucion([1, 1])));
     expect(segunda.lineas[0]).toMatchObject({
       cantidad: 1,
@@ -279,7 +311,7 @@ describe('calcularNotaCredito · criterio 147 · devolución de unidades', () =>
     const segunda = valida(
       calcularNotaCredito(
         BOLETA_C_CON_DESCUENTO,
-        [acreditada(1, 1, primera.lineas[0]!.neto)],
+        [acreditadaDe(primera.lineas[0]!)],
         devolucion([1, 1]),
       ),
     );
@@ -293,6 +325,73 @@ describe('calcularNotaCredito · criterio 147 · devolución de unidades', () =>
     expect(sumar([primera.lineas[0]!.base, segunda.lineas[0]!.base])).toBe('43.97');
     expect(sumar([primera.lineas[0]!.igv, segunda.lineas[0]!.igv])).toBe('7.92');
     expect(sumar([primera.lineas[0]!.neto, segunda.lineas[0]!.neto])).toBe('51.89');
+  });
+
+  it('3 unidades de S/ 1.00 (base 2.54, IGV 0.46) devueltas de una en una: 0.85/0.15, 0.85/0.15 y la última 0.84/0.16 (cierra el original)', () => {
+    const tres: OriginalDeNota = {
+      tasaIgv: '18.00',
+      lineas: [
+        linea({
+          posicion: 1,
+          cantidad: 3,
+          precioUnitario: '1.00',
+          bruto: '3.00',
+          neto: '3.00',
+          base: '2.54',
+          igv: '0.46',
+        }),
+      ],
+    };
+    const previas: Acreditada[] = [];
+    const devueltas = [];
+    for (const [base, igv] of [
+      ['0.85', '0.15'],
+      ['0.85', '0.15'],
+      ['0.84', '0.16'],
+    ] as const) {
+      const r = valida(calcularNotaCredito(tres, previas, devolucion([1, 1])));
+      expect(r.lineas[0], `devolución ${devueltas.length + 1}`).toMatchObject({
+        cantidad: 1,
+        neto: '1.00',
+        base,
+        igv,
+      });
+      expect(r.totales.igv).toBe(igv);
+      previas.push(acreditadaDe(r.lineas[0]!));
+      devueltas.push(r.lineas[0]!);
+    }
+    expect(sumar(devueltas.map((l) => l.base))).toBe('2.54');
+    expect(sumar(devueltas.map((l) => l.igv))).toBe('0.46');
+    expect(calcularNotaCredito(tres, previas, devolucion([1, 1]))).toEqual({
+      valida: false,
+      codigo: 'NADA_QUE_ACREDITAR',
+    });
+  });
+
+  it('devolver las 3 unidades de una vez (q = n) da exactamente la base 2.54 y el IGV 0.46 del original', () => {
+    const tres: OriginalDeNota = {
+      tasaIgv: '18.00',
+      lineas: [
+        linea({
+          posicion: 1,
+          cantidad: 3,
+          precioUnitario: '1.00',
+          bruto: '3.00',
+          neto: '3.00',
+          base: '2.54',
+          igv: '0.46',
+        }),
+      ],
+    };
+    const r = valida(calcularNotaCredito(tres, [], devolucion([1, 3])));
+    expect(r.lineas[0]).toMatchObject({ neto: '3.00', base: '2.54', igv: '0.46' });
+    // Y 2 y luego 1: la primera desglosa su neto (1.69/0.31) y la última toma lo que falta (0.85/0.15).
+    const dos2 = valida(calcularNotaCredito(tres, [], devolucion([1, 2])));
+    expect(dos2.lineas[0]).toMatchObject({ neto: '2.00', base: '1.69', igv: '0.31' });
+    const resto = valida(
+      calcularNotaCredito(tres, [acreditadaDe(dos2.lineas[0]!)], devolucion([1, 1])),
+    );
+    expect(resto.lineas[0]).toMatchObject({ neto: '1.00', base: '0.85', igv: '0.15' });
   });
 
   it('varias líneas en una devolución salen en el orden de la posición de origen aunque el pedido venga desordenado', () => {
@@ -737,12 +836,15 @@ function originalAlAzar(rnd: () => number, conGratuita: boolean): OriginalDeNota
 describe('calcularNotaCredito · propiedades con comprobantes al azar (semilla fija)', () => {
   const ITERACIONES = 250;
 
-  it('devoluciones al azar: nunca se acredita más que el original en unidades, neto, bolsas ni ICBPER, y al agotarlas queda exacto', () => {
+  it('devoluciones al azar: nunca se acredita más que el original en unidades, neto, base, IGV, bolsas ni ICBPER, y al agotarlas queda exacto', () => {
     const rnd = semilla(20261106);
     for (let n = 0; n < ITERACIONES; n++) {
       const original = originalAlAzar(rnd, false);
-      const acreditadas: LineaAcreditada[] = [];
-      const total = (p: number, campo: 'cantidad' | 'neto' | 'bolsas' | 'icbper'): Decimal =>
+      const acreditadas: Acreditada[] = [];
+      const total = (
+        p: number,
+        campo: 'cantidad' | 'neto' | 'bolsas' | 'icbper' | 'base' | 'igv',
+      ): Decimal =>
         acreditadas
           .filter((a) => a.posicionOrigen === p)
           .reduce((s, a) => s.plus(a[campo]), new D(0));
@@ -767,13 +869,7 @@ describe('calcularNotaCredito · propiedades con comprobantes al azar (semilla f
           expect(new D(l.neto).gte(0)).toBe(true);
           sumaNetos = sumaNetos.plus(l.neto);
           sumaIcbper = sumaIcbper.plus(l.icbper);
-          acreditadas.push({
-            posicionOrigen: l.posicionOrigen,
-            cantidad: l.cantidad,
-            neto: l.neto,
-            bolsas: l.bolsas,
-            icbper: l.icbper,
-          });
+          acreditadas.push(acreditadaDe(l));
         }
         expect(r.totales.total).toBe(dos(sumaNetos.plus(sumaIcbper)));
         expect(r.totales.icbper).toBe(dos(sumaIcbper));
@@ -782,6 +878,9 @@ describe('calcularNotaCredito · propiedades con comprobantes al azar (semilla f
           expect(total(o.posicion, 'neto').lte(o.neto)).toBe(true);
           expect(Number(total(o.posicion, 'bolsas'))).toBeLessThanOrEqual(o.bolsas);
           expect(total(o.posicion, 'icbper').lte(o.icbper)).toBe(true);
+          // Regla nueva del criterio 147: tampoco se pasa de la base ni del IGV del original.
+          expect(total(o.posicion, 'base').lte(o.base), `base de ${o.posicion}`).toBe(true);
+          expect(total(o.posicion, 'igv').lte(o.igv), `igv de ${o.posicion}`).toBe(true);
         }
       }
       for (const o of original.lineas) {
@@ -789,6 +888,9 @@ describe('calcularNotaCredito · propiedades con comprobantes al azar (semilla f
         expect(dos(total(o.posicion, 'neto')), `neto de ${o.posicion}`).toBe(o.neto);
         expect(Number(total(o.posicion, 'bolsas')), `bolsas de ${o.posicion}`).toBe(o.bolsas);
         expect(dos(total(o.posicion, 'icbper')), `icbper de ${o.posicion}`).toBe(o.icbper);
+        // Devolver todo, de cualquier forma, da exactamente la base y el IGV del original.
+        expect(dos(total(o.posicion, 'base')), `base de ${o.posicion}`).toBe(o.base);
+        expect(dos(total(o.posicion, 'igv')), `igv de ${o.posicion}`).toBe(o.igv);
         // Agotada la línea, pedirla otra vez no deja nada que acreditar.
         expect(calcularNotaCredito(original, acreditadas, devolucion([o.posicion, 1]))).toEqual({
           valida: false,
@@ -802,18 +904,12 @@ describe('calcularNotaCredito · propiedades con comprobantes al azar (semilla f
     const rnd = semilla(7_654_321);
     for (let n = 0; n < ITERACIONES; n++) {
       const original = originalAlAzar(rnd, false);
-      const acreditadas: LineaAcreditada[] = [];
+      const acreditadas: Acreditada[] = [];
       const notas = original.lineas.map((o) => {
         const r = valida(
           calcularNotaCredito(original, acreditadas, devolucion([o.posicion, o.cantidad])),
         );
-        acreditadas.push({
-          posicionOrigen: o.posicion,
-          cantidad: r.lineas[0]!.cantidad,
-          neto: r.lineas[0]!.neto,
-          bolsas: r.lineas[0]!.bolsas,
-          icbper: r.lineas[0]!.icbper,
-        });
+        acreditadas.push(acreditadaDe(r.lineas[0]!));
         return r;
       });
       const lineas = notas.flatMap((r) => r.lineas);
