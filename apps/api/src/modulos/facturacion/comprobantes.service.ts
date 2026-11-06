@@ -274,7 +274,8 @@ export class ComprobantesService {
    * cortesías (suma de las líneas gratuitas, así cuenta también con un emisor Nuevo RUS), el IGV y el ICBPER. Suma solo
    * los comprobantes nacidos de un cobro (`cobro_id` no nulo, 6b criterio 136): ni las notas de crédito, ni las
    * reemisiones, ni las facturas de un cambio son dinero nuevo, y el estado ante SUNAT no cuenta. Las notas de crédito
-   * emitidas con el turno se devuelven aparte en `notasCredito`.
+   * emitidas con el turno se devuelven aparte en `notasCredito`, sin contar dos veces una nota rechazada y su reemisión:
+   * la que reemplazó una reemisión no cuenta (criterios 136 y 148), igual que al calcular lo que queda por acreditar.
    */
   async resumenDeTurno(turnoId: string): Promise<ResumenTributarioDeTurno> {
     const filas = await this.conexion.query<{
@@ -301,8 +302,10 @@ export class ComprobantesService {
       { bind: [turnoId], type: QueryTypes.SELECT },
     );
     const notas = await this.conexion.query<{ cantidad: number; total: string }>(
-      `SELECT count(*)::int AS cantidad, coalesce(sum(total), 0)::numeric(14, 2)::text AS total
-         FROM comprobante WHERE turno_id = $1 AND afecta_a_id IS NOT NULL`,
+      `SELECT count(*)::int AS cantidad, coalesce(sum(n.total), 0)::numeric(14, 2)::text AS total
+         FROM comprobante n
+        WHERE n.turno_id = $1 AND n.afecta_a_id IS NOT NULL
+          AND NOT EXISTS (SELECT 1 FROM comprobante r WHERE r.reemplaza_a_id = n.id)`,
       { bind: [turnoId], type: QueryTypes.SELECT },
     );
     const total = filas.find((f) => f.es_total);

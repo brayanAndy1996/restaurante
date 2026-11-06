@@ -60,6 +60,10 @@ export interface ComprobanteParaTicket {
   };
   montoEnLetras: string;
   orden: { mesas: readonly string[]; mozo: string | null; numeroLlamado: number | null } | null;
+  /** Solo en una nota de crédito (6b, criterio 157): el documento que modifica. */
+  afectaA?: { tipo: TipoDocumentoElectronico; numero: string } | null;
+  /** Solo en una nota de crédito (6b, criterio 157): su tipo y el motivo que escribió quien la emitió. */
+  nota?: { tipo: 'ANULACION' | 'DEVOLUCION'; motivo: string } | null;
 }
 
 /** Lo que el ticket toma del cobro y del momento de la emisión. */
@@ -71,6 +75,14 @@ export interface ContextoDeComprobante {
   redondeo: string;
   /** El ticket empieza con el pulso de la gaveta (efectivo e impresora con gaveta, criterio 92). */
   abreGaveta: boolean;
+  /**
+   * Solo en una nota de crédito con devolución (6b, criterio 157): lo que se devolvió por cada medio y el redondeo del
+   * efectivo. Reemplaza a los pagos del cobro.
+   */
+  devolucion?: {
+    pagos: readonly { medio: MedioPago; monto: string }[];
+    redondeo: string;
+  } | null;
 }
 
 export const TEXTO_PENDIENTE_DE_ENVIO = 'Comprobante pendiente de envío a SUNAT';
@@ -80,6 +92,14 @@ const NOMBRE_DEL_TIPO = {
   FACTURA: 'FACTURA ELECTRÓNICA',
   NOTA_CREDITO_BOLETA: 'NOTA DE CRÉDITO ELECTRÓNICA',
   NOTA_CREDITO_FACTURA: 'NOTA DE CRÉDITO ELECTRÓNICA',
+} as const;
+
+/** Cómo se nombra el documento que modifica una nota de crédito ("Modifica: BOLETA B001-00000124"). */
+const NOMBRE_CORTO_DEL_TIPO = {
+  BOLETA: 'BOLETA',
+  FACTURA: 'FACTURA',
+  NOTA_CREDITO_BOLETA: 'NOTA DE CRÉDITO',
+  NOTA_CREDITO_FACTURA: 'NOTA DE CRÉDITO',
 } as const;
 
 /** Códigos de SUNAT del tipo de comprobante y del documento del cliente (catálogos 01 y 06). */
@@ -139,6 +159,19 @@ function encabezadoDe(c: ComprobanteParaTicket, ctx: ContextoDeComprobante): Blo
       derecha: limpiarTexto(ctx.hora),
     },
   );
+  // Nota de crédito (6b, criterio 157): el documento que modifica y el motivo.
+  if (c.afectaA !== undefined && c.afectaA !== null) {
+    const modificado = c.afectaA;
+    bloques.push({
+      tipo: 'linea',
+      texto: limpiarTexto(
+        `Modifica: ${NOMBRE_CORTO_DEL_TIPO[modificado.tipo]} ${modificado.numero}`,
+      ),
+    });
+  }
+  if (c.nota !== undefined && c.nota !== null) {
+    bloques.push({ tipo: 'linea', texto: limpiarTexto(`Motivo: ${c.nota.motivo}`) });
+  }
   const cliente = c.cliente;
   if (cliente !== null) {
     bloques.push(
@@ -222,6 +255,31 @@ function totalesDe(c: ComprobanteParaTicket): BloqueTicket[] {
   return bloques;
 }
 
+/** Lo que se devolvió, por medio, con el redondeo del efectivo (nota de crédito con devolución, criterio 157). */
+function devolucionDe(ctx: ContextoDeComprobante): BloqueTicket[] {
+  const devolucion = ctx.devolucion;
+  if (devolucion === undefined || devolucion === null || devolucion.pagos.length === 0) return [];
+  const bloques: BloqueTicket[] = [
+    { tipo: 'regla', caracter: '-' },
+    { tipo: 'linea', texto: 'DEVOLUCIÓN', negrita: true },
+  ];
+  for (const p of devolucion.pagos) {
+    bloques.push({
+      tipo: 'columnas',
+      izquierda: ETIQUETA_DE_MEDIO[p.medio],
+      derecha: formatoMonto(p.monto),
+    });
+  }
+  if (!esCero(devolucion.redondeo)) {
+    bloques.push({
+      tipo: 'columnas',
+      izquierda: 'Redondeo',
+      derecha: `-${formatoMonto(devolucion.redondeo)}`,
+    });
+  }
+  return bloques;
+}
+
 function pagosDe(ctx: ContextoDeComprobante): BloqueTicket[] {
   const bloques: BloqueTicket[] = [];
   if (ctx.pagos.length > 0) {
@@ -258,6 +316,7 @@ function pieDe(c: ComprobanteParaTicket, ctx: ContextoDeComprobante): BloqueTick
   return [
     ...totalesDe(c),
     ...pagosDe(ctx),
+    ...devolucionDe(ctx),
     { tipo: 'espacio' },
     { tipo: 'qr', texto: textoDelQr(c) },
     { tipo: 'espacio' },

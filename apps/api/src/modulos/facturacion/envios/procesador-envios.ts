@@ -350,6 +350,25 @@ export class ProcesadorEnviosPse {
         }),
       );
     }
+    // Una anulación (o la de un cambio de boleta por factura) aceptada deja el original `ANULADO`, en esta misma transacción
+    // (criterio 152). Va después de actualizar la nota (envío → nota → original, el orden del plan).
+    if (salida.cambioElEstado && salida.estadoComprobante === 'ACEPTADO') {
+      const original = await this.anularOriginal(comprobanteId, ahora);
+      if (original !== null) {
+        this.contexto.alConfirmar(() =>
+          this.publicador.publicar({
+            empresaId,
+            sala: { tipo: 'sucursal', sucursalId: original.sucursalId },
+            nombre: 'comprobante.estado',
+            datos: {
+              comprobanteId: original.id,
+              estado: 'ANULADO',
+              sucursalId: original.sucursalId,
+            },
+          }),
+        );
+      }
+    }
     if (salida.alertaNueva !== null) {
       const motivo = salida.alertaNueva;
       this.contexto.alConfirmar(() =>
@@ -365,6 +384,27 @@ export class ProcesadorEnviosPse {
       const startAfter = salida.proximoIntentoEn;
       this.contexto.alConfirmar(() => this.encolarSiguiente(empresaId, comprobanteId, startAfter));
     }
+  }
+
+  /**
+   * Si el comprobante aceptado es una nota de crédito `ANULACION` (también la de un cambio a factura), deja `ANULADO` a su
+   * original, que estaba `ACEPTADO` (criterio 152). Una `DEVOLUCION` no cambia el estado del original. Devuelve el original
+   * anulado, o `null` si no había nada que anular.
+   */
+  private async anularOriginal(
+    notaId: string,
+    ahora: Date,
+  ): Promise<{ id: string; sucursalId: string } | null> {
+    const filas = await this.conexion.query<{ id: string; sucursal_id: string }>(
+      `UPDATE comprobante o
+          SET estado = 'ANULADO', anulado_en = $2, actualizado_en = $2
+         FROM comprobante n
+        WHERE n.id = $1 AND n.tipo_nota = 'ANULACION' AND n.afecta_a_id = o.id AND o.estado = 'ACEPTADO'
+        RETURNING o.id, o.sucursal_id`,
+      { bind: [notaId, ahora], type: QueryTypes.SELECT },
+    );
+    const original = filas[0];
+    return original === undefined ? null : { id: original.id, sucursalId: original.sucursal_id };
   }
 
   /** El siguiente intento en la cola; si falla, el barrido lo recoge (criterio 126). */

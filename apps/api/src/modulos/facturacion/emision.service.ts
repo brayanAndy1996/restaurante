@@ -824,6 +824,13 @@ export class EmisionService {
           vuelto: '0.00',
           redondeo: '0.00',
           abreGaveta: esLaNota && impresora.gaveta && d.devolucionEnEfectivo,
+          devolucion:
+            esLaNota && d.pagos.length > 0
+              ? {
+                  pagos: d.pagos.map((pago) => ({ medio: pago.medio, monto: pago.monto })),
+                  redondeo: d.redondeo,
+                }
+              : null,
         }),
       },
     ]);

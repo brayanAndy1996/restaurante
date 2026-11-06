@@ -220,14 +220,15 @@ export async function leerComprobante(
             mozo: c.mozo_nombre,
             numeroLlamado: c.numero_llamado,
           },
+    // Una reemisión de una nota de crédito rechazada también lleva `afecta_a_id`: manda el motivo del reemplazo.
     origen:
       c.cobro_id !== null
         ? 'COBRO'
-        : c.afecta_a_id !== null
-          ? 'NOTA_CREDITO'
-          : c.motivo_reemplazo === 'CAMBIO_A_FACTURA'
-            ? 'CAMBIO_A_FACTURA'
-            : 'REEMISION',
+        : c.motivo_reemplazo === 'CAMBIO_A_FACTURA'
+          ? 'CAMBIO_A_FACTURA'
+          : c.motivo_reemplazo === 'REEMISION'
+            ? 'REEMISION'
+            : 'NOTA_CREDITO',
     simulado: c.simulado,
     afectaA:
       c.afecta_a_id === null
