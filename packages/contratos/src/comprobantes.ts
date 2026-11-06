@@ -144,12 +144,15 @@ export const referenciaComprobanteSchema = z.object({ id: uuidSchema, numero: z.
 
 /**
  * Lo ya acreditado de un comprobante por sus notas de crédito (6b, criterio 148): por posición de la línea cobrada, las
- * unidades, el neto, las bolsas y el ICBPER que ya cubren las notas que cuentan.
+ * unidades, el neto, la base, el IGV, las bolsas y el ICBPER que ya cubren las notas que cuentan (`base` e `igv` hacen
+ * falta para cerrar exactamente la última devolución, criterio 147).
  */
 export const acreditadoLineaSchema = z.object({
   posicion: z.number().int().min(1),
   cantidad: z.number().int().min(0),
   neto: z.string(),
+  base: z.string(),
+  igv: z.string(),
   bolsas: z.number().int().min(0),
   icbper: z.string(),
 });
