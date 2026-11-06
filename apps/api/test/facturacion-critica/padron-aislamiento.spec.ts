@@ -78,10 +78,11 @@ beforeEach(() => {
   ctx.cola.vaciar();
 });
 
-const buscar = (ruc: string, token: string | undefined = A().token.supervisor) =>
-  api(ctx, token, 'get', `/padron/ruc/${ruc}`);
+/** `token` omitido usa el del Supervisor de A; `null` es «sin sesión» (sin cabecera de autorización). */
+const buscar = (ruc: string, token: string | null = A().token.supervisor!) =>
+  api(ctx, token ?? undefined, 'get', `/padron/ruc/${ruc}`);
 /** Busca un RUC (exige 200) y valida la forma de la respuesta. */
-const ficha = async (ruc: string, token: string | undefined = A().token.supervisor) => {
+const ficha = async (ruc: string, token: string = A().token.supervisor!) => {
   const res = await buscar(ruc, token);
   exigirEstado(res, 200, `GET /padron/ruc/${ruc} (006, criterio 139)`);
   return padronRucRespuestaSchema.parse(res.body);
@@ -269,7 +270,7 @@ describe('criterio 139 · GET /padron/ruc/:ruc', () => {
   });
 
   it('sin sesión no responde (401)', async () => {
-    expect((await buscar(RUC_CON_DIRECCION, undefined)).status).toBe(401);
+    expect((await buscar(RUC_CON_DIRECCION, null)).status).toBe(401);
   });
 });
 
