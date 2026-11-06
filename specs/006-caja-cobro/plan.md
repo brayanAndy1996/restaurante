@@ -383,7 +383,7 @@ En este orden (6a); `down` de cada una deshace solo lo suyo. Ninguna escribe dat
 15. `202611060007-ataque-6b-ronda1.ts` (facturación): `envio_pse.reintento_manual_en` y `envio_pse.alertas_previas` (ver «Ataque adversarial, ronda 1»).
 16. `202611060008-ataque-6b-ronda2.ts` (facturación): `comprobante.pdf_intentado_en` con `GRANT UPDATE` por columna y el índice parcial `comprobante_sin_pdf_idx` (ver «Ataque adversarial, ronda 2»).
 
-`db:migrar` y `db:revertir` de las cinco y otra vez `db:migrar` en una base sin datos dan el mismo esquema (lo verifica el tester en T49). `db:preparar` crea los dos roles nuevos con contraseña (`DB_PASSWORD_COLAS`, `DB_PASSWORD_REFERENCIA`, con valor de desarrollo en `development` y `test`) y el esquema `colas` con dueño `restaurante_colas`; corre dos veces sin errores.
+`db:migrar` y `db:revertir` de las ocho y otra vez `db:migrar` en una base sin datos dan el mismo esquema (lo verifica el tester en T49). `db:preparar` crea los dos roles nuevos con contraseña (`DB_PASSWORD_COLAS`, `DB_PASSWORD_REFERENCIA`, con valor de desarrollo en `development` y `test`) y el esquema `colas` con dueño `restaurante_colas`; corre dos veces sin errores.
 
 ## Riesgos
 
