@@ -59,7 +59,7 @@ Entregas 6a (caja, cobro y comprobante sin PSE) y 6b (facturación electrónica)
   - `src/modulos/caja/`: el cliente de la factura con el padrón (`ClienteFactura`), el estado en vivo en el resultado, "Comprobantes" en Caja.
   - `src/modulos/administracion/cajas/`: las series de notas de crédito; Ajustes › Comprobantes.
   - La ventana de clave muestra el objetivo `NOTA_CREDITO`.
-- Dependencias nuevas (todas de código abierto, sin servicios externos): `pg-boss`, `@socket.io/postgres-emitter`, `pdfkit`, `qrcode`, una biblioteca de descompresión en flujo (`yauzl` o `unzipper`) y `pg-copy-streams`.
+- Dependencias nuevas (todas de código abierto, sin servicios externos): `pg-boss` (12.38.0, solo ESM, cargado con `import()`), `pdfkit`, `qrcode`, una biblioteca de descompresión en flujo (`yauzl` o `unzipper`) y `pg-copy-streams`.
 
 ## Diseño
 
@@ -237,7 +237,7 @@ apps/api/src/nucleo/
   cifrado/cifrado.ts             sellar / abrir con AES-256-GCM y HKDF (123, 160)
   colas/                         ColaPse, ColaPgBoss (restaurante_colas), ColaEnMemoria (124, 137)
   archivos/almacen-comprobantes-*.ts   memoria, disco (./archivos-privados) y R2 privado (131)
-  tiempo-real/emisor-worker.ts   @socket.io/postgres-emitter con restaurante_tiempo_real (172)
+  tiempo-real/emisor-worker.ts   formato del clúster de socket.io-adapter por pg_notify con restaurante_tiempo_real (172; sin @socket.io/postgres-emitter, cuyos mensajes sin nsp descarta el adaptador 0.5.0)
 
 apps/api/src/worker.ts, crear-worker.ts
 ```
