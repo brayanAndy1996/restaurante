@@ -14,15 +14,13 @@
 .entrega__ayuda {
   margin: 0;
 }
-/* El celular se pide en el sitio, bajo el botón que lo abrió: sin hoja ni diálogo para un campo opcional. */
+/* El celular se pide en el sitio, bajo el botón que lo abrió: sin hoja, diálogo ni baldosa dentro de la baldosa. */
 .entrega__whatsapp {
   display: flex;
   flex-direction: column;
   gap: var(--espacio-md);
-  padding: var(--espacio-md);
-  background: var(--color-baldosa);
-  border: 1px solid var(--color-junta);
-  border-radius: var(--radio-baldosa);
+  padding-top: var(--espacio-md);
+  border-top: 1px solid var(--color-junta);
 }
 .entrega__enlace {
   display: flex;
