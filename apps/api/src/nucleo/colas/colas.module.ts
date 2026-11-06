@@ -1,4 +1,12 @@
-import { DynamicModule, Global, Inject, Module, type OnModuleInit } from '@nestjs/common';
+import {
+  DynamicModule,
+  Global,
+  Inject,
+  Logger,
+  Module,
+  type OnApplicationShutdown,
+  type OnModuleInit,
+} from '@nestjs/common';
 import { ENTORNO, type Entorno } from '../../config/entorno';
 import { verificarRolDeFacturacion } from '../base-de-datos';
 import { ColaEnMemoria } from './cola-en-memoria';
@@ -14,12 +22,33 @@ import { COLA_PSE, type ColaPse } from './cola-pse';
  */
 @Global()
 @Module({})
-export class ColasModule implements OnModuleInit {
-  constructor(@Inject(ENTORNO) private readonly entorno: Entorno) {}
+export class ColasModule implements OnModuleInit, OnApplicationShutdown {
+  private readonly logger = new Logger(ColasModule.name);
+
+  constructor(
+    @Inject(ENTORNO) private readonly entorno: Entorno,
+    @Inject(COLA_PSE) private readonly cola: ColaPse,
+  ) {}
 
   async onModuleInit(): Promise<void> {
     if (this.entorno.DATABASE_COLAS_URL === undefined) return;
     await verificarRolDeFacturacion(this.entorno.DATABASE_COLAS_URL, 'colas', 'DATABASE_COLAS_URL');
+    // pg-boss arranca ahora y no en el primer cobro. Si no se puede, la API arranca igual: la cola solo despierta al
+    // worker, el envío ya está en `envio_pse` y el barrido lo recoge (criterio 126); el siguiente uso lo intenta de nuevo.
+    if (this.cola instanceof ColaPgBoss) {
+      await this.cola.iniciar().catch((error: unknown) => {
+        this.logger.warn(
+          JSON.stringify({
+            evento: 'pse.cola_no_iniciada',
+            error: error instanceof Error ? error.name : 'error desconocido',
+          }),
+        );
+      });
+    }
+  }
+
+  async onApplicationShutdown(): Promise<void> {
+    if (this.cola instanceof ColaPgBoss) await this.cola.detener();
   }
 
   static registrar(cola?: ColaPse, opciones: OpcionesColaPgBoss = {}): DynamicModule {

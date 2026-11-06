@@ -2,6 +2,7 @@
 // un cobro registra el envío, el encolado va a pg-boss con el rol `restaurante_colas` (esquema `colas`), un worker lo
 // procesa y el comprobante queda `ACEPTADO`. El trabajo lleva solo `{ empresaId, comprobanteId }`.
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+import { crearAplicacion } from '../../src/aplicacion';
 import { ColaPgBoss } from '../../src/nucleo/colas';
 import { abrirCliente } from '../utilidades';
 import { urlDeRol } from '../utilidades/bd';
@@ -90,5 +91,23 @@ describe('envío al PSE con pg-boss real', () => {
     } finally {
       await admin.end();
     }
+  });
+});
+
+describe('la aplicación con la cola de pg-boss', () => {
+  it('arranca pg-boss al iniciar (sin esperar al primer cobro) y lo detiene al cerrar', async () => {
+    const cola = new ColaPgBoss(urlDeRol('colas'));
+    const app = await crearAplicacion({ colaPse: cola, logger: false });
+    const admin = await abrirCliente('admin');
+    try {
+      const tabla = await admin.query("SELECT to_regclass('colas.job') AS tabla");
+      expect(tabla.rows[0]?.tabla).not.toBeNull();
+    } finally {
+      await admin.end();
+      await app.close();
+    }
+    await expect(
+      cola.encolar({ empresaId: esc.A.id, comprobanteId: '44444444-4444-4444-4444-444444444444' }),
+    ).rejects.toThrow('detenida');
   });
 });

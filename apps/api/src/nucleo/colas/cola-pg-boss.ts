@@ -53,7 +53,7 @@ export class ColaPgBoss implements ColaPse {
   ) {}
 
   async encolar(trabajo: TrabajoEnvioPse, opciones: OpcionesDeEncolado = {}): Promise<void> {
-    const boss = await this.iniciar();
+    const boss = await this.obtener();
     // Solo los dos ids (criterio 163): nunca datos del cliente.
     const datos: TrabajoEnvioPse = {
       empresaId: trabajo.empresaId,
@@ -74,7 +74,7 @@ export class ColaPgBoss implements ColaPse {
   }
 
   async trabajar(procesador: ProcesadorDeTrabajo): Promise<void> {
-    const boss = await this.iniciar();
+    const boss = await this.obtener();
     await boss.work<TrabajoEnvioPse>(
       TRABAJO_ENVIO_PSE,
       { batchSize: TRABAJOS_POR_LOTE, pollingIntervalSeconds: 1 },
@@ -107,8 +107,16 @@ export class ColaPgBoss implements ColaPse {
     if (boss !== null) await boss.stop({ graceful: true, timeout: 10_000 });
   }
 
-  /** Arranca pg-boss la primera vez (crea el esquema y la cola si faltan) y reutiliza la instancia. */
-  private iniciar(): Promise<PgBoss> {
+  /**
+   * Arranca pg-boss si todavía no lo está (crea sus tablas en el esquema `colas` y la cola si faltan). La API lo llama al
+   * arrancar para que el primer cobro no pague el arranque; también se arranca solo en el primer uso.
+   */
+  async iniciar(): Promise<void> {
+    await this.obtener();
+  }
+
+  /** Arranca pg-boss la primera vez y reutiliza la instancia. */
+  private obtener(): Promise<PgBoss> {
     if (this.detenida) return Promise.reject(new Error('La cola de envíos está detenida'));
     this.boss ??= this.arrancar().catch((error: unknown) => {
       // Que el siguiente intento vuelva a probar en lugar de recordar el fallo para siempre.
