@@ -1,11 +1,11 @@
 import { DynamicModule, Global, Module } from '@nestjs/common';
+import { ENTORNO, type Entorno } from '../../config/entorno';
 import { ALMACEN_COMPROBANTES, type AlmacenComprobantes } from './almacen-comprobantes';
-import { AlmacenComprobantesEnMemoria } from './almacen-comprobantes-en-memoria';
+import { crearAlmacenDeComprobantesDeEntorno } from './crear-almacen-comprobantes';
 
 /**
  * Provee `ALMACEN_COMPROBANTES` a toda la aplicación. `crearAplicacion({ almacenComprobantes })` instala el de la
- * prueba. Fase A: sin él, el de memoria en todos los entornos; el de disco (desarrollo) y el de R2 privado
- * (producción, `R2_BUCKET_COMPROBANTES`) llegan con T31.
+ * prueba; sin él, el que elige `ARCHIVOS_DRIVER` (memoria, disco en desarrollo o el bucket privado de R2).
  */
 @Global()
 @Module({})
@@ -14,10 +14,14 @@ export class AlmacenComprobantesModule {
     return {
       module: AlmacenComprobantesModule,
       providers: [
-        {
-          provide: ALMACEN_COMPROBANTES,
-          useValue: almacen ?? new AlmacenComprobantesEnMemoria(),
-        },
+        almacen
+          ? { provide: ALMACEN_COMPROBANTES, useValue: almacen }
+          : {
+              provide: ALMACEN_COMPROBANTES,
+              inject: [ENTORNO],
+              useFactory: (entorno: Entorno): AlmacenComprobantes =>
+                crearAlmacenDeComprobantesDeEntorno(entorno),
+            },
       ],
       exports: [ALMACEN_COMPROBANTES],
     };
