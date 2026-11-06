@@ -161,7 +161,6 @@ export class BarridoEnviosPse {
     // (d) Los aceptados que se quedaron sin PDF se arman ahora, ya fuera de la transacción (criterio 159).
     for (const comprobanteId of sinPdf) {
       if (await this.pdf.generar(empresaId, comprobanteId)) resultado.pdfPendientes += 1;
-      else this.pdf.recordarFallo(comprobanteId);
     }
     return resultado;
   }

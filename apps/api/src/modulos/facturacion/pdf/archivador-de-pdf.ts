@@ -19,10 +19,8 @@ const ACTOR_DEL_PDF = 'worker:envio-pse';
 /** Cuántos comprobantes sin PDF recoge una vuelta del barrido por empresa (criterio 159). */
 export const MAXIMO_PDF_POR_EMPRESA_Y_VUELTA = 20;
 
-/** Cuánto espera el barrido para volver a intentar el PDF de un comprobante que falló en una vuelta (criterio 159). */
+/** Cuánto espera el barrido para volver a intentar el PDF de un comprobante que ya intentó sin lograrlo (criterio 159). */
 export const ESPERA_TRAS_FALLO_DE_PDF_MS = 10 * 60_000;
-/** Tope de fallos recordados; pasado, se olvidan todos (el barrido los vuelve a aprender). */
-const MAXIMO_DE_FALLOS_RECORDADOS = 10_000;
 
 /**
  * Arma el PDF de un comprobante aceptado y lo deja en el almacén privado (historia 006, entrega 6b, criterio 159). Lo
@@ -34,15 +32,16 @@ const MAXIMO_DE_FALLOS_RECORDADOS = 10_000;
  * transacción corta anota `pdf_clave` solo si todavía no estaba. Si algo falla, el `ACEPTADO` ya está guardado y el
  * barrido lo vuelve a intentar: este servicio nunca lanza (el registro lleva ids, no datos de clientes).
  *
- * Los que fallan en el barrido (`recordarFallo`) no se vuelven a ofrecer durante `ESPERA_TRAS_FALLO_DE_PDF_MS`: así, los
- * comprobantes cuyo PDF falla siempre no ocupan el cupo de cada vuelta y no bloquean a los aceptados nuevos. El recuerdo es
- * del proceso (sin tabla): al reiniciar el worker se vuelven a intentar, que es inocuo porque el PDF es idempotente.
+ * El barrido recoge los pendientes con `pendientes()`, que **reclama** el lote: fija `pdf_intentado_en` (el último intento,
+ * persistido en `comprobante`) y ofrece primero los que nunca se intentaron (los aceptados nuevos, los más recientes antes) y
+ * después los de intento más antiguo, sin los intentados hace menos de `ESPERA_TRAS_FALLO_DE_PDF_MS`. Así, ninguna cantidad
+ * de comprobantes cuyo PDF falla siempre bloquea a los nuevos, y ninguno queda excluido para siempre: se turnan. El reclamo
+ * usa `FOR UPDATE SKIP LOCKED`, así que dos workers no toman el mismo lote, y un worker que muere a medias no deja marcas
+ * que bloqueen nada (a los 10 minutos vuelven a ofrecerse). Repetir un PDF es inocuo: su clave es fija.
  */
 @Injectable()
 export class ArchivadorDePdf {
   private readonly logger = new Logger(ArchivadorDePdf.name);
-  /** comprobanteId → instante (ms, reloj de la API) del último fallo del barrido. */
-  private readonly fallos = new Map<string, number>();
 
   constructor(
     @Inject(CONEXION_API) private readonly conexion: Sequelize,
@@ -86,31 +85,27 @@ export class ArchivadorDePdf {
     }
   }
 
-  /** El barrido anota que el PDF de este comprobante falló ahora: no se le ofrece de nuevo hasta pasada la espera. */
-  recordarFallo(comprobanteId: string): void {
-    if (this.fallos.size >= MAXIMO_DE_FALLOS_RECORDADOS) this.fallos.clear();
-    this.fallos.set(comprobanteId, this.reloj.ahora().getTime());
-  }
-
   /**
-   * Los comprobantes aceptados (o anulados) de la empresa del contexto que siguen sin PDF, los más viejos primero, sin los que
-   * fallaron en el barrido hace menos de `ESPERA_TRAS_FALLO_DE_PDF_MS`.
+   * Reclama y devuelve los comprobantes aceptados (o anulados) de la empresa del contexto que siguen sin PDF: primero los
+   * nunca intentados (los más recientes antes), después los de intento más antiguo, sin los intentados hace menos de
+   * `ESPERA_TRAS_FALLO_DE_PDF_MS`. Fija `pdf_intentado_en` de los reclamados; debe llamarse dentro de la transacción del
+   * contexto de la empresa.
    */
   async pendientes(limite = MAXIMO_PDF_POR_EMPRESA_Y_VUELTA): Promise<string[]> {
-    const ahora = this.reloj.ahora().getTime();
-    const recientes: string[] = [];
-    for (const [id, instante] of this.fallos) {
-      if (ahora - instante >= ESPERA_TRAS_FALLO_DE_PDF_MS) this.fallos.delete(id);
-      else recientes.push(id);
-    }
+    const ahora = this.reloj.ahora();
+    const desde = new Date(ahora.getTime() - ESPERA_TRAS_FALLO_DE_PDF_MS);
     const filas = await this.conexion.query<{ id: string }>(
-      `SELECT id
-         FROM comprobante
-        WHERE estado IN ('ACEPTADO', 'ANULADO') AND pdf_clave IS NULL
-          AND id <> ALL ($1::uuid[])
-        ORDER BY emitido_en, id
-        LIMIT ${Math.trunc(limite)}`,
-      { bind: [recientes], type: QueryTypes.SELECT },
+      `UPDATE comprobante
+          SET pdf_intentado_en = $1
+        WHERE id IN (SELECT id
+                       FROM comprobante
+                      WHERE estado IN ('ACEPTADO', 'ANULADO') AND pdf_clave IS NULL
+                        AND (pdf_intentado_en IS NULL OR pdf_intentado_en <= $2)
+                      ORDER BY pdf_intentado_en NULLS FIRST, emitido_en DESC, id
+                      LIMIT ${Math.trunc(limite)}
+                        FOR UPDATE SKIP LOCKED)
+        RETURNING id`,
+      { bind: [ahora, desde], type: QueryTypes.SELECT },
     );
     return filas.map((f) => f.id);
   }
