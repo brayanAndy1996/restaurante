@@ -1295,6 +1295,9 @@ button.ui-fila:active {
 .ui-casilla__caja .ui-icono {
   display: none;
 }
+.ui-casilla__entrada[aria-invalid='true'] ~ .ui-casilla__caja {
+  border-color: var(--color-peligro);
+}
 .ui-casilla__entrada:checked ~ .ui-casilla__caja {
   background: var(--color-accion);
   border-color: var(--color-accion);

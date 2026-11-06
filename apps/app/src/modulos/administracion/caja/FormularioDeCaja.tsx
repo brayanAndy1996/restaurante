@@ -1,11 +1,12 @@
 import type { CajaRespuesta, ImpresoraRespuesta } from '@restaurante/contratos';
-import { Aviso, CampoSeleccion, CampoTexto } from '@restaurante/ui';
-import { useEffect, useRef, type FormEvent, type ReactNode } from 'react';
+import { Aviso, CampoSeleccion, CampoTexto, Plegable } from '@restaurante/ui';
+import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import {
   CAMPOS_DE_SERIE,
   NOMBRE_DE_TIPO,
   PREFIJO_DE_TIPO,
   TIPOS,
+  TIPOS_DE_NOTA,
   accionDeSerie,
   serieActiva,
   serieDeEmisorAnterior,
@@ -40,8 +41,9 @@ interface Props {
 }
 
 /**
- * Datos de una caja (criterios 1 a 3 y 117): nombre, impresora y la serie de boletas y la de facturas. "Primer
- * número" solo aparece al escribir una serie nueva: una serie que ya se usa no cambia de número.
+ * Datos de una caja (criterios 1 a 3, 117 y 178): nombre, impresora y la serie de boletas, la de facturas y las de
+ * sus notas de crédito. "Primer número" solo aparece al escribir una serie nueva: una serie que ya se usa no cambia
+ * de número.
  */
 export function FormularioDeCaja({
   formId,
@@ -127,8 +129,58 @@ export function FormularioDeCaja({
         />
       ))}
 
+      <SeriesDeNotasDeCredito
+        borrador={borrador}
+        errores={errores}
+        caja={caja}
+        emisorId={emisorId}
+        onCambio={onCambio}
+      />
+
       {children}
     </form>
+  );
+}
+
+/**
+ * Las series de las notas de crédito (criterio 178), plegadas: la caja cobra sin ellas y solo hacen falta para anular
+ * o devolver una venta. Se abren solas si la caja ya tiene una o si hay un error en sus campos.
+ */
+function SeriesDeNotasDeCredito({
+  borrador,
+  errores,
+  caja,
+  emisorId,
+  onCambio,
+}: Omit<PropsSerie, 'tipo'>) {
+  const [abierto, setAbierto] = useState<boolean | null>(null);
+  const hayNota = caja ? TIPOS_DE_NOTA.some((tipo) => serieActiva(caja, tipo)) : false;
+  const hayError = TIPOS_DE_NOTA.some((tipo) => {
+    const { serie, primero } = CAMPOS_DE_SERIE[tipo];
+    return errores[serie] !== undefined || errores[primero] !== undefined;
+  });
+  const escritas = TIPOS_DE_NOTA.some((tipo) => borrador[CAMPOS_DE_SERIE[tipo].serie] !== '');
+  return (
+    <Plegable
+      titulo="Notas de crédito"
+      resumen="Para anular o devolver una venta"
+      abierto={abierto ?? (hayNota || hayError || escritas)}
+      onCambio={setAbierto}
+    >
+      <div className="caja__notas">
+        {TIPOS_DE_NOTA.map((tipo) => (
+          <GrupoDeSerie
+            key={tipo}
+            tipo={tipo}
+            borrador={borrador}
+            errores={errores}
+            caja={caja}
+            emisorId={emisorId}
+            onCambio={onCambio}
+          />
+        ))}
+      </div>
+    </Plegable>
   );
 }
 

@@ -1,0 +1,16 @@
+/* El cliente del comprobante (006, 6b, criterio 176): cobro, mostrador, «Emitir otro» y cambio a factura. */
+.cliente-factura {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espacio-md);
+  min-width: 0;
+}
+/* El aviso del padrón y su casilla se leen juntos: más cerca entre sí que del resto de campos. */
+.cliente-factura__aviso {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espacio-sm);
+}
+.cliente-factura .ui-aviso p {
+  margin: 0;
+}

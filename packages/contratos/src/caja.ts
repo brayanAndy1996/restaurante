@@ -12,6 +12,7 @@ import {
   TIPOS_DESCUENTO,
   TIPOS_MOVIMIENTO_CAJA,
   TIPOS_PARTE,
+  TIPOS_SERIE,
 } from '@restaurante/dominio';
 import { z } from 'zod';
 import {
@@ -55,8 +56,8 @@ export const tipoParteSchema = z.enum(TIPOS_PARTE);
 export const modoCobroSchema = z.enum(MODOS_COBRO);
 export const estadoTurnoSchema = z.enum(ESTADOS_TURNO);
 export const tipoMovimientoCajaSchema = z.enum(TIPOS_MOVIMIENTO_CAJA);
-/** El tipo de una serie en 6a: `BOLETA` o `FACTURA` (6b agrega las notas de crédito). */
-export const tipoSerieSchema = z.enum(TIPOS_COMPROBANTE);
+/** El tipo de una serie: `BOLETA`, `FACTURA` y, desde 6b, las dos notas de crédito (criterio 149). */
+export const tipoSerieSchema = z.enum(TIPOS_SERIE);
 
 /**
  * Monto de un total, un pago o un `recibido` que escribe el cliente: hasta 12 enteros y 2 decimales. Lo que pase de
@@ -65,7 +66,7 @@ export const tipoSerieSchema = z.enum(TIPOS_COMPROBANTE);
 export const montoDeCobroSchema = z
   .string()
   .regex(/^\d{1,12}(\.\d{1,2})?$/, 'Debe ser un monto con hasta 2 decimales');
-const montoDeCobroPositivoSchema = montoDeCobroSchema.refine(
+export const montoDeCobroPositivoSchema = montoDeCobroSchema.refine(
   (texto) => /[1-9]/.test(texto),
   'Debe ser mayor que 0',
 );
@@ -107,9 +108,12 @@ export const serieEntradaSchema = z.strictObject({
   primerNumero: z.number().int().min(1).max(CORRELATIVO_MAXIMO).optional(),
 });
 
-/** La entrada de una serie para el `tipo` de la ruta: `B…` para `BOLETA`, `F…` para `FACTURA`. */
-export function serieEntradaDeTipoSchema(tipo: (typeof TIPOS_COMPROBANTE)[number]) {
-  const prefijo = tipo === 'BOLETA' ? 'B' : 'F';
+/**
+ * La entrada de una serie para el `tipo` de la ruta: `B…` para `BOLETA` y `NOTA_CREDITO_BOLETA`, `F…` para `FACTURA` y
+ * `NOTA_CREDITO_FACTURA` (la nota de crédito de un documento lleva el prefijo de ese documento, criterio 149).
+ */
+export function serieEntradaDeTipoSchema(tipo: (typeof TIPOS_SERIE)[number]) {
+  const prefijo = tipo === 'BOLETA' || tipo === 'NOTA_CREDITO_BOLETA' ? 'B' : 'F';
   return z.strictObject({
     serie: z
       .string()
@@ -230,6 +234,10 @@ export const movimientoRespuestaSchema = z.object({
   motivo: z.string(),
   creadoEn: instanteSchema,
   creadoPor: personaRefSchema.nullable(),
+  /** 6b (criterio 150): el medio del movimiento; fuera del efectivo solo las devoluciones de una nota de crédito. */
+  medio: medioPagoSchema.optional(),
+  /** 6b: la nota de crédito que originó el egreso. */
+  comprobanteId: uuidSchema.nullable().optional(),
 });
 
 /**
@@ -298,6 +306,13 @@ export const reporteCajaSchema = z.object({
     egresos: z.string(),
     lista: z.array(movimientoRespuestaSchema),
   }),
+  /**
+   * 6b (criterio 136): las notas de crédito emitidas con este turno; `devuelto` = Σ de sus egresos. Las ventas de arriba
+   * no las incluyen.
+   */
+  notasCredito: z
+    .object({ cantidad: z.number().int().min(0), total: z.string(), devuelto: z.string() })
+    .optional(),
   /** Lo que debería haber de cada medio según el sistema (`esperadoDelTurno`), en el orden de `MEDIOS_PAGO`. */
   esperado: z.array(z.object({ medio: medioPagoSchema, monto: z.string() })),
   /** Solo en un turno cerrado. */

@@ -12,6 +12,10 @@ export interface ContextoDeObjetivo {
   itemUnidades?: number;
   /** "Mesa 4" o "Mesas 4 y 5". */
   mesa: string;
+  /** El número del comprobante que modifica una nota de crédito (`B001-00000124`). */
+  comprobanteNumero?: string;
+  /** Con qué medios se devuelve el dinero de una nota de crédito ("en efectivo", "en efectivo y Yape"). */
+  devueltoEn?: string;
 }
 
 /**
@@ -29,6 +33,24 @@ export function describirObjetivo(
       `Cortesía de ${unidades}`,
       contexto.itemNombre ?? 'un ítem de la cuenta',
       contexto.mesa,
+    ].join(' · ');
+  }
+  if (objetivo.tipo === 'NOTA_CREDITO') {
+    const tipo = {
+      ANULACION: 'Anulación',
+      DEVOLUCION: 'Devolución',
+      CAMBIO_A_FACTURA: 'Cambio a factura',
+    }[objetivo.tipoNota];
+    const total = montoEnSoles(objetivo.total) ?? objetivo.total;
+    const devuelto = montoEnSoles(objetivo.devuelto) ?? objetivo.devuelto;
+    return [
+      'Nota de crédito',
+      tipo,
+      contexto.comprobanteNumero ?? 'un comprobante',
+      total,
+      objetivo.devuelto === '0.00'
+        ? 'sin devolución'
+        : `devuelve ${devuelto}${contexto.devueltoEn ? ` ${contexto.devueltoEn}` : ''}`,
     ].join(' · ');
   }
   const valor =
@@ -59,6 +81,14 @@ export function mismoObjetivo(
       a.itemId === b.itemId &&
       a.descuento.tipo === b.descuento.tipo &&
       a.descuento.valor === b.descuento.valor
+    );
+  }
+  if (a.tipo === 'NOTA_CREDITO' && b.tipo === 'NOTA_CREDITO') {
+    return (
+      a.comprobanteId === b.comprobanteId &&
+      a.tipoNota === b.tipoNota &&
+      a.total === b.total &&
+      a.devuelto === b.devuelto
     );
   }
   return false;

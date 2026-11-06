@@ -1,4 +1,4 @@
-import type { Pool } from 'pg';
+import { Pool } from 'pg';
 import { QueryTypes, type Sequelize } from 'sequelize';
 import { SQL_VERIFICACION_ROLES, type OpcionesSinEmpresa } from './consultas-sin-empresa';
 import { RolPrivilegiadoError } from './errores';
@@ -37,6 +37,11 @@ const CONEXIONES_DE_LA_API =
   'La API y la plataforma deben conectarse con un rol sin esos atributos (ver db:preparar).';
 const CONEXION_DEL_TIEMPO_REAL =
   'El adaptador de tiempo real debe conectarse con restaurante_tiempo_real, un rol sin esos atributos (ver db:preparar).';
+
+const CONEXION_DE_LA_COLA =
+  'La cola de envíos al PSE debe conectarse con restaurante_colas, un rol sin esos atributos (ver db:preparar).';
+const CONEXION_DEL_PADRON =
+  'La carga del padrón de RUC debe conectarse con restaurante_referencia, un rol sin esos atributos (ver db:preparar).';
 
 /** Lanza `RolPrivilegiadoError` si la fila del rol de la conexión tiene algún atributo que salta la RLS. */
 function exigirRolSinPrivilegios(fila: FilaRol | undefined, origen: string, consejo: string): void {
@@ -85,7 +90,11 @@ export async function verificarRolDeConexion(sequelize: Sequelize, origen: strin
  * Sequelize ni por la guarda de la API: su rol (`restaurante_tiempo_real`) no puede ser superusuario, tener
  * `BYPASSRLS`, ser dueño de tablas de `public` ni miembro de un rol así (como el migrador).
  */
-export async function verificarRolDePool(pool: Pool, origen: string): Promise<void> {
+export async function verificarRolDePool(
+  pool: Pool,
+  origen: string,
+  consejo: string = CONEXION_DEL_TIEMPO_REAL,
+): Promise<void> {
   let filas: FilaRol[];
   try {
     filas = (await pool.query<FilaRol>(SQL_VERIFICACION_ROLES)).rows;
@@ -93,5 +102,34 @@ export async function verificarRolDePool(pool: Pool, origen: string): Promise<vo
     const motivo = error instanceof Error ? error.message : String(error);
     throw new Error(`No se pudo verificar el rol de la conexión ${origen}: ${motivo}`);
   }
-  exigirRolSinPrivilegios(filas[0], origen, CONEXION_DEL_TIEMPO_REAL);
+  exigirRolSinPrivilegios(filas[0], origen, consejo);
+}
+
+/**
+ * La misma comprobación para los roles de la facturación electrónica (historia 006, entrega 6b, criterio 163):
+ * `restaurante_colas` (`DATABASE_COLAS_URL`) y `restaurante_referencia` (`DATABASE_REFERENCIA_URL`) no pueden ser
+ * superusuario, tener `BYPASSRLS`, ser dueños de tablas de `public` ni miembros de un rol así (como el migrador).
+ * Abre un pool de una conexión, verifica y lo cierra; lanza `RolPrivilegiadoError`.
+ */
+export async function verificarRolDeFacturacion(
+  url: string,
+  rol: 'colas' | 'referencia',
+  origen: string,
+): Promise<void> {
+  const pool = new Pool({
+    connectionString: url,
+    max: 1,
+    connectionTimeoutMillis: 5_000,
+    application_name: `restaurante-verificacion-${rol}`,
+  });
+  pool.on('error', () => undefined);
+  try {
+    await verificarRolDePool(
+      pool,
+      origen,
+      rol === 'colas' ? CONEXION_DE_LA_COLA : CONEXION_DEL_PADRON,
+    );
+  } finally {
+    await pool.end().catch(() => undefined);
+  }
 }

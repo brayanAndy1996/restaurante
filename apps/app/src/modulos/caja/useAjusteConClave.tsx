@@ -1,10 +1,22 @@
 import type { AutorizacionRespuesta, ObjetivoAutorizacion } from '@restaurante/contratos';
 import type { RequisitoPermiso } from '@restaurante/dominio';
-import { useRef, useState } from 'react';
+import { useRef, useState, useSyncExternalStore } from 'react';
 import { mismoObjetivo, type ContextoDeObjetivo } from '../../componentes/objetivo-de-clave';
 import { useClaveDeSupervisor } from '../../componentes/useClaveDeSupervisor';
 import { ahoraDelServidor, nuevaClaveDeIdempotencia } from '../../lib/api';
 import { useEnvioPendiente } from '../../lib/envios';
+import {
+  alCambiarLosIntentos,
+  estaRetenido,
+  guardarIntento,
+  guardarResultadoDeEnvio,
+  hayEnvioVivo,
+  leerIntento,
+  leerResultadoDeEnvio,
+  registrarEnvioVivo,
+  retenerHastaSuRespuesta,
+  type IntentoRecordado,
+} from '../../lib/intentos-recordados';
 import { ErrorApi } from '../../lib/errores';
 import type { ExtraConClave } from './cuenta';
 
@@ -14,8 +26,8 @@ const MARGEN_DE_AUTORIZACION_MS = 5_000;
 const NOTA_DE_CLAVE_PERDIDA =
   'La clave del supervisor ya no valía. Pídela otra vez; lo que escribiste sigue aquí.';
 
-export interface PedidoDeAjuste {
-  accion: 'APLICAR_DESCUENTO' | 'APLICAR_CORTESIA';
+export interface PedidoDeAjuste<T = unknown> {
+  accion: 'APLICAR_DESCUENTO' | 'APLICAR_CORTESIA' | 'EMITIR_NOTA_CREDITO';
   /** `clave` si la persona necesita la clave de un supervisor; `permitido` si aplica sin ella. */
   permiso: RequisitoPermiso;
   /** Lo que se autoriza: es lo que la ventana muestra y lo que va a `POST /autorizaciones`. */
@@ -24,22 +36,24 @@ export interface PedidoDeAjuste {
   motivo: string;
   /** Todo lo escrito que cambia la acción: mientras no cambie, un nuevo toque repite el mismo `id`. */
   huella: string;
+  /**
+   * Todo lo que viaja en el cuerpo, también lo que no cambia la acción (el motivo, el total): la clave de idempotencia
+   * solo se repite con el mismo cuerpo, porque la API rechaza otra clave con otro cuerpo. Por defecto, la `huella`.
+   */
+  huellaDelCuerpo?: string;
   /** Manda la escritura con el `id` del descuento o de la cortesía y la autorización, si hubo. */
-  enviar: (id: string, extra: ExtraConClave) => Promise<unknown>;
+  enviar: (id: string, extra: ExtraConClave) => Promise<T>;
 }
 
-export type ResultadoDeAjuste =
-  | { estado: 'hecho' }
+export type ResultadoDeAjuste<T = unknown> =
+  /** `respuesta` es lo que contestó la API a la escritura. */
+  | { estado: 'hecho'; respuesta: T; id: string }
   /** La persona cerró la ventana de la clave. */
   | { estado: 'cancelado' }
-  | { estado: 'fallo'; error: unknown };
+  /** `id` es el de la escritura que se mandó (`null` si el fallo fue antes de mandarla): solo ese se puede soltar. */
+  | { estado: 'fallo'; error: unknown; id: string | null };
 
-interface Intento {
-  huella: string;
-  id: string;
-  clave: string;
-  autorizacionId: string | null;
-}
+type Intento = IntentoRecordado;
 
 /**
  * Aplicar un descuento o una cortesía con la clave atada (criterio 40 de 006, pregunta 9): pide la clave del
@@ -51,14 +65,26 @@ interface Intento {
  * - Una autorización sirve de nuevo (por ejemplo, tras un 422 que la API revirtió) solo si su objetivo es
  *   exactamente el de ahora y no está por vencer.
  */
-export function useAjusteConClave() {
+export function useAjusteConClave(opciones: { recordarComo?: string } = {}) {
   const envio = useEnvioPendiente();
   const { pedir, ventana } = useClaveDeSupervisor();
   const autorizacion = useRef<AutorizacionRespuesta | null>(null);
-  const intento = useRef<Intento | null>(null);
+  const propio = useRef<Intento | null>(null);
   const [nota, setNota] = useState<string | null>(null);
+  // Con `recordarComo`, el intento sobrevive a cerrar y volver a abrir la pantalla: un envío que se quedó esperando la
+  // red sigue con su `id`, y el que se abre después de él lo repite en vez de crear otra cosa.
+  const memoria = opciones.recordarComo;
+  const intento = {
+    get current(): Intento | null {
+      return memoria === undefined ? propio.current : leerIntento(memoria);
+    },
+    set current(valor: Intento | null) {
+      if (memoria === undefined) propio.current = valor;
+      else guardarIntento(memoria, valor);
+    },
+  };
 
-  async function ejecutar(pedido: PedidoDeAjuste): Promise<ResultadoDeAjuste> {
+  async function ejecutar<T>(pedido: PedidoDeAjuste<T>): Promise<ResultadoDeAjuste<T>> {
     setNota(null);
     try {
       // Una segunda vuelta solo si la API dice que la autorización ya no vale.
@@ -85,18 +111,26 @@ export function useAjusteConClave() {
         }
 
         const previo = intento.current;
+        const huellaDelCuerpo = pedido.huellaDelCuerpo ?? pedido.huella;
         const mismaAccion = previo?.huella === pedido.huella;
-        const mismaAutorizacion = mismaAccion && previo?.autorizacionId === autorizacionId;
+        const mismoCuerpo =
+          mismaAccion &&
+          previo?.huellaDelCuerpo === huellaDelCuerpo &&
+          previo?.autorizacionId === autorizacionId;
         const actual: Intento = {
           huella: pedido.huella,
+          huellaDelCuerpo,
           id: mismaAccion && previo ? previo.id : nuevaClaveDeIdempotencia(),
-          clave: mismaAutorizacion && previo ? previo.clave : nuevaClaveDeIdempotencia(),
+          clave: mismoCuerpo && previo ? previo.clave : nuevaClaveDeIdempotencia(),
           autorizacionId,
         };
         intento.current = actual;
 
+        // Con memoria, el envío queda anotado hasta que termine, aunque esta pantalla se cierre: así ninguna otra manda
+        // otro con el mismo intento mientras este siga vivo.
+        const terminarEnvio = memoria === undefined ? null : registrarEnvioVivo(memoria, actual.id);
         try {
-          await envio.enviar(
+          const respuesta = await envio.enviar(
             (extra) =>
               pedido.enviar(actual.id, {
                 ...extra,
@@ -106,7 +140,9 @@ export function useAjusteConClave() {
             undefined,
             actual.clave,
           );
-          return { estado: 'hecho' };
+          // Antes de anotar que terminó: la hoja que esperaba este envío ve su respuesta en el mismo cambio.
+          if (memoria !== undefined) guardarResultadoDeEnvio(memoria, { id: actual.id, respuesta });
+          return { estado: 'hecho', respuesta, id: actual.id };
         } catch (error) {
           const clavePerdida =
             error instanceof ErrorApi &&
@@ -120,17 +156,66 @@ export function useAjusteConClave() {
               continue;
             }
           }
-          return { estado: 'fallo', error };
+          return { estado: 'fallo', error, id: actual.id };
+        } finally {
+          terminarEnvio?.();
         }
       }
       return { estado: 'cancelado' };
     } catch (error) {
-      return { estado: 'fallo', error };
+      return { estado: 'fallo', error, id: null };
     }
   }
 
+  /**
+   * Suelta el intento recordado solo si es el de ese `id` y no queda un envío vivo con él: la respuesta final del envío con
+   * ese `id`, o el comprobante que ya muestra su nota cuando ese envío ya terminó. Otra pantalla pudo recordar otro intento mientras tanto (una respuesta tardía no lo borra).
+   */
+  function soltarSiEs(id: string) {
+    // Con un envío vivo de ese `id` no se suelta: su respuesta final es la que lo suelta.
+    if (memoria !== undefined && hayEnvioVivo(memoria, id)) return;
+    if (intento.current?.id === id) intento.current = null;
+  }
+
+  /**
+   * La nota con ese `id` ya se ve en el comprobante leído: salió, y su envío (si sigue vivo) solo traerá la réplica, así que el
+   * intento se suelta, salvo que la persona ya haya pedido revisarlo con el envío vivo (entonces espera su respuesta).
+   */
+  function soltarPorVista(id: string) {
+    if (memoria !== undefined && estaRetenido(memoria, id)) return;
+    if (intento.current?.id === id) intento.current = null;
+  }
+
+  /** La persona revisó el comprobante con ese envío todavía vivo: no se habilita otro hasta que termine. */
+  function retenerSiSigueVivo(id: string) {
+    if (memoria !== undefined && hayEnvioVivo(memoria, id)) retenerHastaSuRespuesta(memoria, id);
+  }
+
+  /** El `id` del intento recordado (el de la escritura que se mandó y aún no tiene respuesta final), si lo hay. */
+  function idDelIntento(): string | null {
+    return intento.current?.id ?? null;
+  }
+
+  // ¿Queda un envío vivo del intento recordado (de esta pantalla o de una que ya se cerró)?
+  const esperandoRespuestaAnterior = useSyncExternalStore(alCambiarLosIntentos, () => {
+    if (memoria === undefined) return false;
+    const id = leerIntento(memoria)?.id;
+    return id !== undefined && hayEnvioVivo(memoria, id);
+  });
+
+  // Lo que respondió el último envío de este intento que terminó bien (aunque lo mandara una hoja que ya se cerró).
+  const resultadoDelEnvio = useSyncExternalStore(alCambiarLosIntentos, () =>
+    memoria === undefined ? null : leerResultadoDeEnvio(memoria),
+  );
+
   return {
     ejecutar,
+    soltarPorVista,
+    retenerSiSigueVivo,
+    esperandoRespuestaAnterior,
+    resultadoDelEnvio,
+    soltarSiEs,
+    idDelIntento,
     ventana,
     pendiente: envio.pendiente,
     sigueMontada: envio.sigueMontada,

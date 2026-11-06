@@ -40,6 +40,18 @@ Solo la PWA: `pnpm --filter @restaurante/app dev`. Llama a la API que diga `VITE
 
 `e2e/caja.spec.ts` recorre la caja de la 6a en serie, contra la API real, con un emulador de impresora ESC/POS (con gaveta) y el simulador del puente. El Administrador deja lista la caja (tasa de IGV, dos cajas con sus series y su impresora); el Cajero abre su turno con fondo y cobra con efectivo (con vuelto) y Yape; una cuenta se divide por ítems y en partes iguales, también al recargar la pantalla y desde otro equipo; un descuento pide la clave del Supervisor; la venta de mostrador sale con su «Llamado N» en el KDS; el reporte X se imprime; el cierre es a ciegas, con una diferencia y su motivo, y la Z se imprime; y el Supervisor no puede cerrar la última caja con una mesa abierta. Corre en dos proyectos de Playwright: `celular` (360 × 740, y el Supervisor también usa una tableta) y `tablet` (768 × 1024, solo este archivo). Necesita la base preparada y con la semilla, como las demás E2E.
 
+## E2E de la facturación electrónica
+
+`e2e/facturacion.spec.ts` (6b) recorre la facturación de punta a punta: la API real con PostgreSQL, el worker de verdad (pg-boss), el PSE simulado, el padrón de ejemplo, el emulador de impresora ESC/POS y el simulador del puente de 3b. Cada persona vive en su propio contexto de navegador (Cajero, Supervisor y Administrador), y hay un contexto sin sesión para abrir el enlace del PDF. Los pasos corren en serie y cada uno depende del anterior. Son siete escenarios: cobrar una factura con el RUC completado desde el padrón y SUNAT la acepta en vivo; un RUC con baja de oficio que solo se cobra con «Emitir igual»; un rechazo del simulador que el Supervisor ve y se corrige con «Emitir otro» hasta que SUNAT acepta; una devolución parcial con la clave del Supervisor, que sale en efectivo de la caja del Cajero y aparece en el X; el cambio de una boleta por factura; compartir por WhatsApp el enlace del PDF y abrirlo sin sesión; y un «Emitir otro» de un reemplazo que también se rechaza.
+
+Corre en dos proyectos de Playwright: `celular` (360 × 740) y `tablet` (768 × 1024).
+
+Necesita la base preparada, migrada y con la semilla, y en el `.env` de la raíz: `DATABASE_COLAS_URL`, `DATABASE_REFERENCIA_URL`, `WORKER=habilitado`, `CLAVE_CIFRADO`, `API_URL_PUBLICA=http://localhost:3000` y `PADRON_RUC_URL` apuntando al padrón de ejemplo (`file://` con la ruta absoluta a `apps/api/test/soporte/padron-ejemplo.zip`). La API de la prueba es la de `e2e/soporte/api-con-simulador.cjs`: la misma API compilada (`pnpm --filter @restaurante/api build`), con un `SimuladorPse` cuyas reglas se mueven por el puerto de control (`E2E_PSE_CONTROL_URL`, por defecto `http://127.0.0.1:3100`; el puerto que escucha lo fija `E2E_PSE_CONTROL_PUERTO`). Si ya hay una API en el puerto 3000 (por ejemplo, con `pnpm dev`), Playwright la reutiliza y la prueba no sirve: párala antes.
+
+```bash
+pnpm --filter @restaurante/app e2e facturacion.spec.ts
+```
+
 ## "Pendiente de envío"
 
 Las escrituras de la carta y de Disponibilidad no se pierden por un microcorte. `src/lib/envios.ts`

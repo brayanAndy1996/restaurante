@@ -3,13 +3,21 @@ import { defineConfig } from '@playwright/test';
 /**
  * Pruebas E2E de la PWA contra la API real y PostgreSQL (criterio 104 de la sección 002, tarea T35).
  * Corren en un viewport de celular (360 × 740, táctil), que es el dispositivo de las personas del
- * restaurante. La E2E de caja (`caja.spec.ts`) corre además en el proyecto `tablet` (768 × 1024).
+ * restaurante. La E2E de caja (`caja.spec.ts`) y la de facturación electrónica (`facturacion.spec.ts`, 6b) corren
+ * además en el proyecto `tablet` (768 × 1024).
  *
  * Requisitos: la base preparada, migrada y con el superadministrador de la semilla
  * (`pnpm db:preparar && pnpm db:migrar && pnpm db:semilla`) y las variables de la API (`DATABASE_URL`,
  * `DATABASE_PLATAFORMA_URL`, `PIN_PEPPER`, `ORIGENES_PERMITIDOS`…). Si ya hay una API en el puerto 3000 y
  * la PWA en el 5173 (por ejemplo con `pnpm dev`), se usan tal cual; si no, Playwright los levanta.
  * Cada corrida crea su propia empresa con nombres únicos: no depende de datos previos ni los ensucia.
+ *
+ * La E2E de facturación electrónica (historia 006, 6b, T45) necesita además, en el entorno de la API: el worker de
+ * envíos de verdad (`WORKER=habilitado` con `DATABASE_COLAS_URL`, pg-boss), `DATABASE_REFERENCIA_URL` y
+ * `PADRON_RUC_URL=file://…/apps/api/test/soporte/padron-ejemplo.zip` para cargar el padrón de ejemplo, `CLAVE_CIFRADO` y
+ * `API_URL_PUBLICA` (el enlace del PDF). La API de esta prueba es la de `e2e/soporte/api-con-simulador.cjs`: la misma API
+ * compilada con un `SimuladorPse` propio cuyas reglas se mueven por un puerto de control (`E2E_PSE_CONTROL_URL`, por
+ * defecto http://127.0.0.1:3100). Una API ya levantada con `pnpm dev` no sirve para esa prueba.
  */
 const APP = process.env.E2E_APP_URL ?? 'http://localhost:5173';
 const API = process.env.E2E_API_URL ?? 'http://localhost:3000';
@@ -34,19 +42,19 @@ export default defineConfig({
   },
   projects: [
     { name: 'celular' },
-    // La E2E de caja también corre con todas las personas en tableta (768 × 1024, criterio 118 de 006). Solo ese archivo:
-    // las demás pruebas no se repiten.
+    // La E2E de caja y la de facturación electrónica también corren con todas las personas en tableta (768 × 1024,
+    // criterios 118 y 179 de 006). Solo esos archivos: las demás pruebas no se repiten.
     {
       name: 'tablet',
-      testMatch: '**/caja.spec.ts',
+      testMatch: '**/{caja,facturacion}.spec.ts',
       use: { viewport: { width: 768, height: 1024 }, hasTouch: true, deviceScaleFactor: 2 },
     },
   ],
   webServer: [
     {
       command: process.env.CI
-        ? 'pnpm --filter @restaurante/api start'
-        : 'pnpm --filter @restaurante/api build && pnpm --filter @restaurante/api start',
+        ? 'node e2e/soporte/api-con-simulador.cjs'
+        : 'pnpm --filter @restaurante/api build && node e2e/soporte/api-con-simulador.cjs',
       url: `${API}/health`,
       reuseExistingServer: true,
       timeout: 180_000,

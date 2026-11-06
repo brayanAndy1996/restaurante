@@ -40,7 +40,7 @@ export { exigirObjetivo, normalizarValor } from './objetivo-autorizacion';
 export { ClaveSupervisorService } from './clave-supervisor.service';
 export { PermisoInterceptor, requisitoDeLaPeticion } from './permiso.interceptor';
 export { ClaveDiferidaInterceptor } from './clave-diferida.interceptor';
-export type { ValidacionPrevia } from './clave-diferida.interceptor';
+export type { ReplicaDeClave, ValidacionPrevia } from './clave-diferida.interceptor';
 export type { AutorizacionConsumida, ConsumirAutorizacion } from './autorizacion.service';
 export type { Principal, TipoPrincipal } from '../../nucleo/principal';
 export { AccesoSucursalController } from './acceso-sucursal.controller';

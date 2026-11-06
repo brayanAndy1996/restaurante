@@ -1,5 +1,12 @@
-import { CallHandler, ExecutionContext, Inject, Injectable, NestInterceptor } from '@nestjs/common';
-import { Reflector } from '@nestjs/core';
+import {
+  CallHandler,
+  ExecutionContext,
+  Inject,
+  Injectable,
+  NestInterceptor,
+  type Type,
+} from '@nestjs/common';
+import { ModuleRef, Reflector } from '@nestjs/core';
 import type { Accion } from '@restaurante/dominio';
 import type { Request } from 'express';
 import type { Observable } from 'rxjs';
@@ -19,6 +26,21 @@ export interface ValidacionPrevia {
   cuerpo?: ZodType<unknown>;
   /** Parámetros de ruta que deben ser UUID (los mismos que llevan `PipeUuid`). */
   uuids?: readonly string[];
+  /**
+   * Un proveedor que reconoce la réplica por el `id` del cuerpo (historia 006, criterio 153): si la operación ya existe,
+   * el interceptor no exige ni consume la autorización (la réplica no es una operación nueva) y deja que el servicio la
+   * resuelva (la devuelve, o responde 422 si el `id` es otra petición).
+   */
+  replicaPor?: Type<ReplicaDeClave>;
+}
+
+/**
+ * Lo que implementa quien reconoce las réplicas de una ruta con clave diferida. Corre en la transacción de la petición
+ * (con la empresa ya fijada) y, si bloquea por el `id` para turnar las réplicas simultáneas, ese cerrojo lo retoma sin
+ * esperar el servicio.
+ */
+export interface ReplicaDeClave {
+  yaExiste(cuerpo: unknown): Promise<boolean>;
 }
 
 /**
@@ -28,7 +50,8 @@ export interface ValidacionPrevia {
  * la devuelve y este interceptor ni se ejecuta: la réplica no consume de nuevo la autorización) y de
  * `ClaveObligatoriaInterceptor` (400 sin `Idempotency-Key`). Los pipes de Nest corren después de todos los
  * interceptores, así que aquí se valida la entrada antes de consumir (400 de forma antes que 403 de clave) con
- * los mismos esquemas de la ruta. Solo actúa si el rol de la sucursal activa necesita clave.
+ * los mismos esquemas de la ruta. Solo actúa si el rol de la sucursal activa necesita clave. Si la ruta declara
+ * `replicaPor` y la operación ya existe (misma id de cliente), tampoco consume: la réplica no es una operación nueva.
  *
  * El consumo corre en la transacción de la petición: si la acción falla después, se revierte (criterio 36).
  */
@@ -37,6 +60,7 @@ export class ClaveDiferidaInterceptor implements NestInterceptor {
   constructor(
     @Inject(Reflector) private readonly reflector: Reflector,
     @Inject(AutorizacionService) private readonly autorizaciones: AutorizacionService,
+    @Inject(ModuleRef) private readonly modulos: ModuleRef,
   ) {}
 
   async intercept(
@@ -60,8 +84,14 @@ export class ClaveDiferidaInterceptor implements NestInterceptor {
       for (const nombre of validacion.uuids ?? []) {
         uuid.transform(String(peticion.params[nombre] ?? ''));
       }
+      let cuerpo: unknown = peticion.body;
       if (validacion.cuerpo !== undefined) {
-        new PipeZod(validacion.cuerpo).transform(peticion.body);
+        cuerpo = new PipeZod(validacion.cuerpo).transform(peticion.body);
+      }
+      // La réplica de una operación ya hecha no pide ni gasta la clave: la resuelve el servicio.
+      if (validacion.replicaPor !== undefined) {
+        const replica = this.modulos.get(validacion.replicaPor, { strict: false });
+        if (await replica.yaExiste(cuerpo)) return siguiente.handle();
       }
       await consumirAutorizacionDeLaPeticion(peticion, this.autorizaciones, accion);
     }

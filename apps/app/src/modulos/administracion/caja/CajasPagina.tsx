@@ -238,6 +238,8 @@ function CajasDeSucursal({ sucursalId, selector }: { sucursalId: string; selecto
       // Cambiar la serie deja atrás el error de su primer número (era de la serie anterior).
       if (parcial.serieBoleta !== undefined) delete siguiente.primerBoleta;
       if (parcial.serieFactura !== undefined) delete siguiente.primerFactura;
+      if (parcial.serieNotaBoleta !== undefined) delete siguiente.primerNotaBoleta;
+      if (parcial.serieNotaFactura !== undefined) delete siguiente.primerNotaFactura;
       return siguiente;
     });
     setFallo(undefined);

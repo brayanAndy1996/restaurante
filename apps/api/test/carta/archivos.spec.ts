@@ -224,6 +224,13 @@ describe('ARCHIVOS_DRIVER y sus reglas por entorno', () => {
     R2_ACCESS_KEY_ID: 'clave',
     R2_SECRET_ACCESS_KEY: 'secreto',
     R2_BUCKET: 'fotos',
+    R2_BUCKET_COMPROBANTES: 'comprobantes-privado',
+  };
+  // Lo que la facturación electrónica (historia 006, 6b) exige además en producción.
+  const facturacion = {
+    CLAVE_CIFRADO: Buffer.alloc(32, 9).toString('base64'),
+    DATABASE_COLAS_URL: 'postgres://restaurante_colas:x@localhost:5432/restaurante_test',
+    PSE_CONECTOR: 'simulador',
   };
 
   it('por defecto: memoria con test, disco con development y nada en producción', () => {
@@ -296,7 +303,9 @@ describe('ARCHIVOS_DRIVER y sus reglas por entorno', () => {
     const conMemoria = () =>
       exigirEntornoDeProduccion(cargarEntorno({ ...prod, ARCHIVOS_DRIVER: 'memoria' }));
     expect(conMemoria).toThrow(/ARCHIVOS_DRIVER=r2 es obligatorio/);
-    expect(() => exigirEntornoDeProduccion(cargarEntorno({ ...prod, ...r2 }))).not.toThrow();
+    expect(() =>
+      exigirEntornoDeProduccion(cargarEntorno({ ...prod, ...r2, ...facturacion })),
+    ).not.toThrow();
   });
 
   it('crearAlmacenDeEntorno elige el almacén de cada driver', () => {

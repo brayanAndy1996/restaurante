@@ -114,7 +114,11 @@ describe('con impresora de caja con gaveta (S3)', () => {
     expect(t).toContain('Yape');
     expect(t).toContain('Recibido');
     expect(t).toContain('Vuelto');
-    expect(t).toContain('Comprobante pendiente de envío a SUNAT');
+    // En papel de 80 mm la leyenda ocupa dos líneas: se compara sin saltos.
+    expect(t.replace(/\s+/g, ' ')).toContain(
+      'Representación impresa de la BOLETA DE VENTA ELECTRÓNICA',
+    );
+    expect(t).not.toContain('pendiente de envío');
     expect(ticket.qrs).toHaveLength(1);
     expect(ticket.qrs[0]).toContain(`|03|${cobro.comprobante.serie}|`);
     expect(ticket.qrs[0]).toContain(`|${cobro.comprobante.totales.total}|`);

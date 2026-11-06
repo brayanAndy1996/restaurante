@@ -10,38 +10,50 @@ interface PropsCasilla {
   onCambio: (marcada: boolean) => void;
   /** No se puede cambiar (por ejemplo, una sucursal donde la persona no tiene permiso): lleva candado y su motivo en `ayuda`. */
   bloqueada?: boolean;
+  /** Lo que falta marcar: problema y salida; la casilla queda como no válida y el mensaje la acompaña. */
+  error?: string | undefined;
 }
 
 /**
  * Casilla grande de una fila de 48 px o más: toda la fila responde al toque. El estado se dice con
  * la marca dentro de la caja, no solo con el color.
  */
-export function Casilla({ etiqueta, ayuda, marcada, onCambio, bloqueada }: PropsCasilla) {
+export function Casilla({ etiqueta, ayuda, marcada, onCambio, bloqueada, error }: PropsCasilla) {
   const id = useId();
+  const descrita = [ayuda ? `${id}-ayuda` : null, error ? `${id}-error` : null].filter(Boolean);
   return (
-    <label className={clases('ui-casilla', bloqueada && 'ui-casilla--bloqueada')} htmlFor={id}>
-      <input
-        id={id}
-        type="checkbox"
-        className="ui-casilla__entrada"
-        checked={marcada}
-        disabled={bloqueada}
-        aria-describedby={ayuda ? `${id}-ayuda` : undefined}
-        onChange={(e) => onCambio(e.target.checked)}
-      />
-      <span className="ui-casilla__caja" aria-hidden="true">
-        <Icono icono={IconoOk} tamano={20} />
-      </span>
-      <span className="ui-casilla__texto">
-        <span className="ui-casilla__etiqueta">{etiqueta}</span>
-        {ayuda ? (
-          <span className="ui-casilla__ayuda" id={`${id}-ayuda`}>
-            {ayuda}
-          </span>
-        ) : null}
-      </span>
-      {bloqueada ? <Icono icono={IconoCandado} tamano={20} /> : null}
-    </label>
+    <>
+      <label className={clases('ui-casilla', bloqueada && 'ui-casilla--bloqueada')} htmlFor={id}>
+        <input
+          id={id}
+          type="checkbox"
+          className="ui-casilla__entrada"
+          checked={marcada}
+          disabled={bloqueada}
+          aria-invalid={error ? true : undefined}
+          aria-describedby={descrita.length > 0 ? descrita.join(' ') : undefined}
+          onChange={(e) => onCambio(e.target.checked)}
+        />
+        <span className="ui-casilla__caja" aria-hidden="true">
+          <Icono icono={IconoOk} tamano={20} />
+        </span>
+        <span className="ui-casilla__texto">
+          <span className="ui-casilla__etiqueta">{etiqueta}</span>
+          {ayuda ? (
+            <span className="ui-casilla__ayuda" id={`${id}-ayuda`}>
+              {ayuda}
+            </span>
+          ) : null}
+        </span>
+        {bloqueada ? <Icono icono={IconoCandado} tamano={20} /> : null}
+      </label>
+      {error ? (
+        <div className="ui-campo__mensaje" id={`${id}-error`} role="alert">
+          <Icono icono={IconoAlerta} tamano={16} />
+          <span>{error}</span>
+        </div>
+      ) : null}
+    </>
   );
 }
 

@@ -117,7 +117,12 @@ describe('rutas de la sección de acceso (fase A)', () => {
     const publicas = rutasDeNest(app)
       .filter((r) => Reflect.getMetadata(PUBLICA, r.controlador.prototype[r.manejador]) === true)
       .map((r) => `${r.metodo} ${r.ruta}`);
-    expect([...publicas].sort()).toEqual([...RUTAS_PUBLICAS].sort());
+    // 006, 6b, criterio 160: `GET /publico/comprobantes/:sello` (el PDF por su enlace) se admite, y solo esa.
+    const RUTA_PUBLICA_DE_6B = 'GET /publico/comprobantes/:sello';
+    expect(publicas.filter((p) => p === RUTA_PUBLICA_DE_6B).length).toBeLessThanOrEqual(1);
+    expect([...publicas.filter((p) => p !== RUTA_PUBLICA_DE_6B)].sort()).toEqual(
+      [...RUTAS_PUBLICAS].sort(),
+    );
   });
 
   it('toda ruta /plataforma/* salvo POST /plataforma/sesiones lleva @Superadministrador()', () => {

@@ -33,6 +33,7 @@ import {
   type PasoDeInicio,
 } from '../administracion/caja/cajas';
 import { PrimerosPasos } from '../administracion/caja/PrimerosPasos';
+import { EnlaceAComprobantes } from '../facturacion/EnlaceAComprobantes';
 import '../administracion/caja/caja.css';
 import {
   CLAVE_DE_TURNO,
@@ -314,6 +315,7 @@ export function AbrirCaja({
               : 'Tu administrador debe crear una caja antes de poder abrir turno.'}
           </EstadoVacio>
         )}
+        <EnlaceAComprobantes />
       </div>
     );
   }

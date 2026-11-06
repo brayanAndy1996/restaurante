@@ -32,6 +32,11 @@ interface Props {
   resumen: ResumenDePagos;
   /** Muestra los problemas de cada pago (después de intentar cobrar o de escribir). */
   verProblemas: boolean;
+  /**
+   * Los pagos son la devolución de una nota de crédito (criterio 150): los mismos botones de medios y el mismo redondeo
+   * del efectivo, pero sin «Recibido», billetes ni vuelto (devolver no da vuelto).
+   */
+  devolucion?: boolean;
 }
 
 /**
@@ -39,7 +44,7 @@ interface Props {
  * vuelto en grande y el redondeo a la vista; los demás medios con su número de operación; «Agregar otro pago» para
  * combinar. El efectivo cubre el resto (así su redondeo es el del dominio); sin efectivo, lo cubre el primer pago.
  */
-export function PagosPanel({ filas, onFilas, resumen, verProblemas }: Props) {
+export function PagosPanel({ filas, onFilas, resumen, verProblemas, devolucion = false }: Props) {
   const hayEfectivo = filas.some((f) => f.medio === 'EFECTIVO');
   const resto = indiceDelResto(filas);
   const sumar = filas.length < MAXIMO_PAGOS_COBRO;
@@ -95,7 +100,13 @@ export function PagosPanel({ filas, onFilas, resumen, verProblemas }: Props) {
             <li key={fila.clave}>
               <div className="pago">
                 <div className="pago__cabecera">
-                  <b>{filas.length > 1 ? `Pago ${i + 1}` : 'Cómo paga'}</b>
+                  <b>
+                    {filas.length > 1
+                      ? `Pago ${i + 1}`
+                      : devolucion
+                        ? 'Cómo devuelves'
+                        : 'Cómo paga'}
+                  </b>
                   {filas.length > 1 ? (
                     <BotonIcono
                       icono={IconoCerrar}
@@ -113,7 +124,15 @@ export function PagosPanel({ filas, onFilas, resumen, verProblemas }: Props) {
 
                 {esResto ? (
                   <div className="pago__cobra">
-                    <span>{fila.medio === 'EFECTIVO' ? 'Efectivo a cobrar' : 'Cobra'}</span>
+                    <span>
+                      {fila.medio === 'EFECTIVO'
+                        ? devolucion
+                          ? 'Efectivo a devolver'
+                          : 'Efectivo a cobrar'
+                        : devolucion
+                          ? 'Devuelves'
+                          : 'Cobra'}
+                    </span>
                     <b>{montoEnSoles(calculada?.monto) ?? '—'}</b>
                   </div>
                 ) : (
@@ -124,7 +143,7 @@ export function PagosPanel({ filas, onFilas, resumen, verProblemas }: Props) {
                   />
                 )}
 
-                {fila.medio === 'EFECTIVO' ? (
+                {fila.medio === 'EFECTIVO' && devolucion ? null : fila.medio === 'EFECTIVO' ? (
                   <>
                     <CampoMonto
                       etiqueta="Recibido"
@@ -175,14 +194,23 @@ export function PagosPanel({ filas, onFilas, resumen, verProblemas }: Props) {
 
       {resumen.redondeo !== '0.00' ? (
         <p className="pagos__redondeo" role="status">
-          Redondeo a tu favor: <b>{montoEnSoles(resumen.redondeo)}</b>. El efectivo se cobra a la
-          décima de sol.
+          {devolucion ? (
+            <>
+              Redondeo: <b>{montoEnSoles(resumen.redondeo)}</b>. El efectivo se devuelve a la décima
+              de sol.
+            </>
+          ) : (
+            <>
+              Redondeo a tu favor: <b>{montoEnSoles(resumen.redondeo)}</b>. El efectivo se cobra a
+              la décima de sol.
+            </>
+          )}
         </p>
       ) : null}
 
       {sumar ? (
         <Boton icono={IconoMas} onClick={agregar}>
-          Agregar otro pago
+          {devolucion ? 'Devolver por otro medio' : 'Agregar otro pago'}
         </Boton>
       ) : null}
     </div>

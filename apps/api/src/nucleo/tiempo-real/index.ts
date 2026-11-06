@@ -9,3 +9,4 @@ export { salaDeEmpresa, salaDePuente, salaDeSesion, salaDeSucursal, salaDeSocket
 export type { DatosDeConexionDePuente } from './salas';
 export { VALIDADOR_DE_PUENTE } from './validador-de-puente';
 export type { PuenteDeConexion, ValidadorDePuente } from './validador-de-puente';
+export { EmisorDelWorker } from './emisor-worker';

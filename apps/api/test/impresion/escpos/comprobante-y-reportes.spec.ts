@@ -97,7 +97,7 @@ describe('criterio 91 · el ticket del comprobante', () => {
       'Efectivo',
       'Recibido',
       'Vuelto',
-      'Comprobante pendiente de envío a SUNAT',
+      'Representación impresa de la BOLETA DE VENTA ELECTRÓNICA',
     ]) {
       expect(sinEspacios(t), esperado).toContain(sinEspacios(esperado));
     }

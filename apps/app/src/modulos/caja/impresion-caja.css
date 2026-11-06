@@ -8,3 +8,10 @@
 .impresion-caja > .texto-ayuda {
   margin: 0;
 }
+
+/* «Imprimir otra vez»: el estado de la impresión, el botón y su fallo, juntos. */
+.reimpresion {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espacio-sm);
+}

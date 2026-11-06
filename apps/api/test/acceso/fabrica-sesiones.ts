@@ -1,5 +1,6 @@
 // spec: 002-plataforma-y-acceso (pruebas protegidas)
 // Ajustado por 005-carta-web-mesa (2026-11-03): rutas públicas de la carta web y del modo mesa.
+// Ajustado por 006-caja-cobro, entrega 6b, criterio 160 (2026-11-06): `RUTA_PUBLICA_DE_6B`, admisión opcional y separada.
 //
 // Ayudantes de las pruebas de acceso del grupo 1 (sesiones, ingreso con contraseña, usuarios y
 // horario). Solo usan los contratos públicos de la sección: HTTP (supertest), `crearSuperadministrador`
@@ -53,6 +54,13 @@ export const RUTAS_PUBLICAS = [
   'POST /publico/mesas/:codigo/llamados',
   'GET /publico/mesas/:codigo/llamados/:id',
 ];
+
+/**
+ * La única ruta pública que 006 (6b, criterio 160) suma a la lista cerrada: el PDF de un comprobante por su enlace con
+ * sello. Se admite que esté registrada o no (la fase C de 6b la registra); no es una ruta de empresa (no exige sesión) y
+ * ninguna otra ruta pública se admite.
+ */
+export const RUTA_PUBLICA_DE_6B = 'GET /publico/comprobantes/:sello';
 
 export type RolDeAcceso = 'MOZO' | 'CAJERO' | 'COCINA_BARRA' | 'SUPERVISOR';
 
@@ -625,7 +633,7 @@ export function enIso(reloj: RelojManual, ms = 0): string {
 export function rutasDeEmpresa(
   rutas: { metodo: string; ruta: string }[],
 ): { metodo: string; ruta: string }[] {
-  const publicas = new Set(RUTAS_PUBLICAS);
+  const publicas = new Set<string>([...RUTAS_PUBLICAS, RUTA_PUBLICA_DE_6B]);
   return rutas.filter(
     (r) => !publicas.has(`${r.metodo} ${r.ruta}`) && !r.ruta.startsWith('/plataforma'),
   );

@@ -14,8 +14,14 @@ import {
   crearConexionPlataforma,
 } from '../../nucleo/base-de-datos/conexion-plataforma';
 import { AuditoriaModule } from '../auditoria';
+import { AlertasDeFacturacion } from './alertas-de-facturacion';
 import { MODELOS_API, MODELOS_PLATAFORMA, definirModelos } from './modelos';
+import { ConfiguracionPseController } from './configuracion-pse.controller';
+import { ConfiguracionPseService } from './configuracion-pse.service';
 import { EmisoresController } from './emisores.controller';
+import { EmpresasConsulta } from './empresas-consulta';
+import { FacturacionPlataformaController } from './facturacion-plataforma.controller';
+import { FacturacionPlataformaService } from './facturacion-plataforma.service';
 import { EmisoresService } from './emisores.service';
 import { OperacionPlataforma } from './operacion-plataforma';
 import { PlanesController } from './planes.controller';
@@ -48,6 +54,8 @@ import { SuscripcionesPlataformaService } from './suscripciones-plataforma.servi
     PlataformaEmpresasController,
     PlanesController,
     SuscripcionesController,
+    ConfiguracionPseController,
+    FacturacionPlataformaController,
   ],
   providers: [
     {
@@ -76,6 +84,10 @@ import { SuscripcionesPlataformaService } from './suscripciones-plataforma.servi
     PlanesService,
     SuscripcionesPlataformaService,
     SuperadministradorGuard,
+    ConfiguracionPseService,
+    FacturacionPlataformaService,
+    EmpresasConsulta,
+    AlertasDeFacturacion,
   ],
   exports: [
     OperacionPlataforma,
@@ -87,6 +99,10 @@ import { SuscripcionesPlataformaService } from './suscripciones-plataforma.servi
     SuscripcionModule,
     SucursalesConsultaModule,
     SuperadministradorGuard,
+    ConfiguracionPseService,
+    FacturacionPlataformaService,
+    EmpresasConsulta,
+    AlertasDeFacturacion,
   ],
 })
 export class PlataformaModule implements OnModuleInit, OnApplicationShutdown {

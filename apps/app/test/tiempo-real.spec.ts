@@ -111,9 +111,10 @@ describe('la conexión de la sesión', () => {
       [...CLAVES_TIEMPO_REAL.impresionEstado],
       [...CLAVES_TIEMPO_REAL.llamados],
       [...CLAVES_TIEMPO_REAL.turno],
+      [...CLAVES_TIEMPO_REAL.facturacion],
     ]);
     // Si ya hay una lectura en camino, esa sirve: no se cancela para bajar lo mismo dos veces.
-    expect(opcionesDeInvalidacion).toEqual(Array(7).fill({ cancelRefetch: false }));
+    expect(opcionesDeInvalidacion).toEqual(Array(8).fill({ cancelRefetch: false }));
   });
 
   it('un aviso de cambio sí cancela la lectura en curso, que pudo salir antes del cambio', async () => {
@@ -121,7 +122,7 @@ describe('la conexión de la sesión', () => {
     socket.conectar();
     opcionesDeInvalidacion.length = 0;
     socket.desdeElServidor('salon.cambio', { mesaIds: [], ordenId: ORDEN });
-    expect(opcionesDeInvalidacion).toEqual([undefined]);
+    expect(opcionesDeInvalidacion).toEqual([undefined, undefined]);
   });
 
   it('se cierra al salir de la sesión', async () => {
@@ -195,19 +196,39 @@ describe('qué consulta vuelve a pedirse con cada evento', () => {
   it('salon.cambio refresca el mapa', async () => {
     const socket = await conectada();
     socket.desdeElServidor('salon.cambio', { mesaIds: [], ordenId: ORDEN });
-    expect(invalidadas).toEqual([[...CLAVES_TIEMPO_REAL.salon]]);
+    expect(invalidadas).toEqual([[...CLAVES_TIEMPO_REAL.salon], [...CLAVES_TIEMPO_REAL.porCobrar]]);
   });
 
-  it('orden.cambio refresca esa orden y el mapa (que muestra su total)', async () => {
+  it('orden.cambio refresca esa orden, el mapa (que muestra su total) y «Por cobrar»', async () => {
     const socket = await conectada();
     socket.desdeElServidor('orden.cambio', { ordenId: ORDEN });
-    expect(invalidadas).toEqual([['orden', ORDEN], [...CLAVES_TIEMPO_REAL.salon]]);
+    expect(invalidadas).toEqual([
+      ['orden', ORDEN],
+      [...CLAVES_TIEMPO_REAL.salon],
+      [...CLAVES_TIEMPO_REAL.porCobrar],
+    ]);
   });
 
   it('un orden.cambio mal formado refresca todas las órdenes en vez de ninguna', async () => {
     const socket = await conectada();
     socket.desdeElServidor('orden.cambio', { nada: true });
-    expect(invalidadas).toEqual([['orden'], [...CLAVES_TIEMPO_REAL.salon]]);
+    expect(invalidadas).toEqual([
+      ['orden'],
+      [...CLAVES_TIEMPO_REAL.salon],
+      [...CLAVES_TIEMPO_REAL.porCobrar],
+    ]);
+  });
+
+  it('«Por cobrar» que no está en pantalla se descarta: al abrirla sale el esqueleto y no una cuenta vieja', async () => {
+    const clave = [...CLAVES_TIEMPO_REAL.porCobrar, S1];
+    cliente.setQueryData(clave, [{ ordenId: 'vieja' }]);
+    const socket = await conectada();
+    socket.desdeElServidor('salon.cambio', { mesaIds: [], ordenId: ORDEN });
+    expect(cliente.getQueryData(clave)).toBeUndefined();
+    // Lo de otras pantallas no se toca.
+    cliente.setQueryData(['salon', 'x'], 1);
+    socket.desdeElServidor('salon.cambio', { mesaIds: [], ordenId: ORDEN });
+    expect(cliente.getQueryData(['salon', 'x'])).toBe(1);
   });
 
   it('una comanda nueva refresca la cocina', async () => {
@@ -285,6 +306,43 @@ describe('el estado de la impresión', () => {
     expect(invalidadas).toEqual([
       [...CLAVES_TIEMPO_REAL.impresionEstado],
       [...CLAVES_TIEMPO_REAL.impresoras],
+    ]);
+  });
+});
+
+describe('la facturación electrónica (006, 6b)', () => {
+  it('comprobante.estado vuelve a pedir ese comprobante, el panel y las alertas', async () => {
+    const socket = await abrir();
+    socket.conectar();
+    invalidadas.length = 0;
+    socket.desdeElServidor('comprobante.estado', {
+      comprobanteId: ORDEN,
+      estado: 'ACEPTADO',
+      sucursalId: ORDEN,
+    });
+    expect(invalidadas).toEqual([
+      [...CLAVES_TIEMPO_REAL.facturacionComprobante(ORDEN)],
+      [...CLAVES_TIEMPO_REAL.facturacionPanel],
+      [...CLAVES_TIEMPO_REAL.facturacionAlertas],
+    ]);
+  });
+
+  it('un comprobante.estado mal formado invalida más, nunca menos', async () => {
+    const socket = await abrir();
+    socket.conectar();
+    invalidadas.length = 0;
+    socket.desdeElServidor('comprobante.estado', { estado: 'ACEPTADO' });
+    expect(invalidadas[0]).toEqual([...CLAVES_TIEMPO_REAL.facturacion]);
+  });
+
+  it('facturacion.alerta vuelve a pedir las alertas y el panel', async () => {
+    const socket = await abrir();
+    socket.conectar();
+    invalidadas.length = 0;
+    socket.desdeElServidor('facturacion.alerta', { sucursalId: ORDEN });
+    expect(invalidadas).toEqual([
+      [...CLAVES_TIEMPO_REAL.facturacionAlertas],
+      [...CLAVES_TIEMPO_REAL.facturacionPanel],
     ]);
   });
 });

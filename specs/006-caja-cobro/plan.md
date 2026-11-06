@@ -1,6 +1,6 @@
 # 006 · Plan técnico
 
-Entregas 6a (caja, cobro y comprobante sin PSE) y 6b (facturación electrónica), pendientes de la aprobación del usuario. Los números entre paréntesis son criterios de `spec.md`; "pregunta N" remite a "Preguntas abiertas". Se ejecuta 6a completa y después 6b; la parte de 6b de este plan se precisa antes de empezarla.
+Entregas 6a (caja, cobro y comprobante sin PSE) y 6b (facturación electrónica), pendientes de la aprobación del usuario. Los números entre paréntesis son criterios de `spec.md`; "pregunta N" remite a "Preguntas abiertas". Se ejecuta 6a completa y después 6b. 6a está terminada (`c1de966`); la parte de 6b se precisó el 2026-11-06 sin PSE elegido (simulador detrás de `ConectorPse`; el adaptador real es T34) y espera la aprobación del usuario.
 
 ## Módulos afectados
 
@@ -35,11 +35,31 @@ Entregas 6a (caja, cobro y comprobante sin PSE) y 6b (facturación electrónica)
   - La ventana de clave de 002 acepta y muestra el `objetivo`.
 - `packages/ui` (skill `impeccable`): `TecladoDeMonto`, `CifraGrande` (vuelto y total), `FilaDeDesglose`.
 
-### Entrega 6b (a precisar)
+### Entrega 6b (precisada y aprobada el 2026-11-06)
 
-- `apps/api/src/modulos/facturacion/pse/`: `ConectorPse`, `SimuladorPse`, el adaptador del PSE elegido; `envios-pse.service.ts`, el trabajo del worker y el barrido; `notas-credito.service.ts`; `padron/` (carga diaria y búsqueda).
-- `apps/api/src/worker.ts` (nuevo punto de entrada) y `src/nucleo/colas/` (pg-boss con su rol `restaurante_colas`, como el de tiempo real de 004).
-- `apps/app`: panel de comprobantes, nota de crédito, autocompletar del RUC, compartir por WhatsApp.
+- `packages/dominio/src/caja/`: `notas-credito.ts` (P8: `calcularNotaCredito`), `envios.ts` (P7: esperas, plazos, alertas, transiciones), `sunat.ts` (códigos), `turno.ts` (`medio` opcional en los movimientos de `esperadoDelTurno`), catálogos nuevos en `catalogos.ts`. Pruebas protegidas en `packages/dominio/test/caja/` (archivos nuevos de la fase B de 6b).
+- `packages/contratos`: `src/facturacion.ts` (nuevo) y los cambios de `comprobantes.ts` (ensanchar), `autorizaciones.ts` (objetivo `NOTA_CREDITO`), `caja.ts` (`reporteCaja.notasCredito`, `movimientos.lista[].medio`), eventos y `errores.ts`.
+- `apps/api`:
+  - `src/modulos/facturacion/pse/`: `conector-pse.ts` (interfaz y tipos), `documento-pse.ts` (`armarDocumentoPse`), `simulador-pse.ts`, `registro-de-conectores.ts` (modo del emisor → conector), `adaptadores-reales.ts` (mapa código → adaptador, vacío en 6b; T34 agrega el del PSE elegido, junto con su código en `PSE_CONECTORES_REALES` de `config/entorno.ts`) y `adaptadores/` (T34).
+  - `src/modulos/facturacion/envios/`: `envios.service.ts` (registrar el envío en la emisión), `procesador-envios.ts` (los tres pasos del worker), `barrido-envios.ts`, `alertas.ts`, `resultado-pse.ts` (aplicar un resultado: estados, columnas, archivos, intentos).
+  - `src/modulos/facturacion/`: `panel.controller.ts` (rutas `/facturacion/…`), `panel.service.ts`, `reemision.service.ts`, `pdf/pdf-comprobantes.ts` (pdfkit y qrcode), `enlaces.ts` (sello del enlace), `publico-comprobantes.controller.ts` (`/publico/comprobantes/:sello`), `almacen-comprobantes.ts` (puerto) y cambios en `emision.service.ts` (registro del envío, `simulado`, `emitirNotaCredito`, `reemitir`), `series.service.ts` (`TIPOS_SERIE`), `comprobantes.service.ts` (nulos, filtro de cobros en el resumen, resumen de notas), `facturado.ts` (filtro de cobros), `lectura-comprobante.ts` (campos de 6b).
+  - `src/modulos/facturacion/padron/`: `carga-padron.ts` (descarga, descompresión en flujo, `INSERT` en lotes, cambio de tabla), `padron.service.ts` (búsqueda), `padron.controller.ts` (`/padron/ruc/:ruc`).
+  - `src/modulos/caja/`: `notas-credito.controller.ts` (`/notas-credito`), `notas-credito.service.ts` (dueño de `nota_credito`), cambios en `reportes-caja.ts` (medio de los movimientos, notas del turno).
+  - `src/modulos/plataforma/`: `configuracion-pse.service.ts` y su controlador (`/plataforma/empresas/:empresaId/emisores/:emisorId/pse`), `EmisoresService.configuracionPse`, `empresas-consulta.ts` (ids para el barrido), `facturacion-plataforma.controller.ts` (`/plataforma/facturacion/alertas`, `/plataforma/padron`, `/plataforma/padron/carga`).
+  - `src/modulos/seguridad/`: `exigirObjetivo` con la variante `NOTA_CREDITO`.
+  - `src/modulos/impresion/escpos/plantillas/comprobante.ts`: la leyenda de 6b, la marca de simulado y la variante de nota de crédito (documento que modifica, motivo, devolución).
+  - `src/nucleo/cifrado/` (nuevo), `src/nucleo/colas/` (nuevo: `ColaPse`, `ColaPgBoss`, `ColaEnMemoria`), `src/nucleo/archivos/` (almacén privado: memoria, disco y R2 con `R2_BUCKET_COMPROBANTES`), `src/nucleo/tiempo-real/emisor-worker.ts` (emisor de `@socket.io/postgres-emitter`).
+  - `src/worker.ts` (nuevo punto de entrada) y `src/crear-worker.ts`; `src/aplicacion.ts` (`pse`, `colaPse`, `almacenComprobantes`; `WORKER=habilitado`); `src/config/entorno.ts` (variables de 6b).
+  - `scripts/` (`db:preparar`): roles `restaurante_colas` y `restaurante_referencia`, esquema `colas` con dueño `restaurante_colas`; `scripts/lib/roles.ts`.
+  - `datos/ubigeo.csv` (catálogo del INEI) y `test/soporte/padron-ejemplo.zip` (padrón pequeño para las pruebas).
+  - `src/migraciones/`: 9 a 13 (ver "Migraciones").
+  - Pruebas protegidas en `test/facturacion-critica/` (fase B de 6b); no protegidas en `test/facturacion/`.
+- `apps/app`:
+  - `src/modulos/facturacion/` (nuevo, bajo demanda): `PanelComprobantesPagina`, `ComprobanteDetalle`, `NotaCreditoHoja`, `ReemisionHoja`, `AvisoDeAlertas`, `EstadoComprobante` (chip en vivo), `CompartirComprobante`, `facturacion.ts` (consultas y mutaciones con IK e `id`).
+  - `src/modulos/caja/`: el cliente de la factura con el padrón (`ClienteFactura`), el estado en vivo en el resultado, "Comprobantes" en Caja.
+  - `src/modulos/administracion/cajas/`: las series de notas de crédito; Ajustes › Comprobantes.
+  - La ventana de clave muestra el objetivo `NOTA_CREDITO`.
+- Dependencias nuevas (todas de código abierto, sin servicios externos): `pg-boss` (12.38.0, solo ESM, cargado con `import()`), `pdfkit`, `qrcode`, una biblioteca de descompresión en flujo (`yauzl` o `unzipper`) y `pg-copy-streams`.
 
 ## Diseño
 
@@ -102,8 +122,12 @@ Primero, si la operación lleva un id del cliente, un cerrojo consultivo de la t
 | Cambio de serie (`PUT …/series/:tipo`) | caja (`FOR NO KEY UPDATE`) → serie (`FOR UPDATE` de la existente y `UPDATE` de la activa) |
 | Cambio de tasa (`configurarTasaIgv`) | solo el emisor (`FOR NO KEY UPDATE SKIP LOCKED`, reintentado cada 25 ms hasta 3 s; después 409 `CONFLICTO`) |
 | Alta o reactivación de caja (`CajasService`) | consultivo `cajas:<sucursal>` (tope de 10 cajas activas) y la caja |
+| Nota de crédito (6b, `NotasCreditoService.emitir`) | consultivo `nota-credito-id:<id>` → comprobante original (`FOR UPDATE`) → turno de la devolución (`FOR SHARE`, si la hay) → emisor (`FOR SHARE`) → serie de la nota (`UPDATE … RETURNING`) → serie de la factura (solo en un cambio) → cuota |
+| Reemisión (6b, `EmisionService.reemitir`) | comprobante rechazado (`FOR UPDATE`) → emisor (`FOR SHARE`) → serie → cuota (el índice único de `reemplaza_a_id` es la red) |
+| Worker, paso 1 y paso 3 (6b) | `envio_pse` (`FOR UPDATE SKIP LOCKED` en el paso 1, `FOR UPDATE` en el 3) → comprobante del envío (`UPDATE` de estado) → original de la nota (`UPDATE` a `ANULADO`, solo con una anulación aceptada) |
+| Barrido (6b) | lectura sin bloqueo de `envio_pse` y `UPDATE … WHERE estado = … AND (en_curso_hasta IS NULL OR en_curso_hasta < $ahora)` (detener por plazo, marcar alertas); no bloquea comprobantes |
 
-Ninguna operación toma estos cerrojos en otro orden, así que no hay ciclos: el consultivo va siempre primero y es propio de cada id; el cierre solo toma turnos; el cambio de tasa solo el emisor y sin esperar sin límite; el reporte X toma solo el turno.
+Ninguna operación toma estos cerrojos en otro orden, así que no hay ciclos: el consultivo va siempre primero y es propio de cada id; el cierre solo toma turnos; el cambio de tasa solo el emisor y sin esperar sin límite; el reporte X toma solo el turno. En 6b: nadie toma un turno antes que un comprobante, ni un comprobante antes que su `envio_pse` (el worker va de envío a comprobante; la nota de crédito y la reemisión bloquean el comprobante pero no su envío, que solo insertan para el documento nuevo); un cobro nunca toma una serie de notas de crédito, y la nota toma su serie antes que la de la factura.
 
 **La clave del consultivo lleva la empresa** (corregido en el código, `CobrosService.turnarPor`): la clave real es `<empresaId>:<clave>`, por ejemplo `<empresaId>:cobro-id:<id>`. El espacio de cerrojos consultivos es de toda la base: sin la empresa, dos empresas con el mismo id de cliente se turnarían entre sí. No filtraba datos (cada una lee con su RLS), pero una podía hacer esperar a la otra. Las claves de la tabla de arriba se escriben sin la empresa por brevedad.
 
@@ -128,7 +152,7 @@ Si cualquier paso lanza, la transacción se revierte entera: el número de la se
 
 ### Partes y cambios después de cobrar (17 a 20, 64 a 68, 86 a 89)
 
-- Facturación guarda en `comprobante.detalle_parte` el resultado de `calcularParte` (la `ParteCalculada`, con `porItem`) y en `comprobante.numero_parte` su lugar en la orden. `FacturadoService.facturadoDeOrden(ordenId)` devuelve esos detalles en orden de `numero_parte`, leyendo solo `comprobante`, y `calcularParte` calcula "lo que falta" restándolos de la cuenta actual. No hay otra fuente de verdad para lo cobrado; `cobro` (caja) guarda solo la referencia al comprobante y los pagos. En 6b, si una nota de crédito anula partes, `facturadoDeOrden` es el único lugar que cambia.
+- Facturación guarda en `comprobante.detalle_parte` el resultado de `calcularParte` (la `ParteCalculada`, con `porItem`) y en `comprobante.numero_parte` su lugar en la orden. `FacturadoService.facturadoDeOrden(ordenId)` devuelve esos detalles en orden de `numero_parte`, leyendo solo `comprobante`, y `calcularParte` calcula "lo que falta" restándolos de la cuenta actual. No hay otra fuente de verdad para lo cobrado; `cobro` (caja) guarda solo la referencia al comprobante y los pagos. En 6b una nota de crédito no cambia lo cobrado de la orden (criterio 156): `facturadoDeOrden` solo agrega el filtro `cobro_id IS NOT NULL`.
 - `orden.monto_cobrado`, `orden.cobros`, `orden.modo_cobro` e `item.cantidad_facturada` son copias que pedidos guarda para sus propias reglas sin leer tablas de caja: saber si una orden tiene cobros (unir, anular, descuentos) y mostrarlo en la cuenta.
 - **Puerto `COBROS`:** antes de confirmar un envío, una anulación de ítem o una unión de una orden con `cobros > 0`, pedidos arma la cuenta que quedaría y llama a `COBROS.validarCambio(ordenId, cuentaNueva)`; caja lee las partes con `facturadoDeOrden` y aplica `cambioDeCuentaPermitido` (que rechaza todo cambio si la cuenta tiene descuento por cuenta y alguna parte cobrada, criterio 20); si no, 409 `CUENTA_COBRADA_EN_PARTE` y la transacción se revierte (la autorización de la anulación también). Cuando el cambio es permitido, el puerto devuelve además `cierraLaCuenta` (caja lo calcula con `cuentaSinNadaQueFaltar` del dominio, la misma definición de "no falta nada" de `cierraLaCuenta`: saldo 0.00, sin bolsas ni cortesías pendientes); si es `true`, pedidos deja la orden `CERRADA` en esa misma transacción (versión, `cerrada_en`, `orden_mesa.hasta`, pre-cuenta invalidada, sin otro comprobante) y publica `orden.cambio` y `salon.cambio` después de confirmar (ronda 2, criterio 90). Unir y anular una orden con cobros se rechazan antes, sin llamar al puerto (409 `CUENTA_EN_COBRO`).
 - En el mostrador no hay partes: la venta es un cobro `TOTAL`.
@@ -176,12 +200,144 @@ Una transacción: cerrojo consultivo `cobro-id:<id>` y réplica por `id` (es el 
 - **Partes iguales entre equipos** (revisión T26, criterios 65 y 113): `partes.ts` guarda por cuenta el total de partes elegido; las partes cobradas y su detalle vienen de `cuentaRespuesta.cobros[].detalleParte`, con lo que `calcularParte` corre igual en cualquier equipo. Si el equipo no tiene el total (la cuenta se sigue desde otro), la PWA propone las partes que faltan según lo cobrado y lo muestra, editable, antes de cobrar.
 - **Mostrador** (revisión T26, criterio 115): ofrece solo los tipos de comprobante permitidos por el régimen del emisor y usa la tasa de IGV y el ICBPER que da la API, nunca una tasa ni una lista de tipos propias (hoy `MostradorPagina` tiene `TIPOS = ['BOLETA', 'FACTURA']` fijo). La ruta que expone esos parámetros sin una orden está pendiente ("Preguntas abiertas" de `spec.md`).
 
-### Entrega 6b (bosquejo)
+### Entrega 6b (precisada el 2026-11-06)
 
-- **Colas:** pg-boss en su esquema, con el rol `restaurante_colas` (sin privilegios en `public`, como `restaurante_tiempo_real`); la API encola con `alConfirmar` solo `{ empresaId, comprobanteId }`; el worker abre `ContextoEmpresa.ejecutar(empresaId, …, { actor: { sistema: 'worker:envio-pse' } })`. Barrido cada minuto de `envio_pse` vencidos.
-- **Idempotencia con el PSE:** serie y número como identificador; ante error de transporte, `consultar` antes de reintentar.
-- **Padrón:** carga diaria a una tabla nueva y cambio atómico de nombre; función `SECURITY DEFINER` de búsqueda exacta (patrón de 005).
-- **Notas de crédito:** la misma numeración de `EmisionService`; los montos con `calcularParte` sobre las líneas del original; el egreso en el turno abierto de quien emite.
+Los números entre paréntesis son criterios de `spec.md` (120 a 181). Sin PSE elegido: todo corre con `SimuladorPse`; el adaptador real es T34.
+
+#### Estructura de 6b
+
+```
+apps/api/src/modulos/facturacion/
+  pse/conector-pse.ts            ConectorPse, DocumentoPse, IdDocumentoPse, ResultadoPse, CredencialPse (120)
+  pse/documento-pse.ts           armarDocumentoPse(comprobante) (pura; códigos de dominio/caja/sunat.ts)
+  pse/simulador-pse.ts           SimuladorPse con reglas, recibidos() y llamadas() (121)
+  pse/registro-de-conectores.ts  para(emisorId): { conector, credencial, modo } según configuracion_pse (122)
+  envios/envios.service.ts       registrar(comprobanteId, tipo, fechaEmision) en la transacción de la emisión (124)
+  envios/procesador-envios.ts    procesar(empresaId, comprobanteId): tomar, llamar, guardar (125, 128)
+  envios/resultado-pse.ts        aplicar(resultado): estados, columnas, archivos, intentos, eventos (127, 131)
+  envios/barrido-envios.ts       barrerAhora(): reencolar, detener por plazo, alertas (126, 130, 133)
+  envios/alertas.ts              conteos de alertas por alcance (133)
+  panel.controller.ts            /facturacion/comprobantes…, /facturacion/alertas (132, 134, 135, 159, 160)
+  panel.service.ts, reemision.service.ts
+  pdf/pdf-comprobantes.ts        armar(comprobante): Buffer (159)
+  enlaces.ts                     sellar / abrir (160)
+  publico-comprobantes.controller.ts   GET /publico/comprobantes/:sello
+  padron/carga-padron.ts, padron/padron.service.ts, padron/padron.controller.ts (138 a 142)
+
+apps/api/src/modulos/caja/
+  notas-credito.controller.ts    POST /notas-credito (144)
+  notas-credito.service.ts       réplica, turno, devolución, egresos, respuesta (144 a 157)
+
+apps/api/src/modulos/plataforma/
+  configuracion-pse.service.ts   modo y credencial cifrada (122, 123)
+  empresas-consulta.ts           ids() para el barrido (126)
+  facturacion-plataforma.controller.ts  alertas y padrón del superadministrador (133, 138)
+
+apps/api/src/nucleo/
+  cifrado/cifrado.ts             sellar / abrir con AES-256-GCM y HKDF (123, 160)
+  colas/                         ColaPse, ColaPgBoss (restaurante_colas), ColaEnMemoria (124, 137)
+  archivos/almacen-comprobantes-*.ts   memoria, disco (./archivos-privados) y R2 privado (131)
+  tiempo-real/emisor-worker.ts   formato del clúster de socket.io-adapter por pg_notify con restaurante_tiempo_real (172; sin @socket.io/postgres-emitter, cuyos mensajes sin nsp descarta el adaptador 0.5.0)
+
+apps/api/src/worker.ts, crear-worker.ts
+```
+
+Dependencias entre módulos (6b): caja → facturación (`EmisionService.prepararNotaCredito` y `numerarNotaCredito`); facturación → plataforma (`EmisoresService.configuracionPse`, `EmpresasConsulta`), impresión, núcleo. Facturación no lee `turno`, `movimiento_caja` ni `nota_credito`; caja no lee `comprobante` ni `envio_pse`; plataforma no lee `comprobante` (para la regla "de `SIMULADO` a `REAL` solo sin comprobantes" usa el puerto de última emisión que facturación ya registra al arrancar, criterio 6 de 6a). La reemisión necesita los pagos del cobro solo para rearmar un ticket viejo: usa el puerto `RegistroPagosDeCobro` que ya existe.
+
+#### Flujo del envío (124 a 131; ruta crítica P7)
+
+1. **En la emisión** (dentro de la transacción del cobro, del mostrador, de la nota, del cambio o de la reemisión): `EmisionService` resuelve el modo del emisor (`configuracion_pse`, lectura sin bloqueo) para copiar `simulado`, inserta el comprobante, sus líneas, el `envio_pse` (`PENDIENTE`, `plazo_hasta` = `plazoDeEnvio(tipo, fechaEmision)`, `proximo_intento_en` = `emitido_en`), cuenta la cuota y encola el ticket; registra `alConfirmar(() => colaPse.encolar({ empresaId, comprobanteId }))`. El orden de cerrojos del cobro no cambia (el `INSERT` de `envio_pse` no espera a nadie).
+2. **Cola:** `ColaPgBoss.encolar` hace `boss.send('envio-pse', datos, { singletonKey: comprobanteId, startAfter? , retryLimit: 0 })` (los reintentos los decide `envio_pse`, no pg-boss). Si falla, se registra un `warn` y el barrido lo recoge.
+3. **Worker:** `boss.work('envio-pse', { batchSize: 5 }, …)` llama a `ProcesadorEnviosPse.procesar(empresaId, comprobanteId)`:
+   - Paso 1 (transacción): toma la fila con `FOR UPDATE SKIP LOCKED`, comprueba estado, `proximo_intento_en` y arriendo; fija `en_curso_hasta` = ahora + 2 min e `intento_en_curso`; suma `intentos`; lee el comprobante con `leerComprobante` y arma el `DocumentoPse`; pide a `RegistroDeConectores` el conector y la credencial descifrada.
+   - Paso 2 (sin transacción): `intentos = 1` → `emitir`; si no → `consultar` y, con `NO_EXISTE`, `emitir`. Cada llamada con `PSE_TIMEOUT_MS`. Con `ACEPTADO`, guarda `xml` y `cdr` en `AlmacenComprobantes` (clave fija por comprobante: repetir sobrescribe lo mismo).
+   - Paso 3 (transacción): vuelve a tomar la fila; si `intento_en_curso` es de otro worker o el envío ya está `TERMINADO`, termina sin escribir; si el arriendo quedó libre porque el barrido detuvo el envío por plazo mientras la llamada seguía en curso, un resultado final (`ACEPTADO` o `RECHAZADO`) se aplica igual y uno no final se descarta (ataque ronda 1, F8); si no, `resultado-pse.ts` aplica la tabla del criterio 127 con un `UPDATE comprobante … WHERE id = $1 AND estado IN (…)` (el disparador de transiciones es la red), inserta los `intento_pse`, calcula `proximo_intento_en` con `proximoIntento` de `packages/dominio` o deja `TERMINADO`, suelta el arriendo y registra con `alConfirmar` el evento `comprobante.estado`, el siguiente `encolar` con `startAfter` y, con un rechazo, la alerta.
+   - Con una nota `ANULACION` (o la de un cambio) aceptada, en el mismo paso 3 pasa el original a `ANULADO` (criterio 152).
+   - Con `ACEPTADO`, en el mismo trabajo y después del paso 3 arma el PDF (criterio 159) y lo guarda con `pdf_clave` en una transacción corta aparte; si falla, el barrido lo reintenta (comprobantes `ACEPTADO` sin `pdf_clave`).
+4. **Barrido** (`setInterval` de 60 s en el worker, `unref`, como la revisión de puentes de 3b; las pruebas llaman a `barrerAhora()`): pide `EmpresasConsulta.ids()` y por cada empresa abre `ContextoEmpresa.ejecutar` con el actor `worker:envio-pse` y: (a) selecciona hasta 500 envíos `PENDIENTE` o `ESPERANDO_RESPUESTA` con `proximo_intento_en` ≤ ahora y sin arriendo vigente y los encola después de confirmar; (b) pasa a `DETENIDO` los que llegaron a `plazo_hasta` sin terminar y sin la marca `reintento_manual_en` (F1, abajo); (c) marca las alertas nuevas con `alertaDe` (`alertado_en`, `alerta`, `alertas_previas`) y las publica; la consulta ya excluye los comprobantes cuyo motivo actual se publicó antes, así que los ya tratados no ocupan el cupo de 1000 (F5 y F7, abajo); (d) reencola el PDF de los `ACEPTADO` sin `pdf_clave`, hasta 20 por vuelta: primero los nunca intentados, después los de intento más antiguo, sin los intentados hace menos de 10 minutos (`pdf_intentado_en`; F7 y H3, abajo). Con varias instancias del worker, los `UPDATE` condicionados y `singletonKey` evitan dobles efectos.
+5. **Por qué no hay duplicados:** el identificador ante el PSE es fijo; el segundo intento siempre consulta; un solo worker trabaja un envío a la vez (fila + arriendo); un resultado tardío de un arriendo vencido se descarta; un trabajo de un envío `TERMINADO` no hace nada.
+
+**Ataque adversarial, ronda 1 (mecanismos elegidos):**
+
+- **F1, reintento manual de un `DETENIDO` (criterios 130 y 132).** Columna `envio_pse.reintento_manual_en timestamptz` (migración 15): `EnviosService.reintentar` la fija con el reloj de la API junto con `proximo_intento_en` y el paso a `PENDIENTE`; `detenerVencidos` del barrido no toca un envío que la tenga (`reintento_manual_en IS NULL` en su `WHERE`); el paso 1 del procesador la limpia al tomar el envío. Si ese intento falla pasado el plazo, `resultado-pse.ts` ya lo deja `DETENIDO` sin `proximo_intento_en` (no se reintenta solo). El barrido sigue reencolando el envío con la marca, así que no queda huérfano.
+- **F5, una alerta por comprobante y motivo (criterio 133).** Columna `envio_pse.alertas_previas text[] NOT NULL DEFAULT '{}'` con `CHECK` de los cuatro motivos (migración 15): `alerta` sigue siendo el último motivo publicado (y `alertado_en` su instante); `alertas_previas` guarda los anteriores. Los motivos ya publicados son `alertas_previas` más `alerta`; una alerta se publica solo si su motivo no está ahí, y al publicarla el `alerta` anterior pasa a `alertas_previas`. Lo usan igual el paso 3 del procesador y el barrido (`UPDATE … WHERE NOT ($motivo = ANY (alertas_previas || alerta))` evita el doble aviso con dos workers).
+- **F7, cupos del barrido (criterios 133 y 159).** Alertas: la consulta de `alertar()` calcula el motivo con `sqlAlerta` y excluye los ya publicados antes del `LIMIT 1000`. PDF: la ronda 1 recordaba en memoria los fallos del barrido; la ronda 2 (H3, abajo) lo reemplazó por `comprobante.pdf_intentado_en`.
+- **F6, `pdf_clave` ajena (criterios 165 y 167).** `PanelService.archivoDelPdf` solo entrega una clave que empiece con `comprobantes/<empresaId>/<comprobanteId>/` (la ronda 2, H2, la endureció a igualdad exacta); si no, 409 `PDF_NO_DISPONIBLE` (también en `…/enlace`), como ya hacía la ruta pública. No se agregó un `CHECK` en la base: la prueba protegida del ataque pone a propósito la clave de otra empresa con el rol de la API para comprobar que la ruta no la sirve, y un `CHECK` la haría imposible.
+- **F2, F3 y F4.** `lineaNotaEntradaSchema.posicion` es entero de 1 a 9999 (`POSICION_MAXIMA_LINEA`); `decodificarCursor` exige un instante real (no mes 13 ni 30 de febrero); el reintento manual valida su cuerpo con `reintentoEntradaSchema` (`z.strictObject({}).optional()`): sin cuerpo o `{}` es 202, cualquier otro es 400 `DATOS_INVALIDOS`.
+- **Entorno (desarrollo).** `ARCHIVOS_COMPROBANTES_DIRECTORIO` no puede ser `ARCHIVOS_DIRECTORIO` ni quedar dentro (la API sirve esa carpeta en `/archivos`), validado en `entorno.ts` con el almacén en disco, igual que en R2 los buckets deben ser distintos.
+
+**Ataque adversarial, ronda 2 (mecanismos elegidos):**
+
+- **H2, `pdf_clave` con `..` y almacén R2 (criterios 131, 165 y 167).** Las rutas `GET /facturacion/comprobantes/:id/pdf`, `…/enlace` y la pública `GET /publico/comprobantes/:sello` solo sirven el PDF si `pdf_clave` es **igual** (no prefijo) a `comprobantes/<empresaId>/<comprobanteId>/representacion.pdf` (`esClaveDelPdfDe`); si no, 409 `PDF_NO_DISPONIBLE` (404 en la pública). Un `..` no se pasa por un prefijo porque un bucket R2 resuelve la URL a la carpeta de otra empresa. Además, el patrón de claves válidas que tenía el almacén en disco pasó a `nucleo/archivos/almacen-comprobantes.ts` (`esClaveValidaDeComprobante` / `exigirClaveValidaDeComprobante`: segmentos `[A-Za-z0-9_-]+` separados por una barra, extensión opcional al final, máximo 300) y lo exigen igual el almacén en disco, el de memoria y `AlmacenComprobantesR2`: `leer` y `guardar` lanzan `RangeError` ante `..`, `.`, segmentos vacíos, barra inicial o final, `\`, espacios, `?`, `#`, `%` o la clave vacía, antes de firmar ni pedir nada al bucket.
+- **H3, el barrido de PDF no se bloquea (criterio 159).** Reemplaza el recuerdo en memoria de la ronda 1 (F7). Columna `comprobante.pdf_intentado_en timestamptz` (migración 16) con `GRANT UPDATE` por columna a `restaurante_api` solo para ella. `ArchivadorDePdf.pendientes()` **reclama** el lote en una sola sentencia: `UPDATE comprobante SET pdf_intentado_en = ahora WHERE id IN (SELECT id … WHERE estado IN ('ACEPTADO','ANULADO') AND pdf_clave IS NULL AND (pdf_intentado_en IS NULL OR pdf_intentado_en <= ahora − 10 min) ORDER BY pdf_intentado_en NULLS FIRST, emitido_en DESC, id LIMIT 20 FOR UPDATE SKIP LOCKED) RETURNING id`. Primero van los nunca intentados (los aceptados nuevos, los más recientes antes), después los de intento más antiguo; ningún fallo se excluye para siempre, se turnan cada 10 minutos como mínimo. `FOR UPDATE SKIP LOCKED` evita que dos workers tomen el mismo lote y un worker que muere a medias no deja nada bloqueado (su marca vence a los 10 minutos). El PDF sigue siendo idempotente (clave fija). Índice parcial `comprobante_sin_pdf_idx`. `recordarFallo` desaparece. Un PDF que falla en el propio worker al aceptarse queda con `pdf_intentado_en` nulo, así que el barrido lo ofrece en la vuelta siguiente.
+- **S1, arriendo frente a `PSE_TIMEOUT_MS` (criterio 125).** El arriendo del envío ya no es una constante: `arriendoDelEnvioMs(PSE_TIMEOUT_MS) = max(2 min, 2 × PSE_TIMEOUT_MS + 30 s)` (la ronda 3 le sumó el guardado de archivos, ver «Orden de los tiempos»; con el valor por defecto de 30 s sigue siendo 2 minutos; con el máximo de 120 s son 270 s). El entorno acepta cualquier `PSE_TIMEOUT_MS` de 1 s a 120 s.
+
+**Ataque adversarial, ronda 3 (mecanismos elegidos):**
+
+- **C1, la réplica por `id` no exige ni consume la clave (criterios 145, 153 y 154).** `ValidacionPrevia` de `@ClaveDespuesDeValidar` gana `replicaPor` (un proveedor que implementa `ReplicaDeClave.yaExiste(cuerpo)`); `ClaveDiferidaInterceptor` valida la entrada como siempre y, antes de exigir y consumir `X-Autorizacion`, le pregunta si la operación ya existe: si existe, sigue sin tocar la cabecera (ni exige la clave ni consume una autorización de otro objetivo) y deja que el servicio la resuelva. `POST /notas-credito` declara `replicaPor: NotasCreditoService`, cuyo `yaExiste` toma el mismo consultivo `<empresa>:nota-credito-id:<id>` que `emitir` (reentrante en la transacción) y mira `nota_credito`: dos peticiones simultáneas con el mismo `id` se turnan y la segunda ve la nota de la primera en lugar de gastar su clave. `emitir` devuelve la nota guardada (misma huella) o responde 422 `CLAVE_IDEMPOTENCIA_REUTILIZADA` (otra huella) antes de `prepararNotaCredito`, que es quien compara el objetivo de la autorización; ni la réplica ni el 422 dejan auditoría. Una nota nueva sigue exigiendo y consumiendo la clave. Las demás rutas con clave diferida no declaran `replicaPor` y no cambian.
+- **S1, el arriendo cubre el peor caso del paso 2 (criterio 125).** Ver «Orden de los tiempos».
+
+**Orden de los tiempos** (`nucleo/colas/tiempos-del-envio.ts`): el paso 2 hace, en el peor caso, dos llamadas al PSE (consultar y emitir, `PSE_TIMEOUT_MS` cada una) y guarda dos archivos (XML y CDR, `TIEMPO_LIMITE_R2_MS` = 20 s cada uno). Arriendo = `max(2 min, 2 × PSE_TIMEOUT_MS + 2 × TIEMPO_LIMITE_R2_MS + 20 s)` (función `arriendoDelEnvioMs`; con el valor por defecto de 30 s son justo 2 minutos y con el máximo de 120 s, 300 s; el margen de 20 s cubre el guardado del resultado y los relojes, y no es mayor para que el arriendo por defecto siga siendo de 2 minutos). La expiración del trabajo `envio-pse` en pg-boss (`EXPIRA_ENVIO_EN_SEGUNDOS`) se deriva del arriendo del mayor `PSE_TIMEOUT_MS` que admite el entorno (`PSE_TIMEOUT_MS_MAXIMO` = 120 s) más 60 s de margen: 360 s, siempre mayor que cualquier arriendo. `ColaPgBoss` la aplica con `createQueue` y además con `updateQueue`, porque `createQueue` no cambia una cola que ya existe. Los instantes que decide la cola («ya») no leen el reloj del sistema: se usa `startAfter: 0` (el reloj de la base de la cola) y `ColaEnMemoria.procesarPendientes` solo toma `ahora` del llamador.
+
+**Rutas sin `Idempotency-Key`:** `PUT /plataforma/empresas/:empresaId/emisores/:emisorId/pse` y `POST /plataforma/padron/carga` no la usan porque son idempotentes por naturaleza: el `PUT` fija la configuración completa (repetirlo deja el mismo estado) y la carga del padrón va a una cola `exclusive` (con una carga esperando o en curso, otra petición no encola una segunda).
+
+**`POST /plataforma/padron/carga` audita antes de encolar:** la operación de plataforma deja `cargar_padron` en `auditoria` y se confirma; recién después `FacturacionPlataformaService.pedirCargaDelPadron` pide la carga a la cola (`boss.send`). Si el encolado falla, queda la fila de auditoría de un pedido que no llegó a la cola y el superadministrador recibe el error y puede repetirlo. Es aceptable porque la cola es `exclusive` y repetir es seguro (nunca hay dos cargas a la vez), la carga no toca datos de clientes y la carga diaria de las 04:00 la recupera de todos modos.
+
+#### Conector, simulador y modo (120 a 123)
+
+- `RegistroDeConectores.para(emisorId)`: sin fila en `configuracion_pse` → `{ modo: null }` y el paso 2 no llama a nadie: resultado `ERROR_CONFIGURACION` («facturación no activada»); `SIMULADO` → la instancia de `SimuladorPse` del proceso; `REAL` → solo el adaptador registrado en `ADAPTADORES_REALES` con el código guardado en `configuracion_pse.conector`; si no existe, `conector: null` con su detalle y el envío termina en `ERROR_CONFIGURACION` sin llamar a nadie. **Falla cerrado** (cierre de 6b): un emisor `REAL` nunca se envía con el simulador, que aceptaría el documento sin SUNAT. `crearAplicacion({ pse })` y `crearWorker({ pse })` reemplazan **solo al simulador** (`CONECTOR_PSE`), nunca a un adaptador real; las pruebas que necesitan un emisor `REAL` con respuesta lo hacen con un adaptador de prueba registrado, no con el simulador. `cargarEntorno` rechaza en cualquier `NODE_ENV` un `PSE_CONECTOR` que no sea `simulador` ni un código de `PSE_CONECTORES_REALES` (lista vacía en 6b; T34 agrega el suyo), con un mensaje que nombra `PSE_CONECTOR`. El `PUT` con `REAL` responde 409 `PSE_NO_CONFIGURADO` mientras `PSE_CONECTOR` no sea el código de un adaptador registrado. `urlConsulta` sigue la misma regla (`REAL` sin adaptador → `null`).
+- `armarDocumentoPse` es pura y se prueba sin red (pruebas del desarrollador): mismo comprobante → mismo documento, byte a byte.
+- **Cifrado** (`nucleo/cifrado/cifrado.ts`): `sellar(texto, { proposito, datosAsociados })` = `version (1 byte) ‖ claveId (1 byte) ‖ iv (12) ‖ etiqueta (16) ‖ cifrado`, con la clave `HKDF-SHA256(CLAVE_CIFRADO, sal fija del sistema, info = proposito)`; `abrir` prueba la clave del `claveId` (actual o anterior) y falla con un error propio sin detalles. Los propósitos son `credencial-pse` (datos asociados `credencial-pse:<empresaId>:<emisorId>`) y `enlace-comprobante` (sin datos asociados: el sello lleva la empresa adentro). `CLAVE_CIFRADO` falta en producción → la API y el worker no arrancan (`exigirEntornoDeProduccion`).
+- **Configuración PSE** (plataforma): el `PUT` del superadministrador corre en una operación de plataforma (conexión `restaurante_plataforma`, que tiene `INSERT` y `UPDATE` en `configuracion_pse`), cifra la credencial antes de escribirla y deja la fila de `auditoria` (`origen` `plataforma`) sin valores. `EmisoresService.configuracionPse(emisorId)` la lee con la conexión de la API (con el contexto de la empresa) y descifra; la usan solo `RegistroDeConectores` y el worker. Ningún esquema de respuesta tiene un campo para el valor.
+
+#### Panel, alertas y reemisión (132 a 136)
+
+- `GET /facturacion/comprobantes`: una consulta con los filtros y otra de conteos (`GROUP BY estado`), sobre el índice `(empresa_id, estado, emitido_en)`; paginación por cursor opaco (`emitido_en`, `id`) en base64url. El alcance (criterio 169) se resuelve como en 6a: el Cajero filtra por `turno_responsable_id`; el Supervisor por la sucursal activa; el Administrador por la lista de sucursales donde la sesión tiene rol Administrador (la da seguridad, sin leer otra tabla de facturación).
+- `alertaDe` (pura) decide la alerta de cada fila; la consulta de `GET /facturacion/alertas` hace el mismo cálculo en SQL (los dos se prueban con los mismos casos).
+- La reemisión copia las líneas con un `INSERT … SELECT` del rechazado (montos idénticos, sin recalcular) y llama a `SeriesService.tomarNumero` con el tipo nuevo; el cliente y el tipo se validan con las mismas funciones del cobro (criterio 51).
+- **X y Z:** `ComprobantesService.resumenDeTurno` agrega `AND c.cobro_id IS NOT NULL` y devuelve además `notasCredito` (Σ de las notas con ese `turno_id`); `reportes-caja.ts` suma los egresos por medio (`SELECT medio, tipo, monto FROM movimiento_caja WHERE turno_id = $1`) y llama a `esperadoDelTurno` con el `medio` de cada movimiento.
+
+#### Notas de crédito (143 a 157; ruta crítica P8)
+
+Orquesta caja (`NotasCreditoService`, como el cobro); facturación calcula, numera y guarda. Una transacción:
+
+1. Interceptores: 401, rol `EMITIR_NOTA_CREDITO`, sucursal, módulo `FACTURACION`, forma, IK, clave diferida (`@ClaveDespuesDeValidar({ cuerpo, uuids: ['comprobanteId'] })`, orden de 004).
+2. Consultivo `<empresa>:nota-credito-id:<id>` y réplica por `id` en `nota_credito` (huella sin `total` ni `motivo`): 201 con `respuesta` o 422.
+3. `EmisionService.prepararNotaCredito` (facturación): toma el original `FOR UPDATE` (404 / 403 alcance / 409 / 422 del criterio 146), lee las notas que cuentan y sus líneas (las de `comprobante_linea` con `posicion_origen` de las notas cuyo `afecta_a_id` es el original y que no tienen reemisión), arma la entrada y llama a `calcularNotaCredito`; compara `total` (409 `NOTA_CREDITO_CAMBIO`) y el objetivo de la autorización del Cajero (`exigirObjetivo`, 403 `AUTORIZACION_INVALIDA`).
+4. Caja, si hay devolución, valida el turno y lo toma `FOR SHARE` (404, 409 `TURNO_CERRADO` / `TURNO_AJENO`), valida los pagos con `validarPagos` (422 `DEVOLUCION_INVALIDA`) y resuelve la caja de la operación y su impresora; sin devolución, la caja del original. El turno va **después** del original y **antes** del emisor, como en la tabla de cerrojos: por eso la emisión se divide en dos llamadas.
+5. `EmisionService.numerarNotaCredito` (facturación): toma el emisor `FOR SHARE`; numera con la serie de la nota de la caja de la operación y el emisor del original (y en un cambio, después, la serie `FACTURA`); inserta la nota (y la factura) con sus líneas (`posicion_origen`), sus `envio_pse`, la cuota y los tickets (la gaveta si hay devolución en efectivo).
+6. Caja inserta los `movimiento_caja` `EGRESO` (uno por pago, con `medio`, `operacion` y `comprobante_id`), el registro `nota_credito` con su respuesta, la auditoría `emitir_nota_credito` y registra `turno.cambio` con `alConfirmar`.
+
+Si algo falla después de numerar, la transacción se revierte entera (número, cuota, egresos, tickets, envíos, autorización). Las réplicas simultáneas se turnan en el consultivo; dos notas distintas sobre el mismo original, en la fila del original.
+
+#### Padrón (138 a 142)
+
+- `CargaPadron.cargar()` corre en el worker (trabajo programado `padron-ruc` con `boss.schedule('padron-ruc', '0 4 * * *', null, { tz: 'America/Lima' })` y trabajo a pedido desde la ruta del superadministrador; política de cola de uno a la vez) con su propio pool de `pg` (`DATABASE_REFERENCIA_URL`, 1 conexión, sin la guarda de la API, como el adaptador de tiempo real), verificado al arrancar.
+- Flujo: leer `padron_estado` → elegir la tabla inactiva → `TRUNCATE` → descargar con `fetch` en flujo → descomprimir en flujo → decodificar ISO-8859-1 → partir por líneas y por `|` → transformar → `INSERT … SELECT … FROM json_to_recordset($1)` en lotes de 5 000 filas (no `COPY`: PostgreSQL rechaza `COPY FROM` en una tabla con RLS para un rol que no es su dueño, y la RLS de `referencia` es obligatoria; sin `pg-copy-streams`; ver la medición más abajo) → contar (las inserciones con `ON CONFLICT (ruc) DO NOTHING`) → si filas ≥ 90 % de la carga anterior (o es la primera), `UPDATE padron_estado SET tabla_activa = …` en una transacción; si no, `ultimo_error`. Se registran tiempos y filas, nunca contenidos.
+- `ubigeo.csv` se carga en `referencia.ubigeo` si la tabla está vacía o su `version` es otra que la del archivo.
+- `PadronService.buscar(ruc)`: `SELECT * FROM padron_buscar_ruc($1)` con la conexión de la API dentro del contexto de la petición (la función no lee ni escribe tablas de clientes).
+- Sin ninguna carga, `padron_buscar_ruc` falla con el estado `RF503` y el servicio responde 503 `PADRON_NO_DISPONIBLE`. La descompresión en flujo usa `unzipper` (analiza el ZIP según llega, sin guardar el archivo). Solo una carga a la vez aunque haya dos procesos: cerrojo consultivo en la conexión de la carga.
+- `GET /plataforma/padron` lee el estado por `public.padron_estado()` (`SECURITY DEFINER`, `STABLE`, cinco columnas, `EXECUTE` solo para `restaurante_plataforma`): plataforma no tiene `USAGE` en `referencia` y la API no necesita `DATABASE_REFERENCIA_URL`. `POST /plataforma/padron/carga` deja `cargar_padron` en `auditoria` y, después de confirmarla, hace `boss.send('padron-ruc')` en una cola de política `exclusive` (una carga esperando o en curso a la vez); el worker la procesa con `boss.work` y programa `boss.schedule('padron-ruc', '0 4 * * *', …, { tz: 'America/Lima' })` al iniciar.
+- `apps/api/datos/ubigeo.csv`: los 1 892 distritos del catálogo del INEI (`codigo,departamento,provincia,distrito`); su versión es el comienzo de su SHA-256.
+- **Medición con el archivo real (pregunta 36, 2026-11-06, T36).** `CargaPadron` con la dirección por defecto (`https://www2.sunat.gob.pe/padron_reducido_ruc.zip`) en una base nueva de PostgreSQL 16.15 local (4 CPU, 16 GB de memoria, disco local), desde el entorno de pruebas del agente: el ZIP pesa 394 763 859 bytes (376 MiB) y trae **18 513 202 filas** de RUC (de 11 dígitos; se cargan todas, opción (a)). Tiempo de punta a punta: **217 s** leyendo el ZIP de un archivo local y **206 s** descargándolo por la red del entorno (la descarga corre en flujo a la vez que se inserta; la base es el límite, unas 90 000 filas por segundo). Memoria del proceso: unos **275 a 285 MB** de RSS en el punto más alto, con el archivo sin guardar entero (el proceso de la medición incluye `tsx` y las bibliotecas). Cada tabla ocupa **1 797 MB** de datos y **2 539 MB** con el índice de la clave primaria, así que las dos tablas alternas juntas son de unos **5 GB** (más el WAL de la carga). Una búsqueda de `padron_buscar_ruc` tarda de 0.3 a 2 ms con las 18.5 millones de filas. De cada 100 filas, unas 85 no tienen ubigeo ni dirección (personas naturales, bajas): así viene el archivo, y la dirección es `null` en esos casos. Esto sale del entorno de pruebas; **pendiente antes de producción**: repetirlo en la base administrada del plan elegido (espacio de 5 GB y más el WAL, tiempo con su disco y su red). Si no cabe, el plan B es no cargar las bajas definitivas (1.1 millones de filas) o las bajas de oficio (2.9 millones), con el aviso «no figura» en lugar de «baja».
+- **Decisiones de T36 fuera del texto de la especificación** (para el orquestador): (1) `INSERT … json_to_recordset` en lugar de `COPY` y sin `pg-copy-streams` (la RLS de `referencia`, que la prueba protegida exige, impide `COPY FROM` a `restaurante_referencia`); (2) `public.padron_estado()` para `GET /plataforma/padron`; (3) el 503 sale del estado `RF503` de la función de búsqueda; (4) `padronAl` es el instante de la carga (ISO 8601), no solo la fecha.
+
+#### PDF y enlace (159 a 161)
+
+- `PdfComprobantes.armar(comprobante, { urlConsulta })` usa `pdfkit` (fuentes estándar Helvetica, que cubren las tildes) y `qrcode` (QR como imagen PNG en memoria). Se prueba con pruebas del desarrollador que extraen el texto del PDF.
+- `EnlacesComprobante.sellar({ empresaId, comprobanteId, expiraEn })` y `abrir(sello)` con `Cifrado` (propósito `enlace-comprobante`). La ruta pública: abre el sello (falla → 404), `ContextoEmpresa.ejecutar(empresaId, …, { actor: { sistema: 'publico:comprobante' } })` de solo lectura, lee `pdf_clave` del comprobante, lo lee del almacén privado y lo responde. Ninguna consulta sin empresa nueva.
+
+#### Ticket definitivo (162)
+
+- `documentoDeComprobante` recibe `{ leyenda: { tipoTexto, urlConsulta, simulado } }`; la emisión la arma con el conector del emisor (`RegistroDeConectores.para(emisorId).conector.urlConsulta()`; sin configuración, `null`).
+- **Plan B** (si el contador exige el `hash`, fuera de 6b): la emisión encola un trabajo `GAVETA` (con `turno_id`) cuando hay efectivo y no el ticket; el paso 3 del worker encola el ticket con el `hash` al aceptar; la PWA dice "El ticket se imprimirá cuando SUNAT acepte" y alerta si tarda más de 2 minutos.
+
+#### PWA de 6b (173 a 181)
+
+- Todo `src/modulos/facturacion/` con `lazy()`; nada de 6b entra en el paquete inicial (solo el destino "Comprobantes" dentro de Caja y Ajustes, que ya están).
+- `comprobante.estado` invalida la consulta del comprobante y del panel; `facturacion.alerta` invalida `GET /facturacion/alertas`.
+- La nota de crédito usa `calcularNotaCredito`, `validarPagos` y `redondeoEfectivo` de `@restaurante/dominio/caja` con lo que trae `GET /comprobantes/:id` (`lineas`, `acreditado`), y conserva el `id` hasta una respuesta final (como el cobro).
+- `ClienteFactura` consulta el padrón al completar 11 dígitos válidos (con un pequeño retardo) y guarda la marca "Emitir igual" solo en el formulario.
 
 ## Decisiones
 
@@ -200,6 +356,17 @@ Una transacción: cerrojo consultivo `cobro-id:<id>` y réplica por `id` (es el 
 | Pulso de gaveta como bloque del ticket con ventana de 120 s | Trabajo aparte siempre | Un trabajo aparte sale en un orden no garantizado frente al ticket; dentro del ticket va primero y no se repite en reimpresiones. |
 | Entrada `@restaurante/dominio/caja` con su alias en Vite | Importar desde el índice | El margen del paquete inicial es de 13.8 kB y las reglas de caja con `decimal.js` no deben entrar en él. |
 | Puertos registrados al arrancar donde la dependencia iría al revés (impresora de la caja para reimprimir, última emisión de un emisor) y `turno_responsable_id` copiado en el comprobante | Leer `caja`, `turno` o `comprobante` desde otro módulo | Cada módulo es dueño de sus tablas y no hay ciclos entre módulos. |
+| (6b) `envio_pse` en la transacción + pg-boss con `alConfirmar` + barrido | Insertar el trabajo de pg-boss en la transacción del cobro; sondear `envio_pse` sin cola | Lo primero exige privilegios de `restaurante_api` sobre un esquema sin RLS; lo segundo deja a pg-boss sin uso (CLAUDE.md pide colas con pg-boss) y obliga a sondear todas las empresas cada pocos segundos. |
+| (6b) Arriendo de 2 minutos y tres pasos | Una transacción abierta durante la llamada al PSE | No retiene filas ni conexiones durante 30 s; un worker caído no bloquea el envío para siempre. |
+| (6b) Consultar antes de emitir desde el segundo intento | Confiar en que el PSE rechace los repetidos | Cada PSE trata distinto un documento repetido; consultar no depende de eso. |
+| (6b) Barrido por empresa con la lista de plataforma | Una función `SECURITY DEFINER` que liste envíos vencidos de todas las empresas | No abre otro canal entre empresas; con 30 empresas basta (riesgo aceptado si crece). |
+| (6b) Rutas en `/facturacion`, `/notas-credito`, `/padron` | Bajo `/comprobantes` | La prueba protegida del criterio 98 falla con cualquier ruta nueva bajo `/comprobantes`. |
+| (6b) Nota de crédito orquestada por caja, en dos llamadas a facturación | Todo en facturación | La devolución toca el turno y `movimiento_caja` (de caja), y el turno debe bloquearse entre el original y el emisor. |
+| (6b) Montos de la nota con una función propia (`calcularNotaCredito`) | Reusar `calcularParte` | Las notas parten de las líneas del comprobante (no de la cuenta), admiten la anulación con gratuitas y deben llevar `posicionOrigen`; la regla proporcional es la misma del criterio 17. |
+| (6b) PDF propio en el worker | El PDF del PSE | Igual para cualquier PSE y para el simulador; sin servicios externos (RNF-18). |
+| (6b) Sello cifrado como enlace público | Fila de enlace con un token buscado por una función entre empresas | Sin función ni motivo `sinEmpresa` nuevos; el costo es no poder revocarlo. |
+| (6b) Padrón en dos tablas alternas con un rol propio | Una tabla con `DELETE` + `COPY` en una transacción; renombrar tablas | El rol de la carga no necesita DDL; las búsquedas nunca esperan ni ven una carga a medias. |
+| (6b) Credencial con AES-256-GCM en la aplicación y HKDF | `pgcrypto` | La clave nunca viaja a la base ni a sus registros de consultas. |
 
 ## Migraciones
 
@@ -214,7 +381,18 @@ En este orden (6a); `down` de cada una deshace solo lo suyo. Ninguna escribe dat
 7. `202611040007-impresion-caja.ts` (impresión): `CHECK` de `trabajo_impresion.tipo` con los cuatro tipos nuevos, `comprobante_id`, `turno_id` y sus índices únicos parciales.
 8. `202611040008-impresion-de-operaciones-de-caja.ts` (caja, grupo C6): `turno.apertura_impresion` y `turno.apertura_trabajo_id`, y `movimiento_caja.impresion` y `movimiento_caja.trabajo_impresion_id` (`EN_COLA` o `SIN_IMPRESORA`; FK compuesta con `empresa_id` a `trabajo_impresion`; `CHECK` de que `EN_COLA` va si y solo si hay trabajo), para que la réplica por `id` de la apertura y del movimiento devuelva el mismo `impresion` y `trabajoId` (criterio 96). No cambia la RLS ni los privilegios.
 
-6b agrega las suyas (envíos, resultados, notas de crédito, padrón y el esquema de pg-boss con su rol en `db:preparar`).
+6b, en este orden (cada `down` deshace solo lo suyo; ninguna escribe datos de clientes; los roles `restaurante_colas` y `restaurante_referencia` y el esquema `colas` los crea `db:preparar`, no una migración):
+
+9. `202611060001-facturacion-electronica.ts` (facturación y caja): en `comprobante`, `cobro_id`, `turno_id` y `detalle_parte` admiten nulo; `tipo` con las notas; las columnas nuevas y los `CHECK` del modelo de datos (escritos para la prueba de catálogo de 002); el disparador `comprobante_transicion`; el índice único de `reemplaza_a_id`; el `GRANT UPDATE (…)` de las columnas de respuesta; `comprobante_linea.posicion_origen`; `serie.tipo` y `serie_forma_ck` con las notas; `movimiento_caja.operacion` y sus `CHECK`. Su `down` vuelve a poner los `NOT NULL` y los `CHECK` de 6a y **falla si ya hay notas, reemisiones o facturas de cambio** (por diseño, como la migración 7).
+10. `202611060002-envios-pse.ts` (facturación): `envio_pse` e `intento_pse` con `sqlTablaDeEmpresaTrazable`.
+11. `202611060003-configuracion-pse.ts` (plataforma): `configuracion_pse` (`privilegiosApi: ['SELECT']`, `privilegiosPlataforma: ['SELECT', 'INSERT', 'UPDATE']`).
+12. `202611060004-padron.ts` (facturación): esquema `referencia` (dueño el migrador; `USAGE` solo para `restaurante_referencia`), `padron_ruc_a`, `padron_ruc_b`, `padron_estado` (sin filas: la primera carga crea la única con `INSERT … ON CONFLICT`), `ubigeo`, sus políticas y privilegios, y `public.padron_buscar_ruc(text)`.
+13. `202611060005-notas-credito.ts` (caja): `nota_credito` con `sqlTablaDeEmpresaTrazable`.
+14. `202611060006-padron-cargado-en.ts` (facturación): `public.padron_cargado_en()`.
+15. `202611060007-ataque-6b-ronda1.ts` (facturación): `envio_pse.reintento_manual_en` y `envio_pse.alertas_previas` (ver «Ataque adversarial, ronda 1»).
+16. `202611060008-ataque-6b-ronda2.ts` (facturación): `comprobante.pdf_intentado_en` con `GRANT UPDATE` por columna y el índice parcial `comprobante_sin_pdf_idx` (ver «Ataque adversarial, ronda 2»).
+
+`db:migrar` y `db:revertir` de las ocho y otra vez `db:migrar` en una base sin datos dan el mismo esquema (lo verifica el tester en T49). `db:preparar` crea los dos roles nuevos con contraseña (`DB_PASSWORD_COLAS`, `DB_PASSWORD_REFERENCIA`, con valor de desarrollo en `development` y `test`) y el esquema `colas` con dueño `restaurante_colas`; corre dos veces sin errores.
 
 ## Riesgos
 
@@ -225,4 +403,10 @@ En este orden (6a); `down` de cada una deshace solo lo suyo. Ninguna escribe dat
 - **Cambio de emisor de una sucursal con series:** cubierto por el criterio 5 (las series del emisor anterior no emiten).
 - **Riesgos aceptados tras la revisión T26** (detalle en `spec.md`, "Riesgos aceptados propuestos"): el 422 `DIFERENCIA_SIN_MOTIVO` con todo en cero revela el esperado sin rastro (para revisar con el usuario); los montos de S/ 0.01 a 0.09 no se pagan en efectivo; el puente puede imprimir dos veces un ticket (3b).
 - **Correcciones de código que esta documentación describe:** la empresa en la clave del cerrojo consultivo (hecha); el módulo del plan en la reimpresión de 004 (hecho, y se comprueba antes que el permiso); el 422 de la tasa en un emisor `NUEVO_RUS` (criterio 6); los tipos y parámetros del mostrador en la PWA (criterio 115); el total de partes en el equipo (criterios 65 y 113).
-- **6b:** primer uso de pg-boss y del worker (roles, RLS, despliegue), tamaño del padrón (cientos de MB) en la base administrada, y la elección del PSE.
+- **6b, primer uso de pg-boss y del worker:** roles, esquema propio, despliegue (un proceso aparte o `WORKER=habilitado` en el mismo contenedor). Mitigación: la cola solo despierta; la verdad está en `envio_pse` y el barrido la repara. En el despliegue, el worker y la API usan la misma imagen.
+- **6b, padrón:** del orden de gigabytes y millones de filas, el doble durante la carga, en una base administrada (pregunta 36). Mitigación: solo las columnas necesarias, dos tablas alternas con `TRUNCATE` antes de llenar, medir en el entorno de pruebas antes de producción; plan B: no cargar las bajas definitivas. El formato del archivo de SUNAT puede cambiar: la carga valida y no cambia de tabla si algo no cuadra.
+- **6b, PSE sin elegir:** el simulador cubre el contrato, no las rarezas de un PSE real (demoras, boletas que se aceptan en el resumen, errores de validación propios). T34 trae pruebas contra su ambiente de pruebas y revisa los tiempos (preguntas 27, 34 y 39).
+- **6b, cálculo de notas de crédito con descuentos y partes:** cubierto por ejemplos exactos en P8 y por la regla proporcional del criterio 17; el ataque debe buscar céntimos que sobren al devolver en varias notas.
+- **6b, efectos fuera de la transacción:** el ticket, el evento y el encolado siguen con `alConfirmar`; el PDF y los archivos se escriben fuera de la transacción del worker y sus claves fijas los hacen idempotentes.
+- **6b, presupuesto de la PWA:** todo bajo demanda; se mide en cada cierre de fase.
+- **Aviso operativo:** el contenedor de desarrollo se reinicia a menudo; las tareas de 6b se cierran por tramos con commit (`tasks.md`).

@@ -15,8 +15,8 @@ secciones ya aprobadas y cerradas. Hoy son:
   (la app Android llega en la 3c).
 - **Sección 5a, Carta web y llamados desde la mesa:** la API, los QR de las mesas (en Ajustes › Mapa de mesas) y los llamados (en Salón › Llamados).
 - **Sección 5b, Carta web y pedido desde la mesa:** la carta pública de cada sucursal y el modo mesa, que abre el QR de cada mesa (`apps/web`).
-
-- **Sección 6a, Caja, cobro y comprobante sin PSE:** apertura y cierre de caja (X y Z), cobro con varios medios y vuelto, división de cuenta, descuentos y cortesías con clave, venta de mostrador y boleta o factura con su número. Los comprobantes quedan «por enviar» hasta la 6b (facturación electrónica), que se trabaja en otra rama y llega a `main` cuando se aprueba.
+- **Sección 6a, Caja, cobro y comprobante:** apertura y cierre de caja (X y Z), cobro con varios medios y vuelto, división de cuenta, descuentos y cortesías con clave, venta de mostrador y boleta o factura con su número.
+- **Sección 6b, Facturación electrónica:** envío de los comprobantes a un PSE simulado, padrón de RUC, notas de crédito, panel de comprobantes, PDF y enlace por WhatsApp. Para que se envíen, el emisor tiene que estar en modo `SIMULADO` y el worker tiene que correr (ver «Facturación electrónica (6b)» en el README); sin eso, quedan «por enviar». El adaptador del PSE real todavía no existe: no se usa con clientes reales.
 
 ## 1. Lo que necesitas instalar
 

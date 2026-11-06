@@ -63,3 +63,67 @@ export class RegistroPagosDeCobro {
     return this.resolutor(cobroId);
   }
 }
+
+/**
+ * Lo que se devolvió con una nota de crédito: por medio, en el orden de `MEDIOS_PAGO`, y el redondeo del efectivo (el total
+ * de la nota menos lo devuelto).
+ */
+export interface DevolucionDeNota {
+  pagos: { medio: MedioPago; monto: string }[];
+  redondeo: string;
+}
+
+/** Cómo leer la devolución de una nota; la registra quien sea dueño de los movimientos de caja (el módulo de caja). */
+export type ResolutorDevolucionDeNota = (notaId: string) => Promise<DevolucionDeNota | null>;
+
+/**
+ * Lo mismo para la devolución de una nota de crédito (historia 006, criterios 150 y 157): facturación no lee
+ * `movimiento_caja` ni `nota_credito`. El módulo de caja registra al arrancar cómo dar los egresos de una nota, para
+ * reimprimir su ticket con la sección «DEVOLUCIÓN» cuando no hay ticket guardado que copiar. Devuelve `null` si la nota no
+ * tuvo devolución. **Falla cerrado**: sin registro, lanza un error (nunca imprime la nota como si no hubiera devuelto nada).
+ */
+@Injectable()
+export class RegistroDevolucionDeNota {
+  private resolutor: ResolutorDevolucionDeNota | null = null;
+
+  registrar(resolutor: ResolutorDevolucionDeNota): void {
+    this.resolutor = resolutor;
+  }
+
+  async deLaNota(notaId: string): Promise<DevolucionDeNota | null> {
+    if (this.resolutor === null) {
+      throw new Error(
+        'Nadie registró cómo leer la devolución de una nota de crédito (módulo de caja)',
+      );
+    }
+    return this.resolutor(notaId);
+  }
+}
+
+/** Cómo dar el `id` que mandó el cliente de cada nota de crédito; lo registra el módulo de caja. */
+export type ResolutorIdsDeNotas = (comprobanteIds: string[]) => Promise<Map<string, string>>;
+
+/**
+ * Lo mismo para el `id` de cliente de las notas de crédito (historia 006, criterio 148): `comprobanteRespuesta.notasCredito`
+ * lleva `notaId`, el `nota_credito.id` que mandó la PWA en `POST /notas-credito`, para que sepa si su intento ya salió.
+ * Facturación no lee `nota_credito`: el módulo de caja registra al arrancar cómo obtenerlo a partir de los ids de comprobante.
+ * Devuelve solo los que tienen registro (el de la nota original; una reemisión no tiene el suyo). **Falla cerrado**: sin
+ * registro, lanza un error (nunca responde una nota sin su `notaId`).
+ */
+@Injectable()
+export class RegistroIdsDeNotas {
+  private resolutor: ResolutorIdsDeNotas | null = null;
+
+  registrar(resolutor: ResolutorIdsDeNotas): void {
+    this.resolutor = resolutor;
+  }
+
+  async deLosComprobantes(comprobanteIds: string[]): Promise<Map<string, string>> {
+    if (this.resolutor === null) {
+      throw new Error(
+        'Nadie registró cómo leer el id de cliente de las notas de crédito (módulo de caja)',
+      );
+    }
+    return this.resolutor(comprobanteIds);
+  }
+}

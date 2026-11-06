@@ -48,6 +48,32 @@ export function veLaCuenta(sesion: SesionDeNavegacion | null | undefined): boole
   return sesion ? puede(sesion, 'ATENDER_MESA', 'CAJA') : false;
 }
 
+/** La sucursal tiene el módulo de Facturación en su plan: sin él no hay envío a SUNAT que mostrar (006, 6b). */
+export function tieneFacturacion(
+  sesion: Pick<SesionRespuesta, 'modulos'> | null | undefined,
+): boolean {
+  return sesion?.modulos.includes('FACTURACION') ?? false;
+}
+
+/**
+ * El panel de comprobantes (006, 6b, criterio 174): quien puede cobrar (`COBRAR`: el Cajero con sus turnos, el
+ * Supervisor y el Administrador, pregunta 40), si la sucursal tiene el módulo de Facturación. La API decide el alcance.
+ */
+export function veLosComprobantes(sesion: SesionDeNavegacion | null | undefined): boolean {
+  return sesion ? puede(sesion, 'COBRAR', 'FACTURACION') : false;
+}
+
+/**
+ * Los avisos de alertas, de modo simulado y de facturación no activada (criterio 175) son del Administrador y del
+ * Supervisor; el Cajero se entera por el resultado de su cobro.
+ */
+export function veLosAvisosDeFacturacion(
+  sesion: Pick<SesionRespuesta, 'rol' | 'esAdministrador' | 'modulos'> | null | undefined,
+): boolean {
+  if (!sesion || !tieneFacturacion(sesion)) return false;
+  return sesion.esAdministrador || sesion.rol === 'ADMINISTRADOR' || sesion.rol === 'SUPERVISOR';
+}
+
 /**
  * "Disponibilidad" va dentro de Cocina para el Administrador (su barra ya tiene cinco destinos, criterio 108 de
  * 006). Si el plan no le da Cocina, vuelve a la barra: es la única puerta.

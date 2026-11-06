@@ -4,6 +4,7 @@ import {
   MONEDA_COMPROBANTE,
   TIPOS_COMPROBANTE,
   TIPOS_DOCUMENTO_CLIENTE,
+  TIPOS_DOCUMENTO_ELECTRONICO,
   validarRuc,
 } from '@restaurante/dominio';
 import { z } from 'zod';
@@ -20,7 +21,10 @@ import { regimenTributarioSchema, textoSchema, uuidSchema } from './comunes';
 
 const instanteSchema = z.iso.datetime();
 
+/** Lo que se elige al cobrar: solo boleta o factura (las notas de crédito no se cobran, 6b criterio 143). */
 export const tipoComprobanteSchema = z.enum(TIPOS_COMPROBANTE);
+/** Todo documento electrónico que numera el sistema: boleta, factura y las dos notas de crédito (6b). */
+export const tipoDocumentoElectronicoSchema = z.enum(TIPOS_DOCUMENTO_ELECTRONICO);
 export const formatoComprobanteSchema = z.enum(FORMATOS_COMPROBANTE);
 export const estadoComprobanteSchema = z.enum(ESTADOS_COMPROBANTE);
 export const tipoDocumentoClienteSchema = z.enum(TIPOS_DOCUMENTO_CLIENTE);
@@ -101,6 +105,18 @@ export const comprobanteLineaRespuestaSchema = z.object({
   afectacion: afectacionIgvSchema,
   gratuita: z.boolean(),
   valorReferencial: z.string().nullable(),
+  /**
+   * La base y el IGV con los que se guardó el valor referencial de una cortesía (`base + igv = valorReferencial`,
+   * criterio 69); `null` en las líneas que no son gratuitas. Se leen de lo guardado: la PWA no los deriva al calcular
+   * la nota de crédito (criterio 147).
+   */
+  baseReferencial: z.string().nullable(),
+  igvReferencial: z.string().nullable(),
+  /**
+   * 6b: en una línea de nota de crédito, la `posicion` de la línea del original que acredita; `null` en las demás.
+   * Opcional hasta que la API de 6b la emita (T30).
+   */
+  posicionOrigen: z.number().int().min(1).nullable().optional(),
 });
 
 export const operacionesComprobanteSchema = z.object({
@@ -122,9 +138,64 @@ export const totalesCuentaSchema = z.object({
   total: z.string(),
 });
 
+/** De dónde nace un comprobante (6b, criterio 134 y 143): un cobro, una nota, una reemisión o la factura de un cambio. */
+export const origenComprobanteSchema = z.enum([
+  'COBRO',
+  'NOTA_CREDITO',
+  'REEMISION',
+  'CAMBIO_A_FACTURA',
+]);
+
+/** Una referencia corta a otro comprobante (6b): `afectaA`, `reemplazaA` y `reemplazadoPor`. */
+export const referenciaComprobanteSchema = z.object({ id: uuidSchema, numero: z.string() });
+
+/**
+ * Lo ya acreditado de un comprobante por sus notas de crédito (6b, criterio 148): por posición de la línea cobrada, las
+ * unidades, el neto, la base, el IGV, las bolsas y el ICBPER que ya cubren las notas que cuentan (`base` e `igv` hacen
+ * falta para cerrar exactamente la última devolución, criterio 147).
+ */
+export const acreditadoLineaSchema = z.object({
+  posicion: z.number().int().min(1),
+  cantidad: z.number().int().min(0),
+  neto: z.string(),
+  base: z.string(),
+  igv: z.string(),
+  bolsas: z.number().int().min(0),
+  icbper: z.string(),
+});
+
+/** Las notas de crédito de un comprobante (6b, criterio 148). */
+export const notaDeComprobanteSchema = z.object({
+  /** El `id` del comprobante de la nota. */
+  id: uuidSchema,
+  /** El `nota_credito.id` que mandó el cliente en `POST /notas-credito` (para saber si su intento ya salió). */
+  notaId: uuidSchema,
+  tipo: z.enum(['ANULACION', 'DEVOLUCION']),
+  numero: z.string(),
+  estado: estadoComprobanteSchema,
+  total: z.string(),
+});
+
+/** La respuesta del PSE guardada en el comprobante (6b, criterios 127 y 131). */
+export const sunatComprobanteSchema = z.object({
+  codigo: z.string().nullable(),
+  mensaje: z.string().nullable(),
+  observaciones: z.array(z.object({ codigo: z.string(), mensaje: z.string() })),
+  hash: z.string().nullable(),
+});
+
+/** Las marcas de tiempo del comprobante ante SUNAT; cada una se fija una sola vez (6b, criterio 127). */
+export const marcasComprobanteSchema = z.object({
+  enviadoEn: instanteSchema.nullable(),
+  aceptadoEn: instanteSchema.nullable(),
+  rechazadoEn: instanteSchema.nullable(),
+  anuladoEn: instanteSchema.nullable(),
+});
+
 export const comprobanteRespuestaSchema = z.object({
   id: uuidSchema,
-  tipo: tipoComprobanteSchema,
+  /** Boleta, factura o nota de crédito (6b ensancha `tipoComprobanteSchema`). */
+  tipo: tipoDocumentoElectronicoSchema,
   serie: z.string(),
   correlativo: z.number().int().min(1),
   /** La serie y el número de 8 cifras: `B001-00000124`. */
@@ -142,10 +213,12 @@ export const comprobanteRespuestaSchema = z.object({
     codigoEstablecimiento: z.string(),
   }),
   cajaId: uuidSchema,
-  turnoId: uuidSchema,
+  /** `null` en una nota de crédito sin devolución (6b, criterio 149). */
+  turnoId: uuidSchema.nullable(),
   /** El responsable del turno al emitir (se copia al comprobante, criterios 69 y 100). */
   turnoResponsableId: uuidSchema,
-  cobroId: uuidSchema,
+  /** `null` en las notas de crédito, las reemisiones y las facturas de cambio (6b: no nacen de un cobro). */
+  cobroId: uuidSchema.nullable(),
   /** Su lugar entre las partes de la orden (1, 2, 3…); `null` si no viene de una orden. */
   numeroParte: z.number().int().min(1).nullable(),
   cliente: clienteComprobanteRespuestaSchema.nullable(),
@@ -163,18 +236,42 @@ export const comprobanteRespuestaSchema = z.object({
       numeroLlamado: z.number().int().nullable(),
     })
     .nullable(),
+  // Campos de 6b (criterios 127, 134, 143 a 148, 159). Opcionales mientras la API de 6a no los emita (T30).
+  origen: origenComprobanteSchema.optional(),
+  /** Copiado del modo del emisor al emitir: un comprobante simulado no tiene valor tributario (criterio 122). */
+  simulado: z.boolean().optional(),
+  /** El documento que modifica esta nota de crédito. */
+  afectaA: z
+    .object({ id: uuidSchema, tipo: tipoDocumentoElectronicoSchema, numero: z.string() })
+    .nullable()
+    .optional(),
+  nota: z
+    .object({
+      tipo: z.enum(['ANULACION', 'DEVOLUCION']),
+      motivo: z.string(),
+      cambioAFactura: z.boolean(),
+    })
+    .nullable()
+    .optional(),
+  reemplazaA: referenciaComprobanteSchema.nullable().optional(),
+  reemplazadoPor: referenciaComprobanteSchema.nullable().optional(),
+  notasCredito: z.array(notaDeComprobanteSchema).optional(),
+  acreditado: z.array(acreditadoLineaSchema).optional(),
+  sunat: sunatComprobanteSchema.nullable().optional(),
+  marcas: marcasComprobanteSchema.optional(),
+  pdfDisponible: z.boolean().optional(),
 });
 
 export const comprobanteResumenSchema = z.object({
   id: uuidSchema,
-  tipo: tipoComprobanteSchema,
+  tipo: tipoDocumentoElectronicoSchema,
   numero: z.string(),
   estado: estadoComprobanteSchema,
   total: z.string(),
   emitidoEn: instanteSchema,
   cliente: z.string().nullable(),
   cajaId: uuidSchema,
-  turnoId: uuidSchema,
+  turnoId: uuidSchema.nullable(),
   ordenId: uuidSchema.nullable(),
 });
 
@@ -197,6 +294,8 @@ export type ComprobanteEntradaValidada = z.output<typeof comprobanteEntradaSchem
 export type ComprobanteLineaRespuesta = z.infer<typeof comprobanteLineaRespuestaSchema>;
 export type TotalesCuentaRespuesta = z.infer<typeof totalesCuentaSchema>;
 export type ComprobanteRespuesta = z.infer<typeof comprobanteRespuestaSchema>;
+export type OrigenComprobante = z.infer<typeof origenComprobanteSchema>;
+export type AcreditadoLinea = z.infer<typeof acreditadoLineaSchema>;
 export type ComprobanteResumen = z.infer<typeof comprobanteResumenSchema>;
 export type ComprobantesConsulta = z.input<typeof comprobantesConsultaSchema>;
 export type ImpresionDeCajaRespuesta = z.infer<typeof impresionDeCajaRespuestaSchema>;

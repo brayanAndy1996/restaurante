@@ -22,7 +22,8 @@ import { horaDeLima } from '../../../lib/formato';
  * calcula aquí: la tasa viaja y se muestra como texto.
  */
 
-export type TipoSerie = 'BOLETA' | 'FACTURA';
+/** Los cuatro documentos que numera una caja: boletas, facturas y, desde 6b, las notas de crédito de cada una (criterio 149). */
+export type TipoSerie = 'BOLETA' | 'FACTURA' | 'NOTA_CREDITO_BOLETA' | 'NOTA_CREDITO_FACTURA';
 
 export const claveCajas = (sucursalId: string) => ['caja', 'cajas', sucursalId] as const;
 export const claveSucursal = (sucursalId: string) => ['caja', 'sucursal', sucursalId] as const;
@@ -140,9 +141,22 @@ export function conTasaGuardada(
 export const NOMBRE_DE_TIPO: Record<TipoSerie, { plural: string; singular: string }> = {
   BOLETA: { plural: 'Boletas', singular: 'boletas' },
   FACTURA: { plural: 'Facturas', singular: 'facturas' },
+  NOTA_CREDITO_BOLETA: {
+    plural: 'Notas de crédito de boletas',
+    singular: 'notas de crédito de boletas',
+  },
+  NOTA_CREDITO_FACTURA: {
+    plural: 'Notas de crédito de facturas',
+    singular: 'notas de crédito de facturas',
+  },
 };
 
+/** Los comprobantes que se cobran: de sus series depende que la caja emita (la lista y los primeros pasos solo miran estas). */
 export const TIPOS: readonly TipoSerie[] = ['BOLETA', 'FACTURA'];
+/** Las series de las notas de crédito (6b): sin ellas la caja cobra igual, pero no puede emitir notas (409 `SIN_SERIE`). */
+export const TIPOS_DE_NOTA: readonly TipoSerie[] = ['NOTA_CREDITO_BOLETA', 'NOTA_CREDITO_FACTURA'];
+/** Todas las series que se escriben al crear o editar una caja. */
+export const TIPOS_DE_SERIE: readonly TipoSerie[] = [...TIPOS, ...TIPOS_DE_NOTA];
 
 /** La serie que hoy emite ese tipo en la caja, si hay. */
 export const serieActiva = (caja: CajaRespuesta, tipo: TipoSerie) =>
@@ -266,10 +280,23 @@ export interface BorradorDeCaja {
   primerBoleta: string;
   serieFactura: string;
   primerFactura: string;
+  serieNotaBoleta: string;
+  primerNotaBoleta: string;
+  serieNotaFactura: string;
+  primerNotaFactura: string;
 }
 
 export type CampoDeCaja =
-  'nombre' | 'impresoraId' | 'serieBoleta' | 'primerBoleta' | 'serieFactura' | 'primerFactura';
+  | 'nombre'
+  | 'impresoraId'
+  | 'serieBoleta'
+  | 'primerBoleta'
+  | 'serieFactura'
+  | 'primerFactura'
+  | 'serieNotaBoleta'
+  | 'primerNotaBoleta'
+  | 'serieNotaFactura'
+  | 'primerNotaFactura';
 
 export type ErroresDeCaja = Partial<Record<CampoDeCaja, string>>;
 
@@ -280,6 +307,10 @@ export const CAJA_VACIA: BorradorDeCaja = {
   primerBoleta: '',
   serieFactura: '',
   primerFactura: '',
+  serieNotaBoleta: '',
+  primerNotaBoleta: '',
+  serieNotaFactura: '',
+  primerNotaFactura: '',
 };
 
 export const borradorDeCaja = (caja: CajaRespuesta): BorradorDeCaja => ({
@@ -289,17 +320,32 @@ export const borradorDeCaja = (caja: CajaRespuesta): BorradorDeCaja => ({
   primerBoleta: '',
   serieFactura: serieActiva(caja, 'FACTURA')?.serie ?? '',
   primerFactura: '',
+  serieNotaBoleta: serieActiva(caja, 'NOTA_CREDITO_BOLETA')?.serie ?? '',
+  primerNotaBoleta: '',
+  serieNotaFactura: serieActiva(caja, 'NOTA_CREDITO_FACTURA')?.serie ?? '',
+  primerNotaFactura: '',
 });
 
 export const CAMPOS_DE_SERIE: Record<
   TipoSerie,
-  { serie: 'serieBoleta' | 'serieFactura'; primero: 'primerBoleta' | 'primerFactura' }
+  {
+    serie: 'serieBoleta' | 'serieFactura' | 'serieNotaBoleta' | 'serieNotaFactura';
+    primero: 'primerBoleta' | 'primerFactura' | 'primerNotaBoleta' | 'primerNotaFactura';
+  }
 > = {
   BOLETA: { serie: 'serieBoleta', primero: 'primerBoleta' },
   FACTURA: { serie: 'serieFactura', primero: 'primerFactura' },
+  NOTA_CREDITO_BOLETA: { serie: 'serieNotaBoleta', primero: 'primerNotaBoleta' },
+  NOTA_CREDITO_FACTURA: { serie: 'serieNotaFactura', primero: 'primerNotaFactura' },
 };
 
-export const PREFIJO_DE_TIPO: Record<TipoSerie, 'B' | 'F'> = { BOLETA: 'B', FACTURA: 'F' };
+/** La serie de una nota de crédito lleva el prefijo del documento que modifica: `B…` para boletas, `F…` para facturas. */
+export const PREFIJO_DE_TIPO: Record<TipoSerie, 'B' | 'F'> = {
+  BOLETA: 'B',
+  FACTURA: 'F',
+  NOTA_CREDITO_BOLETA: 'B',
+  NOTA_CREDITO_FACTURA: 'F',
+};
 
 /** Lo que se escribe en una serie queda en mayúsculas y sin espacios (`b001 ` es `B001`). */
 export const serieEscrita = (texto: string): string => texto.replace(/\s/g, '').toUpperCase();
@@ -377,7 +423,7 @@ export function validarCaja(
   }
 
   const series: SerieAGuardar[] = [];
-  for (const tipo of TIPOS) {
+  for (const tipo of TIPOS_DE_SERIE) {
     const { serie: campoSerie, primero: campoPrimero } = CAMPOS_DE_SERIE[tipo];
     const serie = serieEscrita(borrador[campoSerie]);
     const activa = guardada ? serieActiva(guardada, tipo) : undefined;

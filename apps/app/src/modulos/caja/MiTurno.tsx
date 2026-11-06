@@ -18,6 +18,7 @@ import {
 import { useQuery } from '@tanstack/react-query';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { Pagina } from '../../componentes/Pagina';
+import { EnlaceAComprobantes } from '../facturacion/EnlaceAComprobantes';
 import { AvisoPendiente } from '../../componentes/PendienteDeEnvio';
 import { usePermiso } from '../acceso/permisos';
 import { useSesionActiva } from '../acceso/sesion';
@@ -131,6 +132,8 @@ export function MiTurno({ turno, aperturaImpresa, onCerrada }: Props) {
             Vender en el mostrador
           </Link>
         ) : null}
+
+        <EnlaceAComprobantes />
 
         <Segmentos
           etiqueta="Secciones de tu turno"

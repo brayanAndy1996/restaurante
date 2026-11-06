@@ -68,6 +68,11 @@ export interface OpcionesApi<T> {
   etag?: string;
   /** Recibe la respuesta HTTP (200 o 304) antes de leer su cuerpo; sirve para leer cabeceras como `ETag`. */
   alRespuesta?: (respuesta: Response) => void;
+  /**
+   * La respuesta buena es un archivo (por ejemplo, el PDF de un comprobante): se devuelve su `Blob` en lugar de
+   * leerla como JSON. Los errores siguen llegando como `ErrorApi`.
+   */
+  comoBlob?: boolean;
 }
 
 /** Espera entre intentos, en milisegundos. El primer intento sale de inmediato. */
@@ -76,9 +81,9 @@ const TIEMPO_MAXIMO_MS = 15000;
 const ESTADOS_REINTENTABLES = new Set([502, 503, 504]);
 /**
  * Un 503 que no es un corte de paso: el servidor contesta, y repetir no lo arregla (falta una configuración
- * del sistema). Se muestra de inmediato en vez de esperar los reintentos.
+ * del sistema, o el padrón de RUC sin ninguna carga). Se muestra de inmediato en vez de esperar los reintentos.
  */
-const CODIGOS_503_SIN_REINTENTO = new Set(['CONFIGURACION_INCOMPLETA']);
+const CODIGOS_503_SIN_REINTENTO = new Set(['CONFIGURACION_INCOMPLETA', 'PADRON_NO_DISPONIBLE']);
 
 interface Manejadores {
   /** Un 401 `NO_AUTENTICADO` o `SESION_EXPIRADA` con una credencial guardada: la sesión ya no vale. */
@@ -163,7 +168,9 @@ export async function llamar<T = void>(ruta: string, opciones: OpcionesApi<T> = 
   const ambito = opciones.ambito ?? 'empresa';
   const token = opciones.sinToken ? null : tokenDe(ambito);
 
-  const cabeceras: Record<string, string> = { Accept: 'application/json' };
+  const cabeceras: Record<string, string> = {
+    Accept: opciones.comoBlob ? 'application/pdf, application/json;q=0.9' : 'application/json',
+  };
   if (token) cabeceras.Authorization = `Bearer ${token}`;
   // Una sesión PIN trae el equipo en cada petición (criterio 37); `equipo` explícito manda sobre ella.
   const equipo = opciones.equipo ?? (token && ambito === 'empresa' ? equipoDeSesion() : null);
@@ -218,6 +225,7 @@ export async function llamar<T = void>(ruta: string, opciones: OpcionesApi<T> = 
 
         if (respuesta.ok) {
           opciones.alRespuesta?.(respuesta);
+          if (opciones.comoBlob) return (await respuesta.blob()) as T;
           const texto = await respuesta.text();
           const json = leerJson(texto);
           if (!opciones.esquema) return json as T;

@@ -10,6 +10,7 @@ import { QueryTypes, type Sequelize } from 'sequelize';
 import { CONEXION_API, SQLSTATE, sqlstateDe } from '../../nucleo/base-de-datos';
 import { ContextoEmpresa } from '../../nucleo/contexto-empresa';
 import { ErrorAplicacion } from '../../nucleo/errores/error-aplicacion';
+import { Cifrado, CifradoInvalidoError } from '../../nucleo/cifrado';
 import { RELOJ, type Reloj } from '../../nucleo/reloj';
 import { AuditoriaService } from '../auditoria';
 import { MODELOS_API, type EmisorModelo, type Modelos } from './modelos';
@@ -43,6 +44,28 @@ export interface DatosParaComprobante {
 }
 
 /**
+ * La configuración del PSE de un emisor ya descifrada (historia 006, criterio 122): solo la usan `RegistroDeConectores` y el
+ * worker, y la credencial existe en memoria únicamente durante una llamada al PSE.
+ */
+export interface ConfiguracionPseDescifrada {
+  modo: 'SIMULADO' | 'REAL';
+  /** El `PSE_CONECTOR` con que se pasó a `REAL`; `null` en `SIMULADO`. */
+  conector: string | null;
+  /** `null` si no tiene credencial o si no se pudo descifrar (en ese caso `credencialIlegible` es `true`). */
+  credencial: Readonly<Record<string, string>> | null;
+  /**
+   * Hay una credencial guardada pero no se pudo abrir (clave cambiada, datos asociados que no coinciden, contenido
+   * alterado): el intento termina en `ERROR_CONFIGURACION` y nunca se usa otra credencial (criterio 123).
+   */
+  credencialIlegible: boolean;
+}
+
+/** `datosAsociados` del cifrado de la credencial: un cifrado copiado a la fila de otro emisor no se abre (criterio 123). */
+export function datosAsociadosDeCredencial(empresaId: string, emisorId: string): string {
+  return `credencial-pse:${empresaId}:${emisorId}`;
+}
+
+/**
  * Emisores de la empresa del contexto activo (RF-01). Debe llamarse dentro de `ContextoEmpresa.ejecutar`:
  * los modelos son los de la conexión de la API, así que con contexto la RLS limita todo a la propia empresa.
  */
@@ -55,7 +78,96 @@ export class EmisoresService {
     @Inject(CONEXION_API) private readonly conexion: Sequelize,
     @Inject(AuditoriaService) private readonly auditoria: AuditoriaService,
     @Inject(RELOJ) private readonly reloj: Reloj,
+    @Inject(Cifrado) private readonly cifrado: Cifrado,
   ) {}
+
+  /**
+   * La configuración del PSE del emisor, con la credencial descifrada (historia 006, 6b, criterios 122 y 123); `null` si el
+   * emisor no tiene configuración. Con el contexto de la empresa de la petición o del trabajo (RLS). La usan solo
+   * `RegistroDeConectores` y el worker: el valor descifrado vive en memoria durante una llamada al PSE y no se registra.
+   * Una credencial que no se puede abrir no lanza: `credencialIlegible`.
+   */
+  async configuracionPse(emisorId: string): Promise<ConfiguracionPseDescifrada | null> {
+    const filas = await this.conexion.query<{
+      empresa_id: string;
+      modo: 'SIMULADO' | 'REAL';
+      conector: string | null;
+      credencial: Buffer | null;
+    }>(
+      `SELECT empresa_id, modo, conector, credencial FROM configuracion_pse WHERE emisor_id = $1`,
+      { bind: [emisorId], type: QueryTypes.SELECT },
+    );
+    const fila = filas[0];
+    if (fila === undefined) return null;
+    let credencial: Record<string, string> | null = null;
+    let credencialIlegible = false;
+    if (fila.credencial !== null) {
+      try {
+        credencial = JSON.parse(
+          this.cifrado.abrir(fila.credencial, {
+            proposito: 'credencial-pse',
+            datosAsociados: datosAsociadosDeCredencial(fila.empresa_id, emisorId),
+          }),
+        ) as Record<string, string>;
+      } catch (error) {
+        if (!(error instanceof CifradoInvalidoError) && !(error instanceof SyntaxError))
+          throw error;
+        credencialIlegible = true;
+      }
+    }
+    return { modo: fila.modo, conector: fila.conector, credencial, credencialIlegible };
+  }
+
+  /**
+   * Solo el modo del emisor (`SIMULADO`, `REAL` o `null` sin configuración), sin tocar la credencial: la emisión lo lee,
+   * sin bloquear, para copiar `comprobante.simulado` (criterio 122).
+   */
+  async modoPse(emisorId: string): Promise<'SIMULADO' | 'REAL' | null> {
+    const filas = await this.conexion.query<{ modo: 'SIMULADO' | 'REAL' }>(
+      `SELECT modo FROM configuracion_pse WHERE emisor_id = $1`,
+      { bind: [emisorId], type: QueryTypes.SELECT },
+    );
+    return filas[0]?.modo ?? null;
+  }
+
+  /**
+   * El modo y el código del conector con que el emisor pasó a `REAL` (`null` en `SIMULADO`), sin tocar la credencial; `null`
+   * sin configuración. Lo usa `RegistroDeConectores.urlConsulta` (criterio 122).
+   */
+  async conectorPse(
+    emisorId: string,
+  ): Promise<{ modo: 'SIMULADO' | 'REAL'; conector: string | null } | null> {
+    const filas = await this.conexion.query<{ modo: 'SIMULADO' | 'REAL'; conector: string | null }>(
+      `SELECT modo, conector FROM configuracion_pse WHERE emisor_id = $1`,
+      { bind: [emisorId], type: QueryTypes.SELECT },
+    );
+    return filas[0] ?? null;
+  }
+
+  /**
+   * Si algún emisor de las sucursales dadas está en modo `SIMULADO` (criterio 122): el aviso permanente de la PWA. Un
+   * emisor sin configuración no cuenta. Una sola consulta.
+   */
+  async hayModoSimulado(sucursalIds: readonly string[]): Promise<boolean> {
+    if (sucursalIds.length === 0) return false;
+    const filas = await this.conexion.query<{ simulado: boolean }>(
+      `SELECT EXISTS (
+         SELECT 1 FROM sucursal s
+           JOIN configuracion_pse c ON c.emisor_id = s.emisor_id AND c.empresa_id = s.empresa_id
+          WHERE s.id = ANY($1::uuid[]) AND c.modo = 'SIMULADO') AS simulado`,
+      { bind: [[...sucursalIds]], type: QueryTypes.SELECT },
+    );
+    return filas[0]?.simulado === true;
+  }
+
+  /**
+   * Toma la fila del emisor con `FOR SHARE` hasta el final de la transacción (reemisión y notas de crédito, plan,
+   * «Orden de los cerrojos»): choca con el cambio de tasa, así que «la última fecha de emisión del emisor» que mira
+   * `configurarTasaIgv` ya incluye a esta emisión. 404 si el emisor no es de la empresa.
+   */
+  async bloquearParaEmitir(emisorId: string): Promise<void> {
+    await this.exigirEmisor(emisorId, 'compartido');
+  }
 
   async listar(): Promise<EmisorRespuesta[]> {
     const filas = await this.modelos.Emisor.findAll({

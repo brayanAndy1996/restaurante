@@ -248,6 +248,49 @@ describe('Mostrador: la venta (criterios 79, 80 y 115)', () => {
     expect(within(tipos).getByRole('button', { name: 'Factura' })).toBeVisible();
   });
 
+  it('la factura de mostrador usa el padrón: con un RUC no activo no cobra sin «Emitir igual» (criterios 140 y 176)', async () => {
+    const s = montar({
+      extra: {
+        [`POST ${API_VENTAS}`]: ({ cuerpo }) => vende(cuerpo),
+      },
+    });
+    s.poner('GET /padron/ruc/20100070970', () =>
+      json(200, {
+        ruc: '20100070970',
+        razonSocial: 'Supermercados Peruanos S.A.',
+        direccion: 'Av. Principal 123, Lima',
+        estado: 'BAJA DE OFICIO',
+        condicion: 'HABIDO',
+        activo: false,
+        habido: true,
+        padronAl: '2026-11-05T09:00:00.000Z',
+      }),
+    );
+    renderApp(RUTA);
+    await armarLaVenta();
+    await userEvent.click(screen.getByRole('button', { name: 'Factura' }));
+    await userEvent.type(screen.getByLabelText('RUC'), '20100070970');
+    expect(
+      await screen.findByText(
+        'Este RUC figura como BAJA DE OFICIO / HABIDO en el padrón de SUNAT del 05/11',
+      ),
+    ).toBeVisible();
+    await waitFor(() =>
+      expect(screen.getByLabelText('Razón social')).toHaveValue('Supermercados Peruanos S.A.'),
+    );
+    await userEvent.click(screen.getByRole('button', { name: 'S/\u00a050' }));
+    await userEvent.click(boton('Cobrar y enviar · S/\u00a037.00'));
+    expect(ventas(s)).toHaveLength(0);
+    expect(await screen.findByText('Marca «Emitir igual» o corrige el RUC.')).toBeVisible();
+
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Emitir igual' }));
+    await userEvent.click(boton('Cobrar y enviar · S/\u00a037.00'));
+    expect(await screen.findByText('Llamado 23')).toBeVisible();
+    expect(entradaDe(s)).toMatchObject({
+      comprobante: { tipo: 'FACTURA', cliente: { numero: '20100070970' } },
+    });
+  });
+
   it('con un emisor Nuevo RUS solo ofrece Boleta, lo dice, y el total sale sin una tasa propia de la PWA (criterio 115)', async () => {
     const s = montar({
       parametros: { regimen: 'NUEVO_RUS', tiposComprobante: ['BOLETA'] },

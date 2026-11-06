@@ -87,6 +87,23 @@ export const CODIGOS_ERROR = [
   'PAGOS_NO_CUADRAN',
   'COMPROBANTE_NO_PERMITIDO',
   'CLIENTE_REQUERIDO',
+  // Entrega 6b (facturación electrónica). 409:
+  'ENVIO_TERMINADO',
+  'COMPROBANTE_NO_RECHAZADO',
+  'YA_REEMPLAZADO',
+  'COMPROBANTE_NO_ACEPTADO',
+  'COMPROBANTE_ANULADO',
+  'NOTA_CREDITO_CAMBIO',
+  'PDF_NO_DISPONIBLE',
+  'PSE_NO_CONFIGURADO',
+  'MODO_PSE_INVALIDO',
+  // 422:
+  'NOTA_CREDITO_INVALIDA',
+  'NADA_QUE_ACREDITAR',
+  'DEVOLUCION_INVALIDA',
+  // 404 y 503:
+  'RUC_NO_ENCONTRADO',
+  'PADRON_NO_DISPONIBLE',
 ] as const;
 
 export const codigoErrorSchema = z.enum(CODIGOS_ERROR);
@@ -112,6 +129,8 @@ export const errorRespuestaSchema = z.object({
    * (la orden a la que se unió): para que la PWA lleve a la persona ahí (criterios 11 y 29 de 004).
    */
   ordenId: uuidSchema.optional(),
+  /** Solo en `YA_REEMPLAZADO` (criterio 134 de 006): el comprobante que ya reemplazó al rechazado. */
+  comprobanteId: uuidSchema.optional(),
   /** Solo en `TURNO_YA_ABIERTO` (criterio 26 de 006): el turno que ya está abierto. */
   turnoId: uuidSchema.optional(),
   /** Solo en `CUENTA_CAMBIO` (criterios 49 y 57 de 006): la versión actual de la cuenta. */
@@ -123,6 +142,8 @@ export const errorRespuestaSchema = z.object({
    * orden de `MEDIOS_PAGO`; sin esperado, contado ni diferencia (decisión del usuario: el aviso no lleva montos).
    */
   diferencias: z.array(z.object({ medio: z.enum(MEDIOS_PAGO) })).optional(),
+  /** Solo en `RUC_NO_ENCONTRADO` (criterio 139 de 006): el instante de la carga activa del padrón (igual que `padronAl` del 200). */
+  padronAl: z.string().optional(),
   /** Solo en `LLAMADO_TOMADO` (criterio 43 de 005): quién ya está atendiendo el llamado. */
   atendidoPor: z.object({ id: uuidSchema, nombre: z.string() }).optional(),
   /** Solo en `LLAMADO_CERRADO` (criterios 44 y 53 de 005): el estado en que quedó el llamado. */

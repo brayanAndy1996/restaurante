@@ -25,6 +25,11 @@ const baseProduccion = {
   R2_ACCESS_KEY_ID: 'x',
   R2_SECRET_ACCESS_KEY: 'x',
   R2_BUCKET: 'x',
+  // Facturación electrónica (historia 006, 6b): en producción también se exige esto.
+  R2_BUCKET_COMPROBANTES: 'privado',
+  CLAVE_CIFRADO: Buffer.alloc(32, 9).toString('base64'),
+  DATABASE_COLAS_URL: 'postgres://restaurante_colas:x@localhost:5432/restaurante_test',
+  PSE_CONECTOR: 'simulador',
 };
 
 describe('CARTA_WEB_URL', () => {

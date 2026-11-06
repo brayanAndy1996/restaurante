@@ -65,6 +65,8 @@ const linea = {
   afectacion: 'GRAVADO',
   gratuita: false,
   valorReferencial: null,
+  baseReferencial: null,
+  igvReferencial: null,
 };
 
 const comprobante = {
@@ -102,6 +104,61 @@ const comprobante = {
   orden: { id: ID_1, mesas: ['4'], mozo: 'Lía', numeroLlamado: null },
 };
 
+describe('comprobanteRespuesta (criterios 69 y 77) con los campos de 6b', () => {
+  it('acepta una nota de crédito sin cobro ni turno, con sus campos de 6b', () => {
+    const nota = comprobanteRespuestaSchema.safeParse({
+      ...comprobante,
+      tipo: 'NOTA_CREDITO_BOLETA',
+      turnoId: null,
+      cobroId: null,
+      lineas: [{ ...linea, posicionOrigen: 1 }],
+      origen: 'NOTA_CREDITO',
+      simulado: true,
+      afectaA: { id: ID_1, tipo: 'BOLETA', numero: 'B001-00000124' },
+      nota: { tipo: 'DEVOLUCION', motivo: 'Producto devuelto', cambioAFactura: false },
+      reemplazaA: null,
+      reemplazadoPor: null,
+      notasCredito: [],
+      acreditado: [
+        {
+          posicion: 1,
+          cantidad: 1,
+          neto: '28.00',
+          base: '23.73',
+          igv: '4.27',
+          bolsas: 0,
+          icbper: '0.00',
+        },
+      ],
+      sunat: { codigo: '0', mensaje: 'Aceptado', observaciones: [], hash: null },
+      marcas: { enviadoEn: null, aceptadoEn: null, rechazadoEn: null, anuladoEn: null },
+      pdfDisponible: false,
+    });
+    expect(nota.success).toBe(true);
+  });
+
+  it('sigue aceptando la respuesta de 6a, sin ningún campo de 6b', () => {
+    expect(comprobanteRespuestaSchema.safeParse(comprobante).success).toBe(true);
+  });
+
+  it('rechaza un origen, una observación o una marca de tiempo mal formados', () => {
+    for (const malo of [
+      { ...comprobante, origen: 'OTRO' },
+      {
+        ...comprobante,
+        sunat: { codigo: null, mensaje: null, observaciones: [{ codigo: 'x' }], hash: null },
+      },
+      {
+        ...comprobante,
+        marcas: { enviadoEn: 'ayer', aceptadoEn: null, rechazadoEn: null, anuladoEn: null },
+      },
+      { ...comprobante, lineas: [{ ...linea, posicionOrigen: 0 }] },
+    ]) {
+      expect(comprobanteRespuestaSchema.safeParse(malo).success, JSON.stringify(malo)).toBe(false);
+    }
+  });
+});
+
 describe('comprobanteRespuesta (criterios 69 y 77)', () => {
   it('acepta un comprobante de una boleta con su desglose', () => {
     expect(comprobanteRespuestaSchema.safeParse(comprobante).success).toBe(true);
@@ -120,11 +177,32 @@ describe('comprobanteRespuesta (criterios 69 y 77)', () => {
     ).toBe(true);
   });
 
-  it('rechaza una moneda distinta de PEN, un estado desconocido y un tipo que no es boleta ni factura', () => {
+  it('una línea gratuita trae su base e IGV referenciales; sin ellos la respuesta no vale (criterio 147)', () => {
+    const gratuita = {
+      ...linea,
+      bruto: '0.00',
+      neto: '0.00',
+      base: '0.00',
+      igv: '0.00',
+      gratuita: true,
+      valorReferencial: '12.00',
+      baseReferencial: '10.17',
+      igvReferencial: '1.83',
+    };
+    expect(
+      comprobanteRespuestaSchema.safeParse({ ...comprobante, lineas: [linea, gratuita] }).success,
+    ).toBe(true);
+    const { baseReferencial: _b, ...sinBase } = gratuita;
+    expect(
+      comprobanteRespuestaSchema.safeParse({ ...comprobante, lineas: [sinBase] }).success,
+    ).toBe(false);
+  });
+
+  it('rechaza una moneda distinta de PEN, un estado desconocido y un tipo que no es un documento electrónico', () => {
     for (const malo of [
       { ...comprobante, moneda: 'USD' },
       { ...comprobante, estado: 'PENDIENTE' },
-      { ...comprobante, tipo: 'NOTA_CREDITO_BOLETA' },
+      { ...comprobante, tipo: 'NOTA_DE_DEBITO' },
       { ...comprobante, correlativo: 0 },
       { ...comprobante, numeroParte: 0 },
       { ...comprobante, lineas: [{ ...linea, unidad: 'KGM' }] },

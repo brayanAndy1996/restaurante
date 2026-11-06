@@ -993,3 +993,111 @@ describe('Ajustes › Emisores: tasa de IGV (criterios 6 y 117)', () => {
     expect(await screen.findByText('Aún no hay emisores')).toBeInTheDocument();
   });
 });
+
+describe('Ajustes › Cajas: series de las notas de crédito (criterio 178 de 6b)', () => {
+  const abrirNotas = async () => {
+    await userEvent.click(boton(/Notas de crédito/));
+  };
+
+  it('las series de las notas están plegadas y se abren con un toque', async () => {
+    api();
+    await abrir();
+    await userEvent.click(boton('Agregar caja'));
+    expect(screen.queryByLabelText('Serie de notas de crédito de boletas')).not.toBeVisible();
+    await abrirNotas();
+    expect(campo('Serie de notas de crédito de boletas')).toBeVisible();
+    expect(campo('Serie de notas de crédito de facturas')).toBeVisible();
+  });
+
+  it('crea la caja con sus cuatro series; el primer número solo se pide al ser una serie nueva', async () => {
+    const s = api();
+    await abrir();
+    await userEvent.click(boton('Agregar caja'));
+    await userEvent.type(campo('Nombre de la caja'), 'Caja 1');
+    await userEvent.type(campo('Serie de boletas'), 'B001');
+    await userEvent.type(campo('Serie de facturas'), 'F001');
+    await abrirNotas();
+    await userEvent.type(campo('Serie de notas de crédito de boletas'), 'bc01');
+    expect(campo('Serie de notas de crédito de boletas')).toHaveValue('BC01');
+    await userEvent.type(campo('Serie de notas de crédito de facturas'), 'FC01');
+    // «Primer número» de la nota de boletas: la boleta, la factura y las dos notas son series nuevas.
+    const primeros = screen.getAllByLabelText(/Primer número/);
+    expect(primeros).toHaveLength(4);
+    await userEvent.type(primeros[2]!, '15');
+    await userEvent.click(boton('Crear caja'));
+
+    expect(await screen.findByText('Caja Caja 1 creada.')).toBeInTheDocument();
+    const id = uuid(600);
+    expect(s.de('PUT', `${RUTA_CAJAS}/${id}/series/NOTA_CREDITO_BOLETA`)[0]?.cuerpo).toEqual({
+      serie: 'BC01',
+      primerNumero: 15,
+    });
+    expect(s.de('PUT', `${RUTA_CAJAS}/${id}/series/NOTA_CREDITO_FACTURA`)[0]?.cuerpo).toEqual({
+      serie: 'FC01',
+    });
+    // Cada serie sale por su propia ruta: las de las notas no pisan a las de los comprobantes.
+    expect(s.de('PUT', `${RUTA_CAJAS}/${id}/series/BOLETA`)[0]?.cuerpo).toEqual({ serie: 'B001' });
+    expect(s.de('PUT', `${RUTA_CAJAS}/${id}/series/FACTURA`)[0]?.cuerpo).toEqual({ serie: 'F001' });
+  });
+
+  it('la serie de una nota lleva el prefijo del documento que modifica y lo dice con palabras', async () => {
+    const s = api();
+    await abrir();
+    await userEvent.click(boton('Agregar caja'));
+    await userEvent.type(campo('Nombre de la caja'), 'Caja 1');
+    await abrirNotas();
+    await userEvent.type(campo('Serie de notas de crédito de boletas'), 'F001');
+    await userEvent.type(campo('Serie de notas de crédito de facturas'), 'BC01');
+    await userEvent.click(boton('Crear caja'));
+    expect(
+      await screen.findByText(
+        /La serie de notas de crédito de boletas empieza con B y tiene 4 caracteres/,
+      ),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        /La serie de notas de crédito de facturas empieza con F y tiene 4 caracteres/,
+      ),
+    ).toBeInTheDocument();
+    expect(s.de('POST', RUTA_CAJAS)).toHaveLength(0);
+  });
+
+  it('una caja con serie de nota la muestra abierta con su último número y sin «Primer número»', async () => {
+    api({
+      cajas: [
+        caja(1, 'Caja 1', {
+          series: [
+            { tipo: 'BOLETA', serie: 'B001', ultimoNumero: 130, activa: true, emisorId: EMISOR },
+            {
+              tipo: 'NOTA_CREDITO_BOLETA',
+              serie: 'BC01',
+              ultimoNumero: 3,
+              activa: true,
+              emisorId: EMISOR,
+            },
+          ],
+        }),
+      ],
+    });
+    await abrir();
+    await userEvent.click(boton(/^Caja 1/));
+    expect(campo('Serie de notas de crédito de boletas')).toBeVisible();
+    expect(campo('Serie de notas de crédito de boletas')).toHaveValue('BC01');
+    expect(screen.getByText('Último emitido: BC01-00000003')).toBeVisible();
+    expect(campo('Serie de notas de crédito de facturas')).toHaveValue('');
+    expect(screen.queryByLabelText(/Primer número/)).toBeNull();
+  });
+
+  it('si otra caja del RUC ya usa la serie de la nota, el error sale en ese campo', async () => {
+    api({ seriesOcupadas: ['BC01'] });
+    await abrir();
+    await userEvent.click(boton('Agregar caja'));
+    await userEvent.type(campo('Nombre de la caja'), 'Caja 1');
+    await abrirNotas();
+    await userEvent.type(campo('Serie de notas de crédito de boletas'), 'BC01');
+    await userEvent.click(boton('Crear caja'));
+    expect(
+      await screen.findByText(/Esa serie de notas de crédito de boletas ya la usa otra caja/),
+    ).toBeInTheDocument();
+  });
+});

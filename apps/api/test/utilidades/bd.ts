@@ -24,7 +24,7 @@ export function urlDeRol(rol: RolDePrueba, baseDeDatos: string = BASE_DE_PRUEBA)
   return urlParaRol(admin, rol, baseDeDatos, { ...process.env, NODE_ENV: 'test' });
 }
 
-/** Las cinco URL de `restaurante_test`. */
+/** Las URL de `restaurante_test` de cada rol (con los de la cola y el padrón de 6b). */
 export function urlsDePrueba(): Record<RolDePrueba, string> {
   return {
     admin: urlDeRol('admin'),
@@ -32,6 +32,8 @@ export function urlsDePrueba(): Record<RolDePrueba, string> {
     api: urlDeRol('api'),
     plataforma: urlDeRol('plataforma'),
     tiempoReal: urlDeRol('tiempoReal'),
+    colas: urlDeRol('colas'),
+    referencia: urlDeRol('referencia'),
   };
 }
 

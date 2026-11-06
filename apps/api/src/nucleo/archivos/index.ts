@@ -15,3 +15,17 @@ export {
   LIMITE_FOTO_BYTES,
 } from './cuerpo-binario';
 export type { CuerpoDeFoto } from './cuerpo-binario';
+export {
+  ALMACEN_COMPROBANTES,
+  claveDeArchivoDeComprobante,
+  esClaveDelPdfDe,
+  esClaveValidaDeComprobante,
+  exigirClaveValidaDeComprobante,
+} from './almacen-comprobantes';
+export type { AlmacenComprobantes } from './almacen-comprobantes';
+export { AlmacenComprobantesEnMemoria } from './almacen-comprobantes-en-memoria';
+export { AlmacenComprobantesModule } from './almacen-comprobantes.module';
+export { AlmacenComprobantesEnDisco } from './almacen-comprobantes-en-disco';
+export { AlmacenComprobantesR2 } from './almacen-comprobantes-r2';
+export type { OpcionesAlmacenComprobantesR2 } from './almacen-comprobantes-r2';
+export { crearAlmacenDeComprobantesDeEntorno } from './crear-almacen-comprobantes';

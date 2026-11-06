@@ -5,7 +5,7 @@ import type {
   CajaRespuesta,
   SerieEntrada,
 } from '@restaurante/contratos';
-import { MAXIMO_CAJAS_SUCURSAL, type TipoComprobante } from '@restaurante/dominio';
+import { MAXIMO_CAJAS_SUCURSAL, type TipoSerie } from '@restaurante/dominio';
 import { tiposDeComprobantePermitidos } from '@restaurante/dominio/caja';
 import { QueryTypes, type Sequelize } from 'sequelize';
 import { CONEXION_API, SQLSTATE, restriccionDe, sqlstateDe } from '../../nucleo/base-de-datos';
@@ -199,7 +199,7 @@ export class CajasService {
   async configurarSerie(
     sucursalId: string,
     cajaId: string,
-    tipo: TipoComprobante,
+    tipo: TipoSerie,
     entrada: SerieEntrada,
   ): Promise<CajaRespuesta> {
     await this.exigirSucursal(sucursalId);

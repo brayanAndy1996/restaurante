@@ -35,6 +35,7 @@ import {
   configurarIdentidad,
   type MotivoDeCambioDeIdentidad,
 } from '../../lib/identidad';
+import { olvidarEnviosVivos, olvidarIntentosRecordados } from '../../lib/intentos-recordados';
 import type { ErrorApi } from '../../lib/errores';
 
 /** Por qué se cerró la sesión sin que la persona lo pidiera: se avisa en la pantalla de ingreso. */
@@ -118,6 +119,11 @@ export function SesionProvider({ children }: { children: ReactNode }) {
   const [salida, setSalida] = useState<Salida | null>(null);
   const { pathname } = useLocation();
 
+  // Una app que arranca no tiene envíos vivos de antes (los de otra instancia ya no se siguen).
+  useEffect(() => {
+    olvidarEnviosVivos();
+  }, []);
+
   // Cuando la redirección ya llegó a su destino, el aviso vive en el estado de la ubicación.
   useEffect(() => {
     if (salida && pathname === salida.a) setSalida(null);
@@ -143,6 +149,8 @@ export function SesionProvider({ children }: { children: ReactNode }) {
     (porque?: MotivoDeCambioDeIdentidad) => {
       borrarTokenDeSesion();
       borrarSoporteEnCurso();
+      // Lo que quedó a medias (una nota de crédito sin respuesta) no lo hereda la siguiente persona.
+      olvidarIntentosRecordados();
       setHayToken(false);
       setSoporte(null);
       clientes.removeQueries({ queryKey: CLAVE_SESION });

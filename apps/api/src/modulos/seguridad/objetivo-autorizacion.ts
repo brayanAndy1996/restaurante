@@ -28,6 +28,15 @@ export function normalizarObjetivo(objetivo: ObjetivoAutorizacion): ObjetivoAuto
       },
     };
   }
+  if (objetivo.tipo === 'NOTA_CREDITO') {
+    return {
+      tipo: 'NOTA_CREDITO',
+      comprobanteId: objetivo.comprobanteId.toLowerCase(),
+      tipoNota: objetivo.tipoNota,
+      total: normalizarValor(objetivo.total),
+      devuelto: normalizarValor(objetivo.devuelto),
+    };
+  }
   return {
     tipo: 'CORTESIA',
     ordenId: objetivo.ordenId.toLowerCase(),
@@ -48,6 +57,14 @@ function mismoObjetivo(a: ObjetivoAutorizacion, b: ObjetivoAutorizacion): boolea
   }
   if (a.tipo === 'CORTESIA' && b.tipo === 'CORTESIA') {
     return a.ordenId === b.ordenId && a.itemId === b.itemId && a.cantidad === b.cantidad;
+  }
+  if (a.tipo === 'NOTA_CREDITO' && b.tipo === 'NOTA_CREDITO') {
+    return (
+      a.comprobanteId === b.comprobanteId &&
+      a.tipoNota === b.tipoNota &&
+      a.total === b.total &&
+      a.devuelto === b.devuelto
+    );
   }
   return false;
 }

@@ -1193,3 +1193,120 @@ describe('La impresión del comprobante (criterios 90, 96 y 114)', () => {
     );
   });
 });
+
+describe('El RUC de la factura con el padrón (criterios 139, 140 y 176)', () => {
+  const RUC = '20100070970';
+  const delPadron = (extra: Record<string, unknown> = {}) => ({
+    ruc: RUC,
+    razonSocial: 'Supermercados Peruanos S.A.',
+    direccion: 'Av. Principal 123, Lima',
+    estado: 'ACTIVO',
+    condicion: 'HABIDO',
+    activo: true,
+    habido: true,
+    padronAl: '2026-11-05T09:00:00.000Z',
+    ...extra,
+  });
+  const montarFactura = (padron: Manejador) =>
+    montar({
+      extra: {
+        [`GET /padron/ruc/${RUC}`]: padron,
+        [`POST ${API_COBROS}`]: ({ cuerpo }) => json(201, respuestaDe(cuerpo as CobroEntrada)),
+      },
+    });
+  async function escribirElRuc() {
+    renderApp(RUTA);
+    await screen.findByRole('button', { name: 'Cobrar S/ 68.50' });
+    await userEvent.click(screen.getByRole('button', { name: 'Factura' }));
+    await userEvent.type(screen.getByLabelText('RUC'), RUC);
+  }
+
+  it('llena la razón social y la dirección y cobra con lo que quedó, corregido o no', async () => {
+    const s = montarFactura(() => json(200, delPadron()));
+    await escribirElRuc();
+    await waitFor(() =>
+      expect(screen.getByLabelText('Razón social')).toHaveValue('Supermercados Peruanos S.A.'),
+    );
+    expect(screen.getByLabelText('Dirección fiscal')).toHaveValue('Av. Principal 123, Lima');
+    await userEvent.clear(screen.getByLabelText('Dirección fiscal'));
+    await userEvent.type(screen.getByLabelText('Dirección fiscal'), 'Av. Nueva 9, Lima');
+    await userEvent.click(boton('Cobrar S/ 68.50'));
+    await screen.findByText(/Factura · |Boleta · /);
+    expect(entradaDe(s).comprobante).toEqual({
+      tipo: 'FACTURA',
+      formato: 'DETALLADO',
+      cliente: {
+        tipoDocumento: 'RUC',
+        numero: RUC,
+        nombre: 'Supermercados Peruanos S.A.',
+        direccion: 'Av. Nueva 9, Lima',
+      },
+    });
+  });
+
+  it('con un RUC de baja o no habido no cobra sin «Emitir igual»; con la marca, cobra como siempre', async () => {
+    const s = montarFactura(() =>
+      json(
+        200,
+        delPadron({
+          estado: 'BAJA DE OFICIO',
+          activo: false,
+          condicion: 'NO HABIDO',
+          habido: false,
+        }),
+      ),
+    );
+    await escribirElRuc();
+    expect(
+      await screen.findByText(
+        'Este RUC figura como BAJA DE OFICIO / NO HABIDO en el padrón de SUNAT del 05/11',
+      ),
+    ).toBeVisible();
+    await waitFor(() =>
+      expect(screen.getByLabelText('Razón social')).toHaveValue('Supermercados Peruanos S.A.'),
+    );
+
+    await userEvent.click(boton('Cobrar S/ 68.50'));
+    expect(cobros(s)).toHaveLength(0);
+    expect(await screen.findByText('Marca «Emitir igual» o corrige el RUC.')).toBeVisible();
+    expect(screen.getByText('Marca «Emitir igual» para usar este RUC.')).toBeVisible();
+
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Emitir igual' }));
+    await userEvent.click(boton('Cobrar S/ 68.50'));
+    await screen.findByText(/Factura · |Boleta · /);
+    expect(cobros(s)).toHaveLength(1);
+    expect(entradaDe(s).comprobante.cliente?.numero).toBe(RUC);
+  });
+
+  it('con un RUC que no figura (404) pide la marca; con el padrón caído (503) deja cobrar escribiendo a mano', async () => {
+    const s = montarFactura(() =>
+      json(404, {
+        codigo: 'RUC_NO_ENCONTRADO',
+        mensaje: 'Este RUC no figura en el padrón de SUNAT',
+      }),
+    );
+    await escribirElRuc();
+    expect(await screen.findByText('Este RUC no figura en el padrón de SUNAT')).toBeVisible();
+    await userEvent.type(screen.getByLabelText('Razón social'), 'Comercial Andina E.I.R.L.');
+    await userEvent.type(screen.getByLabelText('Dirección fiscal'), 'Av. Grau 100');
+    await userEvent.click(boton('Cobrar S/ 68.50'));
+    expect(cobros(s)).toHaveLength(0);
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Emitir igual' }));
+    await userEvent.click(boton('Cobrar S/ 68.50'));
+    await screen.findByText(/Factura · |Boleta · /);
+    expect(cobros(s)).toHaveLength(1);
+  });
+
+  it('con el padrón caído (503) dice que no se pudo consultar y cobra con lo escrito', async () => {
+    const s = montarFactura(() =>
+      json(503, { codigo: 'PADRON_NO_DISPONIBLE', mensaje: 'El padrón no está disponible' }),
+    );
+    await escribirElRuc();
+    expect(await screen.findByText('No se pudo consultar el padrón')).toBeVisible();
+    await userEvent.type(screen.getByLabelText('Razón social'), 'Comercial Andina E.I.R.L.');
+    await userEvent.type(screen.getByLabelText('Dirección fiscal'), 'Av. Grau 100');
+    await userEvent.click(boton('Cobrar S/ 68.50'));
+    await screen.findByText(/Factura · |Boleta · /);
+    expect(cobros(s)).toHaveLength(1);
+  });
+});

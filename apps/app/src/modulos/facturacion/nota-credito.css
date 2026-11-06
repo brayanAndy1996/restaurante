@@ -1,0 +1,112 @@
+/* La hoja «Nota de crédito» (006, 6b, criterio 177): líneas con − y +, devolución por medio y pie con el total. */
+
+/* Qué se devuelve: una fila por línea del comprobante, separadas por una junta. */
+.nota__lineas {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  background: var(--color-baldosa);
+  border: 1px solid var(--color-junta);
+  border-radius: var(--radio-baldosa);
+}
+.nota__linea + .nota__linea {
+  border-top: 1px solid var(--color-junta);
+}
+.nota__linea {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--espacio-sm) var(--espacio-md);
+  padding: var(--espacio-md);
+}
+.nota__linea-texto {
+  display: flex;
+  flex: 1 1 9rem;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+/* Cuando el − y + no caben junto al nombre, bajan y quedan a la derecha, donde está el pulgar. */
+.nota__linea > .ui-cantidad {
+  margin-left: auto;
+}
+.nota__linea-texto > b {
+  font-size: 1.0625rem;
+  line-height: 1.375rem;
+  overflow-wrap: anywhere;
+}
+
+.nota__incluye {
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+/* La devolución y el cliente de la factura: bloques separados por una junta, sin baldosas dentro de baldosas. */
+.nota__bloque {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espacio-md);
+  min-width: 0;
+  padding-top: var(--espacio-lg);
+  border-top: 1px solid var(--color-junta);
+}
+.nota__bloque > h3 {
+  margin: 0;
+  font-size: 1.125rem;
+  line-height: 1.5rem;
+  font-weight: 700;
+}
+
+/* El total siempre a la vista, en el pie fijo, junto al botón. */
+.nota__pie p {
+  margin: 0;
+}
+.nota__total {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--espacio-md);
+  margin: 0;
+}
+.nota__total > dt {
+  font-weight: 600;
+}
+.nota__total > dd {
+  margin: 0;
+  font-size: 1.5rem;
+  line-height: 2rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Lo que pasó al emitirla. */
+.nota-hecha {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espacio-lg);
+  min-width: 0;
+}
+.nota-hecha__documento {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--espacio-sm);
+}
+.nota-hecha__numero {
+  margin: 0;
+  font-size: 1.0625rem;
+  line-height: 1.5rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.nota-hecha__nobreak {
+  white-space: nowrap;
+}
+.nota-hecha__acciones {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espacio-sm);
+}
