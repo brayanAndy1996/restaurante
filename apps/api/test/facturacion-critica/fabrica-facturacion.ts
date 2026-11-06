@@ -59,6 +59,7 @@ import {
 } from '../caja-critica/fabrica-caja';
 
 export * from '../caja-critica/fabrica-caja';
+export { filasDeAuditoria, textoDeAuditoria } from '../acceso/fabrica-plataforma';
 
 /** El padrón de ejemplo de las pruebas (`PADRON_RUC_URL=file://…`). */
 export const RUTA_PADRON_EJEMPLO = resolve(__dirname, '..', 'soporte', 'padron-ejemplo.zip');
