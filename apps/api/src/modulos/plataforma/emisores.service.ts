@@ -131,6 +131,20 @@ export class EmisoresService {
   }
 
   /**
+   * El modo y el código del conector con que el emisor pasó a `REAL` (`null` en `SIMULADO`), sin tocar la credencial; `null`
+   * sin configuración. Lo usa `RegistroDeConectores.urlConsulta` (criterio 122).
+   */
+  async conectorPse(
+    emisorId: string,
+  ): Promise<{ modo: 'SIMULADO' | 'REAL'; conector: string | null } | null> {
+    const filas = await this.conexion.query<{ modo: 'SIMULADO' | 'REAL'; conector: string | null }>(
+      `SELECT modo, conector FROM configuracion_pse WHERE emisor_id = $1`,
+      { bind: [emisorId], type: QueryTypes.SELECT },
+    );
+    return filas[0] ?? null;
+  }
+
+  /**
    * Si algún emisor de las sucursales dadas está en modo `SIMULADO` (criterio 122): el aviso permanente de la PWA. Un
    * emisor sin configuración no cuenta. Una sola consulta.
    */

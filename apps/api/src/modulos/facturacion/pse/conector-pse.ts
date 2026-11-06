@@ -6,7 +6,7 @@ import type { ModoPse } from '@restaurante/dominio';
  * nunca lanza por un resultado esperado: toda excepción se trata como `ERROR_TRANSPORTE`.
  */
 
-/** Token de Nest del conector que `crearAplicacion({ pse })` reemplaza (para todos los modos de los emisores). */
+/** Token de Nest del simulador del proceso, que `crearAplicacion({ pse })` reemplaza (solo para el modo `SIMULADO`; nunca a un adaptador real). */
 export const CONECTOR_PSE = Symbol('CONECTOR_PSE');
 
 /** Tipo de documento electrónico ante SUNAT: `01` factura, `03` boleta, `07` nota de crédito. */

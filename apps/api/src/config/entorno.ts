@@ -35,6 +35,14 @@ export type EstadoWorker = (typeof ESTADOS_WORKER)[number];
 /** El conector del PSE sin proveedor: el simulador (historia 006, criterio 121). Es el valor de desarrollo y de pruebas. */
 export const PSE_CONECTOR_SIMULADOR = 'simulador';
 
+/**
+ * Los códigos de los adaptadores reales del PSE registrados en el código (criterios 120 a 122). Un `PSE_CONECTOR` que no sea
+ * `simulador` ni uno de estos códigos no deja arrancar la API: fallar cerrado, para que un emisor `REAL` nunca se envíe con
+ * el simulador. En 6b no hay ninguno; T34 agrega el suyo aquí y registra su instancia en
+ * `modulos/facturacion/pse/adaptadores-reales.ts` con el mismo código.
+ */
+export const PSE_CONECTORES_REALES: readonly string[] = [];
+
 /** Tiempo máximo de cada llamada al PSE si no se define `PSE_TIMEOUT_MS` (criterio 120). */
 export const PSE_TIMEOUT_MS_POR_DEFECTO = 30_000;
 /** El mayor `PSE_TIMEOUT_MS` que se admite; de él sale la expiración de los trabajos de la cola (criterio 125). */
@@ -448,6 +456,17 @@ function validarCartaWebUrl(valor: string | undefined, problemas: string[]): voi
 
 /** `CLAVE_CIFRADO` y `CLAVE_CIFRADO_ANTERIOR` en base64 con al menos 32 bytes; `PADRON_RUC_URL` con `http(s)` o `file`. */
 function validarFacturacion(env: Record<string, string | undefined>, problemas: string[]): void {
+  const conector = env.PSE_CONECTOR;
+  if (
+    conector !== undefined &&
+    conector !== PSE_CONECTOR_SIMULADOR &&
+    !PSE_CONECTORES_REALES.includes(conector)
+  ) {
+    const admitidos = [PSE_CONECTOR_SIMULADOR, ...PSE_CONECTORES_REALES].join(', ');
+    problemas.push(
+      `PSE_CONECTOR "${conector}" no corresponde a ningún adaptador registrado (admitidos: ${admitidos})`,
+    );
+  }
   for (const variable of ['CLAVE_CIFRADO', 'CLAVE_CIFRADO_ANTERIOR'] as const) {
     const valor = env[variable];
     if (valor === undefined) continue;
@@ -525,7 +544,7 @@ export function exigirEntornoDeProduccion(entorno: Entorno): void {
   }
   if (entorno.PSE_CONECTOR === undefined) {
     problemas.push(
-      'PSE_CONECTOR es obligatoria en producción (simulador o el código del adaptador del PSE)',
+      'PSE_CONECTOR es obligatoria en producción (simulador o el código de un adaptador del PSE registrado)',
     );
   }
   if (entorno.R2_BUCKET_COMPROBANTES === undefined) {

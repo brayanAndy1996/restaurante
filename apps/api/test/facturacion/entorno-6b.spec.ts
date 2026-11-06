@@ -96,7 +96,7 @@ describe('validación de formato', () => {
     }
   });
 
-  it('PSE_TIMEOUT_MS entre 1 s y 120 s; PSE_CONECTOR en minúsculas', () => {
+  it('PSE_TIMEOUT_MS entre 1 s y 120 s; PSE_CONECTOR en minúsculas y registrado', () => {
     const dev = { ...base, NODE_ENV: 'development' };
     expect(cargarEntorno({ ...dev, PSE_TIMEOUT_MS: '5000' }).PSE_TIMEOUT_MS).toBe(5000);
     for (const malo of ['500', '200000', 'abc', '1.5']) {
@@ -105,7 +105,9 @@ describe('validación de formato', () => {
       );
     }
     expect(() => cargarEntorno({ ...dev, PSE_CONECTOR: 'Nubefact' })).toThrow(/PSE_CONECTOR/);
-    expect(cargarEntorno({ ...dev, PSE_CONECTOR: 'nubefact' }).PSE_CONECTOR).toBe('nubefact');
+    // Un código con forma válida pero sin adaptador registrado tampoco arranca (cierre de 6b, criterios 120 a 122).
+    expect(() => cargarEntorno({ ...dev, PSE_CONECTOR: 'nubefact' })).toThrow(/PSE_CONECTOR/);
+    expect(cargarEntorno({ ...dev, PSE_CONECTOR: 'simulador' }).PSE_CONECTOR).toBe('simulador');
   });
 
   it('las URL de la cola y del padrón; PADRON_RUC_URL admite file://', () => {

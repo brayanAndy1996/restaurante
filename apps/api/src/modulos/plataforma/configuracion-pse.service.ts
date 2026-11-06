@@ -1,7 +1,7 @@
 import { Inject, Injectable } from '@nestjs/common';
 import type { ConfiguracionPseEntrada, ConfiguracionPseRespuesta } from '@restaurante/contratos';
 import { QueryTypes, type Sequelize, type Transaction } from 'sequelize';
-import { ENTORNO, PSE_CONECTOR_SIMULADOR, type Entorno } from '../../config/entorno';
+import { ENTORNO, PSE_CONECTORES_REALES, type Entorno } from '../../config/entorno';
 import { Cifrado, CifradoInvalidoError } from '../../nucleo/cifrado';
 import { ContextoEmpresa } from '../../nucleo/contexto-empresa';
 import { ErrorAplicacion } from '../../nucleo/errores/error-aplicacion';
@@ -16,8 +16,8 @@ import { UltimaEmisionDeEmisor } from './ultima-emision';
  * que tiene `INSERT` y `UPDATE` sobre `configuracion_pse`); `restaurante_api` solo la lee (`EmisoresService.configuracionPse`).
  * Ningún valor de la credencial sale nunca en una respuesta, un evento, la auditoría ni un registro.
  *
- * Reglas de modo (criterio 122): `REAL` exige un adaptador real (`PSE_CONECTOR` distinto de `simulador`, 409
- * `PSE_NO_CONFIGURADO`); de `SIMULADO` a `REAL` solo si el emisor no emitió ningún comprobante, y de `REAL` nunca se vuelve a
+ * Reglas de modo (criterio 122): `REAL` exige un adaptador real registrado (`PSE_CONECTOR` igual al código de uno de
+ * `PSE_CONECTORES_REALES`, 409 `PSE_NO_CONFIGURADO`); de `SIMULADO` a `REAL` solo si el emisor no emitió ningún comprobante, y de `REAL` nunca se vuelve a
  * `SIMULADO` (409 `MODO_PSE_INVALIDO`). Repetir lo que ya está responde 200 sin cambios ni auditoría; cada cambio deja
  * `configurar_pse_emisor` en `auditoria` (origen `plataforma`) con el modo antes y después y los nombres de los campos.
  */
@@ -87,7 +87,7 @@ export class ConfiguracionPseService {
     const conectorNuevo = entrada.modo === 'REAL' ? this.entorno.PSE_CONECTOR : undefined;
     if (
       entrada.modo === 'REAL' &&
-      (conectorNuevo === undefined || conectorNuevo === PSE_CONECTOR_SIMULADOR)
+      (conectorNuevo === undefined || !PSE_CONECTORES_REALES.includes(conectorNuevo))
     ) {
       throw new ErrorAplicacion(
         409,
