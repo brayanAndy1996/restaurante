@@ -16,7 +16,7 @@ secciones ya aprobadas y cerradas. Hoy son:
 - **Sección 5a, Carta web y llamados desde la mesa:** la API, los QR de las mesas (en Ajustes › Mapa de mesas) y los llamados (en Salón › Llamados).
 - **Sección 5b, Carta web y pedido desde la mesa:** la carta pública de cada sucursal y el modo mesa, que abre el QR de cada mesa (`apps/web`).
 
-La caja (sección 6a, caja, cobro y comprobante sin PSE) está en la rama `claude/upbeat-wright-q09k0n` y todavía no está en `main`: para probarla, cambia a esa rama con `git checkout claude/upbeat-wright-q09k0n`. Los comprobantes de la 6a quedan «por enviar» hasta la 6b (facturación electrónica), que se trabaja en la misma rama y llega a `main` cuando se aprueba.
+La caja (sección 6a, caja, cobro y comprobante sin PSE) está en la rama `claude/upbeat-wright-q09k0n` y todavía no está en `main`: para probarla, cambia a esa rama con `git checkout claude/upbeat-wright-q09k0n`. La 6b (facturación electrónica, en esa misma rama) envía los comprobantes a un PSE simulado: para que se envíen, el emisor tiene que estar en modo `SIMULADO` y el worker tiene que correr (ver «Facturación electrónica (6b)» en el README). Sin eso, quedan «por enviar».
 
 ## 1. Lo que necesitas instalar
 

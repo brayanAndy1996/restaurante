@@ -35,7 +35,7 @@ Entregas 6a (caja, cobro y comprobante sin PSE) y 6b (facturación electrónica)
   - La ventana de clave de 002 acepta y muestra el `objetivo`.
 - `packages/ui` (skill `impeccable`): `TecladoDeMonto`, `CifraGrande` (vuelto y total), `FilaDeDesglose`.
 
-### Entrega 6b (precisada el 2026-11-06, pendiente de aprobación)
+### Entrega 6b (precisada y aprobada el 2026-11-06)
 
 - `packages/dominio/src/caja/`: `notas-credito.ts` (P8: `calcularNotaCredito`), `envios.ts` (P7: esperas, plazos, alertas, transiciones), `sunat.ts` (códigos), `turno.ts` (`medio` opcional en los movimientos de `esperadoDelTurno`), catálogos nuevos en `catalogos.ts`. Pruebas protegidas en `packages/dominio/test/caja/` (archivos nuevos de la fase B de 6b).
 - `packages/contratos`: `src/facturacion.ts` (nuevo) y los cambios de `comprobantes.ts` (ensanchar), `autorizaciones.ts` (objetivo `NOTA_CREDITO`), `caja.ts` (`reporteCaja.notasCredito`, `movimientos.lista[].medio`), eventos y `errores.ts`.
