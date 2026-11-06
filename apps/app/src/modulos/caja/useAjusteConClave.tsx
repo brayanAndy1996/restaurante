@@ -8,8 +8,10 @@ import { useEnvioPendiente } from '../../lib/envios';
 import {
   alCambiarLosIntentos,
   guardarIntento,
+  guardarResultadoDeEnvio,
   hayEnvioVivo,
   leerIntento,
+  leerResultadoDeEnvio,
   registrarEnvioVivo,
   type IntentoRecordado,
 } from '../../lib/intentos-recordados';
@@ -136,6 +138,8 @@ export function useAjusteConClave(opciones: { recordarComo?: string } = {}) {
             undefined,
             actual.clave,
           );
+          // Antes de anotar que terminó: la hoja que esperaba este envío ve su respuesta en el mismo cambio.
+          if (memoria !== undefined) guardarResultadoDeEnvio(memoria, { id: actual.id, respuesta });
           return { estado: 'hecho', respuesta, id: actual.id };
         } catch (error) {
           const clavePerdida =
@@ -188,9 +192,15 @@ export function useAjusteConClave(opciones: { recordarComo?: string } = {}) {
     return id !== undefined && hayEnvioVivo(memoria, id);
   });
 
+  // Lo que respondió el último envío de este intento que terminó bien (aunque lo mandara una hoja que ya se cerró).
+  const resultadoDelEnvio = useSyncExternalStore(alCambiarLosIntentos, () =>
+    memoria === undefined ? null : leerResultadoDeEnvio(memoria),
+  );
+
   return {
     ejecutar,
     esperandoRespuestaAnterior,
+    resultadoDelEnvio,
     soltarPorVista,
     soltarSiEs,
     idDelIntento,

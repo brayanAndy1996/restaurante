@@ -32,7 +32,7 @@ interface Props {
   respuesta: NotaEmitida;
   tipo: TipoNotaCredito;
   /** El comprobante que se acreditó. */
-  original: Pick<ComprobanteDetalle, 'tipo' | 'numero'>;
+  original: Pick<ComprobanteDetalle, 'tipo' | 'numero' | 'notasCredito'>;
   /** Dónde viven los detalles (`/caja/comprobantes` o `/administracion/comprobantes`) y a dónde vuelve «Atrás». */
   base: string;
   volver: string;
@@ -43,16 +43,21 @@ interface Props {
 function DocumentoNuevo({
   comprobante,
   conNumero,
+  yaListado,
 }: {
   comprobante: ComprobanteRespuesta;
   conNumero?: boolean;
+  /** El detalle de atrás ya lista este número («Relacionados»): aquí no se repite suelto. */
+  yaListado?: boolean;
 }) {
   return (
     <div className="nota-hecha__documento">
       <p className="nota-hecha__numero">
-        {`${NOMBRE_DE_TIPO_DOCUMENTO[comprobante.tipo]} `}
+        {`${NOMBRE_DE_TIPO_DOCUMENTO[comprobante.tipo]}${yaListado ? ' ' : ' · '}`}
         {/* El número no se parte en el guion al cambiar de línea (360 px). */}
-        <span className="nota-hecha__nobreak">{`· ${comprobante.numero}`}</span>
+        <span className="nota-hecha__nobreak">
+          {yaListado ? `· ${comprobante.numero}` : comprobante.numero}
+        </span>
       </p>
       {comprobante.simulado ? <EtiquetaDeEstado tono="alerta">Simulado</EtiquetaDeEstado> : null}
       <EstadoDelComprobante comprobante={comprobante} />
@@ -77,7 +82,11 @@ export function NotaCreditoHecha({ respuesta, tipo, original, base, volver, onLi
         </Aviso>
       </div>
 
-      <DocumentoNuevo comprobante={nota} conNumero={factura !== null} />
+      <DocumentoNuevo
+        comprobante={nota}
+        conNumero={factura !== null}
+        yaListado={(original.notasCredito ?? []).some((n) => n.numero === nota.numero)}
+      />
       {factura ? <DocumentoNuevo comprobante={factura} conNumero /> : null}
 
       {tipo === 'CAMBIO_A_FACTURA' && respuesta.factura === undefined ? (

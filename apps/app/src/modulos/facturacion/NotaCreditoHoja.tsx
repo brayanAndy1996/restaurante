@@ -1,4 +1,8 @@
-import type { ComprobanteDetalle, NotaCreditoEntrada } from '@restaurante/contratos';
+import type {
+  ComprobanteDetalle,
+  NotaCreditoEntrada,
+  NotaCreditoRespuesta,
+} from '@restaurante/contratos';
 import type { TipoNotaCredito } from '@restaurante/dominio';
 import {
   Aviso,
@@ -99,6 +103,12 @@ interface Props {
   onCerrar: () => void;
 }
 
+/** El tipo de una nota que mandó otra hoja, por lo que dice la propia nota (la respuesta no repite el tipo pedido). */
+function tipoDeLaRespuesta(respuesta: NotaCreditoRespuesta): TipoNotaCredito {
+  const nota = respuesta.nota.nota;
+  return nota?.cambioAFactura ? 'CAMBIO_A_FACTURA' : (nota?.tipo ?? 'DEVOLUCION');
+}
+
 /** Lo que se muestra cuando la nota ya salió. */
 interface Hecha {
   respuesta: NotaEmitida;
@@ -183,9 +193,24 @@ export function NotaCreditoHoja({ comprobante, base, volver, onCerrar }: Props) 
   const [hecha, setHecha] = useState<Hecha | null>(null);
   // Un envío de la nota de este comprobante sigue vivo (de una hoja que ya se cerró): no se manda otro mientras tanto.
   const esperando = ajuste.esperandoRespuestaAnterior && !enviando;
+  // El `id` del envío que esta hoja espera: si ese envío termina con 201, esta hoja muestra su nota (la respuesta es de otra
+  // hoja que ya se cerró), sin depender de releer el comprobante y sin dejar el formulario a la vista.
+  const [esperadoId, setEsperadoId] = useState<string | null>(null);
   useEffect(() => {
-    if (esperando) esperaba.current = true;
+    if (!esperando) return;
+    esperaba.current = true;
+    setEsperadoId(ajuste.idDelIntento());
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [esperando]);
+  const llegada = ajuste.resultadoDelEnvio;
+  const hechaPorLaEspera: Hecha | null =
+    esperadoId !== null && llegada !== null && llegada.id === esperadoId
+      ? {
+          respuesta: llegada.respuesta as NotaCreditoRespuesta,
+          tipo: tipoDeLaRespuesta(llegada.respuesta as NotaCreditoRespuesta),
+        }
+      : null;
+  const hechaVista = hecha ?? hechaPorLaEspera;
   // La API reconoció el `id` con otra devolución: la nota puede ya estar emitida y no se emite otra hasta revisar.
   const [porRevisar, setPorRevisar] = useState(false);
   const alertaDeFallo = useRef<HTMLDivElement>(null);
@@ -241,13 +266,13 @@ export function NotaCreditoHoja({ comprobante, base, volver, onCerrar }: Props) 
 
   const errorDelMotivo = intentado ? revisarMotivo(motivo) : undefined;
 
-  if (hecha) {
+  if (hechaVista) {
     return (
       <>
         <Hoja abierta onCerrar={onCerrar} titulo="Nota de crédito" className="hoja-ajuste">
           <NotaCreditoHecha
-            respuesta={hecha.respuesta}
-            tipo={hecha.tipo}
+            respuesta={hechaVista.respuesta}
+            tipo={hechaVista.tipo}
             original={comprobante}
             base={base}
             volver={volver}

@@ -16,6 +16,12 @@ const INTENTOS = new Map<string, IntentoRecordado>();
 
 /** Los envíos de cada intento que siguen vivos (en vuelo o esperando la red): por intento, cuántos hay con cada `id`. */
 const ENVIOS_VIVOS = new Map<string, Map<string, number>>();
+/** Cómo terminó con éxito el último envío de cada intento: lo consume la hoja que lo esperaba (otra hoja, ya cerrada, lo mandó). */
+export interface ResultadoDeEnvio {
+  id: string;
+  respuesta: unknown;
+}
+const RESULTADOS = new Map<string, ResultadoDeEnvio>();
 const oyentes = new Set<() => void>();
 const avisar = () => oyentes.forEach((o) => o());
 
@@ -30,6 +36,15 @@ export const leerIntento = (clave: string): IntentoRecordado | null => INTENTOS.
 export function guardarIntento(clave: string, intento: IntentoRecordado | null): void {
   if (intento === null) INTENTOS.delete(clave);
   else INTENTOS.set(clave, intento);
+  avisar();
+}
+
+export const leerResultadoDeEnvio = (clave: string): ResultadoDeEnvio | null =>
+  RESULTADOS.get(clave) ?? null;
+
+/** Guarda la respuesta de un envío que terminó bien, antes de anotar que terminó, para que quien lo esperaba la vea. */
+export function guardarResultadoDeEnvio(clave: string, resultado: ResultadoDeEnvio): void {
+  RESULTADOS.set(clave, resultado);
   avisar();
 }
 
@@ -63,6 +78,7 @@ export const hayEnvioVivo = (clave: string, id: string): boolean =>
 export function olvidarIntentosRecordados(): void {
   INTENTOS.clear();
   ENVIOS_VIVOS.clear();
+  RESULTADOS.clear();
   avisar();
 }
 
