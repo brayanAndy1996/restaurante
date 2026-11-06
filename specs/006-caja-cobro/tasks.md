@@ -202,8 +202,8 @@ Las tareas de backend y frontend no modifican, borran ni debilitan las pruebas d
 
 - [x] T43 · backend · `PdfComprobantes` (pdfkit y qrcode) armado por el worker al aceptar y reintentado por el barrido; `GET /facturacion/comprobantes/:id/pdf` y `…/enlace`; `EnlacesComprobante` y `GET /publico/comprobantes/:sello`; la leyenda de 6b, la marca de simulado y el QR en la plantilla del ticket; la reimpresión de una nota de crédito con su sección de devolución por medio (con un puerto de caja que dé los egresos de la nota y falle cerrado, porque facturación no lee `movimiento_caja`) (ajustar las pruebas no protegidas que afirman la leyenda de 6a). Pruebas del desarrollador que extraen el texto del PDF y del ticket. Tramos: (1) PDF en el worker; (2) rutas, sello y ruta pública; (3) ticket. Deja en verde `archivos-enlaces.spec.ts` y el resto de P10. (criterios 159 a 162, 165)
 - [x] T44 · frontend · "Imprimir otra vez" en el detalle del comprobante (criterio 174, con la reimpresión de 004), "Ver PDF" y "Compartir por WhatsApp" (con celular opcional que no se guarda) en el detalle y en los resultados; "El PDF estará listo cuando SUNAT acepte" con `PDF_NO_DISPONIBLE`. Pruebas de componente: el texto y el enlace de `wa.me`. (criterio 161)
-- [ ] T45 · frontend · E2E de 6b con Playwright según el criterio 179 (contextos separados de Cajero, Supervisor y Administrador, y uno sin sesión para el enlace; celular y tablet; simulador, padrón de ejemplo y emulador de impresora). (criterio 179)
-- [ ] T46 · tester · Suite completa, lint, tipos, build, presupuesto (criterio 181) y E2E de 6a y 6b; P1 a P10 completas en verde.
+- [x] T45 · frontend · E2E de 6b con Playwright según el criterio 179 (contextos separados de Cajero, Supervisor y Administrador, y uno sin sesión para el enlace; celular y tablet; simulador, padrón de ejemplo y emulador de impresora). (criterio 179)
+- [x] T46 · tester · Suite completa, lint, tipos, build, presupuesto (criterio 181) y E2E de 6a y 6b; P1 a P10 completas en verde.
 
 ### Tarea aparte · Adaptador del PSE real (cuando se elija el PSE; pregunta 20)
 
