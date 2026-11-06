@@ -330,7 +330,8 @@ export function NotaCreditoHoja({ comprobante, base, volver, onCerrar }: Props) 
       void clientes.invalidateQueries({ queryKey: CLAVES_TIEMPO_REAL.facturacion });
       void clientes.invalidateQueries({ queryKey: CLAVES_TIEMPO_REAL.turno });
     };
-    if (resultado.estado === 'hecho') ajuste.soltar();
+    // Solo se suelta el intento de este envío (su respuesta final): otra hoja pudo recordar otro mientras esperaba.
+    if (resultado.estado === 'hecho') soltarSiEs(resultado.id);
     if (!ajuste.sigueMontada()) {
       // La persona cerró la hoja mientras esperaba la red: la nota salió igual, y el detalle se pone al día.
       if (resultado.estado === 'hecho') refrescar();
@@ -343,7 +344,7 @@ export function NotaCreditoHoja({ comprobante, base, volver, onCerrar }: Props) 
       setHecha({ respuesta: resultado.respuesta, tipo });
       return;
     }
-    if (esRespuestaFinal(resultado.error)) ajuste.soltar();
+    if (esRespuestaFinal(resultado.error) && resultado.id !== null) soltarSiEs(resultado.id);
     const traducido = falloDeNota(resultado.error);
     if (traducido.revisar) setPorRevisar(true);
     if (traducido.releer) {
@@ -361,12 +362,31 @@ export function NotaCreditoHoja({ comprobante, base, volver, onCerrar }: Props) 
     if (!porRevisar) setFallo(null);
   }
 
-  /** La nota puede ya estar emitida: se vuelve a leer el comprobante y se cierra la hoja para verlo. */
+  /**
+   * La nota puede ya estar emitida: se vuelve a leer el comprobante y, si se pudo, se cierra la hoja para verlo. El `id` se
+   * suelta solo si el comprobante leído trae la nota con ese `id`; si la lectura falla se conserva y se dice, para intentarlo
+   * otra vez (no se emite otra nota mientras tanto).
+   */
   async function revisarElComprobante() {
-    await clientes.invalidateQueries({ queryKey: claveComprobante(comprobante.id) });
-    // Ya vio lo que hay: si la nota salió, está en el comprobante y su `id` ya no hace falta.
-    ajuste.soltar();
-    onCerrar();
+    const id = ajuste.idDelIntento();
+    try {
+      const leido = await clientes.fetchQuery({
+        queryKey: claveComprobante(comprobante.id),
+        queryFn: ({ signal }) => leerComprobante(comprobante.id, signal),
+        staleTime: 0,
+      });
+      if (id !== null && (leido.notasCredito ?? []).some((n) => n.notaId === id)) soltarSiEs(id);
+      onCerrar();
+    } catch {
+      if (!ajuste.sigueMontada()) return;
+      setFallo({
+        titulo: 'No se pudo revisar el comprobante',
+        texto:
+          'Revisa tu conexión e inténtalo otra vez. Mientras tanto no se emite otra nota, para no repetirla.',
+        revisar: true,
+        revisarDeNuevo: true,
+      });
+    }
   }
 
   const conClave = permiso === 'clave';
@@ -581,7 +601,7 @@ export function NotaCreditoHoja({ comprobante, base, volver, onCerrar }: Props) 
                   <p>{fallo.texto}</p>
                   {fallo.revisar ? (
                     <Boton onClick={() => void revisarElComprobante()}>
-                      Revisar el comprobante
+                      {fallo.revisarDeNuevo ? 'Intentar otra vez' : 'Revisar el comprobante'}
                     </Boton>
                   ) : null}
                 </Aviso>

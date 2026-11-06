@@ -1038,6 +1038,68 @@ describe('El id se conserva hasta una respuesta final (criterio 153)', () => {
     expect(cuerpoDe(s, 1).id).toBe(cuerpoDe(s, 0).id);
   });
 
+  it('«Revisar el comprobante» que se pudo leer pero no trae la nota cierra la hoja y conserva el id: al repetir la devolución, el mismo id', async () => {
+    let intentos = 0;
+    const s = montar({
+      rol: 'SUPERVISOR',
+      extra: {
+        [`POST ${API_NOTAS}`]: ({ cuerpo }) =>
+          ++intentos === 1
+            ? json(422, { codigo: 'CLAVE_IDEMPOTENCIA_REUTILIZADA', mensaje: 'ya se usó' })
+            : json(201, respuestaDe(cuerpo as NotaCreditoEntrada)),
+      },
+    });
+    renderApp(RUTA);
+    const hoja = await abrirLaHoja();
+    await within(hoja).findByText(/Sale de tu turno en Caja 1/);
+    await userEvent.click(within(hoja).getByRole('button', { name: 'Error al cobrar' }));
+    await userEvent.click(within(hoja).getByRole('button', { name: 'Emitir nota de crédito' }));
+    await userEvent.click(
+      await within(hoja).findByRole('button', { name: 'Revisar el comprobante' }),
+    );
+    await waitFor(() =>
+      expect(screen.queryByRole('dialog', { name: 'Nota de crédito' })).toBeNull(),
+    );
+
+    const otra = await abrirLaHoja();
+    await within(otra).findByText(/Sale de tu turno en Caja 1/);
+    await userEvent.click(within(otra).getByRole('button', { name: 'Error al cobrar' }));
+    await userEvent.click(within(otra).getByRole('button', { name: 'Emitir nota de crédito' }));
+    await screen.findByText('Nota de crédito emitida');
+    expect(cuerpoDe(s, 1).id).toBe(cuerpoDe(s, 0).id);
+  });
+
+  it('si la relectura de «Revisar el comprobante» falla, lo dice, ofrece intentarlo otra vez y no suelta el id', async () => {
+    let lecturas = 0;
+    let intentos = 0;
+    const s = montar({
+      rol: 'SUPERVISOR',
+      extra: {
+        [`POST ${API_NOTAS}`]: ({ cuerpo }) =>
+          ++intentos === 1
+            ? json(422, { codigo: 'CLAVE_IDEMPOTENCIA_REUTILIZADA', mensaje: 'ya se usó' })
+            : json(201, respuestaDe(cuerpo as NotaCreditoEntrada)),
+      },
+    });
+    s.poner(`GET ${API_BOLETA}`, () =>
+      ++lecturas > 1
+        ? json(500, { codigo: 'ERROR_INTERNO', mensaje: 'Falló' })
+        : json(200, s.estado.comprobante),
+    );
+    renderApp(RUTA);
+    const hoja = await abrirLaHoja();
+    await within(hoja).findByText(/Sale de tu turno en Caja 1/);
+    await userEvent.click(within(hoja).getByRole('button', { name: 'Error al cobrar' }));
+    await userEvent.click(within(hoja).getByRole('button', { name: 'Emitir nota de crédito' }));
+    await userEvent.click(
+      await within(hoja).findByRole('button', { name: 'Revisar el comprobante' }),
+    );
+    expect(await within(hoja).findByText('No se pudo revisar el comprobante')).toBeVisible();
+    expect(within(hoja).getByRole('button', { name: 'Intentar otra vez' })).toBeVisible();
+    expect(within(hoja).getByRole('button', { name: 'Emitir nota de crédito' })).toBeDisabled();
+    expect(notas(s)).toHaveLength(1);
+  });
+
   it('tras una respuesta final de la API (422) el id se suelta: el siguiente intento es otra nota', async () => {
     let intentos = 0;
     const s = montar({

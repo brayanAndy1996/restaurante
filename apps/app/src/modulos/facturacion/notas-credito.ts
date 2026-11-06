@@ -375,6 +375,8 @@ export interface FalloDeNota {
   releer?: boolean;
   /** La nota puede ya estar emitida: se ofrece «Revisar el comprobante» (vuelve a leerlo) en lugar de emitir otra. */
   revisar?: boolean;
+  /** La revisión ya se intentó y no funcionó: el botón dice «Intentar otra vez». */
+  revisarDeNuevo?: boolean;
   /** El turno elegido ya no sirve: hay que volver a leer los turnos abiertos y elegir otro. */
   releerTurnos?: boolean;
 }

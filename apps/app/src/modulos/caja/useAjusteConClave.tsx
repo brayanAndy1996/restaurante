@@ -36,10 +36,11 @@ export interface PedidoDeAjuste<T = unknown> {
 
 export type ResultadoDeAjuste<T = unknown> =
   /** `respuesta` es lo que contestó la API a la escritura. */
-  | { estado: 'hecho'; respuesta: T }
+  | { estado: 'hecho'; respuesta: T; id: string }
   /** La persona cerró la ventana de la clave. */
   | { estado: 'cancelado' }
-  | { estado: 'fallo'; error: unknown };
+  /** `id` es el de la escritura que se mandó (`null` si el fallo fue antes de mandarla): solo ese se puede soltar. */
+  | { estado: 'fallo'; error: unknown; id: string | null };
 
 type Intento = IntentoRecordado;
 
@@ -126,7 +127,7 @@ export function useAjusteConClave(opciones: { recordarComo?: string } = {}) {
             undefined,
             actual.clave,
           );
-          return { estado: 'hecho', respuesta };
+          return { estado: 'hecho', respuesta, id: actual.id };
         } catch (error) {
           const clavePerdida =
             error instanceof ErrorApi &&
@@ -140,21 +141,19 @@ export function useAjusteConClave(opciones: { recordarComo?: string } = {}) {
               continue;
             }
           }
-          return { estado: 'fallo', error };
+          return { estado: 'fallo', error, id: actual.id };
         }
       }
       return { estado: 'cancelado' };
     } catch (error) {
-      return { estado: 'fallo', error };
+      return { estado: 'fallo', error, id: null };
     }
   }
 
-  /** Hubo una respuesta final (la nota salió, o la API dijo que no): lo que sigue es otra acción, con otro `id`. */
-  function soltar() {
-    intento.current = null;
-  }
-
-  /** La escritura con ese `id` ya salió (se vio en lo que la API devuelve): su intento ya no hace falta. */
+  /**
+   * Suelta el intento recordado solo si es el de ese `id`: la respuesta final del envío con ese `id`, o el comprobante que ya
+   * muestra su nota. Otra pantalla pudo recordar otro intento mientras tanto (una respuesta tardía no lo borra).
+   */
   function soltarSiEs(id: string) {
     if (intento.current?.id === id) intento.current = null;
   }
@@ -166,7 +165,6 @@ export function useAjusteConClave(opciones: { recordarComo?: string } = {}) {
 
   return {
     ejecutar,
-    soltar,
     soltarSiEs,
     idDelIntento,
     ventana,
