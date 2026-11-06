@@ -18,6 +18,7 @@ import {
   anularComprobante,
   arrancarFact,
   cerrarAdmin,
+  Cierres,
   cobrarCrudo,
   cobrarFactura,
   cobrarLomo,
@@ -33,6 +34,7 @@ import {
   exigirPse,
   fallarElTicketDelCobro,
   fechaEmisionDe,
+  impresoraDeCaja,
   filas,
   finDelDiaLima,
   limitarBarrido,
@@ -51,6 +53,7 @@ vi.setConfig({ testTimeout: 120_000, hookTimeout: 120_000 });
 let ctx: AppFact;
 let esc: Escenario;
 const A = () => esc.A;
+const cierres = new Cierres();
 let restaurarBarrido: () => void;
 
 beforeAll(async () => {
@@ -60,6 +63,7 @@ beforeAll(async () => {
 });
 afterAll(async () => {
   restaurarBarrido?.();
+  await cierres.cerrarTodo();
   await ctx?.cerrar();
   await cerrarAdmin();
 });
@@ -193,6 +197,10 @@ describe('criterio 124 · registro del envío en la emisión', () => {
 
   it('un cobro que falla a propósito después de numerar no deja envío, ni trabajo en la cola, ni llamada al PSE', async () => {
     const turnoId = await turnoDe(ctx, A(), 'cajero', 'S1', 'caja1');
+    // La falla inyectada salta al encolar el ticket del comprobante, así que la caja necesita su impresora.
+    await impresoraDeCaja(ctx, cierres, A().token.admin!, A().S1, 'Caja de S1', {
+      cajaId: (await A().cajas()).S1!.caja1,
+    });
     const mala = await cuentaCon(ctx, A(), 'S1', [['lomo', 1]]);
     const idMalo = randomUUID();
     const enviosAntes = await contar('SELECT 1 FROM envio_pse WHERE empresa_id = $1', [A().id]);
@@ -213,6 +221,7 @@ describe('criterio 124 · registro del envío en la emisión', () => {
     } finally {
       await quitar();
     }
+    // El cobro falló después de numerar y después de registrar el envío: la transacción revirtió todo.
     expect(await contar('SELECT 1 FROM envio_pse WHERE empresa_id = $1', [A().id])).toBe(
       enviosAntes,
     );
