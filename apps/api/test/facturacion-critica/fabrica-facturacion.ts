@@ -39,6 +39,7 @@ import type { AppP5 } from '../impresion-critica/fabrica-p5';
 import { fijarEntornoDePrueba } from '../utilidades';
 import {
   abrirTurno,
+  api,
   CLIENTE_RUC,
   cobrar,
   crearEscenario,
@@ -205,7 +206,7 @@ export async function crearEscenarioFact(
   opciones: { conPse?: boolean } = {},
 ): Promise<Escenario> {
   const esc = await crearEscenario(ctx);
-  if (opciones.conPse !== false) {
+  if (opciones.conPse !== false && !process.env.P7_SIN_PSE) {
     await activarSimulado(ctx, esc, esc.A);
     await activarSimulado(ctx, esc, esc.B);
   }
@@ -445,3 +446,78 @@ export function capturarRegistros(): RegistrosCapturados {
 /** Los eventos publicados de un nombre (copias). */
 export const eventosPublicados = (ctx: AppFact, nombre: string): EventoPublicable[] =>
   ctx.publicador.eventos().filter((ev) => ev.nombre === nombre);
+
+// ------------------------------------------------------------------------------------------------
+// Series de notas de crédito, anulaciones y plazos
+// ------------------------------------------------------------------------------------------------
+
+const seriesDeNotasPuestas = new Map<string, Promise<void>>();
+
+/**
+ * Pone las series de notas de crédito de las cajas 1 y 2 de las sucursales S1 y S3 (criterio 149): `BN01`/`FN01` y
+ * `BN02`/`FN02` en S1 y `BN31`/`FN31` y `BN32`/`FN32` en S3. Se hace una sola vez por empresa y archivo.
+ */
+export function seriesDeNotas(ctx: AppFact, e: EmpresaCaja): Promise<void> {
+  let promesa = seriesDeNotasPuestas.get(e.id);
+  if (!promesa) {
+    promesa = (async () => {
+      const cajas = await e.cajas();
+      const t = e.token.admin!;
+      const poner = async (sucursalId: string, cajaId: string, tipo: string, serie: string) =>
+        exigirEstado(
+          await api(ctx, t, 'put', `/sucursales/${sucursalId}/cajas/${cajaId}/series/${tipo}`, {
+            serie,
+          }),
+          200,
+          `Serie ${serie} de ${tipo} (006, criterio 149)`,
+        );
+      for (const [sucursal, nombre] of [
+        ['S1', ['01', '02']],
+        ['S3', ['31', '32']],
+      ] as const) {
+        const c = cajas[sucursal]!;
+        await poner(e.sucursalId(sucursal), c.caja1, 'NOTA_CREDITO_BOLETA', `BN${nombre[0]}`);
+        await poner(e.sucursalId(sucursal), c.caja1, 'NOTA_CREDITO_FACTURA', `FN${nombre[0]}`);
+        await poner(e.sucursalId(sucursal), c.caja2, 'NOTA_CREDITO_BOLETA', `BN${nombre[1]}`);
+        await poner(e.sucursalId(sucursal), c.caja2, 'NOTA_CREDITO_FACTURA', `FN${nombre[1]}`);
+      }
+    })();
+    seriesDeNotasPuestas.set(e.id, promesa);
+  }
+  return promesa;
+}
+
+/** `POST /notas-credito` de tipo `ANULACION` (sin devolución) con el token dado. */
+export function anularComprobante(
+  ctx: AppFact,
+  token: string,
+  comprobanteId: string,
+  total: string,
+  motivo = 'Error al digitar la venta',
+): Promise<Res> {
+  return escribir(ctx, token, 'post', '/notas-credito', {
+    id: randomUUID(),
+    comprobanteId,
+    tipo: 'ANULACION',
+    motivo,
+    total,
+  });
+}
+
+/**
+ * El último milisegundo, hora de Lima, de `fecha` (`AAAA-MM-DD`) más `dias` días (criterio 130): el plazo de envío. Se
+ * calcula aquí, aparte de la implementación, para que las pruebas no dependan de ella.
+ */
+export function finDelDiaLima(fecha: string | Date, dias: number): Date {
+  const texto = fecha instanceof Date ? fecha.toISOString().slice(0, 10) : fecha;
+  const [a, m, d] = texto.split('-').map(Number) as [number, number, number];
+  return new Date(Date.UTC(a, m - 1, d + dias, 23 + 5, 59, 59, 999));
+}
+
+/** `comprobante.fecha_emision` como `AAAA-MM-DD`. */
+export async function fechaEmisionDe(comprobanteId: string): Promise<string> {
+  const r = await filas('SELECT fecha_emision::text AS f FROM comprobante WHERE id = $1', [
+    comprobanteId,
+  ]);
+  return r[0]!.f as string;
+}
