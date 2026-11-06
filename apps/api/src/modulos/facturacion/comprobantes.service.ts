@@ -241,7 +241,7 @@ export class ComprobantesService {
         'No hay una impresora activa donde reimprimir este ticket',
       );
     }
-    const comprobante = await leerComprobante(this.conexion, comprobanteId, this.idsDeNotas);
+    const comprobante = await leerComprobante(this.conexion, comprobanteId, null);
     if (comprobante === null) throw comprobanteNoEncontrado();
     const original = await this.impresion.trabajoDeComprobante(comprobanteId);
     let documento;

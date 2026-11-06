@@ -15,7 +15,7 @@ import type { RegistroIdsDeNotas } from './impresora-de-caja';
  * `acreditado` (criterio 148): las notas que cuentan (todas las del comprobante salvo las que reemplazó una reemisión)
  * y lo que acreditan por línea del original, con los que la PWA calcula la nota con `calcularNotaCredito`. Cada nota lleva
  * `notaId`, el `id` que mandó el cliente: lo da el puerto de caja (`RegistroIdsDeNotas`, que falla cerrado: facturación no
- * lee `nota_credito`).
+ * lee `nota_credito`). Quien no necesita las notas (el worker del envío, el PDF y el ticket) pasa `null` y no se leen.
  */
 
 interface FilaComprobante {
@@ -133,7 +133,7 @@ const UNIONES = `FROM comprobante c
 export async function leerComprobante(
   conexion: Sequelize,
   id: string,
-  idsDeNotas: RegistroIdsDeNotas,
+  idsDeNotas: RegistroIdsDeNotas | null,
 ): Promise<ComprobanteRespuesta | null> {
   const filas = await conexion.query<FilaComprobante>(
     `SELECT ${COLUMNAS} ${UNIONES} WHERE c.id = $1`,
@@ -152,7 +152,9 @@ export async function leerComprobante(
   );
   const tieneOperaciones = c.op_gravadas !== null;
   const conNotas =
-    c.tipo === 'BOLETA' || c.tipo === 'FACTURA' ? await notasDe(conexion, id, idsDeNotas) : null;
+    idsDeNotas !== null && (c.tipo === 'BOLETA' || c.tipo === 'FACTURA')
+      ? await notasDe(conexion, id, idsDeNotas)
+      : null;
   return {
     id: c.id,
     tipo: c.tipo,

@@ -11,7 +11,6 @@ import { arriendoDelEnvioMs } from '../../../nucleo/colas/tiempos-del-envio';
 import { ContextoEmpresa } from '../../../nucleo/contexto-empresa';
 import { PUBLICADOR_EVENTOS, type PublicadorEventos } from '../../../nucleo/eventos';
 import { RELOJ, type Reloj } from '../../../nucleo/reloj';
-import { RegistroIdsDeNotas } from '../impresora-de-caja';
 import { leerComprobante } from '../lectura-comprobante';
 import { armarDocumentoPse } from '../pse/documento-pse';
 import type {
@@ -81,7 +80,7 @@ function motivosPublicados(
  * El procesador de un envío al PSE (historia 006, entrega 6b, criterios 125 a 131; ruta crítica P7), en tres pasos:
  *
  * 1. **Tomar** (transacción corta): `FOR UPDATE SKIP LOCKED` sobre `envio_pse`; si no hay fila, está `TERMINADO` o
- *    `DETENIDO`, aún no toca o tiene un arriendo vigente, termina sin hacer nada. Si no, fija el arriendo (`2 × PSE_TIMEOUT_MS + 2 × TIEMPO_LIMITE_R2_MS + 30 s`, mínimo 2 minutos) y un
+ *    `DETENIDO`, aún no toca o tiene un arriendo vigente, termina sin hacer nada. Si no, fija el arriendo (`2 × PSE_TIMEOUT_MS + 2 × TIEMPO_LIMITE_R2_MS + 20 s`, mínimo 2 minutos) y un
  *    `intento_en_curso`, suma un intento y arma el documento y el conector del emisor.
  * 2. **Llamar** (sin transacción): el primer intento emite; los demás consultan primero y solo con `NO_EXISTE` emiten
  *    (criterio 128). Un `ACEPTADO` con XML o CDR los guarda en el almacén privado antes del paso 3.
@@ -109,7 +108,6 @@ export class ProcesadorEnviosPse {
     @Inject(COLA_PSE) private readonly cola: ColaPse,
     @Inject(PUBLICADOR_EVENTOS) private readonly publicador: PublicadorEventos,
     @Inject(ArchivadorDePdf) private readonly pdf: ArchivadorDePdf,
-    @Inject(RegistroIdsDeNotas) private readonly idsDeNotas: RegistroIdsDeNotas,
   ) {}
 
   /**
@@ -166,7 +164,7 @@ export class ProcesadorEnviosPse {
       return null;
     }
 
-    const comprobante = await leerComprobante(this.conexion, comprobanteId, this.idsDeNotas);
+    const comprobante = await leerComprobante(this.conexion, comprobanteId, null);
     if (comprobante === null) return null;
     const intentoEnCurso = randomUUID();
     await this.conexion.query(

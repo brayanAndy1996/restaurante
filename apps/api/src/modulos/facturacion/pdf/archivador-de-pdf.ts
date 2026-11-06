@@ -9,7 +9,6 @@ import {
 import { CONEXION_API } from '../../../nucleo/base-de-datos';
 import { ContextoEmpresa } from '../../../nucleo/contexto-empresa';
 import { RELOJ, type Reloj } from '../../../nucleo/reloj';
-import { RegistroIdsDeNotas } from '../impresora-de-caja';
 import { leerComprobante } from '../lectura-comprobante';
 import { RegistroDeConectores } from '../pse/registro-de-conectores';
 import { PdfComprobantes } from './pdf-comprobantes';
@@ -51,7 +50,6 @@ export class ArchivadorDePdf {
     @Inject(PdfComprobantes) private readonly pdf: PdfComprobantes,
     @Inject(RegistroDeConectores) private readonly conectores: RegistroDeConectores,
     @Inject(RELOJ) private readonly reloj: Reloj,
-    @Inject(RegistroIdsDeNotas) private readonly idsDeNotas: RegistroIdsDeNotas,
   ) {}
 
   /**
@@ -124,7 +122,7 @@ export class ArchivadorDePdf {
     const fila = filas[0];
     if (fila === undefined || fila.pdf_clave !== null) return null;
     if (fila.estado !== 'ACEPTADO' && fila.estado !== 'ANULADO') return null;
-    const comprobante = await leerComprobante(this.conexion, comprobanteId, this.idsDeNotas);
+    const comprobante = await leerComprobante(this.conexion, comprobanteId, null);
     if (comprobante === null) return null;
     return { comprobante, urlConsulta: await this.conectores.urlConsulta(fila.emisor_id) };
   }
