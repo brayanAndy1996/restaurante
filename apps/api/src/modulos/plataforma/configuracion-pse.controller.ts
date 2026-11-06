@@ -10,7 +10,7 @@ import { Superadministrador } from './superadministrador.decorator';
 
 /**
  * `GET` y `PUT /plataforma/empresas/:empresaId/emisores/:emisorId/pse` (historia 006, entrega 6b, criterios 122 y 123): solo
- * el superadministrador. Un emisor de otra empresa responde 404. Deja `configurar_pse_emisor` en `auditoria_plataforma`.
+ * el superadministrador. Un emisor de otra empresa responde 404. Deja `configurar_pse_emisor` en `auditoria` (origen `plataforma`).
  */
 @Controller('plataforma/empresas/:empresaId/emisores/:emisorId/pse')
 @Superadministrador()

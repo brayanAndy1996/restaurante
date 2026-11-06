@@ -19,7 +19,7 @@ export class FacturacionPlataformaService {
     return Promise.reject(noImplementado());
   }
 
-  /** Encola la carga del padrón (una a la vez); deja `cargar_padron` en `auditoria_plataforma`. */
+  /** Encola la carga del padrón (una a la vez); deja `cargar_padron` en `auditoria` (origen `plataforma`). */
   pedirCargaDelPadron(): Promise<void> {
     return Promise.reject(noImplementado());
   }
