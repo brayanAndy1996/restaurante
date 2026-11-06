@@ -308,6 +308,8 @@ export interface OpcionesEmision {
   formato?: 'DETALLADO' | 'CONSUMO';
   cliente?: Libre;
   pagos?: Libre[];
+  /** El redondeo del cobro en efectivo (por defecto `"0.00"`). */
+  redondeo?: string;
   /** Si es `false`, se deja `POR_ENVIAR` (sin correr el worker). */
   aceptado?: boolean;
 }
@@ -335,6 +337,7 @@ export async function emitirAceptado(
     ...(o.formato ? { formato: o.formato } : {}),
     ...(o.cliente ? { cliente: o.cliente } : {}),
     ...(o.pagos ? { pagos: o.pagos } : { pagos: [efectivo(total)] }),
+    ...(o.redondeo ? { redondeo: o.redondeo } : {}),
   });
   const comprobanteId = (cobro.comprobante as Libre).id as string;
   if (o.aceptado !== false) await aceptar(ctx, e, comprobanteId);
