@@ -139,15 +139,15 @@ describe('rutas de la entrega 6b (fase A)', () => {
     }
   });
 
-  it('las rutas responden «No implementado» como 500 sin detalles (con una sesión de prueba)', async () => {
+  it('las rutas clasificadas piden sucursal activa antes de ejecutar nada (con una sesión de prueba sin sucursal)', async () => {
     const id = '11111111-1111-1111-1111-111111111111';
     const empresa = '22222222-2222-2222-2222-222222222222';
     const servidor = () => request(app.getHttpServer());
     const res = await servidor()
       .get(`/facturacion/comprobantes/${id}/enlace`)
       .set('x-empresa-id', empresa);
-    expect(res.status).toBe(500);
-    expect(JSON.stringify(res.body)).not.toContain('No implementado');
+    expect(res.status).toBe(409);
+    expect(res.body.codigo).toBe('SUCURSAL_NO_ELEGIDA');
   });
 });
 

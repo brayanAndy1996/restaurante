@@ -5,10 +5,14 @@ import type {
   NotaCreditoEntradaValidada,
 } from '@restaurante/contratos';
 import {
+  compararMontos,
   diaOperativo,
   fechaLima,
+  MONTO_BOLETA_SIN_DOCUMENTO,
   montoEnLetras,
   preciosUnitarios,
+  tiposDeComprobantePermitidos,
+  type RegimenTributario,
   type FormatoComprobante,
   type LineaDeParte,
   type MedioPago,
@@ -31,7 +35,15 @@ import {
   SuscripcionService,
   type DatosParaComprobante,
 } from '../plataforma';
+import {
+  clienteRequerido,
+  comprobanteNoPermitido,
+  comprobanteNoRechazado,
+  comprobanteNoEncontrado,
+  yaReemplazado,
+} from './errores-facturacion';
 import { sinMarcaDeValida } from './facturado';
+import { RegistroImpresoraDeCaja, RegistroPagosDeCobro } from './impresora-de-caja';
 import { EnviosService } from './envios/envios.service';
 import { leerComprobante } from './lectura-comprobante';
 import { SeriesService } from './series.service';
@@ -174,6 +186,8 @@ export class EmisionService {
     @Inject(SuscripcionService) private readonly suscripciones: SuscripcionService,
     @Inject(IMPRESION) private readonly impresion: ImpresionPuerto,
     @Inject(EnviosService) private readonly envios: EnviosService,
+    @Inject(RegistroImpresoraDeCaja) private readonly impresoras: RegistroImpresoraDeCaja,
+    @Inject(RegistroPagosDeCobro) private readonly pagosDeCobro: RegistroPagosDeCobro,
   ) {}
 
   /**
@@ -314,14 +328,185 @@ export class EmisionService {
   }
 
   /**
-   * "Emitir otro" de un comprobante `RECHAZADO` (criterio 134): copia sus líneas y totales con otro número y registra su
-   * envío. 409 `COMPROBANTE_NO_RECHAZADO` / `YA_REEMPLAZADO` / `SIN_SERIE`. Fase A: lanza `Error('No implementado')` hasta
-   * T32.
+   * "Emitir otro" de un comprobante `RECHAZADO` (criterio 134): toma el rechazado con `FOR UPDATE`, el emisor con
+   * `FOR SHARE` y la serie activa del tipo en la caja del rechazado, y guarda uno nuevo con otro número, **las mismas
+   * líneas y totales** (copiados con `INSERT … SELECT`, sin recalcular), la misma tasa de IGV, el mismo formato, caja, turno
+   * y responsable (también si el turno ya se cerró: no toca su X ni su Z) y el mismo emisor, con `reemplaza_a_id` = el
+   * rechazado. Registra su envío, cuenta en la cuota del plan y encola el ticket en la impresora de esa caja, sin el pulso
+   * de la gaveta. 409 `COMPROBANTE_NO_RECHAZADO` / `YA_REEMPLAZADO` / `SIN_SERIE` / `SERIE_AGOTADA`; 422
+   * `COMPROBANTE_NO_PERMITIDO` / `CLIENTE_REQUERIDO` (las reglas del criterio 51). Una nota de crédito rechazada se
+   * reemite con el mismo tipo de nota, sin cliente y con el mismo documento que modifica. Quien llama comprobó el alcance.
    */
-  reemitir(comprobanteId: string, datos: DatosDeReemision): Promise<ComprobanteEmitido> {
-    void comprobanteId;
-    void datos;
-    return Promise.reject(noImplementado());
+  async reemitir(comprobanteId: string, datos: DatosDeReemision): Promise<ComprobanteEmitido> {
+    const filas = await this.conexion.query<FilaRechazada>(
+      `SELECT id, estado, tipo, emisor_id, caja_id, sucursal_id, cobro_id, total::text AS total,
+              emisor->>'regimen' AS regimen, cliente_tipo_documento, cliente_numero, cliente_nombre,
+              cliente_direccion
+         FROM comprobante WHERE id = $1 FOR UPDATE`,
+      { bind: [comprobanteId], type: QueryTypes.SELECT },
+    );
+    const rechazado = filas[0];
+    if (rechazado === undefined) throw comprobanteNoEncontrado();
+    if (rechazado.estado !== 'RECHAZADO') throw comprobanteNoRechazado();
+    const previas = await this.conexion.query<{ id: string }>(
+      'SELECT id FROM comprobante WHERE reemplaza_a_id = $1',
+      { bind: [comprobanteId], type: QueryTypes.SELECT },
+    );
+    if (previas[0] !== undefined) throw yaReemplazado(previas[0].id);
+
+    const cliente = this.clienteDeReemision(rechazado, datos);
+    await this.emisores.bloquearParaEmitir(rechazado.emisor_id);
+    const { serieId, serie, numero } = await this.series.tomarNumero(
+      rechazado.caja_id,
+      datos.tipo,
+      rechazado.emisor_id,
+    );
+    const instante = this.reloj.ahora();
+    const horaCorte = await this.sucursales.horaCorte(rechazado.sucursal_id);
+    const simulado = (await this.emisores.modoPse(rechazado.emisor_id)) === 'SIMULADO';
+    const creados = await this.conexion.query<{ id: string }>(
+      `INSERT INTO comprobante (
+         empresa_id, sucursal_id, emisor_id, caja_id, turno_id, turno_responsable_id, cobro_id, serie_id, tipo, serie,
+         numero, formato, fecha_emision, emitido_en, dia_operativo, emisor, sucursal, cliente_tipo_documento,
+         cliente_numero, cliente_nombre, cliente_direccion, moneda, tasa_igv, subtotal, descuentos, op_gravadas,
+         op_exoneradas, op_inafectas, op_gratuitas, igv, igv_gratuitas, icbper, total, monto_en_letras, orden_id, mesas,
+         mozo_nombre, numero_llamado, numero_parte, detalle_parte, estado, simulado, afecta_a_id, tipo_nota,
+         motivo_nota, reemplaza_a_id, motivo_reemplazo, creado_en, actualizado_en)
+       SELECT empresa_id, sucursal_id, emisor_id, caja_id, turno_id, turno_responsable_id, NULL, $2, $3, $4,
+              $5, formato, $6::date, $7, $8::date, emisor, sucursal, $9,
+              $10, $11, $12, moneda, tasa_igv, subtotal, descuentos, op_gravadas,
+              op_exoneradas, op_inafectas, op_gratuitas, igv, igv_gratuitas, icbper, total, monto_en_letras, NULL, mesas,
+              mozo_nombre, numero_llamado, NULL, NULL, 'POR_ENVIAR', $13, afecta_a_id, tipo_nota,
+              motivo_nota, id, 'REEMISION', $7, $7
+         FROM comprobante WHERE id = $1
+       RETURNING id`,
+      {
+        bind: [
+          comprobanteId,
+          serieId,
+          datos.tipo,
+          serie,
+          numero,
+          fechaLima(instante),
+          instante,
+          diaOperativo(instante, horaCorte ?? '00:00'),
+          cliente?.tipoDocumento ?? null,
+          cliente?.numero ?? null,
+          cliente?.nombre ?? null,
+          cliente?.direccion ?? null,
+          simulado,
+        ],
+        type: QueryTypes.SELECT,
+      },
+    );
+    const nuevoId = creados[0]!.id;
+    await this.conexion.query(
+      `INSERT INTO comprobante_linea (
+         empresa_id, comprobante_id, posicion, item_id, descripcion, cantidad, unidad, precio_unitario, valor_unitario,
+         bruto, descuento, neto, base, igv, bolsas, icbper, afectacion, gratuita, valor_referencial, base_referencial,
+         igv_referencial, posicion_origen, creado_en, actualizado_en)
+       SELECT empresa_id, $2, posicion, item_id, descripcion, cantidad, unidad, precio_unitario, valor_unitario,
+              bruto, descuento, neto, base, igv, bolsas, icbper, afectacion, gratuita, valor_referencial,
+              base_referencial, igv_referencial, posicion_origen, $3, $3
+         FROM comprobante_linea WHERE comprobante_id = $1`,
+      { bind: [comprobanteId, nuevoId, instante], type: QueryTypes.INSERT },
+    );
+    await this.envios.registrar(nuevoId, datos.tipo, fechaLima(instante), instante);
+    await this.suscripciones.registrarComprobanteEmitido(rechazado.sucursal_id, instante);
+    const comprobante = await leerComprobante(this.conexion, nuevoId);
+    if (comprobante === null) throw new Error('El comprobante recién emitido no se puede leer');
+    const trabajoId = await this.encolarTicketDeReemision(comprobante, rechazado, instante);
+    return {
+      comprobante,
+      trabajoId,
+      impresion: trabajoId === null ? 'SIN_IMPRESORA' : 'EN_COLA',
+      emitidoEn: instante,
+    };
+  }
+
+  /**
+   * Las reglas del criterio 51 para el comprobante nuevo antes de numerar nada: el tipo que el emisor puede emitir
+   * (`COMPROBANTE_NO_PERMITIDO`) y el cliente (`CLIENTE_REQUERIDO`: la factura exige RUC y dirección; la boleta de más de
+   * S/ 700, documento y nombre). Sin `cliente` en la entrada se conserva el del rechazado. Devuelve el cliente que lleva.
+   */
+  private clienteDeReemision(
+    rechazado: FilaRechazada,
+    datos: DatosDeReemision,
+  ): ClienteComprobanteEntrada | null {
+    const esNota =
+      rechazado.tipo === 'NOTA_CREDITO_BOLETA' || rechazado.tipo === 'NOTA_CREDITO_FACTURA';
+    if (esNota) {
+      if (datos.tipo !== rechazado.tipo) {
+        throw comprobanteNoPermitido(
+          'Una nota de crédito rechazada se emite de nuevo con el mismo tipo de nota',
+          'tipo',
+        );
+      }
+      return conservado(rechazado);
+    }
+    if (datos.tipo !== 'BOLETA' && datos.tipo !== 'FACTURA') {
+      throw comprobanteNoPermitido('Elige boleta o factura', 'tipo');
+    }
+    if (!tiposDeComprobantePermitidos(rechazado.regimen).includes(datos.tipo)) {
+      throw comprobanteNoPermitido('El emisor solo puede emitir boletas de venta', 'tipo');
+    }
+    const cliente = datos.cliente ?? conservado(rechazado);
+    if (datos.tipo === 'FACTURA') {
+      if (cliente === null || cliente.tipoDocumento !== 'RUC' || cliente.direccion === undefined) {
+        throw clienteRequerido(
+          'Una factura necesita el cliente con su RUC, su razón social y su dirección',
+        );
+      }
+    } else if (
+      cliente === null &&
+      compararMontos(rechazado.total, MONTO_BOLETA_SIN_DOCUMENTO) > 0
+    ) {
+      throw clienteRequerido(
+        `Una boleta de más de S/ ${MONTO_BOLETA_SIN_DOCUMENTO} necesita el documento y el nombre del cliente`,
+      );
+    }
+    return cliente;
+  }
+
+  /** El ticket de la reemisión en la impresora de la caja del rechazado, sin el pulso de la gaveta (criterio 134). */
+  private async encolarTicketDeReemision(
+    comprobante: ComprobanteRespuesta,
+    rechazado: FilaRechazada,
+    instante: Date,
+  ): Promise<string | null> {
+    const impresora = await this.impresoras.deLaCaja(rechazado.caja_id);
+    if (impresora === null) return null;
+    const cobro =
+      rechazado.cobro_id === null ? null : await this.pagosDeCobro.deCobro(rechazado.cobro_id);
+    const orden = comprobante.orden;
+    const [trabajoId] = await this.impresion.encolar([
+      {
+        sucursalId: rechazado.sucursal_id,
+        impresoraId: impresora.id,
+        estacionId: null,
+        tipo: 'COMPROBANTE',
+        comandaId: null,
+        precuentaId: null,
+        comprobanteId: comprobante.id,
+        turnoId: null,
+        mesa:
+          orden === null
+            ? null
+            : orden.numeroLlamado !== null
+              ? `Llamado ${orden.numeroLlamado}`
+              : orden.mesas.join(', '),
+        ordenId: orden?.id ?? null,
+        envioNumero: null,
+        documento: documentoDeComprobante(comprobante, {
+          hora: horaLocal(instante),
+          pagos: cobro?.pagos ?? [],
+          vuelto: cobro?.vuelto ?? '0.00',
+          redondeo: cobro?.redondeo ?? '0.00',
+          abreGaveta: false,
+        }),
+      },
+    ]);
+    return trabajoId ?? null;
   }
 
   /**
@@ -452,4 +637,32 @@ function valoresDeLinea(linea: LineaDeParte, posicion: number, datos: DatosDeEmi
     precioUnitario,
     valorUnitario,
   ];
+}
+
+/** Lo que la reemisión necesita del comprobante rechazado. */
+interface FilaRechazada {
+  id: string;
+  estado: ComprobanteRespuesta['estado'];
+  tipo: TipoDocumentoElectronico;
+  emisor_id: string;
+  caja_id: string;
+  sucursal_id: string;
+  cobro_id: string | null;
+  total: string;
+  regimen: RegimenTributario;
+  cliente_tipo_documento: ClienteComprobanteEntrada['tipoDocumento'] | null;
+  cliente_numero: string | null;
+  cliente_nombre: string | null;
+  cliente_direccion: string | null;
+}
+
+/** El cliente que ya tenía el comprobante rechazado, o `null`. */
+function conservado(fila: FilaRechazada): ClienteComprobanteEntrada | null {
+  if (fila.cliente_tipo_documento === null) return null;
+  return {
+    tipoDocumento: fila.cliente_tipo_documento,
+    numero: fila.cliente_numero!,
+    nombre: fila.cliente_nombre!,
+    ...(fila.cliente_direccion === null ? {} : { direccion: fila.cliente_direccion }),
+  };
 }

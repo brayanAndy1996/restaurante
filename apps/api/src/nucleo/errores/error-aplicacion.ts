@@ -16,6 +16,8 @@ export interface DetalleDeError {
   atendidoPor?: { id: string; nombre: string };
   /** Solo en `LLAMADO_CERRADO` (historia 005, criterios 44 y 53): el estado en que quedó el llamado. */
   estado?: EstadoLlamado;
+  /** Solo en `YA_REEMPLAZADO` (historia 006, criterio 134): el comprobante que ya reemplazó al rechazado. */
+  comprobanteId?: string;
   /** Solo en `TURNO_YA_ABIERTO` (historia 006, criterio 26): el turno que ya está abierto. */
   turnoId?: string;
   /** Solo en `CUENTA_CAMBIO` (historia 006, criterio 49): la versión actual de la cuenta. */

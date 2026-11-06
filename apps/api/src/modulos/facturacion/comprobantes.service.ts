@@ -66,6 +66,16 @@ export class ComprobantesService {
     return comprobante;
   }
 
+  /** El texto del número (`B001-00000124`) de un comprobante visible; 404 si no existe (la RLS oculta los de otra empresa). */
+  async numeroDe(id: string): Promise<string> {
+    const filas = await this.conexion.query<{ serie: string; numero: number }>(
+      'SELECT serie, numero FROM comprobante WHERE id = $1',
+      { bind: [id.toLowerCase()], type: QueryTypes.SELECT },
+    );
+    if (filas[0] === undefined) throw comprobanteNoEncontrado();
+    return textoDelNumero(filas[0].serie, filas[0].numero);
+  }
+
   /**
    * La reimpresión de 004 de un trabajo `COMPROBANTE` (criterio 90): el mismo permiso (`COBRAR`) y el mismo alcance que
    * `POST /comprobantes/:id/impresiones`: 403 `PROHIBIDO` para quien no tiene el permiso o es un Cajero que pide el

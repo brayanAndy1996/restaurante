@@ -43,3 +43,30 @@ export const comprobanteDeOtro = (): ErrorAplicacion =>
     'PROHIBIDO',
     'No tienes permiso para ver los comprobantes del turno de otra persona',
   );
+
+/** 409 `COMPROBANTE_NO_RECHAZADO`: solo un comprobante `RECHAZADO` se reemite (criterio 134). */
+export const comprobanteNoRechazado = (): ErrorAplicacion =>
+  new ErrorAplicacion(
+    409,
+    'COMPROBANTE_NO_RECHAZADO',
+    'Solo se puede emitir otro comprobante en lugar de uno rechazado por SUNAT',
+  );
+
+/** 409 `YA_REEMPLAZADO`: el rechazado ya tiene su reemisión; `comprobanteId` es la que lo reemplazó (criterio 134). */
+export const yaReemplazado = (comprobanteId: string): ErrorAplicacion =>
+  new ErrorAplicacion(
+    409,
+    'YA_REEMPLAZADO',
+    'Este comprobante ya fue reemplazado por otro',
+    undefined,
+    undefined,
+    { comprobanteId },
+  );
+
+/** 422 `COMPROBANTE_NO_PERMITIDO`: el emisor no emite ese tipo, o el tipo no vale para ese comprobante (criterio 51). */
+export const comprobanteNoPermitido = (mensaje: string, campo: string): ErrorAplicacion =>
+  new ErrorAplicacion(422, 'COMPROBANTE_NO_PERMITIDO', mensaje, [{ campo, mensaje }]);
+
+/** 422 `CLIENTE_REQUERIDO`: la factura o la boleta de más de S/ 700 necesita al cliente (criterio 51). */
+export const clienteRequerido = (mensaje: string): ErrorAplicacion =>
+  new ErrorAplicacion(422, 'CLIENTE_REQUERIDO', mensaje, [{ campo: 'cliente', mensaje }]);
