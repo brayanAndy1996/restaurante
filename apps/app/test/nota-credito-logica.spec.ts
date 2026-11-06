@@ -364,6 +364,8 @@ describe('Los errores en palabras', () => {
     expect(esRespuestaFinal(error(0, 'SIN_CONEXION'))).toBe(false);
     expect(esRespuestaFinal(error(500, 'ERROR_INTERNO'))).toBe(false);
     expect(esRespuestaFinal(error(409, 'CONFLICTO'))).toBe(false);
+    // El id ya se usó: la nota puede ya estar emitida, el id se conserva hasta revisar el comprobante.
+    expect(esRespuestaFinal(error(422, 'CLAVE_IDEMPOTENCIA_REUTILIZADA'))).toBe(false);
     expect(esRespuestaFinal(error(0, 'ENVIO_CANCELADO'))).toBe(false);
     expect(esRespuestaFinal(new Error('x'))).toBe(false);
   });

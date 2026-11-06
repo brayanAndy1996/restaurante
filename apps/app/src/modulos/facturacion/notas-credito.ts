@@ -349,13 +349,18 @@ export const huellaDelCuerpoDeNota = (entrada: NotaCreditoEntrada): string =>
     entrada.motivo,
   ]);
 
-/** La API contestó que no, y no por un corte ni por un cruce con otra operación: el `id` ya no hace falta. */
+/**
+ * La API contestó que no, y no por un corte ni por un cruce con otra operación: el `id` ya no hace falta. Un 422
+ * `CLAVE_IDEMPOTENCIA_REUTILIZADA` no cuenta: dice que el `id` ya se usó, es decir, que la nota puede ya estar emitida, y
+ * el `id` se conserva hasta que la persona revise el comprobante.
+ */
 export function esRespuestaFinal(error: unknown): boolean {
   return (
     error instanceof ErrorApi &&
     !error.sinConexion &&
     error.codigo !== 'CONFLICTO' &&
     error.codigo !== 'ENVIO_CANCELADO' &&
+    error.codigo !== 'CLAVE_IDEMPOTENCIA_REUTILIZADA' &&
     error.estado < 500
   );
 }

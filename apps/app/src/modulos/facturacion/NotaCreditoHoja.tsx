@@ -142,6 +142,8 @@ export function NotaCreditoHoja({ comprobante, base, volver, onCerrar }: Props) 
   const [fallo, setFallo] = useState<FalloDeNota | null>(null);
   const [enviando, setEnviando] = useState(false);
   const [hecha, setHecha] = useState<Hecha | null>(null);
+  // La API reconoció el `id` con otra devolución: la nota puede ya estar emitida y no se emite otra hasta revisar.
+  const [porRevisar, setPorRevisar] = useState(false);
   const alertaDeFallo = useRef<HTMLDivElement>(null);
 
   // --- La nota ------------------------------------------------------------------------------------------
@@ -223,9 +225,11 @@ export function NotaCreditoHoja({ comprobante, base, volver, onCerrar }: Props) 
           : nota.motivo === 'DATOS'
             ? 'No pudimos leer los montos de este comprobante. Avisa al Administrador.'
             : 'El comprobante cambió. Cierra esta ventana y ábrela de nuevo.'
-        : !esCambio && consultaDeTurnos.isPending
-          ? 'Revisando tu caja…'
-          : null;
+        : porRevisar
+          ? 'Revisa el comprobante antes de emitir otra nota.'
+          : !esCambio && consultaDeTurnos.isPending
+            ? 'Revisando tu caja…'
+            : null;
 
   async function emitir() {
     if (enviando || tipo === null || nota === null || !nota.ok) return;
@@ -303,6 +307,7 @@ export function NotaCreditoHoja({ comprobante, base, volver, onCerrar }: Props) 
     }
     if (esRespuestaFinal(resultado.error)) ajuste.soltar();
     const traducido = falloDeNota(resultado.error);
+    if (traducido.revisar) setPorRevisar(true);
     if (traducido.releer) {
       void clientes.invalidateQueries({ queryKey: claveComprobante(comprobante.id) });
     }
@@ -316,6 +321,8 @@ export function NotaCreditoHoja({ comprobante, base, volver, onCerrar }: Props) 
   /** La nota puede ya estar emitida: se vuelve a leer el comprobante y se cierra la hoja para verlo. */
   async function revisarElComprobante() {
     await clientes.invalidateQueries({ queryKey: claveComprobante(comprobante.id) });
+    // Ya vio lo que hay: si la nota salió, está en el comprobante y su `id` ya no hace falta.
+    ajuste.soltar();
     onCerrar();
   }
 

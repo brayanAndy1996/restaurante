@@ -35,6 +35,7 @@ import {
   configurarIdentidad,
   type MotivoDeCambioDeIdentidad,
 } from '../../lib/identidad';
+import { olvidarIntentosRecordados } from '../../lib/intentos-recordados';
 import type { ErrorApi } from '../../lib/errores';
 
 /** Por qué se cerró la sesión sin que la persona lo pidiera: se avisa en la pantalla de ingreso. */
@@ -143,6 +144,8 @@ export function SesionProvider({ children }: { children: ReactNode }) {
     (porque?: MotivoDeCambioDeIdentidad) => {
       borrarTokenDeSesion();
       borrarSoporteEnCurso();
+      // Lo que quedó a medias (una nota de crédito sin respuesta) no lo hereda la siguiente persona.
+      olvidarIntentosRecordados();
       setHayToken(false);
       setSoporte(null);
       clientes.removeQueries({ queryKey: CLAVE_SESION });

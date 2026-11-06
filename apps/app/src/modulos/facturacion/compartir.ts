@@ -118,7 +118,10 @@ export const TEXTO_CELULAR_INVALIDO =
  */
 export function abrirPestanaEnBlanco(): Window | null {
   try {
-    return window.open('', '_blank');
+    const ventana = window.open('', '_blank');
+    // La pestaña va a `wa.me` o al PDF: no debe poder volver a esta con `window.opener`.
+    if (ventana) ventana.opener = null;
+    return ventana;
   } catch {
     return null;
   }
@@ -134,7 +137,9 @@ export function llevarPestana(ventana: Window | null, url: string): boolean {
     return true;
   }
   try {
-    return window.open(url, '_blank') !== null;
+    const nueva = window.open(url, '_blank');
+    if (nueva) nueva.opener = null;
+    return nueva !== null;
   } catch {
     return false;
   }

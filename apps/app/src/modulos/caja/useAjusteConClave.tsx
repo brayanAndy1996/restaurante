@@ -5,14 +5,12 @@ import { mismoObjetivo, type ContextoDeObjetivo } from '../../componentes/objeti
 import { useClaveDeSupervisor } from '../../componentes/useClaveDeSupervisor';
 import { ahoraDelServidor, nuevaClaveDeIdempotencia } from '../../lib/api';
 import { useEnvioPendiente } from '../../lib/envios';
+import { INTENTOS_RECORDADOS, type IntentoRecordado } from '../../lib/intentos-recordados';
 import { ErrorApi } from '../../lib/errores';
 import type { ExtraConClave } from './cuenta';
 
 /** Una autorización que vence en menos de esto se pide de nuevo antes de usarla. */
 const MARGEN_DE_AUTORIZACION_MS = 5_000;
-
-/** Los intentos que sobreviven a la pantalla que los hizo (en memoria: una recarga los suelta). */
-const INTENTOS_RECORDADOS = new Map<string, Intento>();
 
 const NOTA_DE_CLAVE_PERDIDA =
   'La clave del supervisor ya no valía. Pídela otra vez; lo que escribiste sigue aquí.';
@@ -43,13 +41,7 @@ export type ResultadoDeAjuste<T = unknown> =
   | { estado: 'cancelado' }
   | { estado: 'fallo'; error: unknown };
 
-interface Intento {
-  huella: string;
-  huellaDelCuerpo: string;
-  id: string;
-  clave: string;
-  autorizacionId: string | null;
-}
+type Intento = IntentoRecordado;
 
 /**
  * Aplicar un descuento o una cortesía con la clave atada (criterio 40 de 006, pregunta 9): pide la clave del
@@ -162,9 +154,15 @@ export function useAjusteConClave(opciones: { recordarComo?: string } = {}) {
     intento.current = null;
   }
 
+  /** La escritura con ese `id` ya salió (se vio en lo que la API devuelve): su intento ya no hace falta. */
+  function soltarSiEs(id: string) {
+    if (intento.current?.id === id) intento.current = null;
+  }
+
   return {
     ejecutar,
     soltar,
+    soltarSiEs,
     ventana,
     pendiente: envio.pendiente,
     sigueMontada: envio.sigueMontada,
