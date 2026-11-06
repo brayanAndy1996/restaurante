@@ -72,6 +72,12 @@ const OPCIONES_DE_DINERO: readonly OpcionDeSegmento<'DEVOLVER' | 'SIN'>[] = [
   { valor: 'SIN', etiqueta: 'Sin devolución' },
 ];
 
+/** «1 unidad», «3 unidades»: lo que se devuelve en total. */
+function textoDeUnidades(elegidas: readonly { cantidad: number }[]): string {
+  const total = elegidas.reduce((n, l) => n + l.cantidad, 0);
+  return `${total} ${total === 1 ? 'unidad' : 'unidades'}`;
+}
+
 function revisarMotivo(motivo: string): string | undefined {
   const limpio = motivo.trim();
   if (limpio === '') return 'Elige o escribe el motivo';
@@ -357,7 +363,7 @@ export function NotaCreditoHoja({ comprobante, base, volver, onCerrar }: Props) 
                     montoEsCero(iva.icbper) ? '' : ` · ICBPER ${montoEnSoles(iva.icbper) ?? ''}`
                   }`}
                   {tipo === 'DEVOLUCION'
-                    ? ` · ${unidadesElegidas(comprobante, unidades).reduce((n, l) => n + l.cantidad, 0)} unidades`
+                    ? ` · ${textoDeUnidades(unidadesElegidas(comprobante, unidades))}`
                     : ''}
                 </p>
               ) : null}

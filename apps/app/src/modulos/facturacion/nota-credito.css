@@ -24,10 +24,14 @@
 }
 .nota__linea-texto {
   display: flex;
-  flex: 1 1 11rem;
+  flex: 1 1 9rem;
   flex-direction: column;
   gap: 2px;
   min-width: 0;
+}
+/* Cuando el − y + no caben junto al nombre, bajan y quedan a la derecha, donde está el pulgar. */
+.nota__linea > .ui-cantidad {
+  margin-left: auto;
 }
 .nota__linea-texto > b {
   font-size: 1.0625rem;
@@ -96,6 +100,9 @@
   font-size: 1.0625rem;
   line-height: 1.5rem;
   font-variant-numeric: tabular-nums;
+}
+.nota-hecha__numero b {
+  white-space: nowrap;
 }
 .nota-hecha__acciones {
   display: flex;

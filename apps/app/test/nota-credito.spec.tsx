@@ -302,9 +302,11 @@ describe('Los tipos y las líneas (criterios 143, 147, 148 y 177)', () => {
     // La última unidad que falta cierra la base y el IGV del original.
     expect(within(hoja).getByText(/Incluye IGV S\/ 4\.27/)).toBeVisible();
 
+    expect(within(hoja).getByText(/· 1 unidad$/)).toBeVisible();
     // Una bolsa: S/ 0.10 más su ICBPER de S/ 0.50.
     await masDe(hoja, 'Bolsa plástica');
     expect(within(hoja).getByLabelText('Total de la nota')).toHaveTextContent('S/ 28.60');
+    expect(within(hoja).getByText(/· 2 unidades$/)).toBeVisible();
     await userEvent.click(
       within(hoja).getByRole('button', { name: 'Quitar una unidad de Lomo saltado' }),
     );
