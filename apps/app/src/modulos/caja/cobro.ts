@@ -296,6 +296,22 @@ export interface ResumenDePagos {
   problema: string | null;
 }
 
+/** Lo que cambia de las palabras cuando los pagos son una devolución de la nota de crédito (criterio 150). */
+const PALABRAS_DE_PAGOS = {
+  COBRO: {
+    elegir: 'Elige cómo paga el cliente.',
+    cuanto: (medio: string) => `Escribe cuánto paga con ${medio}.`,
+    sinEfectivo: 'No queda efectivo por cobrar. Quita el efectivo o baja los otros pagos.',
+    sinResto: 'No queda nada por cobrar aquí. Quita este pago o baja los otros.',
+  },
+  DEVOLUCION: {
+    elegir: 'Elige cómo devuelves el dinero.',
+    cuanto: (medio: string) => `Escribe cuánto devuelves con ${medio}.`,
+    sinEfectivo: 'No queda efectivo por devolver. Quita el efectivo o baja los otros medios.',
+    sinResto: 'No queda nada por devolver aquí. Quita este medio o baja los otros.',
+  },
+} as const;
+
 const SIN_PAGOS: ResumenDePagos = {
   filas: [],
   redondeo: '0.00',
@@ -308,12 +324,17 @@ const SIN_PAGOS: ResumenDePagos = {
  * Los pagos escritos contra el total de la parte. El efectivo y su redondeo salen de `redondeoEfectivo`; el vuelto y
  * la validación final, de `validarPagos`: si algo no cuadra se dice en palabras y el botón de cobrar espera.
  */
-export function resumirPagos(total: string, filas: readonly PagoEscrito[]): ResumenDePagos {
+export function resumirPagos(
+  total: string,
+  filas: readonly PagoEscrito[],
+  modo: 'COBRO' | 'DEVOLUCION' = 'COBRO',
+): ResumenDePagos {
+  const palabras = PALABRAS_DE_PAGOS[modo];
   const t = comoDecimal(total);
   if (t === null) return { ...SIN_PAGOS, pagos: null, problema: 'No se pudo leer el total.' };
   if (t.isZero()) return SIN_PAGOS;
   if (filas.length === 0) {
-    return { ...SIN_PAGOS, pagos: null, problema: 'Elige cómo paga el cliente.' };
+    return { ...SIN_PAGOS, pagos: null, problema: palabras.elegir };
   }
 
   const resto = indiceDelResto(filas);
@@ -332,7 +353,7 @@ export function resumirPagos(total: string, filas: readonly PagoEscrito[]): Resu
     const monto = montoComoTexto(f.monto);
     const fila = calculadas[i];
     if (monto === null) {
-      marcar(i, `Escribe cuánto paga con ${NOMBRE_DE_MEDIO_DE_PAGO[f.medio]}.`);
+      marcar(i, palabras.cuanto(NOMBRE_DE_MEDIO_DE_PAGO[f.medio]));
     } else if (fila) {
       fila.monto = monto;
       escritos.push({ i, monto });
@@ -367,12 +388,7 @@ export function resumirPagos(total: string, filas: readonly PagoEscrito[]): Resu
   const montoResto = calculadas[resto]?.monto ?? null;
   if (montoResto !== null && !(comoDecimal(montoResto)?.gt(0) ?? false)) {
     calculadas[resto]!.monto = null;
-    marcar(
-      resto,
-      filaResto.medio === 'EFECTIVO'
-        ? 'No queda efectivo por cobrar. Quita el efectivo o baja los otros pagos.'
-        : 'No queda nada por cobrar aquí. Quita este pago o baja los otros.',
-    );
+    marcar(resto, filaResto.medio === 'EFECTIVO' ? palabras.sinEfectivo : palabras.sinResto);
   }
 
   // Número de operación y recibido.
@@ -381,7 +397,7 @@ export function resumirPagos(total: string, filas: readonly PagoEscrito[]): Resu
       if (!OPERACION_VALIDA.test(f.operacion.trim())) {
         marcar(i, `Escribe el número de operación del ${NOMBRE_DE_MEDIO_DE_PAGO[f.medio]}.`);
       }
-    } else if (f.recibido.trim() !== '') {
+    } else if (modo === 'COBRO' && f.recibido.trim() !== '') {
       const recibido = montoComoTexto(f.recibido);
       const monto = calculadas[i]?.monto ?? null;
       if (recibido === null) marcar(i, 'Escribe cuánto recibiste, por ejemplo 50.');
@@ -396,7 +412,9 @@ export function resumirPagos(total: string, filas: readonly PagoEscrito[]): Resu
   const pagos: PagoCobroEntrada[] = filas.map((f, i) => {
     const monto = calculadas[i]?.monto ?? '0.00';
     if (f.medio === 'EFECTIVO') {
-      const recibido = f.recibido.trim() === '' ? null : montoComoTexto(f.recibido);
+      // Una devolución no da vuelto: no lleva «recibido» (criterio 150).
+      const recibido =
+        modo === 'DEVOLUCION' || f.recibido.trim() === '' ? null : montoComoTexto(f.recibido);
       return { medio: f.medio, monto, ...(recibido ? { recibido } : {}) };
     }
     return { medio: f.medio, monto, operacion: f.operacion.trim() };

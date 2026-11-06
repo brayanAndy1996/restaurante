@@ -8,7 +8,7 @@ import {
   claseBoton,
 } from '@restaurante/ui';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { lazy, Suspense, type ReactNode } from 'react';
+import { lazy, Suspense, useState, type ReactNode } from 'react';
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { Pagina } from '../../componentes/Pagina';
 import { AvisoPendiente } from '../../componentes/PendienteDeEnvio';
@@ -34,6 +34,7 @@ import {
   textoDeFalloDeReintento,
 } from './facturacion';
 import { ID_FORMULARIO_DE_REEMISION } from './ids';
+import { sePuedeEmitirNota } from './notas-credito';
 import { RUTA_PANEL_EN_AJUSTES, RUTA_PANEL_EN_CAJA } from './rutas';
 import './panel.css';
 
@@ -41,6 +42,10 @@ import './panel.css';
 const EmitirOtro = lazy(() => import('./EmitirOtro').then((m) => ({ default: m.EmitirOtro })));
 const ReemisionHecha = lazy(() =>
   import('./EmitirOtro').then((m) => ({ default: m.ReemisionHecha })),
+);
+// La hoja de la nota de crédito (con el cálculo de la nota, los pagos y el cliente de la factura) también se baja al abrirla.
+const NotaCreditoHoja = lazy(() =>
+  import('./NotaCreditoHoja').then((m) => ({ default: m.NotaCreditoHoja })),
 );
 
 /** `/caja/comprobantes/:id`: el detalle para el Supervisor y el Cajero (de sus turnos). */
@@ -113,6 +118,9 @@ function DetalleCargado({ base, atras, volver, comprobante }: PropsCargado) {
   const ubicacion = useLocation();
   const [parametros, ponerParametros] = useSearchParams();
   const puedeCobrar = usePermiso('COBRAR') !== 'prohibido';
+  const puedeNota =
+    usePermiso('EMITIR_NOTA_CREDITO') !== 'prohibido' && sePuedeEmitirNota(comprobante);
+  const [notaAbierta, ponerNotaAbierta] = useState(false);
   const envio = useEnvioPendiente();
   const yaReemplazado = (ubicacion.state as { aviso?: string } | null)?.aviso === 'YA_REEMPLAZADO';
 
@@ -208,6 +216,12 @@ function DetalleCargado({ base, atras, volver, comprobante }: PropsCargado) {
         Reintentar el envío
       </Boton>
     );
+  } else if (puedeNota) {
+    pie = (
+      <Boton variante="principal" bloque onClick={() => ponerNotaAbierta(true)}>
+        Nota de crédito
+      </Boton>
+    );
   }
 
   return (
@@ -254,6 +268,17 @@ function DetalleCargado({ base, atras, volver, comprobante }: PropsCargado) {
                 reemision.reset();
                 cambiarEmitir(false);
               }}
+            />
+          </Suspense>
+        ) : null}
+
+        {notaAbierta && puedeNota ? (
+          <Suspense fallback={null}>
+            <NotaCreditoHoja
+              comprobante={comprobante}
+              base={base}
+              volver={volver}
+              onCerrar={() => ponerNotaAbierta(false)}
             />
           </Suspense>
         ) : null}

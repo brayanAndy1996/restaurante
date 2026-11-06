@@ -14,6 +14,8 @@ export interface ContextoDeObjetivo {
   mesa: string;
   /** El número del comprobante que modifica una nota de crédito (`B001-00000124`). */
   comprobanteNumero?: string;
+  /** Con qué medios se devuelve el dinero de una nota de crédito ("en efectivo", "en efectivo y Yape"). */
+  devueltoEn?: string;
 }
 
 /**
@@ -46,7 +48,9 @@ export function describirObjetivo(
       tipo,
       contexto.comprobanteNumero ?? 'un comprobante',
       total,
-      objetivo.devuelto === '0.00' ? 'sin devolución' : `devuelve ${devuelto}`,
+      objetivo.devuelto === '0.00'
+        ? 'sin devolución'
+        : `devuelve ${devuelto}${contexto.devueltoEn ? ` ${contexto.devueltoEn}` : ''}`,
     ].join(' · ');
   }
   const valor =
