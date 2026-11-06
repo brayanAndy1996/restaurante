@@ -116,9 +116,18 @@ describe('rutas de la entrega 6b (fase A)', () => {
     }
   });
 
-  it('la ruta pública de los enlaces todavía no está registrada (choca con pruebas protegidas de 3b y 005)', () => {
-    const registradas = rutasDeNest(app).map((r) => r.ruta);
-    expect(registradas.filter((r) => r.startsWith('/publico/comprobantes'))).toEqual([]);
+  it('la única ruta pública de 6b es GET /publico/comprobantes/:sello, @Publica() y sin permiso ni módulo (T43)', () => {
+    const publicas = rutasDeNest(app).filter((r) => r.ruta.startsWith('/publico/comprobantes'));
+    expect(publicas.map((r) => `${r.metodo} ${r.ruta}`)).toEqual([
+      'GET /publico/comprobantes/:sello',
+    ]);
+    const r = publicas[0]!;
+    const manejador = r.controlador.prototype[r.manejador] as object;
+    const leer = (llave: string) =>
+      Reflect.getMetadata(llave, manejador) ?? Reflect.getMetadata(llave, r.controlador);
+    expect(leer(PUBLICA)).toBe(true);
+    expect(leer(PERMISO)).toBeUndefined();
+    expect(leer(REQUIERE_MODULO)).toBeUndefined();
   });
 
   it('crearAplicacion usa el conector, la cola y el almacén que se le pasan', () => {

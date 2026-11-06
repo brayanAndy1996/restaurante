@@ -18,6 +18,7 @@ import {
 } from './nucleo/archivos';
 import type { ColaPse } from './nucleo/colas';
 import type { ConectorPse } from './modulos/facturacion/pse';
+import { rechazarSelloIlegible } from './modulos/facturacion/sello-ilegible';
 import type { InventarioPuerto } from './modulos/pedidos';
 import type { PublicadorEventos } from './nucleo/eventos';
 import type { Reloj } from './nucleo/reloj';
@@ -165,6 +166,8 @@ export async function crearAplicacion(
       devolver(null, esRutaPublica(peticion.url) ? opcionesCorsPublicas : opcionesCorsConSesion);
     },
   );
+  // Un sello de enlace que no se puede ni decodificar es el mismo 404 que uno alterado (criterio 160 de 006).
+  app.use('/publico/comprobantes', rechazarSelloIlegible());
   // Un `POST` público de más de 16 KB responde 413 sin leer el cuerpo ni consultar la base (criterio 17).
   app.use(limitarCuerpoPublico());
   // La foto de un producto y el logo de la carta web (005) son las únicas rutas con cuerpo binario, con su propio

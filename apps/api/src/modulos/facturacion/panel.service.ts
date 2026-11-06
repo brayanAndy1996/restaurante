@@ -16,9 +16,13 @@ import {
   type TipoDocumentoElectronico,
 } from '@restaurante/dominio';
 import { QueryTypes, type Sequelize } from 'sequelize';
+import { Logger } from '@nestjs/common';
+import { DIAS_ENLACE_COMPROBANTE } from '@restaurante/dominio';
+import { ENTORNO, type Entorno } from '../../config/entorno';
+import { ALMACEN_COMPROBANTES, type AlmacenComprobantes } from '../../nucleo/archivos';
 import { CONEXION_API } from '../../nucleo/base-de-datos';
+import { ContextoEmpresa } from '../../nucleo/contexto-empresa';
 import { ErrorAplicacion } from '../../nucleo/errores/error-aplicacion';
-import { noImplementado } from '../../nucleo/errores/no-implementado';
 import { RELOJ, type Reloj } from '../../nucleo/reloj';
 import { EmisoresService } from '../plataforma';
 import { ResolutorDeAlcanceDelPanel, type AlcanceDelPanel } from './alcance-del-panel';
@@ -27,7 +31,8 @@ import { contarAlertas, sqlAlerta } from './envios/alertas-sql';
 import { COLUMNAS_ENVIO, envioRespuestaDe, type FilaDeEnvio } from './envios/envio-respuesta';
 import { EnviosService } from './envios/envios.service';
 import { leerComprobante, textoDelNumero } from './lectura-comprobante';
-import { comprobanteNoEncontrado } from './errores-facturacion';
+import { EnlacesComprobante } from './enlaces';
+import { comprobanteNoEncontrado, pdfNoDisponible } from './errores-facturacion';
 
 /** Comprobantes por página del panel (criterio 135). */
 export const COMPROBANTES_POR_PAGINA = 50;
@@ -132,7 +137,13 @@ export class PanelService {
     @Inject(ComprobantesService) private readonly comprobantes: ComprobantesService,
     @Inject(EnviosService) private readonly envios: EnviosService,
     @Inject(EmisoresService) private readonly emisores: EmisoresService,
+    @Inject(ALMACEN_COMPROBANTES) private readonly almacen: AlmacenComprobantes,
+    @Inject(EnlacesComprobante) private readonly enlaces: EnlacesComprobante,
+    @Inject(ContextoEmpresa) private readonly contexto: ContextoEmpresa,
+    @Inject(ENTORNO) private readonly entorno: Entorno,
   ) {}
+
+  private readonly logger = new Logger(PanelService.name);
 
   /** `GET /facturacion/comprobantes` (criterio 135). */
   async listar(consulta: PanelConsultaValidada): Promise<PanelComprobantes> {
@@ -259,16 +270,73 @@ export class PanelService {
     };
   }
 
-  /** El PDF como `StreamableFile` con su tipo y `Content-Disposition: inline; filename="B001-00000124.pdf"` (T43). */
+  /**
+   * `GET /facturacion/comprobantes/:id/pdf` (criterio 159): el PDF guardado al aceptarse el comprobante, inline y con el
+   * número como nombre (`B001-00000124.pdf`). Con la visibilidad del criterio 169 (404 y 403 antes que nada); 409
+   * `PDF_NO_DISPONIBLE` si el comprobante no está `ACEPTADO` ni `ANULADO`, o si todavía no tiene PDF (el barrido lo arma).
+   */
   async pdf(id: string): Promise<StreamableFile> {
     await this.comprobantes.exigirVisible(id);
-    return Promise.reject(noImplementado());
+    const { numero, clave } = await this.archivoDelPdf(id.toLowerCase());
+    const contenido = await this.almacen.leer(clave);
+    if (contenido === null) {
+      // La fila dice que hay PDF pero el archivo no está: no se inventa otro, se avisa y se deja la huella en el registro.
+      this.logger.error(JSON.stringify({ evento: 'pdf.archivo_perdido', comprobanteId: id }));
+      throw pdfNoDisponible(
+        'El PDF no está disponible en este momento; inténtalo de nuevo más tarde',
+      );
+    }
+    return new StreamableFile(contenido, {
+      type: 'application/pdf',
+      disposition: `inline; filename="${numero}.pdf"`,
+      length: contenido.length,
+    });
   }
 
-  /** El enlace público de 30 días del PDF (T43). */
+  /**
+   * `GET /facturacion/comprobantes/:id/enlace` (criterio 160): `{ url, expiraEn }` con `url` =
+   * `<API_URL_PUBLICA>/publico/comprobantes/<sello>` y vencimiento a `DIAS_ENLACE_COMPROBANTE` días del reloj de la API.
+   * Solo con el PDF disponible (409 `PDF_NO_DISPONIBLE` si no). Cada llamada da un sello nuevo; ninguno se guarda.
+   */
   async enlace(id: string): Promise<EnlaceComprobanteRespuesta> {
     await this.comprobantes.exigirVisible(id);
-    return Promise.reject(noImplementado());
+    const comprobanteId = id.toLowerCase();
+    await this.archivoDelPdf(comprobanteId);
+    const expiraEn = new Date(this.reloj.ahora().getTime() + DIAS_ENLACE_COMPROBANTE * MS_POR_DIA);
+    const sello = this.enlaces.sellar({
+      empresaId: this.contexto.empresaActual(),
+      comprobanteId,
+      expiraEn,
+    });
+    const base = this.entorno.API_URL_PUBLICA;
+    if (base === undefined) {
+      throw new ErrorAplicacion(
+        503,
+        'CONFIGURACION_INCOMPLETA',
+        'El servidor no tiene configurada su dirección pública, así que no se puede armar el enlace. Avisa a soporte.',
+      );
+    }
+    return { url: `${base}/publico/comprobantes/${sello}`, expiraEn: expiraEn.toISOString() };
+  }
+
+  /** El número y la clave del PDF de un comprobante visible, o 409 `PDF_NO_DISPONIBLE` (criterio 159). */
+  private async archivoDelPdf(comprobanteId: string): Promise<{ numero: string; clave: string }> {
+    const filas = await this.conexion.query<{
+      serie: string;
+      numero: number;
+      estado: EstadoComprobante;
+      pdf_clave: string | null;
+    }>('SELECT serie, numero, estado, pdf_clave FROM comprobante WHERE id = $1', {
+      bind: [comprobanteId],
+      type: QueryTypes.SELECT,
+    });
+    const fila = filas[0];
+    if (fila === undefined) throw comprobanteNoEncontrado();
+    if (fila.estado !== 'ACEPTADO' && fila.estado !== 'ANULADO') throw pdfNoDisponible();
+    if (fila.pdf_clave === null) {
+      throw pdfNoDisponible('El PDF se está preparando; inténtalo de nuevo en un minuto');
+    }
+    return { numero: textoDelNumero(fila.serie, fila.numero), clave: fila.pdf_clave };
   }
 }
 

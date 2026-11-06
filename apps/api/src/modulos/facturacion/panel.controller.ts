@@ -31,8 +31,7 @@ import { ReemisionService } from './reemision.service';
 /**
  * Panel de comprobantes, reintento, reemisión, PDF, enlace y alertas (historia 006, entrega 6b, criterios 132 a 135, 159
  * y 160): `COBRAR` y módulo `FACTURACION` en todas, con el alcance del criterio 169 (Cajero: sus turnos; Supervisor: la
- * sucursal activa; Administrador: sus sucursales). Las escrituras llevan `Idempotency-Key` obligatoria. El PDF y el enlace
- * responden `No implementado` hasta T43. Ninguna cuelga de los prefijos de 6a (criterio 168).
+ * sucursal activa; Administrador: sus sucursales). Las escrituras llevan `Idempotency-Key` obligatoria. Ninguna cuelga de los prefijos de 6a (criterio 168).
  */
 @Controller('facturacion')
 export class PanelController {

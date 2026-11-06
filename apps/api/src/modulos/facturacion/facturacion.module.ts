@@ -14,6 +14,8 @@ import { BarridoEnviosPse } from './envios/barrido-envios';
 import { EnviosService } from './envios/envios.service';
 import { ProcesadorEnviosPse } from './envios/procesador-envios';
 import { TrabajoEnSegundoPlano } from './envios/trabajo-en-segundo-plano';
+import { PublicoComprobantesController } from './publico-comprobantes.controller';
+import { PublicoComprobantesService } from './publico-comprobantes.service';
 import { PanelController } from './panel.controller';
 import { PanelService } from './panel.service';
 import { CargaPadron } from './padron/carga-padron';
@@ -44,9 +46,9 @@ import { UltimaEmisionDeComprobantes } from './ultima-emision-de-comprobantes';
     ComprobantesController,
     PanelController,
     PadronController,
-    // `PublicoComprobantesController` (`GET /publico/comprobantes/:sello`, `@Publica()`) NO se registra en la fase A:
-    // pruebas protegidas de 3b (`puente-aislamiento.spec.ts`) y de 005 (`permisos-llamados.spec.ts`) fijan la lista cerrada
-    // de rutas públicas y de `/publico/*`. Se registra en T43 junto con el ajuste que decida el orquestador.
+    // `GET /publico/comprobantes/:sello` (`@Publica()`): la única ruta pública nueva de 6b; las listas protegidas de rutas
+    // públicas ya la admiten (T43).
+    PublicoComprobantesController,
   ],
   providers: [
     SeriesService,
@@ -69,6 +71,7 @@ import { UltimaEmisionDeComprobantes } from './ultima-emision-de-comprobantes';
     AlertasParaPlataforma,
     ReemisionService,
     EnlacesComprobante,
+    PublicoComprobantesService,
     PdfComprobantes,
     ArchivadorDePdf,
     CargaPadron,

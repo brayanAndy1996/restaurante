@@ -111,3 +111,19 @@ export const sinSerieDeNotas = (): ErrorAplicacion =>
     'SIN_SERIE',
     'La caja no tiene serie de notas de crédito: configúrala en Ajustes',
   );
+
+// ---------------------------------------------------------------------------------------------------
+// PDF y enlace (6b, criterios 159 y 160)
+// ---------------------------------------------------------------------------------------------------
+
+/** 409 `PDF_NO_DISPONIBLE`: el PDF se arma cuando SUNAT acepta el comprobante (criterio 159). */
+export const pdfNoDisponible = (
+  mensaje = 'El PDF estará listo cuando SUNAT acepte el comprobante',
+): ErrorAplicacion => new ErrorAplicacion(409, 'PDF_NO_DISPONIBLE', mensaje);
+
+/**
+ * 404 de la ruta pública del PDF: un sello alterado, de otra clave, vencido, de un comprobante inexistente o sin PDF
+ * responden exactamente igual (criterio 160); nunca dice cuál de los cuatro.
+ */
+export const enlaceNoValido = (): ErrorAplicacion =>
+  new ErrorAplicacion(404, 'NO_ENCONTRADO', 'Este enlace no es válido o ya venció');
