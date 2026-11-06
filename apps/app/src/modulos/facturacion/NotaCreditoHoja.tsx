@@ -24,7 +24,13 @@ import { ClienteFactura } from '../caja/ClienteFactura';
 import { CLIENTE_VACIO, resumirPagos, type ClienteEscrito, type PagoEscrito } from '../caja/cobro';
 import { useClienteFactura } from '../caja/padron';
 import { PagosPanel, pagoNuevo } from '../caja/PagosPanel';
-import { claveTurnoMio, horaDelTurno, leerTurnoMio } from '../caja/turno';
+import {
+  claveCajasDeTurno,
+  claveTurnoMio,
+  horaDelTurno,
+  leerTurnoMio,
+  listarCajasActivas,
+} from '../caja/turno';
 import { useAjusteConClave } from '../caja/useAjusteConClave';
 import { claveComprobante, NOMBRE_DE_TIPO_DOCUMENTO } from './facturacion';
 import { NotaCreditoHecha } from './NotaCreditoHecha';
@@ -34,6 +40,7 @@ import {
   devueltoDe,
   emitirNotaCredito,
   entradaDeNota,
+  etiquetaDeTurno,
   esRespuestaFinal,
   falloDeNota,
   huellaDeNota,
@@ -43,6 +50,8 @@ import {
   textoDeMedios,
   tiposDeNota,
   totalEnSoles,
+  turnoPropio,
+  turnosAbiertos,
   unidadesElegidas,
   type FalloDeNota,
 } from './notas-credito';
@@ -144,14 +153,32 @@ export function NotaCreditoHoja({ comprobante, base, volver, onCerrar }: Props) 
   // --- La devolución desde el turno propio ----------------------------------------------------------------
   const usuarioId = sesion.usuario?.id ?? '';
   const sucursalId = sesion.sucursal?.id ?? '';
+  // El Cajero devuelve solo desde su turno; el Supervisor y el Administrador, desde cualquiera de los abiertos.
+  const elige = permiso === 'permitido';
   const turnoConsulta = useQuery({
     queryKey: claveTurnoMio(usuarioId, sucursalId),
     queryFn: ({ signal }) => leerTurnoMio(signal),
-    enabled: !esCambio && sucursalId !== '',
+    enabled: !esCambio && !elige && sucursalId !== '',
   });
-  const turno = turnoConsulta.data ?? null;
+  const cajasConsulta = useQuery({
+    queryKey: claveCajasDeTurno(sucursalId),
+    queryFn: ({ signal }) => listarCajasActivas(signal),
+    enabled: !esCambio && elige && sucursalId !== '',
+  });
+  const consultaDeTurnos = elige ? cajasConsulta : turnoConsulta;
+  const turnos = useMemo(
+    () =>
+      elige ? turnosAbiertos(cajasConsulta.data ?? [], usuarioId) : turnoPropio(turnoConsulta.data),
+    [elige, cajasConsulta.data, turnoConsulta.data, usuarioId],
+  );
+  const [turnoElegido, setTurnoElegido] = useState<string | null>(null);
+  // El turno propio viene elegido; el de otra persona, solo si se elige (así nunca sale dinero de una caja por descuido).
+  const turno = turnos.find((t) => t.id === turnoElegido) ?? turnos.find((t) => t.propio) ?? null;
   const hayDinero = total !== null && !montoEsCero(total);
   const devolviendo = !esCambio && hayDinero && turno !== null && devolver;
+  const faltaElegirTurno =
+    !esCambio && hayDinero && devolver && turnos.length > 0 && turno === null;
+  const sinPropioUnico = elige && !(turnos.length === 1 && turnos[0]?.propio);
   const resumen = useMemo(() => resumirPagos(total ?? '0.00', filas, 'DEVOLUCION'), [total, filas]);
 
   // --- El cliente de la factura (cambio) ---------------------------------------------------------------------
@@ -193,7 +220,7 @@ export function NotaCreditoHoja({ comprobante, base, volver, onCerrar }: Props) 
           : nota.motivo === 'DATOS'
             ? 'No pudimos leer los montos de este comprobante. Avisa al Administrador.'
             : 'El comprobante cambió. Cierra esta ventana y ábrela de nuevo.'
-        : !esCambio && turnoConsulta.isPending
+        : !esCambio && consultaDeTurnos.isPending
           ? 'Revisando tu caja…'
           : null;
 
@@ -204,6 +231,7 @@ export function NotaCreditoHoja({ comprobante, base, volver, onCerrar }: Props) 
     const motivoLimpio = motivo.trim();
     if (revisarMotivo(motivo)) return;
     if (esCambio && !padron.validado.ok) return;
+    if (faltaElegirTurno) return;
     if (devolviendo && resumen.pagos === null) return;
 
     const devolucion =
@@ -274,6 +302,9 @@ export function NotaCreditoHoja({ comprobante, base, volver, onCerrar }: Props) 
     const traducido = falloDeNota(resultado.error);
     if (traducido.releer) {
       void clientes.invalidateQueries({ queryKey: claveComprobante(comprobante.id) });
+    }
+    if (traducido.releerTurnos) {
+      void clientes.invalidateQueries({ queryKey: CLAVES_TIEMPO_REAL.turno });
     }
     setFallo(traducido);
     requestAnimationFrame(() => alertaDeFallo.current?.scrollIntoView?.({ block: 'nearest' }));
@@ -401,13 +432,22 @@ export function NotaCreditoHoja({ comprobante, base, volver, onCerrar }: Props) 
               ) : hayDinero ? (
                 <section className="nota__bloque" aria-labelledby="nota-dinero">
                   <h3 id="nota-dinero">Devolución del dinero</h3>
-                  {turnoConsulta.isPending ? (
+                  {consultaDeTurnos.isPending ? (
                     <p className="texto-ayuda">Revisando tu caja…</p>
-                  ) : turno === null ? (
-                    <Aviso tipo="info" titulo="Sin devolución: no tienes la caja abierta">
-                      {turnoConsulta.isError
+                  ) : turnos.length === 0 ? (
+                    <Aviso
+                      tipo="info"
+                      titulo={
+                        elige
+                          ? 'Sin devolución: no hay ninguna caja abierta'
+                          : 'Sin devolución: no tienes la caja abierta'
+                      }
+                    >
+                      {consultaDeTurnos.isError
                         ? 'No pudimos revisar tu caja. La nota se emite sin devolución; si vas a devolver el dinero, vuelve a abrir esta ventana en un momento.'
-                        : 'La nota se emite igual, pero el dinero no sale de tu caja. Si lo vas a devolver ahora, abre tu caja primero.'}
+                        : elige
+                          ? 'La nota se emite igual, pero el dinero no sale de ninguna caja. Si lo vas a devolver ahora, abre una caja primero.'
+                          : 'La nota se emite igual, pero el dinero no sale de tu caja. Si lo vas a devolver ahora, abre tu caja primero.'}
                     </Aviso>
                   ) : (
                     <>
@@ -419,16 +459,38 @@ export function NotaCreditoHoja({ comprobante, base, volver, onCerrar }: Props) 
                       />
                       {devolver ? (
                         <>
-                          <p className="texto-ayuda">
-                            {`Sale de tu turno en ${turno.caja.nombre}, abierto a las ${horaDelTurno(turno.abiertoEn)}.`}
-                          </p>
-                          <PagosPanel
-                            devolucion
-                            filas={filas}
-                            onFilas={setFilas}
-                            resumen={resumen}
-                            verProblemas={intentado}
-                          />
+                          {sinPropioUnico ? (
+                            <div className="formulario__grupo">
+                              <Segmentos
+                                etiqueta="Turno del que sale el dinero"
+                                opciones={turnos.map((t) => ({
+                                  valor: t.id,
+                                  etiqueta: etiquetaDeTurno(t),
+                                }))}
+                                valor={turno?.id ?? ''}
+                                onCambio={setTurnoElegido}
+                              />
+                              {intentado && faltaElegirTurno ? (
+                                <p className="pago__problema" role="alert">
+                                  Elige el turno del que sale el dinero.
+                                </p>
+                              ) : null}
+                            </div>
+                          ) : null}
+                          {turno ? (
+                            <p className="texto-ayuda">
+                              {`Sale ${turno.propio ? 'de tu turno' : `del turno de ${turno.responsable}`} en ${turno.caja}, abierto a las ${horaDelTurno(turno.abiertoEn)}.`}
+                            </p>
+                          ) : null}
+                          {turno ? (
+                            <PagosPanel
+                              devolucion
+                              filas={filas}
+                              onFilas={setFilas}
+                              resumen={resumen}
+                              verProblemas={intentado}
+                            />
+                          ) : null}
                         </>
                       ) : (
                         <p className="texto-ayuda">La nota se emite sin mover dinero de tu caja.</p>

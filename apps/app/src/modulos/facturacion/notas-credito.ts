@@ -1,10 +1,12 @@
 import {
   notaCreditoRespuestaSchema,
+  type CajaRespuesta,
   type ClienteComprobanteEntrada,
   type ComprobanteDetalle,
   type NotaCreditoEntrada,
   type NotaCreditoRespuesta,
   type ObjetivoAutorizacion,
+  type TurnoRespuesta,
 } from '@restaurante/contratos';
 import type { MedioPago, TipoNotaCredito } from '@restaurante/dominio';
 import {
@@ -22,6 +24,7 @@ import { ErrorApi, mensajeDeError } from '../../lib/errores';
 import { montoEnSoles } from '../../lib/monto';
 import { NOMBRE_DE_MEDIO_DE_PAGO } from '../caja/cobro';
 import type { ExtraConClave } from '../caja/cuenta';
+import { horaDelTurno } from '../caja/turno';
 
 /**
  * La nota de crédito en la PWA (historia 006, entrega 6b, criterios 143 a 153 y 177): qué tipos admite un comprobante,
@@ -212,6 +215,62 @@ export function calcularLaNota(
   }
 }
 
+// --- El turno del que sale la devolución -----------------------------------------------------------------
+
+/** Un turno abierto del que puede salir el dinero de una devolución (criterio 150). */
+export interface TurnoDeDevolucion {
+  id: string;
+  caja: string;
+  /** Quién es responsable del turno. */
+  responsable: string;
+  abiertoEn: string;
+  /** Es el turno de quien emite la nota. */
+  propio: boolean;
+}
+
+/** El turno propio de quien emite (el Cajero devuelve solo desde el suyo); ninguno si no tiene la caja abierta. */
+export const turnoPropio = (turno: TurnoRespuesta | null | undefined): TurnoDeDevolucion[] =>
+  turno
+    ? [
+        {
+          id: turno.id,
+          caja: turno.caja.nombre,
+          responsable: turno.responsable.nombre,
+          abiertoEn: turno.abiertoEn,
+          propio: true,
+        },
+      ]
+    : [];
+
+/**
+ * Los turnos abiertos de la sucursal, de las cajas activas (el Supervisor y el Administrador pueden devolver desde el de
+ * cualquiera, criterio 150), con el propio primero.
+ */
+export function turnosAbiertos(
+  cajas: readonly Pick<CajaRespuesta, 'nombre' | 'turnoAbierto'>[],
+  usuarioId: string,
+): TurnoDeDevolucion[] {
+  return cajas
+    .flatMap((c) =>
+      c.turnoAbierto
+        ? [
+            {
+              id: c.turnoAbierto.id,
+              caja: c.nombre,
+              responsable: c.turnoAbierto.responsable.nombre,
+              abiertoEn: c.turnoAbierto.abiertoEn,
+              propio: c.turnoAbierto.responsable.id === usuarioId,
+            },
+          ]
+        : [],
+    )
+    .sort((a, b) => Number(b.propio) - Number(a.propio));
+}
+
+/** «Caja 1 · tu turno, desde 18:02» o «Caja 2 · turno de Ana, desde 08:00». */
+export const etiquetaDeTurno = (t: TurnoDeDevolucion): string =>
+  `${t.caja} · ${t.propio ? 'tu turno' : `turno de ${t.responsable}`}, desde ${horaDelTurno(t.abiertoEn)}`;
+
 // --- Lo que se manda y lo que se autoriza ----------------------------------------------------------------
 
 /** La suma de lo devuelto por medio (`"0.00"` sin devolución): es el `devuelto` que la clave del supervisor autoriza. */
@@ -308,6 +367,8 @@ export interface FalloDeNota {
   texto: string;
   /** Lo que se ve en pantalla estaba viejo: hay que volver a leer el comprobante. */
   releer?: boolean;
+  /** El turno elegido ya no sirve: hay que volver a leer los turnos abiertos y elegir otro. */
+  releerTurnos?: boolean;
 }
 
 /** Por qué no se pudo emitir la nota, con palabras y con la salida. Lo escrito se conserva siempre. */
@@ -367,13 +428,15 @@ export function falloDeNota(error: unknown): FalloDeNota {
         return {
           titulo,
           texto:
-            'Tu turno ya está cerrado, así que no se puede devolver dinero. Ábrelo de nuevo en «Caja» o emite la nota sin devolución.',
+            'Ese turno ya está cerrado, así que no se puede devolver dinero desde él. Elige otro turno abierto, o emite la nota sin devolución. Lo que escribiste sigue aquí.',
+          releerTurnos: true,
         };
       case 'TURNO_AJENO':
         return {
           titulo,
           texto:
             'Ese turno es de otra persona. Devuelve el dinero desde tu propio turno, o pídele a un supervisor que lo haga.',
+          releerTurnos: true,
         };
       case 'COMPROBANTE_NO_PERMITIDO':
         return {

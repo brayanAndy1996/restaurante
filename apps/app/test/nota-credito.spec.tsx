@@ -2,6 +2,7 @@ import type {
   AutorizacionRespuesta,
   ComprobanteDetalle,
   NotaCreditoEntrada,
+  CajaRespuesta,
   NotaCreditoRespuesta,
   TurnoRespuesta,
 } from '@restaurante/contratos';
@@ -49,6 +50,27 @@ const turno: TurnoRespuesta = {
   cerradoEn: null,
   cerradoPor: null,
 };
+
+/** Una caja activa; con `turno` lo tiene abierto esa persona. */
+function caja(
+  n: number,
+  nombre: string,
+  turnoAbierto: CajaRespuesta['turnoAbierto'] = null,
+): CajaRespuesta {
+  return {
+    id: uuid(100 + n),
+    sucursalId: ID.sucursalA,
+    nombre,
+    activa: true,
+    impresora: null,
+    series: [],
+    turnoAbierto,
+    parametros: { regimen: 'GENERAL', tiposComprobante: ['BOLETA', 'FACTURA'] },
+  };
+}
+
+const TURNO_DE_ANA = uuid(301);
+const ANA = { id: uuid(71), nombre: 'Ana Ríos' };
 
 const autorizada = (extra: Partial<AutorizacionRespuesta> = {}): AutorizacionRespuesta => ({
   autorizacionId: 'dddddddd-dddd-4ddd-8ddd-dddddddddddd',
@@ -101,6 +123,8 @@ function montar(
     rol?: Rol;
     comprobante?: ComprobanteDetalle;
     turno?: TurnoRespuesta | null;
+    /** Las cajas activas de la sucursal; por defecto, la del turno propio abierta. */
+    cajas?: () => CajaRespuesta[];
     extra?: Record<string, Manejador>;
   } = {},
 ) {
@@ -119,6 +143,25 @@ function montar(
       opciones.turno === null
         ? json(404, { codigo: 'NO_ENCONTRADO', mensaje: 'No hay turno' })
         : json(200, opciones.turno ?? turno),
+    'GET /cajas': () =>
+      json(
+        200,
+        opciones.cajas
+          ? opciones.cajas()
+          : [
+              caja(
+                1,
+                'Caja 1',
+                opciones.turno === null
+                  ? null
+                  : {
+                      id: (opciones.turno ?? turno).id,
+                      responsable: (opciones.turno ?? turno).responsable,
+                      abiertoEn: (opciones.turno ?? turno).abiertoEn,
+                    },
+              ),
+            ],
+      ),
     ...(opciones.extra ?? {}),
   });
   return Object.assign(s, { estado });
@@ -646,6 +689,177 @@ describe('La devolución desde el turno propio (criterios 21 y 150)', () => {
     await userEvent.click(within(hoja).getByRole('button', { name: 'Emitir nota de crédito' }));
     await screen.findByText('Nota de crédito emitida');
     expect(cuerpoDe(s).devolucion).toBeNull();
+  });
+});
+
+describe('El Supervisor elige el turno de la devolución (criterio 150)', () => {
+  const turnoDeAna = {
+    id: TURNO_DE_ANA,
+    responsable: ANA,
+    abiertoEn: '2026-11-05T13:00:00.000Z',
+  };
+  const cajasDe = (propio: boolean) => () => [
+    caja(
+      1,
+      'Caja 1',
+      propio
+        ? {
+            id: TURNO,
+            responsable: { id: ID.usuario, nombre: 'Marta Pérez' },
+            abiertoEn: turno.abiertoEn,
+          }
+        : null,
+    ),
+    caja(2, 'Caja 2', turnoDeAna),
+    caja(3, 'Caja 3'),
+  ];
+  const conRespuesta = {
+    [`POST ${API_NOTAS}`]: ({ cuerpo }: { cuerpo: unknown }) =>
+      json(201, respuestaDe(cuerpo as NotaCreditoEntrada)),
+  };
+
+  it('sin turno propio elige el de otro cajero y el turnoId enviado es ese', async () => {
+    const s = montar({ rol: 'SUPERVISOR', cajas: cajasDe(false), extra: conRespuesta });
+    renderApp(RUTA);
+    const hoja = await abrirLaHoja();
+    const elegir = await within(hoja).findByRole('group', { name: 'Turno del que sale el dinero' });
+    // Solo los turnos abiertos: la Caja 3 está libre. Ninguno viene elegido.
+    expect(within(elegir).getAllByRole('button')).toHaveLength(1);
+    expect(
+      within(elegir).getByRole('button', {
+        name: 'Caja 2 · turno de Ana Ríos, desde 08:00',
+        pressed: false,
+      }),
+    ).toBeVisible();
+    await userEvent.click(within(hoja).getByRole('button', { name: 'Error al cobrar' }));
+
+    // Sin elegir no sale el dinero de ninguna caja: lo dice y no manda.
+    await userEvent.click(within(hoja).getByRole('button', { name: 'Emitir nota de crédito' }));
+    expect(await within(hoja).findByText('Elige el turno del que sale el dinero.')).toBeVisible();
+    expect(notas(s)).toHaveLength(0);
+
+    await userEvent.click(within(elegir).getByRole('button', { name: /Caja 2/ }));
+    expect(
+      within(hoja).getByText('Sale del turno de Ana Ríos en Caja 2, abierto a las 08:00.'),
+    ).toBeVisible();
+    await userEvent.click(within(hoja).getByRole('button', { name: 'Emitir nota de crédito' }));
+    await screen.findByText('Nota de crédito emitida');
+    expect(cuerpoDe(s).devolucion).toEqual({
+      turnoId: TURNO_DE_ANA,
+      pagos: [{ medio: 'EFECTIVO', monto: '66.20' }],
+      redondeo: '0.00',
+    });
+  });
+
+  it('con turno propio viene elegido y puede cambiar al de otra caja', async () => {
+    const s = montar({ rol: 'SUPERVISOR', cajas: cajasDe(true), extra: conRespuesta });
+    renderApp(RUTA);
+    const hoja = await abrirLaHoja();
+    const elegir = await within(hoja).findByRole('group', { name: 'Turno del que sale el dinero' });
+    const botones = within(elegir).getAllByRole('button');
+    // El propio va primero y viene elegido.
+    expect(botones[0]).toHaveAccessibleName('Caja 1 · tu turno, desde 18:02');
+    expect(botones[0]).toHaveAttribute('aria-pressed', 'true');
+    expect(
+      within(hoja).getByText('Sale de tu turno en Caja 1, abierto a las 18:02.'),
+    ).toBeVisible();
+    await userEvent.click(within(hoja).getByRole('button', { name: 'Error al cobrar' }));
+    await userEvent.click(within(hoja).getByRole('button', { name: 'Emitir nota de crédito' }));
+    await screen.findByText('Nota de crédito emitida');
+    expect(cuerpoDe(s).devolucion?.turnoId).toBe(TURNO);
+  });
+
+  it('con un solo turno, el propio, no pregunta cuál', async () => {
+    montar({ rol: 'SUPERVISOR' });
+    renderApp(RUTA);
+    const hoja = await abrirLaHoja();
+    await within(hoja).findByText('Sale de tu turno en Caja 1, abierto a las 18:02.');
+    expect(within(hoja).queryByRole('group', { name: 'Turno del que sale el dinero' })).toBeNull();
+  });
+
+  it('sin ninguna caja abierta: «Sin devolución» y devolucion: null', async () => {
+    const s = montar({
+      rol: 'ADMINISTRADOR',
+      cajas: () => [caja(1, 'Caja 1'), caja(2, 'Caja 2')],
+      extra: conRespuesta,
+    });
+    renderApp(RUTA);
+    const hoja = await abrirLaHoja();
+    expect(
+      await within(hoja).findByText('Sin devolución: no hay ninguna caja abierta'),
+    ).toBeVisible();
+    await userEvent.click(within(hoja).getByRole('button', { name: 'Error al cobrar' }));
+    await userEvent.click(within(hoja).getByRole('button', { name: 'Emitir nota de crédito' }));
+    await screen.findByText('Nota de crédito emitida');
+    expect(cuerpoDe(s).devolucion).toBeNull();
+  });
+
+  it('«Sin devolución» no obliga a elegir turno', async () => {
+    const s = montar({ rol: 'SUPERVISOR', cajas: cajasDe(false), extra: conRespuesta });
+    renderApp(RUTA);
+    const hoja = await abrirLaHoja();
+    await within(hoja).findByRole('group', { name: 'Turno del que sale el dinero' });
+    await userEvent.click(within(hoja).getByRole('button', { name: 'Sin devolución' }));
+    expect(within(hoja).queryByRole('group', { name: 'Turno del que sale el dinero' })).toBeNull();
+    await userEvent.click(within(hoja).getByRole('button', { name: 'Error al cobrar' }));
+    await userEvent.click(within(hoja).getByRole('button', { name: 'Emitir nota de crédito' }));
+    await screen.findByText('Nota de crédito emitida');
+    expect(cuerpoDe(s).devolucion).toBeNull();
+  });
+
+  it('409 TURNO_CERRADO: pide elegir otro turno, vuelve a leer las cajas y conserva lo escrito', async () => {
+    let anaAbierta = true;
+    let intentos = 0;
+    const s = montar({
+      rol: 'SUPERVISOR',
+      cajas: () => [
+        caja(1, 'Caja 1', anaAbierta ? turnoDeAna : null),
+        caja(2, 'Caja 2', {
+          id: uuid(302),
+          responsable: { id: uuid(72), nombre: 'Luis Soto' },
+          abiertoEn: '2026-11-05T14:00:00.000Z',
+        }),
+      ],
+      extra: {
+        [`POST ${API_NOTAS}`]: ({ cuerpo }) => {
+          if (++intentos > 1) return json(201, respuestaDe(cuerpo as NotaCreditoEntrada));
+          anaAbierta = false;
+          return json(409, { codigo: 'TURNO_CERRADO', mensaje: 'El turno ya está cerrado' });
+        },
+      },
+    });
+    renderApp(RUTA);
+    const hoja = await abrirLaHoja();
+    const elegir = await within(hoja).findByRole('group', { name: 'Turno del que sale el dinero' });
+    await userEvent.click(within(elegir).getByRole('button', { name: /turno de Ana Ríos/ }));
+    await userEvent.click(within(hoja).getByRole('button', { name: 'Error al cobrar' }));
+    await userEvent.click(within(hoja).getByRole('button', { name: 'Emitir nota de crédito' }));
+
+    expect(await within(hoja).findByText(/Ese turno ya está cerrado/)).toBeVisible();
+    // El turno cerrado ya no se ofrece, no queda elegido ninguno y lo escrito sigue.
+    await waitFor(() =>
+      expect(within(hoja).queryByRole('button', { name: /turno de Ana Ríos/ })).toBeNull(),
+    );
+    expect(within(hoja).getByLabelText('Motivo')).toHaveValue('Error al cobrar');
+    await userEvent.click(within(hoja).getByRole('button', { name: 'Emitir nota de crédito' }));
+    expect(await within(hoja).findByText('Elige el turno del que sale el dinero.')).toBeVisible();
+    expect(notas(s)).toHaveLength(1);
+
+    await userEvent.click(within(hoja).getByRole('button', { name: /turno de Luis Soto/ }));
+    await userEvent.click(within(hoja).getByRole('button', { name: 'Emitir nota de crédito' }));
+    await screen.findByText('Nota de crédito emitida');
+    expect(cuerpoDe(s, 1).devolucion?.turnoId).toBe(uuid(302));
+    // Otro turno es otra devolución: otro id (el cuerpo cambió, criterio 153).
+    expect(cuerpoDe(s, 1).id).not.toBe(cuerpoDe(s, 0).id);
+  });
+
+  it('el Cajero no elige: sigue con su turno propio y no pide las cajas', async () => {
+    const s = montar({ rol: 'CAJERO', cajas: cajasDe(true) });
+    renderApp(RUTA);
+    const hoja = await abrirLaHoja();
+    await within(hoja).findByText('Sale de tu turno en Caja 1, abierto a las 18:02.');
+    expect(within(hoja).queryByRole('group', { name: 'Turno del que sale el dinero' })).toBeNull();
+    expect(s.de('GET', '/cajas')).toHaveLength(0);
   });
 });
 
