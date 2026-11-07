@@ -1,7 +1,8 @@
 # Guía de uso con ejemplos: El Fogón, de cero a la primera mesa cobrada
 
 Esta guía recorre todo lo que hoy existe en `main` (plataforma y acceso, carta, salón y cocina,
-impresión, caja y cobro, y carta web con pedidos desde la mesa), con datos concretos para escribir y con
+impresión, caja y cobro, carta web con pedidos desde la mesa y facturación electrónica en modo
+simulado), con datos concretos para escribir y con
 la explicación de **para qué sirve** cada cosa en un restaurante real.
 
 Es más detallada que el recorrido de `DESPLIEGUE-LOCAL.md`, sección 5. Antes de empezar, el sistema
@@ -15,20 +16,21 @@ mesas, cocina, impresión, caja y carta web. Atenderemos la mesa 4 de principio 
 
 ## Orden recomendado
 
-| Paso | Archivo                                                  | Qué haces                                                              | Tiempo |
-| ---- | -------------------------------------------------------- | ---------------------------------------------------------------------- | ------ |
-| 1    | [01-acceso-y-usuarios.md](01-acceso-y-usuarios.md)       | Primer ingreso, PIN, equipos recordados, crear personal, horarios      | 20 min |
-| 2    | [02-carta.md](02-carta.md)                               | Estaciones, familias, productos, modificadores, combos, menú           | 40 min |
-| 3    | [03-salon-y-cocina.md](03-salon-y-cocina.md)             | Mapa de mesas y una atención completa con la cocina                    | 30 min |
-| 4    | [04-impresion.md](04-impresion.md)                       | Impresoras, destinos y el simulador de puente                          | 20 min |
-| 5    | [05-plataforma.md](05-plataforma.md)                     | Lo que hace nuestro equipo: empresas, suscripciones y soporte          | 15 min |
-| 6    | [06-caja-y-cobro.md](06-caja-y-cobro.md)                 | Caja: tasa, cajas y series, turno, cobro, descuentos, mostrador, X y Z | 40 min |
-| 7    | [07-carta-web-y-llamados.md](07-carta-web-y-llamados.md) | Publicar la carta web, QR de las mesas y pedidos desde la mesa         | 30 min |
+| Paso | Archivo                                                        | Qué haces                                                                                        | Tiempo |
+| ---- | -------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ | ------ |
+| 1    | [01-acceso-y-usuarios.md](01-acceso-y-usuarios.md)             | Primer ingreso, PIN, equipos recordados, crear personal, horarios                                | 20 min |
+| 2    | [02-carta.md](02-carta.md)                                     | Estaciones, familias, productos, modificadores, combos, menú                                     | 40 min |
+| 3    | [03-salon-y-cocina.md](03-salon-y-cocina.md)                   | Mapa de mesas y una atención completa con la cocina                                              | 30 min |
+| 4    | [04-impresion.md](04-impresion.md)                             | Impresoras, destinos y el simulador de puente                                                    | 20 min |
+| 5    | [05-plataforma.md](05-plataforma.md)                           | Lo que hace nuestro equipo: empresas, suscripciones y soporte                                    | 15 min |
+| 6    | [06-caja-y-cobro.md](06-caja-y-cobro.md)                       | Caja: tasa, cajas y series, turno, cobro, descuentos, mostrador, X y Z                           | 40 min |
+| 7    | [07-carta-web-y-llamados.md](07-carta-web-y-llamados.md)       | Publicar la carta web, QR de las mesas y pedidos desde la mesa                                   | 30 min |
+| 8    | [08-facturacion-electronica.md](08-facturacion-electronica.md) | Envío a SUNAT (simulado), padrón de RUC, panel de comprobantes, notas de crédito, PDF y WhatsApp | 40 min |
 
 Los pasos 3 y 4 necesitan la carta del paso 2: la base de datos empieza **sin carta, sin mesas y sin
 impresoras**.
 
-El paso 6 necesita la carta del paso 2 y una mesa con comanda (paso 3). La caja empieza sin cajas, sin series y sin tasa de IGV: el capítulo las crea. El paso 7 necesita la carta y las mesas de los pasos 2 y 3.
+El paso 6 necesita la carta del paso 2 y una mesa con comanda (paso 3). La caja empieza sin cajas, sin series y sin tasa de IGV: el capítulo las crea. El paso 7 necesita la carta y las mesas de los pasos 2 y 3. El paso 8 necesita la caja del paso 6 y una preparación única que el capítulo explica.
 
 ## Datos de demostración que ya existen
 

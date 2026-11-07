@@ -1,6 +1,6 @@
 # 6. Caja, cobro y comprobantes
 
-> **Estado:** la caja (entrega 6a) ya está en `main`. Los comprobantes quedan «por enviar»: no salen a SUNAT hasta la entrega 6b.
+> **Estado:** la caja (entrega 6a) está en `main`. El envío de los comprobantes a SUNAT, en modo simulado, está en el capítulo 8: sin su preparación, los comprobantes quedan «Por enviar».
 
 ## Para qué sirve
 
